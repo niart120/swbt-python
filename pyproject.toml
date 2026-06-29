@@ -1,8 +1,8 @@
 [project]
 name = "swbt-python"
 version = "0.1.0"
-description = "Python library for presenting a virtual Nintendo Switch Pro Controller over Bluetooth HID."
-readme = { file = "spec/initial/README.md", content-type = "text/markdown" }
+description = "Python library for presenting an NX-compatible virtual Bluetooth HID input device."
+readme = "README.md"
 authors = [
     { name = "niart120", email = "38847256+niart120@users.noreply.github.com" }
 ]
@@ -11,12 +11,14 @@ maintainers = [
 ]
 requires-python = ">=3.12"
 license = "MIT"
+license-files = ["LICENSE"]
 keywords = [
     "bluetooth",
+    "bluetooth-hid",
     "controller",
+    "gamepad",
     "hid",
-    "nintendo-switch",
-    "pro-controller",
+    "nx",
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -131,5 +133,5 @@ addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
 markers = [
     "bumble: requires a dedicated USB Bluetooth dongle opened through Bumble",
-    "hardware: requires a Nintendo Switch console and Switch-facing Bluetooth HID behavior",
+    "hardware: requires a target NX-family console and Bluetooth HID behavior",
 ]

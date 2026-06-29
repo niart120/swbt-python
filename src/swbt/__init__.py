@@ -1,3 +1,3 @@
-"""Python API for virtual Nintendo Switch input devices."""
+"""Python API for virtual NX-compatible input devices."""
 
 __all__: tuple[str, ...] = ()
