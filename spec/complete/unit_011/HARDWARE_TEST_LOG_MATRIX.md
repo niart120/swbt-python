@@ -58,9 +58,9 @@ Bumble adapter、Switch 実機、OS / driver、dongle、firmware に依存する
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | todo | hardware observation として report / subcommand / input reflection を記録する |
-| Bumble / transport | required | todo | adapter open、Classic、HID advertising、L2CAP は Bumble version と event 条件付き |
-| OS / driver / adapter | required | todo | matrix の中心。OS、driver、dongle identity を必須記録にする |
+| Switch HID / report bytes | future observation only | not run | この作業では report / subcommand / input reflection を観測していない。template に記録欄を用意し、実機観測は後続 run entry に残す |
+| Bumble / transport | future observation only | not run | adapter open、Classic、HID advertising、L2CAP は実行していない。Bumble version と command の記録欄を template に含めた |
+| OS / driver / adapter | required for log schema | done | OS、driver、dongle、adapter string を run entry と matrix の必須項目として定義した |
 
 ## 6. 振る舞い仕様
 
@@ -76,13 +76,13 @@ Bumble adapter、Switch 実機、OS / driver、dongle、firmware に依存する
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | hardware log template に必要項目が揃っている | new | unit | no | docs check で検証可能 |
-| todo | matrix に OS、dongle、driver、Switch model、firmware、Pairing、L2CAP、Subcommands、Input reflected がある | new | unit | no | README source |
-| todo | `@pytest.mark.bumble` の結果を log に転記できる | characterization | bumble | yes | M2 |
-| todo | pairing / L2CAP run の結果を matrix に反映できる | characterization | hardware | yes | M3 |
-| todo | subcommand sequence の trace artifact を run entry から辿れる | characterization | hardware | yes | M4 |
-| todo | Button A 反映結果を matrix に反映できる | characterization | hardware | yes | M5 |
-| todo | reconnect 観測を separate notes として残せる | characterization | hardware | yes | M6 |
+| green | hardware log template に必要項目が揃っている | new | unit | no | red: `environment` 欄不足。green: docs check で確認 |
+| green | matrix に OS、dongle、driver、Switch model、firmware、Pairing、L2CAP、Subcommands、Input reflected がある | new | unit | no | red: `Adapter` / review columns 不足。green: docs check で確認 |
+| deferred | `@pytest.mark.bumble` の結果を log に転記できる | characterization | bumble | yes | M2 の adapter run 後に run entry を追加する |
+| deferred | pairing / L2CAP run の結果を matrix に反映できる | characterization | hardware | yes | M3 の実機 run 後に run entry と matrix を更新する |
+| deferred | subcommand sequence の trace artifact を run entry から辿れる | characterization | hardware | yes | M4 の実機 trace 取得後に artifact path を記録する |
+| deferred | Button A 反映結果を matrix に反映できる | characterization | hardware | yes | M5 の入力反映確認後に記録する |
+| deferred | reconnect 観測を separate notes として残せる | characterization | hardware | yes | M6 の reconnect 観測後に追記する |
 
 ## 8. 設計メモ
 
@@ -96,19 +96,26 @@ Bumble adapter、Switch 実機、OS / driver、dongle、firmware に依存する
 | path | change | 内容 |
 |---|---|---|
 | `docs/hardware-test-log.md` | new | run entry と matrix |
-| `README.md` | modify | 確認済み / 未確認構成 |
-| `tests/hardware/` | modify | marker と log 対応 |
-| `spec/wip/unit_012/INITIAL_RELEASE_GATE.md` | modify | release gate の証跡 |
+| `README.md` | modify | 実機検証状態を未記録として明示。release gate 時に確認済み / 未確認構成へ反映する |
+| `tests/hardware/README.md` | new | marker 実行結果と `docs/hardware-test-log.md` の対応を明示 |
+| `spec/wip/unit_012/INITIAL_RELEASE_GATE.md` | deferred | release gate の証跡照合時に更新する |
+| `tests/unit/test_hardware_test_log_docs.py` | new | hardware log template と matrix の docs check |
 
 ## 10. 検証
 
-この表は hardware log / matrix 作業時に実行する gate を示す。仕様書作成時点の実行結果ではない。
+この表は今回の hardware log / matrix 作業で実行または未実行とした gate を示す。
 
 | command | result | notes |
 |---|---|---|
-| `rg -n "未検証|確認済み" docs README.md spec` | pending | docs 作成後に確認する |
-| `uv run pytest -m bumble` | pending-approval | adapter 承認後に実行する |
-| `uv run pytest -m hardware` | pending-approval | Switch 実機承認後に実行する |
+| `uv sync --dev` | pass | 41 packages resolved / checked |
+| `uv run pytest tests/unit/test_hardware_test_log_docs.py` | pass | 2 passed。run entry template、matrix header、release review 用列を確認した |
+| `rg -n "未検証|確認済み|未記録|not run" docs README.md tests\hardware spec` | pass | hardware log、README、hardware test README、関連 spec に未検証 / 未記録 / not run の状態が見えることを確認した |
+| `uv run ruff format --check .` | pass | 3 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit` | pass | 3 passed |
+| `uv run pytest -m bumble` | not run | この仕様は template / matrix 作成が対象。adapter open は承認対象であり、この作業では実行しない |
+| `uv run pytest -m hardware` | not run | 実機 test の実行そのものは対象外。M3 以降の実機 run で記録する |
 
 ## 11. 実機実行条件
 
@@ -123,8 +130,10 @@ Bumble adapter、Switch 実機、OS / driver、dongle、firmware に依存する
 
 ## 12. 先送り事項
 
+- `@pytest.mark.bumble` と `@pytest.mark.hardware` の実行結果は、明示承認を受けた M2-M6 の run で `docs/hardware-test-log.md` に追加する。
+- README の確認済み / 未確認構成への反映は unit_012 release gate で行う。
 - dedicated hardware runner は初期対象外。
-- macOS matrix は初期対象外として空欄または未検証で残す。
+- macOS matrix は初期対象外として未検証で残す。
 - 複数 firmware の比較は初期 release 後に増やす。
 
 ## 13. チェックリスト
@@ -133,7 +142,7 @@ Bumble adapter、Switch 実機、OS / driver、dongle、firmware に依存する
 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
-- [ ] `docs/hardware-test-log.md` の template と matrix を作成した
-- [ ] docs consistency check を実行し、検証欄を結果で更新した
-- [ ] hardware run は承認、command、cleanup、結果を run entry に記録した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] `docs/hardware-test-log.md` の template と matrix を作成した
+- [x] docs consistency check を実行し、検証欄を結果で更新した
+- [x] hardware run はこの作業では未実行とし、後続 run entry に記録する条件を残した
+- [x] 完了条件を満たしたら `spec/complete` へ移動する

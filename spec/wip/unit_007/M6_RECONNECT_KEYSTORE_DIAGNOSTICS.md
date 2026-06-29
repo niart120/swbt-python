@@ -50,7 +50,7 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 - `spec/initial/testing.md`
 - `spec/initial/risks.md`
 - `spec/wip/unit_010/DIAGNOSTICS_TRACE_SCHEMA.md`
-- `spec/wip/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
+- `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 
 ## 5. 根拠監査
 

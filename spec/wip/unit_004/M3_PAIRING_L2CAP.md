@@ -52,7 +52,7 @@ M2 の Bumble HID transport を使い、Switch との pairing、HID control chan
 - `spec/initial/risks.md`
 - `spec/wip/unit_003/M2_BUMBLE_HID_TRANSPORT.md`
 - `spec/wip/unit_010/DIAGNOSTICS_TRACE_SCHEMA.md`
-- `spec/wip/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
+- `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 
 ## 5. 根拠監査
 

@@ -53,7 +53,7 @@
 - `spec/wip/unit_002/M1_SWITCH_GAMEPAD_FAKE_TRANSPORT.md`
 - `spec/wip/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md`
 - `spec/wip/unit_010/DIAGNOSTICS_TRACE_SCHEMA.md`
-- `spec/wip/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
+- `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 
 ## 5. 根拠監査
 

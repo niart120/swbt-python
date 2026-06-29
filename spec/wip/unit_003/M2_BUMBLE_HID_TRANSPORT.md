@@ -54,7 +54,7 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 - `spec/initial/testing.md`
 - `spec/initial/risks.md`
 - `spec/wip/unit_010/DIAGNOSTICS_TRACE_SCHEMA.md`
-- `spec/wip/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
+- `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 
 ## 5. 根拠監査
 

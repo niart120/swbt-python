@@ -57,7 +57,7 @@
 - `spec/wip/unit_001/M0_PROTOCOL_CORE.md`
 - `spec/wip/unit_003/M2_BUMBLE_HID_TRANSPORT.md`
 - `spec/wip/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md`
-- `spec/wip/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
+- `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 
 ## 5. 根拠監査
 
