@@ -54,7 +54,7 @@
 - `spec/initial/risks.md`
 - `spec/initial/naming.md`
 - `spec/wip/unit_008/M7_PACKAGING_EXAMPLES_CLI.md`
-- `spec/wip/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
+- `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 
 ## 5. 根拠監査
 

@@ -10,6 +10,12 @@ NX 向けの仮想 Bluetooth HID 入力デバイスを Python から扱うため
 - uv
 - Bumble が利用可能な USB Bluetooth アダプター
 
+## 実機検証の状態
+
+確認済み構成はまだありません。Bumble adapter、pairing、入力反映の結果は未記録です。
+
+未検証構成は `docs/hardware-test-log.md` の matrix で管理します。README には、release 前に同 matrix から確認済み構成と未確認構成を反映します。
+
 ## 開発
 
 ```powershell

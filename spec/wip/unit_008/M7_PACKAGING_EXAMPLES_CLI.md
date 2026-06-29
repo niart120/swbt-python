@@ -54,7 +54,7 @@
 - `spec/initial/naming.md`
 - `spec/initial/testing.md`
 - `spec/initial/risks.md`
-- `spec/wip/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
+- `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 - `spec/wip/unit_012/INITIAL_RELEASE_GATE.md`
 
 ## 5. 根拠監査
