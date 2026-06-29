@@ -168,7 +168,6 @@ CI で必須にする対象は、static type check、lint、unit tests、fake tr
 
 - 変更を伴う作業では開始時に branch と `git status --short` を確認する。
 - default branch への直接 commit は、ユーザの明示指示がある場合を除き避ける。
-- remote 未設定の間、`pr-merge-cleanup` は push / PR / merge を実行せず stop condition として扱う。
 - Conventional Commits に準拠する。
 
 ```text
