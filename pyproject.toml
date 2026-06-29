@@ -1,0 +1,135 @@
+[project]
+name = "swbt-python"
+version = "0.1.0"
+description = "Python library for presenting a virtual Nintendo Switch Pro Controller over Bluetooth HID."
+readme = { file = "spec/initial/README.md", content-type = "text/markdown" }
+authors = [
+    { name = "niart120", email = "38847256+niart120@users.noreply.github.com" }
+]
+maintainers = [
+    { name = "niart120", email = "38847256+niart120@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+license = "MIT"
+keywords = [
+    "bluetooth",
+    "controller",
+    "hid",
+    "nintendo-switch",
+    "pro-controller",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+dependencies = [
+    "bumble>=0.0.230,<0.0.231",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pyyaml>=6.0.3",
+    "ruff>=0.15.16",
+    "ty>=0.0.44",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.25,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv]
+cache-dir = ".uv-cache"
+
+[tool.uv.build-backend]
+module-name = "swbt"
+source-include = [
+    "AGENTS.md",
+    "spec/**",
+    "tests/**",
+]
+
+[tool.ruff]
+line-length = 100
+required-version = ">=0.15.16"
+src = ["src", "tests"]
+target-version = "py312"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+ignore = ["D203", "D213"]
+select = [
+    "A",
+    "ANN",
+    "ARG",
+    "ASYNC",
+    "B",
+    "BLE",
+    "C4",
+    "D",
+    "DTZ",
+    "E",
+    "F",
+    "FURB",
+    "I",
+    "N",
+    "NPY",
+    "PERF",
+    "PIE",
+    "PLC",
+    "PLE",
+    "PLW",
+    "PT",
+    "PTH",
+    "RET",
+    "RUF",
+    "S",
+    "SIM",
+    "SLOT",
+    "T20",
+    "TC",
+    "TRY",
+    "UP",
+    "W",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D100", "D103", "S101"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.ruff.lint.isort]
+known-first-party = ["swbt"]
+
+[tool.ty.environment]
+python-version = "3.12"
+root = ["./src"]
+
+[tool.ty.src]
+include = ["src", "tests"]
+
+[tool.ty.terminal]
+error-on-warning = true
+output-format = "concise"
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "bumble: requires a dedicated USB Bluetooth dongle opened through Bumble",
+    "hardware: requires a Nintendo Switch console and Switch-facing Bluetooth HID behavior",
+]
