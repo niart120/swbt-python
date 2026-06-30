@@ -293,6 +293,40 @@ def test_callback_exception_is_recorded_and_close_cleans_up() -> None:
     asyncio.run(run())
 
 
+def test_callback_exception_is_recorded_in_trace_and_status() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        unsupported_subcommand = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 ff")
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+
+        await transport.inject_interrupt_data(unsupported_subcommand)
+
+        status = pad.status()
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert status.connection_state == "failed"
+        assert status.last_error is not None
+        assert status.last_error.error_type == "UnsupportedSubcommandError"
+        assert {
+            "event": "error",
+            "error_type": "UnsupportedSubcommandError",
+            "message": "unsupported subcommand: 0xff",
+            "recoverable": False,
+        } in events
+
+        await pad.close()
+
+    asyncio.run(run())
+
+
 def test_tap_button_a_records_press_and_release_reports() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
