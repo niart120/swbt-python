@@ -32,6 +32,7 @@
 - fake transport integration tests。
 - static type check、lint、format。
 - package build。
+- GitHub Actions による pull request / main push の automated gate。
 - Windows + 専用 USB Bluetooth dongle adapter open 観測。
 - 少なくとも 1 つの Switch 実機構成で pairing と Button A 反映観測。
 - README の対応済み / 未確認構成。
@@ -72,6 +73,7 @@
 | unit gate | tests/unit | protocol core と public import が通る | M0-M1 |
 | integration gate | tests/integration | fake transport API / report loop が通る | CI 必須 |
 | package gate | build | wheel / sdist が build できる | M7 |
+| CI gate | GitHub Actions | static gate、unit tests、fake integration、package build が pull request と main push で実行される | `bumble` / `hardware` marker は対象外 |
 | adapter gate | hardware log | Windows + 専用 USB dongle で adapter open 確認済み | `@pytest.mark.bumble` または manual |
 | Switch gate | hardware log | 少なくとも 1 構成で pairing と Button A 反映確認済み | `@pytest.mark.hardware` または manual |
 | docs gate | README / risks | 対応済み構成、未確認構成、既知リスクが一致 | documentation drift 対策 |
@@ -81,12 +83,13 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | `uv run ruff format --check .` が通る | regression | unit | no | local static gate |
-| todo | `uv run ruff check .` が通る | regression | unit | no | local static gate |
-| todo | `uv run ty check --no-progress` が通る | regression | unit | no | type gate |
-| todo | `uv run pytest tests/unit` が通る | regression | unit | no | M0-M1 |
-| todo | `uv run pytest tests/integration` が通る | regression | integration | no | fake transport |
-| todo | package build が通る | regression | unit | no | M7 |
+| done | `uv run ruff format --check .` が通る | regression | unit | no | 2026-07-01 に local pass |
+| done | `uv run ruff check .` が通る | regression | unit | no | 2026-07-01 に local pass |
+| done | `uv run ty check --no-progress` が通る | regression | unit | no | 2026-07-01 に local pass |
+| done | `uv run pytest tests/unit` が通る | regression | unit | no | 2026-07-01 に 82 passed |
+| done | `uv run pytest tests/integration` が通る | regression | integration | no | 2026-07-01 に 16 passed |
+| done | package build が通る | regression | unit | no | 2026-07-01 に sdist / wheel build pass |
+| done | GitHub Actions CI が pull request / `main` push で local gate 相当を実行する | regression | integration | no | `.github/workflows/ci.yml` で追加。PR check の通過は merge 前に確認する |
 | todo | Windows + 専用 USB dongle で adapter open が hardware log に記録されている | regression | bumble | yes | release gate |
 | todo | 1 つ以上の Switch 実機構成で pairing と Button A 反映が記録されている | regression | hardware | yes | release gate |
 | todo | README に対応済み構成と未確認構成が分かれている | regression | unit | no | docs gate |
@@ -106,6 +109,7 @@
 | `README.md` | modify | release readiness、確認済み / 未確認構成 |
 | `spec/initial/risks.md` | modify | release 時点の既知リスク |
 | `docs/hardware-test-log.md` | modify | release gate evidence |
+| `.github/workflows/ci.yml` | add | pull request / `main` push の automated gate |
 | `pyproject.toml` | modify | build / package metadata |
 | `tests/unit/` | modify | release blocking unit tests |
 | `tests/integration/` | modify | fake transport release gate |
@@ -116,13 +120,14 @@
 
 | command | result | notes |
 |---|---|---|
-| `uv sync --dev` | pending | release 判定時に依存同期として実行する |
-| `uv run ruff format --check .` | pending | release 判定時の static gate |
-| `uv run ruff check .` | pending | release 判定時の lint gate |
-| `uv run ty check --no-progress` | pending | release 判定時の type gate |
-| `uv run pytest tests/unit` | pending | release 判定時の unit gate |
-| `uv run pytest tests/integration` | pending | release 判定時の fake transport integration gate |
-| `uv build` | pending | M7 実装後の package build gate |
+| `uv sync --dev` | pass | 2026-07-01、Windows、Python 3.13.5。41 packages resolved / checked |
+| `uv run ruff format --check .` | pass | 2026-07-01。35 files already formatted |
+| `uv run ruff check .` | pass | 2026-07-01。All checks passed |
+| `uv run ty check --no-progress` | pass | 2026-07-01。All checks passed |
+| `uv run pytest tests/unit` | pass | 2026-07-01。82 passed |
+| `uv run pytest tests/integration` | pass | 2026-07-01。16 passed |
+| `uv build` | pass | 2026-07-01。sandbox では PyPI access 制限で失敗後、network 許可付きで sdist / wheel build pass |
+| GitHub Actions `CI` | pending-remote | pull request の required check として merge 前に確認する |
 | `uv run pytest -m bumble` | pending-approval | adapter 承認後に release hardware evidence として実行する |
 | `uv run pytest -m hardware` | pending-approval | Switch 実機承認後に release hardware evidence として実行する |
 
@@ -150,7 +155,8 @@
 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
-- [ ] release 判定に必要な local / static / build gate を実行し、検証欄を結果で更新した
+- [x] GitHub Actions CI で static / unit / fake integration / build gate を自動化した
+- [x] release 判定に必要な local / static / build gate を実行し、検証欄を結果で更新した
 - [ ] adapter open と Switch 実機の release evidence を `docs/hardware-test-log.md` から確認した
 - [ ] README と `spec/initial/risks.md` を release 時点の確認済み / 未確認状態に更新した
 - [ ] publish / tag push 前にユーザの明示確認で停止した
