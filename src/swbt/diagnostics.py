@@ -63,6 +63,21 @@ class DiagnosticsRecorder:
             python_version=platform.python_version(),
         )
 
+    def record_state_transition(
+        self,
+        *,
+        previous: str,
+        next_state: str,
+        reason: str,
+    ) -> DiagnosticsEvent:
+        """Record one lifecycle state transition."""
+        return self.record_event(
+            "state_transition",
+            previous=previous,
+            next=next_state,
+            reason=reason,
+        )
+
     def record_error(self, error: Exception, *, recoverable: bool) -> DiagnosticsEvent:
         """Record an exception as an error event."""
         event = DiagnosticsEvent(

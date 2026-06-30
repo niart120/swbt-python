@@ -33,3 +33,17 @@ def test_run_metadata_records_environment_and_adapter() -> None:
     assert payload["os"] == platform.system()
     assert payload["python_version"] == platform.python_version()
     assert payload["package_version"] == "0.1.0"
+
+
+def test_state_transition_records_previous_next_and_reason() -> None:
+    trace = StringIO()
+    recorder = DiagnosticsRecorder(trace_writer=trace)
+
+    recorder.record_state_transition(previous="closed", next_state="opening", reason="open")
+
+    assert json.loads(trace.getvalue()) == {
+        "event": "state_transition",
+        "next": "opening",
+        "previous": "closed",
+        "reason": "open",
+    }
