@@ -82,7 +82,7 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | diagnostics event が JSON Lines として 1 行 1 object で出力される | new | unit | no | schema 最初の red |
+| green | diagnostics event が JSON Lines として 1 行 1 object で出力される | new | unit | no | `tests/unit/test_diagnostics.py` で固定 |
 | todo | run metadata に OS、Python、package version、adapter が入る | new | unit | no | 取得不能値の扱いも確認 |
 | todo | lifecycle state transition が previous / next / reason を持つ | new | unit | no | M1-M3 共通 |
 | todo | report tx counter が `0x21` と `0x30` を区別して増える | new | integration | no | fake transport |
@@ -115,6 +115,11 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 
 | command | result | notes |
 |---|---|---|
+| `uv run pytest tests\unit\test_diagnostics.py::test_diagnostics_event_is_written_as_one_json_object_per_line -q` | pass | 1 passed。`DiagnosticsRecorder` が 1 行 1 JSON object を出力することを確認した |
+| `uv run pytest tests\unit -q` | pass | 69 passed |
+| `uv run ruff format --check .` | pass | 30 files already formatted |
+| `uv run ruff check .` | pass | lint pass |
+| `uv run ty check --no-progress` | pass | type check pass |
 | `uv run pytest tests/unit tests/integration` | pending | diagnostics schema 実装後に local automated gate として実行する |
 | `uv run pytest -m hardware` | pending-approval | hardware metadata は実機承認後に確認する |
 
