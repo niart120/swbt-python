@@ -1,8 +1,10 @@
 import asyncio
+import json
+from io import StringIO
 
 import pytest
 
-from swbt import Button, InputState, SwitchGamepad
+from swbt import Button, DiagnosticsConfig, InputState, SwitchGamepad
 from swbt.errors import ConnectionTimeoutError
 from swbt.transport.fake import FakeHidTransport
 
@@ -141,6 +143,47 @@ def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
 
             assert reports[start_count][0] == 0x21
             assert reports[start_count + 1][0] == 0x30
+
+    asyncio.run(run())
+
+
+def test_report_tx_counter_distinguishes_0x21_and_0x30() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=1000,
+        ) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            await pad.press(Button.A)
+            await transport.wait_for_interrupt_report_id(0x30)
+
+            await transport.inject_interrupt_data(request_device_info)
+            await transport.wait_for_interrupt_report_id(0x21)
+
+        report_events = [
+            json.loads(line)
+            for line in trace.getvalue().splitlines()
+            if json.loads(line)["event"] == "report_tx"
+        ]
+
+        assert {
+            "event": "report_tx",
+            "counter": 1,
+            "reason": "periodic",
+            "report_id": "0x30",
+        } in report_events
+        assert {
+            "event": "report_tx",
+            "counter": 1,
+            "reason": "subcommand_reply",
+            "report_id": "0x21",
+        } in report_events
 
     asyncio.run(run())
 

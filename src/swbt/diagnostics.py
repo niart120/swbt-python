@@ -8,6 +8,13 @@ from typing import TextIO
 
 
 @dataclass(frozen=True)
+class DiagnosticsConfig:
+    """Diagnostics configuration accepted by SwitchGamepad."""
+
+    trace_writer: TextIO | None = None
+
+
+@dataclass(frozen=True)
 class DiagnosticsEvent:
     """One diagnostics event recorded by the gamepad."""
 
