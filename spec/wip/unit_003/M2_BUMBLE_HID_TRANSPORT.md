@@ -84,7 +84,7 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 | green | `BumbleHidTransport` が adapter string を diagnostics に記録する | new | unit | no | `test_bumble_transport_records_adapter_string_in_diagnostics` で固定。adapter open は fake opener |
 | green | Bumble open 失敗が `TransportOpenError` に変換される | new | unit | no | `test_bumble_open_failure_is_mapped_to_transport_open_error` で固定 |
 | green | open 途中の失敗でも close cleanup が呼ばれる | edge | unit | no | `test_bumble_open_failure_after_handle_open_closes_handle` で固定 |
-| todo | close を複数回呼んでも例外を出さない | edge | unit | no | idempotency |
+| green | close を複数回呼んでも例外を出さない | edge | unit | no | `test_bumble_close_is_idempotent` で固定 |
 | todo | `swbt.transport.bumble` 以外が Bumble を import していない | regression | unit | no | 依存境界 |
 | todo | `adapter="usb:0"` で USB HCI transport を開ける | new | bumble | yes | 明示承認、専用 dongle、cleanup plan が必要 |
 | todo | Bumble device を生成し Classic を有効化できる | new | bumble | yes | `@pytest.mark.bumble` |
@@ -121,7 +121,8 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 | `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_transport_records_adapter_string_in_diagnostics -q` | pass | 1 passed。adapter string が diagnostics に記録されることを fake opener で確認した |
 | `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_open_failure_is_mapped_to_transport_open_error -q` | pass | 1 passed。fake opener の失敗が `TransportOpenError` に変換され、error event が残ることを確認した |
 | `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_open_failure_after_handle_open_closes_handle -q` | pass | 1 passed。open 後初期化失敗時に handle cleanup が呼ばれることを確認した |
-| `uv run pytest tests\unit -q` | pass | 75 passed |
+| `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_close_is_idempotent -q` | pass | 1 passed。`close()` を複数回呼んでも handle cleanup が一度だけ呼ばれることを確認した |
+| `uv run pytest tests\unit -q` | pass | 76 passed |
 | `uv run ruff format --check .` | pass | 32 files already formatted |
 | `uv run ruff check .` | pass | lint pass |
 | `uv run ty check --no-progress` | pass | type check pass |

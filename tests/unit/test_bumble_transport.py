@@ -105,3 +105,22 @@ def test_bumble_open_failure_after_handle_open_closes_handle() -> None:
         assert handle.close_count == 1
 
     asyncio.run(run())
+
+
+def test_bumble_close_is_idempotent() -> None:
+    async def run() -> None:
+        handle = FakeBumbleHandle()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return handle
+
+        transport = BumbleHidTransport(adapter="usb:0", _open_transport=open_transport)
+
+        await transport.open()
+        await transport.close()
+        await transport.close()
+
+        assert handle.close_count == 1
+
+    asyncio.run(run())
