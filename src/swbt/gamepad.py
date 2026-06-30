@@ -113,6 +113,10 @@ class SwitchGamepad:
         """Remove buttons from the current input state."""
         await self._state_store.release(*buttons)
 
+    async def neutral(self) -> None:
+        """Return the current input state to neutral."""
+        await self._state_store.neutral()
+
     async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
         """Press buttons briefly and then release them."""
         await self.press(*buttons)
@@ -131,7 +135,10 @@ class SwitchGamepad:
         self._transport.on_disconnected(self._handle_disconnected)
 
     async def _send_trailing_neutral_if_connected(self) -> None:
-        return None
+        await self._state_store.neutral()
+        if self._report_loop is None or not self._connected_event.is_set():
+            return
+        await self._report_loop.send_current_input()
 
     async def _send_current_input(self) -> None:
         if self._report_loop is None:

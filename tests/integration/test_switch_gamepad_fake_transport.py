@@ -100,6 +100,24 @@ def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
     asyncio.run(run())
 
 
+def test_close_with_neutral_records_trailing_neutral_report() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = SwitchGamepad(transport=transport, report_period_us=100_000)
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+        await pad.press(Button.A)
+        await pad.close(neutral=True)
+
+        assert transport.is_open is False
+        assert transport.sent_interrupt_reports[-1][0] == 0x30
+        assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+    asyncio.run(run())
+
+
 def test_tap_button_a_records_press_and_release_reports() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

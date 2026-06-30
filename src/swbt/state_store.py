@@ -29,3 +29,9 @@ class InputStateStore:
         async with self._lock:
             self._state = self._state.with_buttons(self._state.buttons.difference(buttons))
             return self._state
+
+    async def neutral(self) -> InputState:
+        """Replace the current input state with neutral input."""
+        async with self._lock:
+            self._state = InputState.neutral()
+            return self._state
