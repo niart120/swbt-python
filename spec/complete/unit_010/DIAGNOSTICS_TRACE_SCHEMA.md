@@ -61,9 +61,9 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | todo | trace に report ID、subcommand ID、raw bytes を残す場合、意味付けは監査済み値に基づける |
-| Bumble / transport | required | todo | event 名と metadata は Bumble callback と version に依存する |
-| OS / driver / adapter | required | todo | run metadata と hardware observation の前提として記録する |
+| Switch HID / report bytes | required | done | `0x21` / `0x30` report id と subcommand id は unit_001 / unit_009 の監査済み parser / responder 値を利用する。raw bytes 出力は今回追加していない |
+| Bumble / transport | required | deferred | Bumble 固有 callback / channel metadata は unit_003 以降の transport 実装と実機 run で確定する |
+| OS / driver / adapter | required | deferred | local schema は OS、Python、adapter string を記録する。driver / dongle identity の実測値は hardware run 後に `docs/hardware-test-log.md` へ記録する |
 
 ## 6. 振る舞い仕様
 
@@ -88,7 +88,7 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 | green | report tx counter が `0x21` と `0x30` を区別して増える | new | integration | no | `test_report_tx_counter_distinguishes_0x21_and_0x30` で固定 |
 | green | output report rx と subcommand rx が packet id で対応付く | new | integration | no | `test_output_report_rx_and_subcommand_rx_share_packet_id` で固定 |
 | green | callback 例外が error event と status に反映される | edge | integration | no | `test_callback_exception_is_recorded_in_trace_and_status` で固定 |
-| todo | hardware run metadata が hardware log に転記できる粒度で出力される | characterization | hardware | yes | 実機 run 後 |
+| deferred | hardware run metadata が hardware log に転記できる粒度で出力される | characterization | hardware | yes | 実機 run 後に `docs/hardware-test-log.md` へ転記確認する |
 
 ## 8. 設計メモ
 
@@ -122,10 +122,12 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_output_report_rx_and_subcommand_rx_share_packet_id -q` | pass | 1 passed。output report rx と subcommand rx が同じ packet id を持つことを確認した |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_callback_exception_is_recorded_in_trace_and_status -q` | pass | 1 passed。callback 例外が trace の error event と status に反映されることを確認した |
 | `uv run pytest tests\unit tests\integration -q` | pass | 87 passed |
+| `uv sync --dev` | pass | Resolved 41 packages / Checked 41 packages |
 | `uv run ruff format --check .` | pass | 30 files already formatted |
 | `uv run ruff check .` | pass | lint pass |
 | `uv run ty check --no-progress` | pass | type check pass |
-| `uv run pytest tests/unit tests/integration` | pending | diagnostics schema 実装後に local automated gate として実行する |
+| `uv run pytest tests\unit -q` | pass | 71 passed |
+| `uv run pytest tests\integration -q` | pass | 16 passed |
 | `uv run pytest -m hardware` | pending-approval | hardware metadata は実機承認後に確認する |
 
 ## 11. 実機実行条件
@@ -150,7 +152,7 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
-- [ ] diagnostics event schema と status source の実装を完了した
-- [ ] local automated gate を実行し、検証欄を結果で更新した
-- [ ] hardware metadata validation は承認、command、cleanup、結果を記録した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] diagnostics event schema と status source の実装を完了した
+- [x] local automated gate を実行し、検証欄を結果で更新した
+- [x] hardware metadata validation は実機承認後の deferred item として明示した
+- [x] 完了条件を満たしたら `spec/complete` へ移動する
