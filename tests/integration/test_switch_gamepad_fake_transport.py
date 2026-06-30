@@ -23,6 +23,25 @@ def test_async_context_opens_and_closes_fake_transport() -> None:
     asyncio.run(run())
 
 
+def test_press_buttons_are_reflected_in_periodic_report() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            await pad.press(Button.L, Button.R)
+
+            start_count = len(transport.sent_interrupt_reports)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 1)
+            report = reports[-1]
+
+            assert report[0] == 0x30
+            assert report[3:6] == bytes.fromhex("40 00 40")
+
+    asyncio.run(run())
+
+
 def test_tap_button_a_records_press_and_release_reports() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

@@ -76,6 +76,7 @@ class SwitchGamepad:
             self._report_loop = ReportLoop(
                 transport=self._transport,
                 state_store=self._state_store,
+                report_period_us=self._config.report_period_us,
             )
             self._is_open = True
 
@@ -94,6 +95,8 @@ class SwitchGamepad:
                 return
             if neutral:
                 await self._send_trailing_neutral_if_connected()
+            if self._report_loop is not None:
+                await self._report_loop.stop()
             await self._transport.close()
             self._report_loop = None
             self._is_open = False
@@ -140,6 +143,8 @@ class SwitchGamepad:
 
     async def _handle_connected(self) -> None:
         self._connected_event.set()
+        if self._report_loop is not None:
+            self._report_loop.start()
 
     async def _handle_disconnected(self, reason: int | None) -> None:
         _ = reason

@@ -1,5 +1,7 @@
 """In-memory HID transport for integration tests."""
 
+import asyncio
+
 from swbt.errors import ClosedError
 from swbt.transport.base import (
     ConnectedCallback,
@@ -20,6 +22,7 @@ class FakeHidTransport:
         self._events: list[str] = []
         self._sent_interrupt_reports: list[bytes] = []
         self._sent_control_reports: list[bytes] = []
+        self._interrupt_report_event = asyncio.Event()
         self._interrupt_callback: InterruptDataCallback | None = None
         self._control_callback: ControlDataCallback | None = None
         self._connected_callback: ConnectedCallback | None = None
@@ -87,6 +90,22 @@ class FakeHidTransport:
         """Record an interrupt report."""
         self._require_open()
         self._sent_interrupt_reports.append(bytes(payload))
+        self._interrupt_report_event.set()
+
+    async def wait_for_interrupt_report_count(
+        self,
+        count: int,
+        *,
+        max_wait: float = 0.5,
+    ) -> tuple[bytes, ...]:
+        """Wait until at least count interrupt reports have been recorded."""
+        async with asyncio.timeout(max_wait):
+            while len(self._sent_interrupt_reports) < count:
+                self._interrupt_report_event.clear()
+                if len(self._sent_interrupt_reports) >= count:
+                    break
+                await self._interrupt_report_event.wait()
+        return self.sent_interrupt_reports
 
     async def send_control(self, payload: bytes) -> None:
         """Record a control report."""
