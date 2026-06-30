@@ -80,7 +80,7 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | Bumble package を import できない環境でも `swbt` public import は壊れない | regression | unit | no | lazy import または transport 内閉じ込め |
+| green | Bumble package を import できない環境でも `swbt` public import は壊れない | regression | unit | no | `test_public_api_import_does_not_resolve_bumble` で固定 |
 | todo | `BumbleHidTransport` が adapter string を diagnostics に記録する | new | unit | no | adapter open は mock で確認 |
 | todo | Bumble open 失敗が `TransportOpenError` に変換される | new | unit | no | Bumble 例外を mock |
 | todo | open 途中の失敗でも close cleanup が呼ばれる | edge | unit | no | cleanup path |
@@ -117,6 +117,11 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 
 | command | result | notes |
 |---|---|---|
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_public_api_import_does_not_resolve_bumble -q` | pass | 1 passed。public API import が Bumble import を解決しないことを確認した |
+| `uv run pytest tests\unit -q` | pass | 72 passed |
+| `uv run ruff format --check .` | pass | 30 files already formatted |
+| `uv run ruff check .` | pass | lint pass |
+| `uv run ty check --no-progress` | pass | type check pass |
 | `uv run pytest tests/unit tests/integration` | pending | M2 実装後に local automated gate として実行する |
 | `uv run pytest -m bumble` | pending-approval | 専用 adapter、command、cleanup plan の明示承認後に実行する |
 
