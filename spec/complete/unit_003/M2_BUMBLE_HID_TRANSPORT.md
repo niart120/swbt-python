@@ -80,16 +80,16 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | Bumble package を import できない環境でも `swbt` public import は壊れない | regression | unit | no | lazy import または transport 内閉じ込め |
-| todo | `BumbleHidTransport` が adapter string を diagnostics に記録する | new | unit | no | adapter open は mock で確認 |
-| todo | Bumble open 失敗が `TransportOpenError` に変換される | new | unit | no | Bumble 例外を mock |
-| todo | open 途中の失敗でも close cleanup が呼ばれる | edge | unit | no | cleanup path |
-| todo | close を複数回呼んでも例外を出さない | edge | unit | no | idempotency |
-| todo | `swbt.transport.bumble` 以外が Bumble を import していない | regression | unit | no | 依存境界 |
-| todo | `adapter="usb:0"` で USB HCI transport を開ける | new | bumble | yes | 明示承認、専用 dongle、cleanup plan が必要 |
-| todo | Bumble device を生成し Classic を有効化できる | new | bumble | yes | `@pytest.mark.bumble` |
-| todo | HID Device 初期化、discoverable / connectable へ遷移できる | new | bumble | yes | Switch pairing は M3 |
-| todo | adapter 情報、OS、Python version、Bumble version が diagnostics に残る | new | bumble | yes | hardware log に転記可能な粒度 |
+| green | Bumble package を import できない環境でも `swbt` public import は壊れない | regression | unit | no | `test_public_api_import_does_not_resolve_bumble` で固定 |
+| green | `BumbleHidTransport` が adapter string を diagnostics に記録する | new | unit | no | `test_bumble_transport_records_adapter_string_in_diagnostics` で固定。adapter open は fake opener |
+| green | Bumble open 失敗が `TransportOpenError` に変換される | new | unit | no | `test_bumble_open_failure_is_mapped_to_transport_open_error` で固定 |
+| green | open 途中の失敗でも close cleanup が呼ばれる | edge | unit | no | `test_bumble_open_failure_after_handle_open_closes_handle` で固定 |
+| green | close を複数回呼んでも例外を出さない | edge | unit | no | `test_bumble_close_is_idempotent` で固定 |
+| green | `swbt.transport.bumble` 以外が Bumble を import していない | regression | unit | no | `test_only_bumble_transport_module_may_resolve_bumble` で固定 |
+| deferred | `adapter="usb:0"` で USB HCI transport を開ける | new | bumble | yes | 明示承認、専用 dongle、cleanup plan が必要。非実機完了範囲では未実行 |
+| deferred | Bumble device を生成し Classic を有効化できる | new | bumble | yes | `@pytest.mark.bumble`。非実機完了範囲では未実行 |
+| deferred | HID Device 初期化、discoverable / connectable へ遷移できる | new | bumble | yes | Switch pairing は M3。非実機完了範囲では未実行 |
+| deferred | adapter 情報、OS、Python version、Bumble version が diagnostics に残る | new | bumble | yes | hardware log に転記可能な粒度。非実機完了範囲では未実行 |
 
 ## 8. 設計メモ
 
@@ -103,21 +103,29 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 | path | change | 内容 |
 |---|---|---|
 | `src/swbt/transport/bumble.py` | new | Bumble transport 実装 |
-| `src/swbt/transport/base.py` | modify | 実 transport に必要な callback / send interface |
-| `src/swbt/protocol/profile.py` | modify | HID descriptor / SDP 用 profile data |
-| `src/swbt/diagnostics.py` | modify | adapter と runtime metadata |
-| `src/swbt/errors.py` | modify | transport 例外 |
-| `tests/unit/` | modify | mock による Bumble boundary tests |
-| `tests/integration/` | modify | fake transport との境界維持 |
-| `tests/hardware/` | new | `@pytest.mark.bumble` adapter tests |
+| `tests/unit/test_bumble_transport.py` | new | fake opener による Bumble transport boundary tests |
+| `tests/unit/test_public_api_boundary.py` | modify | Bumble import 境界の regression test |
+| `tests/hardware/` | deferred | `@pytest.mark.bumble` adapter tests は承認待ち |
 
 ## 10. 検証
 
-この表は M2 実装時に実行する gate を示す。仕様書作成時点の実行結果ではない。
+この表は M2 の非実機完了時点の実行結果を示す。
 
 | command | result | notes |
 |---|---|---|
-| `uv run pytest tests/unit tests/integration` | pending | M2 実装後に local automated gate として実行する |
+| `uv sync --dev` | pass | 41 packages resolved / checked |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_public_api_import_does_not_resolve_bumble -q` | pass | 1 passed。public API import が Bumble import を解決しないことを確認した |
+| `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_transport_records_adapter_string_in_diagnostics -q` | pass | 1 passed。adapter string が diagnostics に記録されることを fake opener で確認した |
+| `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_open_failure_is_mapped_to_transport_open_error -q` | pass | 1 passed。fake opener の失敗が `TransportOpenError` に変換され、error event が残ることを確認した |
+| `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_open_failure_after_handle_open_closes_handle -q` | pass | 1 passed。open 後初期化失敗時に handle cleanup が呼ばれることを確認した |
+| `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_close_is_idempotent -q` | pass | 1 passed。`close()` を複数回呼んでも handle cleanup が一度だけ呼ばれることを確認した |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_only_bumble_transport_module_may_resolve_bumble -q` | pass | 1 passed。`swbt.transport.bumble` 以外の `swbt` module import が Bumble を解決しないことを確認した |
+| `uv run pytest tests\unit -q` | pass | 77 passed |
+| `uv run pytest tests\integration -q` | pass | 16 passed |
+| `uv run ruff format --check .` | pass | 32 files already formatted |
+| `uv run ruff check .` | pass | lint pass |
+| `uv run ty check --no-progress` | pass | type check pass |
+| `uv run pytest tests\unit tests\integration -q` | pass | 93 passed |
 | `uv run pytest -m bumble` | pending-approval | 専用 adapter、command、cleanup plan の明示承認後に実行する |
 
 ## 11. 実機実行条件
@@ -144,6 +152,6 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
 - [x] Bumble / HID descriptor / SDP / OS driver 前提の根拠監査を実施し、状態を更新した
-- [ ] M2 の local automated gate を実行し、検証欄を結果で更新した
-- [ ] adapter を使う検証は承認、command、cleanup、結果を記録した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] M2 の local automated gate を実行し、検証欄を結果で更新した
+- [x] adapter を使う検証は明示承認待ちとして deferred にした
+- [x] 完了条件を満たしたら `spec/complete` へ移動する
