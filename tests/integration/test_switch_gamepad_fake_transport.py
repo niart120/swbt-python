@@ -42,6 +42,27 @@ def test_press_buttons_are_reflected_in_periodic_report() -> None:
     asyncio.run(run())
 
 
+def test_release_buttons_clears_next_periodic_report() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+
+            await pad.press(Button.L, Button.R)
+            pressed_count = len(transport.sent_interrupt_reports)
+            pressed_reports = await transport.wait_for_interrupt_report_count(pressed_count + 1)
+            assert pressed_reports[-1][3:6] == bytes.fromhex("40 00 40")
+
+            await pad.release(Button.L, Button.R)
+            released_count = len(transport.sent_interrupt_reports)
+            released_reports = await transport.wait_for_interrupt_report_count(released_count + 1)
+            assert released_reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+    asyncio.run(run())
+
+
 def test_tap_button_a_records_press_and_release_reports() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
