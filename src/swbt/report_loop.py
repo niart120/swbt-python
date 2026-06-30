@@ -1,6 +1,7 @@
 """Input report sender used by SwitchGamepad."""
 
 import asyncio
+from collections import deque
 from contextlib import suppress
 
 from swbt.protocol.input_report import InputReportBuilder
@@ -24,6 +25,7 @@ class ReportLoop:
         self._state_store = state_store
         self._report_period_seconds = report_period_us / 1_000_000
         self._input_report_builder = input_report_builder or InputReportBuilder()
+        self._reply_queue: deque[bytes] = deque()
         self._timer = 0
         self._task: asyncio.Task[None] | None = None
 
@@ -50,7 +52,18 @@ class ReportLoop:
         self._timer = (self._timer + 1) & 0xFF
         await self._transport.send_interrupt(report)
 
+    def queue_reply(self, report: bytes) -> None:
+        """Queue one subcommand reply for priority transmission."""
+        self._reply_queue.append(bytes(report))
+
+    async def send_next_report(self) -> None:
+        """Send the next queued reply or current input report."""
+        if self._reply_queue:
+            await self._transport.send_interrupt(self._reply_queue.popleft())
+            return
+        await self.send_current_input()
+
     async def _run(self) -> None:
         while True:
             await asyncio.sleep(self._report_period_seconds)
-            await self.send_current_input()
+            await self.send_next_report()

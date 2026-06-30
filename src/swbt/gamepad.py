@@ -6,6 +6,8 @@ from types import TracebackType
 
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.input import Button
+from swbt.protocol.output_report import OutputReportParser
+from swbt.protocol.subcommand import SubcommandResponder
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
@@ -42,6 +44,8 @@ class SwitchGamepad:
         )
         self._transport = transport
         self._state_store = InputStateStore()
+        self._output_report_parser = OutputReportParser()
+        self._subcommand_responder = SubcommandResponder()
         self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
@@ -136,7 +140,15 @@ class SwitchGamepad:
         await self._report_loop.send_current_input()
 
     async def _handle_interrupt_data(self, payload: bytes) -> None:
-        _ = payload
+        output_report = self._output_report_parser.parse(payload)
+        if output_report.subcommand_id is None:
+            return
+        if self._report_loop is None:
+            msg = "gamepad is not open"
+            raise ClosedError(msg)
+        state = await self._state_store.snapshot()
+        reply = self._subcommand_responder.respond(output_report, state=state)
+        self._report_loop.queue_reply(reply)
 
     async def _handle_control_data(self, payload: bytes) -> None:
         _ = payload

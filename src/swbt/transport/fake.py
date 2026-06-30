@@ -86,6 +86,13 @@ class FakeHidTransport:
         if self._connected_callback is not None:
             await self._connected_callback()
 
+    async def inject_interrupt_data(self, payload: bytes) -> None:
+        """Inject host-to-device data into the registered interrupt callback."""
+        self._require_open()
+        self._events.append("interrupt_rx")
+        if self._interrupt_callback is not None:
+            await self._interrupt_callback(bytes(payload))
+
     async def send_interrupt(self, payload: bytes) -> None:
         """Record an interrupt report."""
         self._require_open()
@@ -106,6 +113,21 @@ class FakeHidTransport:
                     break
                 await self._interrupt_report_event.wait()
         return self.sent_interrupt_reports
+
+    async def wait_for_interrupt_report_id(
+        self,
+        report_id: int,
+        *,
+        max_wait: float = 0.5,
+    ) -> bytes:
+        """Wait until an interrupt report with report_id has been recorded."""
+        async with asyncio.timeout(max_wait):
+            while True:
+                for report in self._sent_interrupt_reports:
+                    if report and report[0] == report_id:
+                        return report
+                self._interrupt_report_event.clear()
+                await self._interrupt_report_event.wait()
 
     async def send_control(self, payload: bytes) -> None:
         """Record a control report."""
