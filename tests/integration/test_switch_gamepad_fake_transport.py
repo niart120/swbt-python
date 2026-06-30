@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from swbt import Button, SwitchGamepad
+from swbt import Button, InputState, SwitchGamepad
 from swbt.errors import ConnectionTimeoutError
 from swbt.transport.fake import FakeHidTransport
 
@@ -62,6 +62,25 @@ def test_release_buttons_clears_next_periodic_report() -> None:
             released_count = len(transport.sent_interrupt_reports)
             released_reports = await transport.wait_for_interrupt_report_count(released_count + 1)
             assert released_reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+    asyncio.run(run())
+
+
+def test_set_input_updates_snapshot_and_next_periodic_report() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        state = InputState.neutral().with_buttons([Button.X])
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            await pad.set_input(state)
+
+            assert pad.snapshot() == state
+
+            start_count = len(transport.sent_interrupt_reports)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 1)
+            assert reports[-1][3:6] == bytes.fromhex("02 00 00")
 
     asyncio.run(run())
 

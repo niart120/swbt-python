@@ -18,6 +18,17 @@ class InputStateStore:
         async with self._lock:
             return self._state
 
+    @property
+    def current(self) -> InputState:
+        """Return the latest committed input state."""
+        return self._state
+
+    async def set_input(self, state: InputState) -> InputState:
+        """Replace the current input state."""
+        async with self._lock:
+            self._state = state
+            return self._state
+
     async def press(self, *buttons: Button) -> InputState:
         """Add buttons to the current input state."""
         async with self._lock:

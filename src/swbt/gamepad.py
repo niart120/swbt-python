@@ -6,7 +6,7 @@ from types import TracebackType
 
 from swbt.diagnostics import DiagnosticsRecorder, GamepadStatus
 from swbt.errors import ClosedError, ConnectionTimeoutError, SwbtError, TransportOpenError
-from swbt.input import Button
+from swbt.input import Button, InputState
 from swbt.protocol.output_report import OutputReportParser
 from swbt.protocol.subcommand import SubcommandResponder
 from swbt.report_loop import ReportLoop
@@ -120,6 +120,10 @@ class SwitchGamepad:
         """Add buttons to the current input state."""
         await self._state_store.press(*buttons)
 
+    async def set_input(self, state: InputState) -> None:
+        """Replace the current input state."""
+        await self._state_store.set_input(state)
+
     async def release(self, *buttons: Button) -> None:
         """Remove buttons from the current input state."""
         await self._state_store.release(*buttons)
@@ -143,6 +147,10 @@ class SwitchGamepad:
             connection_state=self._connection_state,
             last_error=self._diagnostics.last_error,
         )
+
+    def snapshot(self) -> InputState:
+        """Return the latest committed input state."""
+        return self._state_store.current
 
     def _register_transport_callbacks(self) -> None:
         if self._transport is None:
