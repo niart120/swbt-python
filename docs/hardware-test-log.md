@@ -6,8 +6,8 @@
 
 ## Current Status
 
-- Hardware run: adapter open/close のみ記録あり。Switch-facing 動作は未記録
-- Bumble adapter run: 2026-07-01 に CSR8510 A10 / WinUSB / `usb:0` で open/close smoke pass
+- Hardware run: 2026-07-01 に CSR8510 A10 / WinUSB / `usb:0` で M2 advertising smoke pass
+- Bumble adapter run: adapter open、Bumble Device 初期化、Classic HID 初期化、SDP / HID descriptor 登録、discoverable / connectable、close を記録済み
 - Pairing run: 未記録
 - Input reflection run: 未記録
 
@@ -37,11 +37,31 @@
 
 | OS | Bluetooth dongle | Driver | Adapter | Switch model | Firmware | Pairing | L2CAP | Subcommands | Input reflected | Result source | Last updated | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Windows | CSR8510 A10 | WinUSB / libwdi 6.1.7600.16385 | `usb:0` | 未使用 | 未使用 | 未実行 | 未実行 | 未実行 | 未実行 | 2026-07-01 adapter open/close smoke | 2026-07-01 | Bumble USB HCI transport の open/close のみ成功。Bumble Device 生成、Classic HID 初期化、advertising、pairing は未検証 |
+| Windows | CSR8510 A10 | WinUSB / libwdi 6.1.7600.16385 | `usb:0` | 未使用 | 未使用 | 未実行 | 未実行 | 未実行 | 未実行 | 2026-07-01 M2 advertising smoke | 2026-07-01 | Bumble Device 生成、Classic HID 初期化、SDP / HID descriptor 登録、discoverable / connectable、close に成功。Switch pairing 以降は未実行 |
 | Linux | 未検証 | libusb 想定 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期保証対象に含めるか未決 |
 | macOS | 未検証 | 未検証 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期検証対象外 |
 
 ## Run Entries
+
+### 2026-07-01: unit_003 Bumble HID advertising smoke
+
+- OS: Windows 11, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `test/unit-003-bumble-hardware` branch
+- adapter: `usb:0`
+- dongle: CSR8510 A10, `USB\VID_0A12&PID_0001\9&12127A34&0&1`, `Port_#0001.Hub_#0013`
+- driver: WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not used
+- Switch firmware: not used
+- report period: not used
+- command / test: `uv run pytest tests\hardware\test_bumble_transport.py -m bumble --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_003\20260701-022335 -q`
+- approval: user approved this M2 hardware smoke. Scope included Bumble adapter open, Bumble Device initialization, Classic enable, HID Device initialization, SDP / HID descriptor registration, discoverable / connectable, and close. Scope excluded Switch pairing, L2CAP channel open, subcommand handling, periodic report loop, and input reflection.
+- result: pass, `1 passed in 0.52s`. Trace includes `transport_open_start`, `bumble_device_initialized`, `sdp_record_registered` with `hid_descriptor_size=203`, `hid_device_initialized`, `transport_open_complete`, `advertising_start`, and `transport_close_complete`.
+- artifact: `.pytest_cache\hardware\unit_003\20260701-022335\bumble-hid-advertising-smoke.jsonl`
+- cleanup: test called `BumbleHidTransport.close()` twice in `finally`; trace recorded one `transport_close_complete`. Post-run PnP status for CSR8510 A10 was `OK`.
+- notes: `usb:0` is associated with CSR8510 A10 by the pre-run Windows PnP inventory. This run did not pair with a console, open HID channels, receive subcommands, start the periodic report loop, or send input reports.
 
 ### 2026-07-01: unit_003 Bumble adapter open / close smoke
 

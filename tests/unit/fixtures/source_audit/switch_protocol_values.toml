@@ -174,9 +174,9 @@ handoff = ["unit_001", "unit_002", "unit_005"]
 id = "swbt_python_adapter_driver_boundary"
 fixture_name = "swbt_python_adapter_driver_boundary"
 area = "hardware"
-value = "swbt-python observed Bumble USB HCI transport open/close on adapter usb:0 with CSR8510 A10 on WinUSB; Bumble Device generation, Classic HID initialization, advertising, pairing, L2CAP, and input reflection remain unverified in swbt-python"
+value = "swbt-python observed Bumble USB HCI transport open/close, Bumble Device generation, Classic HID initialization, SDP / HID descriptor registration, discoverable / connectable, and close on adapter usb:0 with CSR8510 A10 on WinUSB; pairing, L2CAP, subcommands, report loop, and input reflection remain unverified in swbt-python"
 classification = "hardware observation"
-condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; open/close only"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; M2 advertising smoke only; no Switch pairing"
 source = [
     'docs\hardware-test-log.md',
     'spec\complete\unit_003\M2_BUMBLE_HID_TRANSPORT.md',

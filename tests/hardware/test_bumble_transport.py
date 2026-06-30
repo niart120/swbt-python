@@ -12,11 +12,11 @@ from swbt.transport.bumble import BumbleHidTransport
 
 
 @pytest.mark.bumble
-def test_bumble_adapter_open_close_records_diagnostics(
+def test_bumble_hid_transport_advertising_smoke_records_diagnostics(
     swbt_bumble_adapter: str,
     swbt_hardware_artifact_dir: Path,
 ) -> None:
-    trace_path = swbt_hardware_artifact_dir / "bumble-adapter-open-close.jsonl"
+    trace_path = swbt_hardware_artifact_dir / "bumble-hid-advertising-smoke.jsonl"
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
@@ -33,7 +33,9 @@ def test_bumble_adapter_open_close_records_diagnostics(
             )
             try:
                 await transport.open()
+                await transport.start_advertising()
             finally:
+                await transport.close()
                 await transport.close()
 
     asyncio.run(run())
@@ -42,7 +44,11 @@ def test_bumble_adapter_open_close_records_diagnostics(
     assert _contains_event(events, "run_metadata", adapter=swbt_bumble_adapter)
     assert _contains_event(events, "bumble_runtime")
     assert _contains_event(events, "transport_open_start", adapter=swbt_bumble_adapter)
+    assert _contains_event(events, "bumble_device_initialized", adapter=swbt_bumble_adapter)
+    assert _contains_event(events, "sdp_record_registered", adapter=swbt_bumble_adapter)
+    assert _contains_event(events, "hid_device_initialized", adapter=swbt_bumble_adapter)
     assert _contains_event(events, "transport_open_complete", adapter=swbt_bumble_adapter)
+    assert _contains_event(events, "advertising_start", adapter=swbt_bumble_adapter)
     assert _contains_event(events, "transport_close_complete", adapter=swbt_bumble_adapter)
 
 

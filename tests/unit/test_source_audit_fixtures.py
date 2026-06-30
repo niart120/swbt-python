@@ -97,7 +97,9 @@ def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
 
     assert isinstance(condition, str)
     assert isinstance(value, str)
-    assert "open/close only" in condition
+    assert "M2 advertising smoke only" in condition
+    assert "discoverable / connectable" in value
+    assert "no Switch pairing" in condition
     assert "input reflection remain unverified" in value
 
 
