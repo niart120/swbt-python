@@ -86,7 +86,7 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 | green | run metadata に OS、Python、package version、adapter が入る | new | unit | no | `test_run_metadata_records_environment_and_adapter` で固定。package version 取得不能時は `unknown` |
 | green | lifecycle state transition が previous / next / reason を持つ | new | unit | no | `test_state_transition_records_previous_next_and_reason` で固定 |
 | green | report tx counter が `0x21` と `0x30` を区別して増える | new | integration | no | `test_report_tx_counter_distinguishes_0x21_and_0x30` で固定 |
-| todo | output report rx と subcommand rx が packet id で対応付く | new | integration | no | fake fixture |
+| green | output report rx と subcommand rx が packet id で対応付く | new | integration | no | `test_output_report_rx_and_subcommand_rx_share_packet_id` で固定 |
 | todo | callback 例外が error event と status に反映される | edge | integration | no | failed state |
 | todo | hardware run metadata が hardware log に転記できる粒度で出力される | characterization | hardware | yes | 実機 run 後 |
 
@@ -119,7 +119,8 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 | `uv run pytest tests\unit\test_diagnostics.py::test_run_metadata_records_environment_and_adapter -q` | pass | 1 passed。run metadata に adapter、OS、Python version、package version が入ることを確認した |
 | `uv run pytest tests\unit\test_diagnostics.py::test_state_transition_records_previous_next_and_reason -q` | pass | 1 passed。state transition が previous / next / reason を出力することを確認した |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_report_tx_counter_distinguishes_0x21_and_0x30 -q` | pass | 1 passed。`0x30` と `0x21` の report tx counter が別々に増えることを確認した |
-| `uv run pytest tests\unit tests\integration -q` | pass | 85 passed |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_output_report_rx_and_subcommand_rx_share_packet_id -q` | pass | 1 passed。output report rx と subcommand rx が同じ packet id を持つことを確認した |
+| `uv run pytest tests\unit tests\integration -q` | pass | 86 passed |
 | `uv run ruff format --check .` | pass | 30 files already formatted |
 | `uv run ruff check .` | pass | lint pass |
 | `uv run ty check --no-progress` | pass | type check pass |

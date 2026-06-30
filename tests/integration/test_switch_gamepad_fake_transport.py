@@ -188,6 +188,40 @@ def test_report_tx_counter_distinguishes_0x21_and_0x30() -> None:
     asyncio.run(run())
 
 
+def test_output_report_rx_and_subcommand_rx_share_packet_id() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        request_device_info = bytes.fromhex("01 12 00 00 00 00 00 00 00 00 02")
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=1000,
+        ) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            await transport.inject_interrupt_data(request_device_info)
+            await transport.wait_for_interrupt_report_id(0x21)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "output_report_rx",
+            "length": 11,
+            "packet_id": 0x12,
+            "report_id": "0x01",
+            "subcommand_id": "0x02",
+        } in events
+        assert {
+            "event": "subcommand_rx",
+            "packet_id": 0x12,
+            "subcommand_id": "0x02",
+        } in events
+
+    asyncio.run(run())
+
+
 def test_close_with_neutral_records_trailing_neutral_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

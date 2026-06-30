@@ -179,8 +179,25 @@ class SwitchGamepad:
     async def _handle_interrupt_data(self, payload: bytes) -> None:
         try:
             output_report = self._output_report_parser.parse(payload)
+            subcommand_id = (
+                f"0x{output_report.subcommand_id:02x}"
+                if output_report.subcommand_id is not None
+                else None
+            )
+            self._diagnostics.record_event(
+                "output_report_rx",
+                length=len(payload),
+                packet_id=output_report.packet_id,
+                report_id=f"0x{output_report.report_id:02x}",
+                subcommand_id=subcommand_id,
+            )
             if output_report.subcommand_id is None:
                 return
+            self._diagnostics.record_event(
+                "subcommand_rx",
+                packet_id=output_report.packet_id,
+                subcommand_id=subcommand_id,
+            )
             if self._report_loop is None:
                 msg = "gamepad is not open"
                 raise ClosedError(msg)
