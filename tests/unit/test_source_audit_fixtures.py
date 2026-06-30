@@ -87,11 +87,20 @@ def test_hardware_observations_are_condition_scoped() -> None:
             assert entry["condition"]
 
 
-def test_swbt_python_adapter_boundary_is_not_marked_verified() -> None:
+def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
     entry = _entry_by_id("swbt_python_adapter_driver_boundary")
 
-    assert entry["classification"] == "unverified hypothesis"
-    assert entry["status"] == "requires-hardware-log"
+    assert entry["classification"] == "hardware observation"
+    assert entry["status"] == "hardware-observed-only"
+    condition = entry["condition"]
+    value = entry["value"]
+
+    assert isinstance(condition, str)
+    assert isinstance(value, str)
+    assert "M2 advertising smoke only" in condition
+    assert "discoverable / connectable" in value
+    assert "no Switch pairing" in condition
+    assert "input reflection remain unverified" in value
 
 
 def test_default_report_period_remains_configurable() -> None:

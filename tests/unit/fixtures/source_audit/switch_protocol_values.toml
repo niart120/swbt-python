@@ -174,15 +174,15 @@ handoff = ["unit_001", "unit_002", "unit_005"]
 id = "swbt_python_adapter_driver_boundary"
 fixture_name = "swbt_python_adapter_driver_boundary"
 area = "hardware"
-value = "swbt-python has no confirmed Bumble adapter, pairing, or input reflection run; Windows WinUSB and Linux libusb are planning assumptions until recorded in docs/hardware-test-log.md"
-classification = "unverified hypothesis"
+value = "swbt-python observed Bumble USB HCI transport open/close, Bumble Device generation, Classic HID initialization, SDP / HID descriptor registration, discoverable / connectable, and close on adapter usb:0 with CSR8510 A10 on WinUSB; pairing, L2CAP, subcommands, report loop, and input reflection remain unverified in swbt-python"
+classification = "hardware observation"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; M2 advertising smoke only; no Switch pairing"
 source = [
-    'README.md',
     'docs\hardware-test-log.md',
-    'spec\initial\transport-bumble.md',
-    'spec\initial\risks.md',
+    'spec\complete\unit_003\M2_BUMBLE_HID_TRANSPORT.md',
+    'tests\hardware\test_bumble_transport.py',
 ]
-status = "requires-hardware-log"
+status = "hardware-observed-only"
 handoff = ["unit_003", "unit_004", "unit_005", "unit_011"]
 
 [[entry]]
