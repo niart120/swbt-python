@@ -118,6 +118,35 @@ def test_close_with_neutral_records_trailing_neutral_report() -> None:
     asyncio.run(run())
 
 
+def test_concurrent_press_and_release_preserve_button_state() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+
+            await asyncio.gather(
+                pad.press(Button.L),
+                pad.press(Button.R),
+                pad.press(Button.L, Button.R),
+            )
+            pressed_count = len(transport.sent_interrupt_reports)
+            pressed_reports = await transport.wait_for_interrupt_report_count(pressed_count + 1)
+            assert pressed_reports[-1][3:6] == bytes.fromhex("40 00 40")
+
+            await asyncio.gather(
+                pad.release(Button.L),
+                pad.release(Button.R),
+                pad.release(Button.L, Button.R),
+            )
+            released_count = len(transport.sent_interrupt_reports)
+            released_reports = await transport.wait_for_interrupt_report_count(released_count + 1)
+            assert released_reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+    asyncio.run(run())
+
+
 def test_tap_button_a_records_press_and_release_reports() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
