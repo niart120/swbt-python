@@ -54,13 +54,13 @@
 - `spec/initial/testing.md`
 - `spec/initial/roadmap.md`
 - `spec/initial/risks.md`
-- `spec/wip/unit_009/PORTING_SOURCE_AUDIT.md`
+- `spec/complete/unit_009/PORTING_SOURCE_AUDIT.md`
 
 ## 5. 根拠監査
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | todo | `0x30` layout、button bit、stick packing、IMU frame、battery / connection info、reply payload、SPI address は既存 `swbt-daemon` spec と実機ログから分類して固定する |
+| Switch HID / report bytes | required | done | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` の `input_report_0x30_layout`、`button_bit_and_stick_pack`、`output_report_parser_layout`、`subcommand_reply_0x21_layout`、`spi_flash_boundary_and_seed_map` を M0 実装前の根拠 source とする |
 | Bumble / transport | not applicable | not applicable | M0 は protocol core のみで Bumble を import しない |
 | OS / driver / adapter | not applicable | not applicable | M0 は USB Bluetooth adapter を使わない |
 
@@ -84,11 +84,11 @@
 | todo | neutral `InputState` が空 button、center stick、neutral IMU を持つ | new | unit | no | M0 最初の red 候補 |
 | todo | `Stick.raw()` が `0..4095` 外の値を拒否する | edge | unit | no | 範囲と例外を固定する |
 | todo | `Stick.normalized()` が `-1.0`、`0.0`、`1.0` を決定的な raw 値へ変換する | edge | unit | no | 丸めを fixture 化する |
-| todo | neutral `0x30` report が report ID を含む 49 bytes になる | new | unit | no | report byte 監査後に期待値を固定する |
-| todo | `Button.A` が期待する button bit に反映される | new | unit | no | source-audit 必須 |
-| todo | `Button.L` と `Button.R` の同時押しが期待する bytes になる | new | unit | no | source-audit 必須 |
-| todo | d-pad 4 方向が個別の bit として反映される | new | unit | no | source-audit 必須 |
-| todo | stick center が期待する 12-bit pack になる | new | unit | no | source-audit 必須 |
+| todo | neutral `0x30` report が report ID を含む 49 bytes になる | new | unit | no | `input_report_0x30_layout` を期待値 source にする |
+| todo | `Button.A` が期待する button bit に反映される | new | unit | no | `button_bit_and_stick_pack` を期待値 source にする |
+| todo | `Button.L` と `Button.R` の同時押しが期待する bytes になる | new | unit | no | `button_bit_and_stick_pack` を期待値 source にする |
+| todo | d-pad 4 方向が個別の bit として反映される | new | unit | no | `button_bit_and_stick_pack` を期待値 source にする |
+| todo | stick center が期待する 12-bit pack になる | new | unit | no | `button_bit_and_stick_pack` を期待値 source にする |
 | todo | `0x01` output report から packet id、rumble、subcommand id、payload を抽出できる | new | unit | no | 不正長 test も追加する |
 | todo | `0x10` output report を rumble only として扱う | new | unit | no | subcommand reply を生成しない |
 | todo | 対応 subcommand から `0x21` reply を生成できる | new | unit | no | `0x02`、`0x03`、`0x04`、`0x08`、`0x10`、`0x21`、`0x30`、`0x40`、`0x48` |
@@ -148,6 +148,6 @@
 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
-- [ ] protocol byte layout と subcommand payload の根拠監査を実施し、状態を更新した
+- [x] protocol byte layout と subcommand payload の根拠監査を実施し、状態を更新した
 - [ ] M0 の実装と対象 test を実行し、検証欄を結果で更新した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する

@@ -1,0 +1,201 @@
+schema_version = 1
+
+[metadata]
+purpose = "unit_009 porting source audit handoff for Switch HID protocol and Bumble transport values"
+created = "2026-06-30"
+policy = "Do not promote hardware observations or unverified transport assumptions to stable public guarantees."
+
+[[entry]]
+id = "input_report_0x30_layout"
+fixture_name = "neutral_0x30_report_layout"
+area = "protocol"
+value = "report_id=0x30; size=49 bytes including report id; byte order: report id, timer, battery/connection, 3 button bytes, left stick, right stick, vibrator, 6-axis payload"
+classification = "source fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-report-core.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_report.h:9-10',
+]
+status = "stable"
+handoff = ["unit_001"]
+
+[[entry]]
+id = "button_bit_and_stick_pack"
+fixture_name = "button_stick_pack_layout"
+area = "protocol"
+value = "button bytes at report indexes 3,4,5; 3 bytes per stick; x=b0|((b1&0x0f)<<8); y=(b1>>4)|(b2<<4)"
+classification = "source fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-report-core.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\tests\switch_report_test.c:85-97',
+]
+status = "stable"
+handoff = ["unit_001"]
+
+[[entry]]
+id = "output_report_parser_layout"
+fixture_name = "output_report_0x01_0x10_layout"
+area = "protocol"
+value = "0x01 is rumble plus subcommand; 0x10 is rumble only; rumble payload is 8 bytes after report id and packet counter"
+classification = "source fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-subcommand-core.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_subcommand.h:10-17',
+]
+status = "stable"
+handoff = ["unit_001", "unit_005"]
+
+[[entry]]
+id = "subcommand_reply_0x21_layout"
+fixture_name = "subcommand_reply_0x21_layout"
+area = "protocol"
+value = "report_id=0x21; size=50 bytes; ack offset=13; reply-to subcommand offset=14; data offset=15; max data=35 bytes"
+classification = "source fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-subcommand-reply-core.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_subcommand_reply.h:10-20',
+]
+status = "stable"
+handoff = ["unit_001", "unit_005"]
+
+[[entry]]
+id = "subcommand_reply_payloads"
+fixture_name = "subcommand_reply_payload_classification"
+area = "protocol"
+value = "simple ACK=0x80; device info ACK=0x82; trigger buttons elapsed ACK=0x83; SPI read ACK=0x90; MCU config ACK=0xa0; player lights ACK=0xb0"
+classification = "implementation fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-subcommand-dispatcher-core.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_subcommand_dispatcher.c:47-228',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\tests\switch_subcommand_dispatcher_test.c:121-346',
+]
+status = "handoff-ready"
+handoff = ["unit_001", "unit_005"]
+
+[[entry]]
+id = "device_info_swbt_pro_profile"
+fixture_name = "device_info_swbt_pro_profile"
+area = "protocol"
+value = "swbt-pro profile: firmware=04 00; controller_type=0x03; marker=0x02; runtime Bluetooth address; tail=01 01"
+classification = "implementation fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-subcommand-dispatcher-core.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_device_info.h:6-10',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_device_info.c:21-31',
+]
+status = "handoff-ready"
+handoff = ["unit_005"]
+
+[[entry]]
+id = "spi_flash_boundary_and_seed_map"
+fixture_name = "spi_flash_boundary_seed_map"
+area = "protocol"
+value = "address_limit=0x80000 exclusive; storage_size=0x10000; max_read=0x1d; erased=0xff; device_type_address=0x6012; pro_controller_value=0x03"
+classification = "source fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-spi-core.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_spi.h:7-23',
+]
+status = "stable"
+handoff = ["unit_001", "unit_005"]
+
+[[entry]]
+id = "raw_rumble_payload"
+fixture_name = "raw_rumble_payload"
+area = "protocol"
+value = "rumble payload size=8 bytes; neutral payload=00 01 40 40 00 01 40 40; no semantic frequency/amplitude decode"
+classification = "source fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-rumble-core.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_rumble.h:8-10',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_rumble.c:3-4',
+]
+status = "stable-raw-only"
+handoff = ["unit_001", "unit_005"]
+
+[[entry]]
+id = "hid_report_descriptor"
+fixture_name = "hid_report_descriptor_203_bytes"
+area = "transport"
+value = "HID report descriptor length=203 bytes; descriptor report IDs include input 0x30,0x21,0x81 and output 0x01,0x10,0x80,0x82"
+classification = "source fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-hid-descriptor-core.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_hid_descriptor.h:7',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\tests\switch_hid_descriptor_test.c:76-81',
+]
+status = "stable"
+handoff = ["unit_003"]
+
+[[entry]]
+id = "bumble_hid_device_api"
+fixture_name = "bumble_0_0_230_hid_device_api"
+area = "transport"
+value = "bumble.hid.Device registers Classic HID control and interrupt servers; callbacks exist for get/set report and get/set protocol"
+classification = "source fact"
+source = [
+    '.venv\Lib\site-packages\bumble\hid.py:43-44',
+    '.venv\Lib\site-packages\bumble\hid.py:221-224',
+    '.venv\Lib\site-packages\bumble\hid.py:342-503',
+    'uv.lock:142-165',
+]
+status = "version-pinned"
+handoff = ["unit_003"]
+
+[[entry]]
+id = "bumble_classic_visibility"
+fixture_name = "bumble_classic_discoverable_connectable"
+area = "transport"
+value = "DeviceConfig has classic_enabled, discoverable, and connectable; Device.power_on applies connectable/discoverable when classic is enabled"
+classification = "source fact"
+source = [
+    '.venv\Lib\site-packages\bumble\device.py:2136-2143',
+    '.venv\Lib\site-packages\bumble\device.py:2838-3004',
+    '.venv\Lib\site-packages\bumble\device.py:3736-3761',
+    'uv.lock:142-165',
+]
+status = "version-pinned"
+handoff = ["unit_003"]
+
+[[entry]]
+id = "report_period_default"
+fixture_name = "report_period_default_8000us"
+area = "report-loop"
+value = "8000us is the initial configurable default; it is not an optimized or universal timing guarantee"
+classification = "inference"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-hid-initial-source-audit.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\btstack-periodic-input-report-core.md',
+    'spec\initial\architecture.md',
+]
+status = "configurable"
+handoff = ["unit_001", "unit_002", "unit_005"]
+
+[[entry]]
+id = "swbt_python_adapter_driver_boundary"
+fixture_name = "swbt_python_adapter_driver_boundary"
+area = "hardware"
+value = "swbt-python has no confirmed Bumble adapter, pairing, or input reflection run; Windows WinUSB and Linux libusb are planning assumptions until recorded in docs/hardware-test-log.md"
+classification = "unverified hypothesis"
+source = [
+    'README.md',
+    'docs\hardware-test-log.md',
+    'spec\initial\transport-bumble.md',
+    'spec\initial\risks.md',
+]
+status = "requires-hardware-log"
+handoff = ["unit_003", "unit_004", "unit_005", "unit_011"]
+
+[[entry]]
+id = "swbt_daemon_csr8510_winusb_observation"
+fixture_name = "swbt_daemon_csr8510_winusb_observation"
+area = "hardware"
+value = "swbt-daemon observed pairing, L2CAP, 0x21 replies, 0x30 reports, and Button A reflection on CSR8510 A10, WinUSB, Switch2 firmware 22.1.0"
+classification = "hardware observation"
+condition = "Windows native; CSR8510 A10; WinUSB; BTstack 075a0780f0fad7ff67d58ac19f46e8953656a752; swbt-daemon production backend; Switch2 firmware 22.1.0"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\docs\status.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\docs\hardware-test-log.md',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\protocols\switch-hid-core.md',
+]
+status = "hardware-observed-only"
+handoff = ["unit_003", "unit_004", "unit_005", "unit_011"]

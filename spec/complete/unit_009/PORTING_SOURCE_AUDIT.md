@@ -63,9 +63,9 @@
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | todo | この仕様自体が監査 inventory。値は各実装 unit に移す前に分類する |
-| Bumble / transport | required | todo | Bumble HID Device / SDP / L2CAP 仮定を version 付きで記録する |
-| OS / driver / adapter | required | todo | WinUSB、libusb、dongle identity、firmware 観測を一般化しない |
+| Switch HID / report bytes | required | done | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` に `0x30`、`0x01`、`0x10`、`0x21`、button / stick、subcommand reply、SPI、rumble、HID descriptor の分類を記録した |
+| Bumble / transport | required | done | `bumble==0.0.230` の installed API と `uv.lock` を source として、HID Device helper、Classic PSM、discoverable / connectable 前提を version 付きで記録した |
+| OS / driver / adapter | required | done | `swbt-python` の adapter / driver 実機結果は未確認として `unverified hypothesis`、既存 `swbt-daemon` の CSR8510 A10 / WinUSB 観測は `hardware observation` として分離した |
 
 ## 6. 振る舞い仕様
 
@@ -81,13 +81,13 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | `0x30` neutral report fixture が source と対応付けられている | characterization | unit | no | M0 の fixture source |
-| todo | button bit と stick packing の fixture に source 分類がある | characterization | unit | no | 実装前の監査 |
-| todo | subcommand reply payload fixture に source 分類がある | characterization | unit | no | M4 で更新 |
-| todo | SPI flash address / data fixture に source 分類がある | characterization | unit | no | 未定義領域の扱いを含む |
-| todo | HID descriptor / SDP record の source と version が記録されている | characterization | unit | no | M2 の前提 |
-| todo | report period default の根拠と configurable 判断が記録されている | characterization | unit | no | scheduler jitter 対策 |
-| todo | adapter / driver 前提が hardware log と README に分かれて反映される | regression | hardware | yes | 実機 run 後 |
+| done | `0x30` neutral report fixture が source と対応付けられている | characterization | unit | no | `input_report_0x30_layout` |
+| done | button bit と stick packing の fixture に source 分類がある | characterization | unit | no | `button_bit_and_stick_pack` |
+| done | subcommand reply payload fixture に source 分類がある | characterization | unit | no | `subcommand_reply_0x21_layout`、`subcommand_reply_payloads` |
+| done | SPI flash address / data fixture に source 分類がある | characterization | unit | no | `spi_flash_boundary_and_seed_map` |
+| done | HID descriptor / SDP record の source と version が記録されている | characterization | unit | no | `hid_report_descriptor`、`bumble_hid_device_api`、`bumble_classic_visibility` |
+| done | report period default の根拠と configurable 判断が記録されている | characterization | unit | no | `report_period_default` |
+| done | adapter / driver 前提が hardware log と README に分かれて反映される | regression | hardware | no | 実機 run ではなく文書境界の確認。`swbt_python_adapter_driver_boundary` と `docs/hardware-test-log.md` matrix に反映 |
 
 ## 8. 設計メモ
 
@@ -103,9 +103,10 @@
 | `spec/wip/unit_001/M0_PROTOCOL_CORE.md` | modify | protocol value audit status |
 | `spec/wip/unit_003/M2_BUMBLE_HID_TRANSPORT.md` | modify | Bumble / descriptor / OS audit status |
 | `spec/wip/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md` | modify | observed subcommand audit |
-| `spec/dev-journal.md` | new / modify | 小さい未解決観測 |
-| `docs/hardware-test-log.md` | new / modify | 実機観測 |
-| `tests/unit/fixtures/` | new | 監査済み protocol fixture |
+| `spec/dev-journal.md` | unchanged | 小さい未解決観測は今回なし |
+| `docs/hardware-test-log.md` | unchanged | 実機 run は今回なし。既存 matrix と README の未検証境界を参照 |
+| `tests/unit/fixtures/source_audit/switch_protocol_values.toml` | new | 監査済み protocol / transport source fixture |
+| `tests/unit/test_source_audit_fixtures.py` | new | source fixture の分類、source、handoff、実機条件分離を検査 |
 
 ## 10. 検証
 
@@ -113,8 +114,12 @@
 
 | command | result | notes |
 |---|---|---|
-| `rg -n ("TO" + "DO|" + "TB" + "D|" + "x" + "xx") spec src tests README.md` | pending | 監査結果を実装や docs に反映した後、仮テキスト残存確認として実行する |
-| `uv run pytest tests/unit` | pending | 監査 fixture 実装後に実行する |
+| `uv sync --dev` | pass | 41 packages resolved / checked |
+| `uv run ruff format --check .` | pass | 4 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit` | pass | 8 passed |
+| `rg -n ("TO" + "DO|" + "TB" + "D|" + "x" + "xx") spec src tests README.md` | pass | no matches。`rg` は no-match のため exit 1 |
 
 ## 11. 実機実行条件
 
@@ -131,6 +136,8 @@
 
 - release 前にどの監査項目を blocking にするかは unit_012 で判断する。
 - Linux / macOS の実機保証は初期 release 範囲が決まった後に拡張する。
+- `swbt-python` 自身の Bumble adapter open、pairing、input reflection はこの作業では実行していない。実行時は `hardware-harness` の承認境界を通し、`docs/hardware-test-log.md` に記録する。
+- `swbt-daemon` の CSR8510 A10 / WinUSB / Switch2 firmware `22.1.0` 観測は source handoff として使うが、Bumble transport の互換性保証にはしない。
 
 ## 13. チェックリスト
 
@@ -138,7 +145,7 @@
 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
-- [ ] protocol / Bumble / OS driver の監査表を作成し、分類を記録した
-- [ ] 監査結果を対象 unit の根拠監査欄または fixture に反映した
-- [ ] 監査 fixture と docs residue の検証を実行し、検証欄を結果で更新した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] protocol / Bumble / OS driver の監査表を作成し、分類を記録した
+- [x] 監査結果を対象 unit の根拠監査欄または fixture に反映した
+- [x] 監査 fixture と docs residue の検証を実行し、検証欄を結果で更新した
+- [x] 完了条件を満たしたら `spec/complete` へ移動する
