@@ -79,3 +79,29 @@ def test_bumble_open_failure_is_mapped_to_transport_open_error() -> None:
         } in events
 
     asyncio.run(run())
+
+
+def test_bumble_open_failure_after_handle_open_closes_handle() -> None:
+    async def run() -> None:
+        handle = FakeBumbleHandle()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return handle
+
+        async def initialize_device(opened_handle: object) -> None:
+            assert opened_handle is handle
+            raise FakeOpenError
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        with pytest.raises(TransportOpenError):
+            await transport.open()
+
+        assert handle.close_count == 1
+
+    asyncio.run(run())

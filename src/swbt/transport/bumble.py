@@ -19,6 +19,7 @@ class _BumbleHandle(Protocol):
 
 
 _OpenTransport = Callable[[str], Awaitable[_BumbleHandle]]
+_InitializeDevice = Callable[[_BumbleHandle], Awaitable[None]]
 
 
 class BumbleHidTransport:
@@ -30,11 +31,13 @@ class BumbleHidTransport:
         adapter: str,
         diagnostics: DiagnosticsRecorder | None = None,
         _open_transport: _OpenTransport | None = None,
+        _initialize_device: _InitializeDevice | None = None,
     ) -> None:
         """Create a Bumble transport for an adapter string."""
         self._adapter = adapter
         self._diagnostics = diagnostics
         self._open_transport = _open_transport or _default_open_transport
+        self._initialize_device = _initialize_device or _default_initialize_device
         self._handle: _BumbleHandle | None = None
         self._interrupt_callback: InterruptDataCallback | None = None
         self._control_callback: ControlDataCallback | None = None
@@ -48,7 +51,9 @@ class BumbleHidTransport:
         self._record_event("transport_open_start", adapter=self._adapter)
         try:
             self._handle = await self._open_transport(self._adapter)
+            await self._initialize_device(self._handle)
         except Exception as error:
+            await self._cleanup_open_failure()
             self._record_error(error)
             msg = f"failed to open Bumble adapter: {self._adapter}"
             raise TransportOpenError(msg) from error
@@ -111,8 +116,19 @@ class BumbleHidTransport:
         if self._diagnostics is not None:
             self._diagnostics.record_error(error, recoverable=False)
 
+    async def _cleanup_open_failure(self) -> None:
+        if self._handle is None:
+            return
+        handle = self._handle
+        self._handle = None
+        await handle.close()
+
 
 async def _default_open_transport(adapter: str) -> _BumbleHandle:
     from bumble.transport import open_transport  # noqa: PLC0415
 
     return await open_transport(adapter)
+
+
+async def _default_initialize_device(handle: _BumbleHandle) -> None:
+    _ = handle
