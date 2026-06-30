@@ -29,18 +29,24 @@
 <!-- 実行した検証コマンドとその結果を記載する -->
 
 ```
-pnpm lint
-pnpm test:run
-pnpm exec tsc -b --noEmit
+uv sync --dev
+uv run ruff format --check .
+uv run ruff check .
+uv run ty check --no-progress
+uv run pytest tests/unit
+uv run pytest tests/integration
+uv build
 ```
 
 ## Checklist
 
 - [ ] lint / format チェック通過
 - [ ] 既存テスト通過
+- [ ] fake transport integration test 通過
 - [ ] コミット prefix (feat/fix 等) が変更の動機と一致している
 - [ ] 新規・変更コードに対するテスト追加（該当する場合）
 - [ ] 型チェック通過
+- [ ] package build 通過
 
 ## Review Notes
 
