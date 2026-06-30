@@ -85,7 +85,7 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 | green | Bumble open 失敗が `TransportOpenError` に変換される | new | unit | no | `test_bumble_open_failure_is_mapped_to_transport_open_error` で固定 |
 | green | open 途中の失敗でも close cleanup が呼ばれる | edge | unit | no | `test_bumble_open_failure_after_handle_open_closes_handle` で固定 |
 | green | close を複数回呼んでも例外を出さない | edge | unit | no | `test_bumble_close_is_idempotent` で固定 |
-| todo | `swbt.transport.bumble` 以外が Bumble を import していない | regression | unit | no | 依存境界 |
+| green | `swbt.transport.bumble` 以外が Bumble を import していない | regression | unit | no | `test_only_bumble_transport_module_may_resolve_bumble` で固定 |
 | todo | `adapter="usb:0"` で USB HCI transport を開ける | new | bumble | yes | 明示承認、専用 dongle、cleanup plan が必要 |
 | todo | Bumble device を生成し Classic を有効化できる | new | bumble | yes | `@pytest.mark.bumble` |
 | todo | HID Device 初期化、discoverable / connectable へ遷移できる | new | bumble | yes | Switch pairing は M3 |
@@ -122,7 +122,8 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 | `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_open_failure_is_mapped_to_transport_open_error -q` | pass | 1 passed。fake opener の失敗が `TransportOpenError` に変換され、error event が残ることを確認した |
 | `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_open_failure_after_handle_open_closes_handle -q` | pass | 1 passed。open 後初期化失敗時に handle cleanup が呼ばれることを確認した |
 | `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_close_is_idempotent -q` | pass | 1 passed。`close()` を複数回呼んでも handle cleanup が一度だけ呼ばれることを確認した |
-| `uv run pytest tests\unit -q` | pass | 76 passed |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_only_bumble_transport_module_may_resolve_bumble -q` | pass | 1 passed。`swbt.transport.bumble` 以外の `swbt` module import が Bumble を解決しないことを確認した |
+| `uv run pytest tests\unit -q` | pass | 77 passed |
 | `uv run ruff format --check .` | pass | 32 files already formatted |
 | `uv run ruff check .` | pass | lint pass |
 | `uv run ty check --no-progress` | pass | type check pass |
