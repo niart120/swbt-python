@@ -83,7 +83,7 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
 | green | diagnostics event が JSON Lines として 1 行 1 object で出力される | new | unit | no | `tests/unit/test_diagnostics.py` で固定 |
-| todo | run metadata に OS、Python、package version、adapter が入る | new | unit | no | 取得不能値の扱いも確認 |
+| green | run metadata に OS、Python、package version、adapter が入る | new | unit | no | `test_run_metadata_records_environment_and_adapter` で固定。package version 取得不能時は `unknown` |
 | todo | lifecycle state transition が previous / next / reason を持つ | new | unit | no | M1-M3 共通 |
 | todo | report tx counter が `0x21` と `0x30` を区別して増える | new | integration | no | fake transport |
 | todo | output report rx と subcommand rx が packet id で対応付く | new | integration | no | fake fixture |
@@ -116,7 +116,8 @@ M1 以降の fake transport、Bumble adapter、実機 pairing、subcommand、inp
 | command | result | notes |
 |---|---|---|
 | `uv run pytest tests\unit\test_diagnostics.py::test_diagnostics_event_is_written_as_one_json_object_per_line -q` | pass | 1 passed。`DiagnosticsRecorder` が 1 行 1 JSON object を出力することを確認した |
-| `uv run pytest tests\unit -q` | pass | 69 passed |
+| `uv run pytest tests\unit\test_diagnostics.py::test_run_metadata_records_environment_and_adapter -q` | pass | 1 passed。run metadata に adapter、OS、Python version、package version が入ることを確認した |
+| `uv run pytest tests\unit -q` | pass | 70 passed |
 | `uv run ruff format --check .` | pass | 30 files already formatted |
 | `uv run ruff check .` | pass | lint pass |
 | `uv run ty check --no-progress` | pass | type check pass |

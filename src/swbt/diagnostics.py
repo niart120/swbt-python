@@ -1,7 +1,9 @@
 """Minimal diagnostics state for gamepad lifecycle and callback errors."""
 
 import json
+import platform
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 from typing import TextIO
 
 
@@ -51,6 +53,16 @@ class DiagnosticsRecorder:
         self._append(diagnostics_event)
         return diagnostics_event
 
+    def record_run_metadata(self, *, adapter: str) -> DiagnosticsEvent:
+        """Record environment metadata for one diagnostics run."""
+        return self.record_event(
+            "run_metadata",
+            adapter=adapter,
+            os=platform.system(),
+            package_version=self._package_version(),
+            python_version=platform.python_version(),
+        )
+
     def record_error(self, error: Exception, *, recoverable: bool) -> DiagnosticsEvent:
         """Record an exception as an error event."""
         event = DiagnosticsEvent(
@@ -78,3 +90,10 @@ class DiagnosticsRecorder:
         self._trace_writer.write(json.dumps(payload, separators=(",", ":"), sort_keys=True))
         self._trace_writer.write("\n")
         self._trace_writer.flush()
+
+    @staticmethod
+    def _package_version() -> str:
+        try:
+            return version("swbt-python")
+        except PackageNotFoundError:
+            return "unknown"
