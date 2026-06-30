@@ -1,6 +1,9 @@
 import asyncio
 
+import pytest
+
 from swbt import Button, SwitchGamepad
+from swbt.errors import ConnectionTimeoutError
 from swbt.transport.fake import FakeHidTransport
 
 
@@ -205,5 +208,16 @@ def test_wait_connected_completes_after_fake_connected_callback() -> None:
             await asyncio.wait_for(connected, timeout=0.1)
 
             assert transport.events == ("open", "connected")
+
+    asyncio.run(run())
+
+
+def test_wait_connected_timeout_raises_connection_timeout_error() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport) as pad:
+            with pytest.raises(ConnectionTimeoutError):
+                await pad.wait_connected(timeout=0.001)
 
     asyncio.run(run())

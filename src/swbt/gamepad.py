@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from types import TracebackType
 
 from swbt.diagnostics import DiagnosticsRecorder, GamepadStatus
-from swbt.errors import ClosedError, SwbtError, TransportOpenError
+from swbt.errors import ClosedError, ConnectionTimeoutError, SwbtError, TransportOpenError
 from swbt.input import Button
 from swbt.protocol.output_report import OutputReportParser
 from swbt.protocol.subcommand import SubcommandResponder
@@ -94,8 +94,12 @@ class SwitchGamepad:
         if timeout is None:
             await self._connected_event.wait()
             return
-        async with asyncio.timeout(timeout):
-            await self._connected_event.wait()
+        try:
+            async with asyncio.timeout(timeout):
+                await self._connected_event.wait()
+        except TimeoutError as error:
+            msg = "connection timed out"
+            raise ConnectionTimeoutError(msg) from error
 
     async def close(self, *, neutral: bool = True) -> None:
         """Close the transport and leave the gamepad in a closed state."""
