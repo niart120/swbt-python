@@ -54,7 +54,7 @@
 - `spec/initial/transport-bumble.md`
 - `spec/initial/testing.md`
 - `spec/initial/risks.md`
-- `spec/wip/unit_001/M0_PROTOCOL_CORE.md`
+- `spec/complete/unit_001/M0_PROTOCOL_CORE.md`
 - `spec/wip/unit_003/M2_BUMBLE_HID_TRANSPORT.md`
 - `spec/wip/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md`
 - `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
@@ -100,7 +100,7 @@
 
 | path | change | 内容 |
 |---|---|---|
-| `spec/wip/unit_001/M0_PROTOCOL_CORE.md` | modify | protocol value audit status |
+| `spec/complete/unit_001/M0_PROTOCOL_CORE.md` | modify | protocol value audit status |
 | `spec/wip/unit_003/M2_BUMBLE_HID_TRANSPORT.md` | modify | Bumble / descriptor / OS audit status |
 | `spec/wip/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md` | modify | observed subcommand audit |
 | `spec/dev-journal.md` | unchanged | 小さい未解決観測は今回なし |
