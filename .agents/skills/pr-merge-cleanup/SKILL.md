@@ -29,7 +29,7 @@ remote 未設定の現段階では stop condition として扱い、push や PR 
 7. `git push -u origin <branch>` で push する。
 8. `gh pr create` で PR を作成する。
 9. required check を確認する。
-10. check が通ったら repo policy に従って merge する。merge method が不明な場合は repo 設定を確認し、勝手に squash へ変えない。
+10. check が通ったら  merge commit する。勝手に squash へ変えない。
 11. default branch へ戻り、`git pull --ff-only origin <default>` で同期する。
 12. local / remote の作業 branch を削除する。
 13. PR 番号、URL、merge commit、削除 branch、gate、hardware 状態を報告する。
