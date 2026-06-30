@@ -39,6 +39,7 @@ class SwitchGamepad:
         )
         self._transport = transport
         self._lifecycle_lock = asyncio.Lock()
+        self._connected_event = asyncio.Event()
         self._is_open = False
 
     async def __aenter__(self) -> "SwitchGamepad":
@@ -65,8 +66,17 @@ class SwitchGamepad:
                 msg = "a transport must be provided until Bumble transport is implemented"
                 raise TransportOpenError(msg)
             self._register_transport_callbacks()
+            self._connected_event.clear()
             await self._transport.open()
             self._is_open = True
+
+    async def wait_connected(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
+        """Wait until the transport reports a completed connection."""
+        if timeout is None:
+            await self._connected_event.wait()
+            return
+        async with asyncio.timeout(timeout):
+            await self._connected_event.wait()
 
     async def close(self, *, neutral: bool = True) -> None:
         """Close the transport and leave the gamepad in a closed state."""
@@ -96,7 +106,7 @@ class SwitchGamepad:
         _ = payload
 
     async def _handle_connected(self) -> None:
-        return None
+        self._connected_event.set()
 
     async def _handle_disconnected(self, reason: int | None) -> None:
         _ = reason

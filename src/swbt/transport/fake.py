@@ -76,6 +76,13 @@ class FakeHidTransport:
         self._close_count += 1
         self._events.append("close")
 
+    async def connect(self) -> None:
+        """Emit a fake host connection event."""
+        self._require_open()
+        self._events.append("connected")
+        if self._connected_callback is not None:
+            await self._connected_callback()
+
     async def send_interrupt(self, payload: bytes) -> None:
         """Record an interrupt report."""
         self._require_open()
