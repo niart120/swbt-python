@@ -147,6 +147,30 @@ def test_concurrent_press_and_release_preserve_button_state() -> None:
     asyncio.run(run())
 
 
+def test_callback_exception_is_recorded_and_close_cleans_up() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        unsupported_subcommand = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 ff")
+        pad = SwitchGamepad(transport=transport)
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+
+        await transport.inject_interrupt_data(unsupported_subcommand)
+        status = pad.status()
+
+        assert status.connection_state == "failed"
+        assert status.last_error is not None
+        assert status.last_error.event == "error"
+        assert status.last_error.error_type == "UnsupportedSubcommandError"
+
+        await pad.close()
+        assert transport.is_open is False
+
+    asyncio.run(run())
+
+
 def test_tap_button_a_records_press_and_release_reports() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

@@ -4,7 +4,8 @@ import asyncio
 from dataclasses import dataclass
 from types import TracebackType
 
-from swbt.errors import ClosedError, TransportOpenError
+from swbt.diagnostics import DiagnosticsRecorder, GamepadStatus
+from swbt.errors import ClosedError, SwbtError, TransportOpenError
 from swbt.input import Button
 from swbt.protocol.output_report import OutputReportParser
 from swbt.protocol.subcommand import SubcommandResponder
@@ -44,11 +45,13 @@ class SwitchGamepad:
         )
         self._transport = transport
         self._state_store = InputStateStore()
+        self._diagnostics = DiagnosticsRecorder()
         self._output_report_parser = OutputReportParser()
         self._subcommand_responder = SubcommandResponder()
         self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
+        self._connection_state = "closed"
         self._is_open = False
 
     async def __aenter__(self) -> "SwitchGamepad":
@@ -74,6 +77,7 @@ class SwitchGamepad:
             if self._transport is None:
                 msg = "a transport must be provided until Bumble transport is implemented"
                 raise TransportOpenError(msg)
+            self._connection_state = "opening"
             self._register_transport_callbacks()
             self._connected_event.clear()
             await self._transport.open()
@@ -82,6 +86,7 @@ class SwitchGamepad:
                 state_store=self._state_store,
                 report_period_us=self._config.report_period_us,
             )
+            self._connection_state = "advertising"
             self._is_open = True
 
     async def wait_connected(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
@@ -97,6 +102,7 @@ class SwitchGamepad:
         async with self._lifecycle_lock:
             if not self._is_open or self._transport is None:
                 return
+            self._connection_state = "disconnecting"
             if neutral:
                 await self._send_trailing_neutral_if_connected()
             if self._report_loop is not None:
@@ -104,6 +110,7 @@ class SwitchGamepad:
             await self._transport.close()
             self._report_loop = None
             self._is_open = False
+            self._connection_state = "closed"
 
     async def press(self, *buttons: Button) -> None:
         """Add buttons to the current input state."""
@@ -126,6 +133,13 @@ class SwitchGamepad:
         await self.release(*buttons)
         await self._send_current_input()
 
+    def status(self) -> GamepadStatus:
+        """Return the current gamepad status."""
+        return GamepadStatus(
+            connection_state=self._connection_state,
+            last_error=self._diagnostics.last_error,
+        )
+
     def _register_transport_callbacks(self) -> None:
         if self._transport is None:
             return
@@ -147,20 +161,25 @@ class SwitchGamepad:
         await self._report_loop.send_current_input()
 
     async def _handle_interrupt_data(self, payload: bytes) -> None:
-        output_report = self._output_report_parser.parse(payload)
-        if output_report.subcommand_id is None:
-            return
-        if self._report_loop is None:
-            msg = "gamepad is not open"
-            raise ClosedError(msg)
-        state = await self._state_store.snapshot()
-        reply = self._subcommand_responder.respond(output_report, state=state)
-        self._report_loop.queue_reply(reply)
+        try:
+            output_report = self._output_report_parser.parse(payload)
+            if output_report.subcommand_id is None:
+                return
+            if self._report_loop is None:
+                msg = "gamepad is not open"
+                raise ClosedError(msg)
+            state = await self._state_store.snapshot()
+            reply = self._subcommand_responder.respond(output_report, state=state)
+            self._report_loop.queue_reply(reply)
+        except SwbtError as error:
+            self._connection_state = "failed"
+            self._diagnostics.record_error(error, recoverable=False)
 
     async def _handle_control_data(self, payload: bytes) -> None:
         _ = payload
 
     async def _handle_connected(self) -> None:
+        self._connection_state = "connected"
         self._connected_event.set()
         if self._report_loop is not None:
             self._report_loop.start()
