@@ -60,9 +60,9 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | todo | HID descriptor bytes と SDP に渡す profile 情報は Switch 認識に影響する |
-| Bumble / transport | required | todo | Bumble HID Device helper、Classic enable、callback、USB transport moniker の API を確認する |
-| OS / driver / adapter | required | todo | Windows WinUSB、Linux libusb permission、dongle identity は環境依存のため事実分類が必要 |
+| Switch HID / report bytes | required | done | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` の `hid_report_descriptor` を HID descriptor handoff source とする。SDP record は Bumble 側の構築境界として扱い、descriptor bytes と混ぜない |
+| Bumble / transport | required | done | `bumble_hid_device_api` と `bumble_classic_visibility` に `bumble==0.0.230` の HID Device helper、Classic PSM、callback、discoverable / connectable 前提を記録した |
+| OS / driver / adapter | required | done | `swbt_python_adapter_driver_boundary` は未検証仮説、`swbt_daemon_csr8510_winusb_observation` は既存 daemon の条件付き実機観測として分離した。M2 の adapter open は別途承認が必要 |
 
 ## 6. 振る舞い仕様
 
@@ -143,7 +143,7 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
-- [ ] Bumble / HID descriptor / SDP / OS driver 前提の根拠監査を実施し、状態を更新した
+- [x] Bumble / HID descriptor / SDP / OS driver 前提の根拠監査を実施し、状態を更新した
 - [ ] M2 の local automated gate を実行し、検証欄を結果で更新した
 - [ ] adapter を使う検証は承認、command、cleanup、結果を記録した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する

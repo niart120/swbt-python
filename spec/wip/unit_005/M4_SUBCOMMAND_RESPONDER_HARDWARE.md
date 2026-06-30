@@ -59,9 +59,9 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | todo | subcommand ID、reply payload、SPI address / data、rumble bytes、report ID は source fact と hardware observation を分けて記録する |
-| Bumble / transport | required | todo | output report の受信 channel、callback timing、send path が sequence に影響する |
-| OS / driver / adapter | required | todo | 実機 trace は adapter、driver、Bumble version、Switch firmware 付きで記録する |
+| Switch HID / report bytes | required | done | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` の `output_report_parser_layout`、`subcommand_reply_0x21_layout`、`subcommand_reply_payloads`、`spi_flash_boundary_and_seed_map`、`raw_rumble_payload` を source fact / implementation fact として使う |
+| Bumble / transport | required | done | `bumble_hid_device_api` は Bumble `0.0.230` の HID callback 境界だけを示す。実機 sequence の callback timing は M4 実行時の hardware observation として別記録にする |
+| OS / driver / adapter | required | done | `swbt_daemon_csr8510_winusb_observation` は既存 daemon の条件付き観測であり、Bumble / 別 firmware へ一般化しない。M4 実機 trace は adapter、driver、Bumble version、Switch firmware 付きで `docs/hardware-test-log.md` に記録する |
 
 ## 6. 振る舞い仕様
 
@@ -81,7 +81,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 |---|---|---|---|---|---|
 | todo | 観測済み `0x01` fixture から subcommand id と payload を parse できる | characterization | unit | no | 実機 trace 取得後に fixture 化 |
 | todo | `0x02` device info reply が監査済み payload を返す | regression | unit | no | M0 の不足補完 |
-| todo | `0x10` SPI read reply が address と size に応じた data を返す | regression | unit | no | source-audit 必須 |
+| todo | `0x10` SPI read reply が address と size に応じた data を返す | regression | unit | no | `spi_flash_boundary_and_seed_map` を期待値 source にする |
 | todo | 未対応 subcommand が diagnostics event を生成する | new | unit | no | 隠さないため |
 | todo | fake transport 注入時に `0x21` reply が `0x30` より先に送られる | regression | integration | no | M1 の再確認 |
 | todo | 実機で `0x01` output report を受信できる | new | hardware | yes | 承認が必要 |
@@ -142,7 +142,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
-- [ ] subcommand ID、reply payload、SPI data の根拠監査を実施し、状態を更新した
+- [x] subcommand ID、reply payload、SPI data の根拠監査を実施し、状態を更新した
 - [ ] M4 の local automated gate を実行し、検証欄を結果で更新した
 - [ ] 実機検証は承認、command、cleanup、結果を `docs/hardware-test-log.md` に記録した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する
