@@ -6,8 +6,8 @@
 
 ## Current Status
 
-- Hardware run: 未記録
-- Bumble adapter run: 未記録
+- Hardware run: adapter open/close のみ記録あり。Switch-facing 動作は未記録
+- Bumble adapter run: 2026-07-01 に CSR8510 A10 / WinUSB / `usb:0` で open/close smoke pass
 - Pairing run: 未記録
 - Input reflection run: 未記録
 
@@ -37,9 +37,31 @@
 
 | OS | Bluetooth dongle | Driver | Adapter | Switch model | Firmware | Pairing | L2CAP | Subcommands | Input reflected | Result source | Last updated | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Windows | 未検証 | WinUSB 想定 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期想定構成。実行結果は未記録 |
+| Windows | CSR8510 A10 | WinUSB / libwdi 6.1.7600.16385 | `usb:0` | 未使用 | 未使用 | 未実行 | 未実行 | 未実行 | 未実行 | 2026-07-01 adapter open/close smoke | 2026-07-01 | Bumble USB HCI transport の open/close のみ成功。Bumble Device 生成、Classic HID 初期化、advertising、pairing は未検証 |
 | Linux | 未検証 | libusb 想定 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期保証対象に含めるか未決 |
 | macOS | 未検証 | 未検証 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期検証対象外 |
+
+## Run Entries
+
+### 2026-07-01: unit_003 Bumble adapter open / close smoke
+
+- OS: Windows 11, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `test/unit-003-bumble-hardware` branch
+- adapter: `usb:0`
+- dongle: CSR8510 A10, `USB\VID_0A12&PID_0001\9&12127A34&0&1`, `Port_#0001.Hub_#0013`
+- driver: WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not used
+- Switch firmware: not used
+- report period: not used
+- command / test: `uv run pytest tests\hardware\test_bumble_transport.py -m bumble --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_003\20260701-015427 -q`
+- approval: user approved Bumble adapter open/close after read-only adapter inventory. Scope excluded Switch pairing, HID advertising, report loop, and input sending.
+- result: pass, `1 passed in 0.70s`. Trace includes `transport_open_start`, `transport_open_complete`, and `transport_close_complete`.
+- artifact: `.pytest_cache\hardware\unit_003\20260701-015427\bumble-adapter-open-close.jsonl`
+- cleanup: test called `BumbleHidTransport.close()` in `finally`; trace recorded `transport_close_complete`.
+- notes: `usb:0` is associated with CSR8510 A10 by the pre-run Windows PnP inventory. This run did not initialize Bumble HID Device, enter discoverable / connectable state, pair with a console, or open HID channels.
 
 ## Marker Result Mapping
 

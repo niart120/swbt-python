@@ -86,10 +86,10 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 | green | open 途中の失敗でも close cleanup が呼ばれる | edge | unit | no | `test_bumble_open_failure_after_handle_open_closes_handle` で固定 |
 | green | close を複数回呼んでも例外を出さない | edge | unit | no | `test_bumble_close_is_idempotent` で固定 |
 | green | `swbt.transport.bumble` 以外が Bumble を import していない | regression | unit | no | `test_only_bumble_transport_module_may_resolve_bumble` で固定 |
-| deferred | `adapter="usb:0"` で USB HCI transport を開ける | new | bumble | yes | 明示承認、専用 dongle、cleanup plan が必要。非実機完了範囲では未実行 |
+| green | `adapter="usb:0"` で USB HCI transport を開ける | new | bumble | yes | `test_bumble_adapter_open_close_records_diagnostics` で確認。CSR8510 A10 / WinUSB / Bumble 0.0.230 の adapter open/close のみ |
 | deferred | Bumble device を生成し Classic を有効化できる | new | bumble | yes | `@pytest.mark.bumble`。非実機完了範囲では未実行 |
 | deferred | HID Device 初期化、discoverable / connectable へ遷移できる | new | bumble | yes | Switch pairing は M3。非実機完了範囲では未実行 |
-| deferred | adapter 情報、OS、Python version、Bumble version が diagnostics に残る | new | bumble | yes | hardware log に転記可能な粒度。非実機完了範囲では未実行 |
+| partial | adapter 情報、OS、Python version、Bumble version が diagnostics に残る | new | bumble | yes | `test_bumble_adapter_open_close_records_diagnostics` で adapter、OS、Python、Bumble version を trace に記録。dongle と driver は `docs/hardware-test-log.md` に記録 |
 
 ## 8. 設計メモ
 
@@ -105,11 +105,13 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 | `src/swbt/transport/bumble.py` | new | Bumble transport 実装 |
 | `tests/unit/test_bumble_transport.py` | new | fake opener による Bumble transport boundary tests |
 | `tests/unit/test_public_api_boundary.py` | modify | Bumble import 境界の regression test |
-| `tests/hardware/` | deferred | `@pytest.mark.bumble` adapter tests は承認待ち |
+| `tests/conftest.py` | new | hardware test 用 pytest option |
+| `tests/hardware/test_bumble_transport.py` | new | `@pytest.mark.bumble` adapter open/close smoke test |
+| `docs/hardware-test-log.md` | modify | CSR8510 A10 / WinUSB / `usb:0` の adapter open/close 観測 |
 
 ## 10. 検証
 
-この表は M2 の非実機完了時点の実行結果を示す。
+この表は M2 の非実機完了時点の実行結果と、2026-07-01 に追加した adapter open/close smoke の結果を示す。
 
 | command | result | notes |
 |---|---|---|
@@ -126,7 +128,8 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 | `uv run ruff check .` | pass | lint pass |
 | `uv run ty check --no-progress` | pass | type check pass |
 | `uv run pytest tests\unit tests\integration -q` | pass | 93 passed |
-| `uv run pytest -m bumble` | pending-approval | 専用 adapter、command、cleanup plan の明示承認後に実行する |
+| `uv run pytest tests\hardware\test_bumble_transport.py -m bumble --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_003\20260701-015427 -q` | pass | 1 passed。CSR8510 A10 / WinUSB と見られる `usb:0` で Bumble USB HCI transport open/close を確認した |
+| `uv run pytest -m hardware` | pending-approval | Switch pairing、HID channel、report loop、input reflection は未実行 |
 
 ## 11. 実機実行条件
 
@@ -153,5 +156,6 @@ Bumble を使って USB Bluetooth dongle を開き、Bluetooth Classic HID Devic
 - [x] TDD Test List の初期案を作成した
 - [x] Bumble / HID descriptor / SDP / OS driver 前提の根拠監査を実施し、状態を更新した
 - [x] M2 の local automated gate を実行し、検証欄を結果で更新した
-- [x] adapter を使う検証は明示承認待ちとして deferred にした
+- [x] adapter open/close smoke を明示承認後に実行し、結果を `docs/hardware-test-log.md` に記録した
+- [x] Bumble Device 生成、Classic HID 初期化、advertising、pairing は未検証として残した
 - [x] 完了条件を満たしたら `spec/complete` へ移動する
