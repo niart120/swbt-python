@@ -4,7 +4,10 @@ import asyncio
 from dataclasses import dataclass
 from types import TracebackType
 
-from swbt.errors import TransportOpenError
+from swbt.errors import ClosedError, TransportOpenError
+from swbt.input import Button
+from swbt.report_loop import ReportLoop
+from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
 
 
@@ -38,6 +41,8 @@ class SwitchGamepad:
             key_store_path=key_store_path,
         )
         self._transport = transport
+        self._state_store = InputStateStore()
+        self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
         self._is_open = False
@@ -68,6 +73,10 @@ class SwitchGamepad:
             self._register_transport_callbacks()
             self._connected_event.clear()
             await self._transport.open()
+            self._report_loop = ReportLoop(
+                transport=self._transport,
+                state_store=self._state_store,
+            )
             self._is_open = True
 
     async def wait_connected(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
@@ -86,7 +95,25 @@ class SwitchGamepad:
             if neutral:
                 await self._send_trailing_neutral_if_connected()
             await self._transport.close()
+            self._report_loop = None
             self._is_open = False
+
+    async def press(self, *buttons: Button) -> None:
+        """Add buttons to the current input state."""
+        await self._state_store.press(*buttons)
+
+    async def release(self, *buttons: Button) -> None:
+        """Remove buttons from the current input state."""
+        await self._state_store.release(*buttons)
+
+    async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
+        """Press buttons briefly and then release them."""
+        await self.press(*buttons)
+        await self._send_current_input()
+        if duration > 0:
+            await asyncio.sleep(duration)
+        await self.release(*buttons)
+        await self._send_current_input()
 
     def _register_transport_callbacks(self) -> None:
         if self._transport is None:
@@ -98,6 +125,12 @@ class SwitchGamepad:
 
     async def _send_trailing_neutral_if_connected(self) -> None:
         return None
+
+    async def _send_current_input(self) -> None:
+        if self._report_loop is None:
+            msg = "gamepad is not open"
+            raise ClosedError(msg)
+        await self._report_loop.send_current_input()
 
     async def _handle_interrupt_data(self, payload: bytes) -> None:
         _ = payload

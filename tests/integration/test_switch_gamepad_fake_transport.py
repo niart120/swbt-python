@@ -1,6 +1,6 @@
 import asyncio
 
-from swbt import SwitchGamepad
+from swbt import Button, SwitchGamepad
 from swbt.transport.fake import FakeHidTransport
 
 
@@ -19,6 +19,26 @@ def test_async_context_opens_and_closes_fake_transport() -> None:
         assert transport.open_count == 1
         assert transport.close_count == 1
         assert transport.events == ("open", "close")
+
+    asyncio.run(run())
+
+
+def test_tap_button_a_records_press_and_release_reports() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+
+            await pad.tap(Button.A, duration=0)
+
+            assert len(transport.sent_interrupt_reports) == 2
+            pressed, released = transport.sent_interrupt_reports
+            assert pressed[0] == 0x30
+            assert pressed[3:6] == bytes.fromhex("08 00 00")
+            assert released[0] == 0x30
+            assert released[3:6] == bytes.fromhex("00 00 00")
 
     asyncio.run(run())
 
