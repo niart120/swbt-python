@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from types import TracebackType
 
-from swbt.diagnostics import DiagnosticsRecorder, GamepadStatus
+from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
 from swbt.errors import ClosedError, ConnectionTimeoutError, SwbtError, TransportOpenError
 from swbt.input import Button, InputState
 from swbt.protocol.output_report import OutputReportParser
@@ -34,6 +34,7 @@ class SwitchGamepad:
         report_period_us: int = 8000,
         device_name: str = "Pro Controller",
         key_store_path: str | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
     ) -> None:
         """Create a gamepad object."""
@@ -45,7 +46,9 @@ class SwitchGamepad:
         )
         self._transport = transport
         self._state_store = InputStateStore()
-        self._diagnostics = DiagnosticsRecorder()
+        self._diagnostics = DiagnosticsRecorder(
+            trace_writer=diagnostics.trace_writer if diagnostics is not None else None
+        )
         self._output_report_parser = OutputReportParser()
         self._subcommand_responder = SubcommandResponder()
         self._report_loop: ReportLoop | None = None
@@ -85,6 +88,7 @@ class SwitchGamepad:
                 transport=self._transport,
                 state_store=self._state_store,
                 report_period_us=self._config.report_period_us,
+                diagnostics=self._diagnostics,
             )
             self._connection_state = "advertising"
             self._is_open = True
@@ -175,8 +179,25 @@ class SwitchGamepad:
     async def _handle_interrupt_data(self, payload: bytes) -> None:
         try:
             output_report = self._output_report_parser.parse(payload)
+            subcommand_id = (
+                f"0x{output_report.subcommand_id:02x}"
+                if output_report.subcommand_id is not None
+                else None
+            )
+            self._diagnostics.record_event(
+                "output_report_rx",
+                length=len(payload),
+                packet_id=output_report.packet_id,
+                report_id=f"0x{output_report.report_id:02x}",
+                subcommand_id=subcommand_id,
+            )
             if output_report.subcommand_id is None:
                 return
+            self._diagnostics.record_event(
+                "subcommand_rx",
+                packet_id=output_report.packet_id,
+                subcommand_id=subcommand_id,
+            )
             if self._report_loop is None:
                 msg = "gamepad is not open"
                 raise ClosedError(msg)

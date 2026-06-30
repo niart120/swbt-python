@@ -1,8 +1,10 @@
 import asyncio
+import json
+from io import StringIO
 
 import pytest
 
-from swbt import Button, InputState, SwitchGamepad
+from swbt import Button, DiagnosticsConfig, InputState, SwitchGamepad
 from swbt.errors import ConnectionTimeoutError
 from swbt.transport.fake import FakeHidTransport
 
@@ -145,6 +147,81 @@ def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
     asyncio.run(run())
 
 
+def test_report_tx_counter_distinguishes_0x21_and_0x30() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=1000,
+        ) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            await pad.press(Button.A)
+            await transport.wait_for_interrupt_report_id(0x30)
+
+            await transport.inject_interrupt_data(request_device_info)
+            await transport.wait_for_interrupt_report_id(0x21)
+
+        report_events = [
+            json.loads(line)
+            for line in trace.getvalue().splitlines()
+            if json.loads(line)["event"] == "report_tx"
+        ]
+
+        assert {
+            "event": "report_tx",
+            "counter": 1,
+            "reason": "periodic",
+            "report_id": "0x30",
+        } in report_events
+        assert {
+            "event": "report_tx",
+            "counter": 1,
+            "reason": "subcommand_reply",
+            "report_id": "0x21",
+        } in report_events
+
+    asyncio.run(run())
+
+
+def test_output_report_rx_and_subcommand_rx_share_packet_id() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        request_device_info = bytes.fromhex("01 12 00 00 00 00 00 00 00 00 02")
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=1000,
+        ) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            await transport.inject_interrupt_data(request_device_info)
+            await transport.wait_for_interrupt_report_id(0x21)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "output_report_rx",
+            "length": 11,
+            "packet_id": 0x12,
+            "report_id": "0x01",
+            "subcommand_id": "0x02",
+        } in events
+        assert {
+            "event": "subcommand_rx",
+            "packet_id": 0x12,
+            "subcommand_id": "0x02",
+        } in events
+
+    asyncio.run(run())
+
+
 def test_close_with_neutral_records_trailing_neutral_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
@@ -212,6 +289,40 @@ def test_callback_exception_is_recorded_and_close_cleans_up() -> None:
 
         await pad.close()
         assert transport.is_open is False
+
+    asyncio.run(run())
+
+
+def test_callback_exception_is_recorded_in_trace_and_status() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        unsupported_subcommand = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 ff")
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+
+        await transport.inject_interrupt_data(unsupported_subcommand)
+
+        status = pad.status()
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert status.connection_state == "failed"
+        assert status.last_error is not None
+        assert status.last_error.error_type == "UnsupportedSubcommandError"
+        assert {
+            "event": "error",
+            "error_type": "UnsupportedSubcommandError",
+            "message": "unsupported subcommand: 0xff",
+            "recoverable": False,
+        } in events
+
+        await pad.close()
 
     asyncio.run(run())
 
