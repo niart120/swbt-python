@@ -81,19 +81,21 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | neutral `InputState` が空 button、center stick、neutral IMU を持つ | new | unit | no | M0 最初の red 候補 |
-| todo | `Stick.raw()` が `0..4095` 外の値を拒否する | edge | unit | no | 範囲と例外を固定する |
-| todo | `Stick.normalized()` が `-1.0`、`0.0`、`1.0` を決定的な raw 値へ変換する | edge | unit | no | 丸めを fixture 化する |
-| todo | neutral `0x30` report が report ID を含む 49 bytes になる | new | unit | no | `input_report_0x30_layout` を期待値 source にする |
-| todo | `Button.A` が期待する button bit に反映される | new | unit | no | `button_bit_and_stick_pack` を期待値 source にする |
-| todo | `Button.L` と `Button.R` の同時押しが期待する bytes になる | new | unit | no | `button_bit_and_stick_pack` を期待値 source にする |
-| todo | d-pad 4 方向が個別の bit として反映される | new | unit | no | `button_bit_and_stick_pack` を期待値 source にする |
-| todo | stick center が期待する 12-bit pack になる | new | unit | no | `button_bit_and_stick_pack` を期待値 source にする |
-| todo | `0x01` output report から packet id、rumble、subcommand id、payload を抽出できる | new | unit | no | 不正長 test も追加する |
-| todo | `0x10` output report を rumble only として扱う | new | unit | no | subcommand reply を生成しない |
-| todo | 対応 subcommand から `0x21` reply を生成できる | new | unit | no | `0x02`、`0x03`、`0x04`、`0x08`、`0x10`、`0x21`、`0x30`、`0x40`、`0x48` |
-| todo | `VirtualSpiFlash` が既知 address の読み取りを返す | new | unit | no | address と data は監査対象 |
-| todo | protocol package が Bumble を import していない | regression | unit | no | 依存境界の固定 |
+| green | neutral `InputState` が空 button、center stick、neutral IMU を持つ | new | unit | no | `tests/unit/test_input_state.py` で固定 |
+| green | `Stick.raw()` が `0..4095` 外の値を拒否する | edge | unit | no | `InvalidInputError` を固定 |
+| green | `Stick.normalized()` が `-1.0`、`0.0`、`1.0` を決定的な raw 値へ変換する | edge | unit | no | 端点変換を固定 |
+| green | neutral `0x30` report が report ID を含む 49 bytes になる | new | unit | no | `tests/unit/test_input_report.py` で固定 |
+| green | `Button.A` が期待する button bit に反映される | new | unit | no | 代表 bit と全公開 button mapping を固定 |
+| green | `Button.L` と `Button.R` の同時押しが期待する bytes になる | new | unit | no | byte 3 / 5 の bit を固定 |
+| green | d-pad 4 方向が個別の bit として反映される | new | unit | no | byte 5 の low nibble を固定 |
+| green | stick center が期待する 12-bit pack になる | new | unit | no | center と custom stick pack を固定 |
+| green | `0x01` output report から packet id、rumble、subcommand id、payload を抽出できる | new | unit | no | 不正長は `ProtocolError` |
+| green | `0x10` output report を rumble only として扱う | new | unit | no | subcommand id は `None` |
+| green | 対応 subcommand から `0x21` reply を生成できる | new | unit | no | `0x02`、`0x03`、`0x04`、`0x08`、`0x10`、`0x21`、`0x30`、`0x40`、`0x48` |
+| green | 未対応 subcommand が diagnostics 用の id と payload を保持する | edge | unit | no | `UnsupportedSubcommandError` で固定 |
+| green | `VirtualSpiFlash` が既知 address の読み取りを返す | new | unit | no | `0x6012` の device type と read 境界を固定 |
+| green | `RumbleState` が raw rumble bytes を保持する | new | unit | no | 高水準 rumble 解釈はしない |
+| green | protocol package が Bumble を import していない | regression | unit | no | `tests/unit/test_protocol_boundary.py` で固定 |
 
 ## 8. 設計メモ
 
@@ -118,12 +120,15 @@
 
 ## 10. 検証
 
-この表は M0 実装時に実行する gate を示す。仕様書作成時点の実行結果ではない。
-
 | command | result | notes |
 |---|---|---|
-| `uv run pytest tests/unit` | pending | M0 実装後に protocol unit gate として実行する |
-| `uv run ruff format --check .` | pending | M0 実装後に静的 gate として実行する |
+| `uv sync --dev` | pass | 2026-07-01 実行。Resolved 41 packages / Checked 41 packages |
+| `uv run ruff format --check .` | pass | 2026-07-01 実行。20 files already formatted |
+| `uv run ruff check .` | pass | 2026-07-01 実行。All checks passed |
+| `uv run ty check --no-progress` | pass | 2026-07-01 実行。All checks passed |
+| `uv run pytest tests/unit` | pass | 2026-07-01 実行。66 passed |
+| `uv run pytest tests/integration` | not run | M0 は protocol unit のみで、fake transport integration は M1 の対象 |
+| `bumble` / `hardware` marker tests | not run | M0 は Bumble、adapter open、Switch-facing 動作を対象外とする |
 
 ## 11. 実機実行条件
 
@@ -149,5 +154,5 @@
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
 - [x] protocol byte layout と subcommand payload の根拠監査を実施し、状態を更新した
-- [ ] M0 の実装と対象 test を実行し、検証欄を結果で更新した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] M0 の実装と対象 test を実行し、検証欄を結果で更新した
+- [x] 完了条件を満たしたら `spec/complete` へ移動する

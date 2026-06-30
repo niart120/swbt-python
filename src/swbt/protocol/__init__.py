@@ -1,0 +1,1 @@
+"""Switch HID protocol helpers."""
