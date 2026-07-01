@@ -79,6 +79,51 @@ class FakeBumbleDevice:
         self.connection_requests.append((bd_addr, class_of_device, link_type))
 
 
+class FakeBumbleHost:
+    """Fake Bumble host for command-support checks."""
+
+    def __init__(self) -> None:
+        """Create a fake host that records command support probes."""
+        self.supported_commands: list[int] = []
+
+    def supports_command(self, command: int) -> bool:
+        """Record one supported-command probe."""
+        self.supported_commands.append(command)
+        return True
+
+
+class FakeBumbleDeviceWithLinkPolicy(FakeBumbleDevice):
+    """Fake Bumble device that accepts raw HCI commands."""
+
+    def __init__(self) -> None:
+        """Create a fake device with an HCI host boundary."""
+        super().__init__()
+        self.host = FakeBumbleHost()
+        self.sent_commands: list[object] = []
+        self.operations: list[str] = []
+
+    async def power_on(self) -> None:
+        """Record the power-on operation."""
+        self.operations.append("power_on")
+        await super().power_on()
+
+    async def set_connectable(self, connectable: bool = True) -> None:
+        """Record connectable transitions."""
+        self.operations.append("set_connectable")
+        await super().set_connectable(connectable)
+
+    async def set_discoverable(self, discoverable: bool = True) -> None:
+        """Record discoverable transitions."""
+        self.operations.append("set_discoverable")
+        await super().set_discoverable(discoverable)
+
+    async def send_sync_command(self, command: object) -> object:
+        """Record one HCI command."""
+        self.operations.append("link_policy")
+        self.sent_commands.append(command)
+        return object()
+
+
 class FakeHidDevice:
     """Fake Bumble HID helper."""
 
@@ -405,6 +450,59 @@ def test_bumble_start_advertising_powers_on_initialized_runtime() -> None:
 
         assert device.power_on_count == 1
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {"event": "advertising_start", "adapter": "usb:0"} in events
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_start_advertising_configures_reference_classic_link_policy() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+        device = FakeBumbleDeviceWithLinkPolicy()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        await transport.start_advertising()
+
+        assert device.power_on_count == 1
+        assert device.connectable_calls == [True]
+        assert device.discoverable_calls == [True]
+        assert device.operations == [
+            "power_on",
+            "link_policy",
+            "set_connectable",
+            "set_discoverable",
+        ]
+        assert len(device.sent_commands) == 1
+        command = cast("Any", device.sent_commands[0])
+        assert (
+            command.default_link_policy_settings
+            == bumble_module._REFERENCE_DEFAULT_LINK_POLICY_SETTINGS
+        )
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "classic_link_policy_configured",
+            "adapter": "usb:0",
+            "settings": "0x0005",
+        } in events
         assert {"event": "advertising_start", "adapter": "usb:0"} in events
 
         await transport.close()

@@ -31,6 +31,8 @@ _HID_GET_SET_SUCCESS = 0xFF
 _HID_GET_SET_UNSUPPORTED_REQUEST = 0x02
 _HID_CONTROL_PSM = 0x0011
 _HID_INTERRUPT_PSM = 0x0013
+_REFERENCE_LINK_POLICY_ENABLE_ROLE_SWITCH = 0x0001
+_REFERENCE_LINK_POLICY_ENABLE_SNIFF_MODE = 0x0004
 _DEFAULT_DEVICE_NAME = "Pro Controller"
 _REFERENCE_CLASS_OF_DEVICE = 0x002508
 
@@ -64,6 +66,11 @@ _REFERENCE_HIDSSR_HOST_MIN_TIMEOUT = 0xFFFF
 class _BumbleGetSetStatus:
     data: bytes = b""
     status: int = 0
+
+
+_REFERENCE_DEFAULT_LINK_POLICY_SETTINGS = (
+    _REFERENCE_LINK_POLICY_ENABLE_ROLE_SWITCH | _REFERENCE_LINK_POLICY_ENABLE_SNIFF_MODE
+)
 
 
 class _BumbleHandle(Protocol):
@@ -123,6 +130,7 @@ class _BumbleRuntime:
     hid_device: _BumbleHidRuntime
     service_record_count: int
     hid_descriptor_size: int
+    classic_link_policy_settings: int | None = None
     advertising_started: bool = False
 
 
@@ -215,6 +223,12 @@ class BumbleHidTransport:
             return
         await self._start_advertising(self._runtime)
         self._runtime.advertising_started = True
+        if self._runtime.classic_link_policy_settings is not None:
+            self._record_event(
+                "classic_link_policy_configured",
+                adapter=self._adapter,
+                settings=f"0x{self._runtime.classic_link_policy_settings:04x}",
+            )
         self._record_event("advertising_start", adapter=self._adapter)
 
     async def close(self) -> None:
@@ -520,8 +534,10 @@ async def _default_initialize_device(
         class_of_device=_REFERENCE_CLASS_OF_DEVICE,
         le_enabled=False,
         classic_enabled=True,
-        connectable=True,
-        discoverable=True,
+        # Bumble applies these flags during power_on; keep them off until after
+        # the Classic link policy command is sent.
+        connectable=False,
+        discoverable=False,
     )
     device = Device.from_config_with_hci(
         config,
@@ -543,11 +559,13 @@ async def _default_initialize_device(
 
 
 async def _default_start_advertising(runtime: _BumbleRuntime) -> None:
-    if runtime.device.powered_on:
-        await runtime.device.set_connectable(True)
-        await runtime.device.set_discoverable(True)
-        return
-    await runtime.device.power_on()
+    if not runtime.device.powered_on:
+        await runtime.device.power_on()
+    link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
+    if link_policy_settings is not None:
+        runtime.classic_link_policy_settings = link_policy_settings
+    await runtime.device.set_connectable(True)
+    await runtime.device.set_discoverable(True)
 
 
 async def _default_close_runtime(runtime: _BumbleRuntime) -> None:
@@ -579,6 +597,27 @@ def _decode_hidp_output_report(pdu: bytes) -> bytes | None:
     if report_type != _HID_OUTPUT_REPORT_TYPE:
         return None
     return pdu[1:]
+
+
+async def _configure_reference_classic_link_policy(device: object) -> int | None:
+    """Set the reference Classic default link policy when Bumble exposes HCI access."""
+    from bumble import hci  # noqa: PLC0415
+
+    send_sync_command = getattr(device, "send_sync_command", None)
+    if not callable(send_sync_command):
+        return None
+    host = getattr(device, "host", None)
+    supports_command = getattr(host, "supports_command", None)
+    if callable(supports_command) and not supports_command(
+        hci.HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMMAND
+    ):
+        return None
+    await send_sync_command(
+        hci.HCI_Write_Default_Link_Policy_Settings_Command(
+            default_link_policy_settings=_REFERENCE_DEFAULT_LINK_POLICY_SETTINGS
+        )
+    )
+    return _REFERENCE_DEFAULT_LINK_POLICY_SETTINGS
 
 
 def _package_version(package_name: str) -> str:

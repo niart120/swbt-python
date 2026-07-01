@@ -27,6 +27,7 @@ REQUIRED_ENTRY_IDS = {
     "bumble_hid_device_api",
     "bumble_classic_visibility",
     "bumble_l2cap_connection_events",
+    "bumble_reference_classic_link_policy",
     "bumble_hidp_output_report_boundary",
     "btstack_reference_hid_sdp_policy",
     "swbt_daemon_reference_discovery_identity",
@@ -105,13 +106,21 @@ def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
     assert "M3 pairing/L2CAP hardware test" in condition
     assert "SDP service-name M4 attempt" in condition
     assert "reset-state M4 attempt" in condition
+    assert "link-policy M4 hardware test" in condition
+    assert "link-policy-only M4 hardware test" in condition
     assert "discoverable / connectable" in value
     assert "Classic pairing" in value
     assert "HID control / interrupt L2CAP open" in value
     assert "SDP service-name" in value
     assert "reset-state attempts" in value
+    assert "Classic default link policy 0x0005" in value
+    assert "a2 01" in value
+    assert "a1 21" in value
+    assert "without HID L2CAP MTU 100 re-registration" in value
+    assert "0x8e/0x80 profile prefix change" in value
     assert "no SDP PSM query" in value
-    assert "no output_report_rx" in value
+    assert "observed no HID CONTROL PDU" in value
+    assert "output_report_rx" in value
     assert "no semantic input reflection" in condition
     assert "semantic input reflection" in value
     assert "key store behavior remain unverified" in value
@@ -129,6 +138,21 @@ def test_bumble_hidp_output_report_boundary_is_version_pinned_source_fact() -> N
     assert "EVENT_INTERRUPT_DATA" in value
     assert "EVENT_CONTROL_DATA" in value
     assert "SET_REPORT callback receives report_id separated" in value
+
+
+def test_bumble_reference_classic_link_policy_is_implementation_policy() -> None:
+    entry = _entry_by_id("bumble_reference_classic_link_policy")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "implementation-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "ROLE_SWITCH|SNIFF_MODE" in value
+    assert "0x0005" in value
+    assert "before connectable/discoverable advertising" in value
+    assert "outgoing classic ACL" in value
+    assert "not treated as an incoming Switch connection fix" in value
 
 
 def test_btstack_reference_hid_sdp_policy_is_handoff_ready() -> None:
