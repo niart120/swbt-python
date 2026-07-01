@@ -41,12 +41,20 @@ _SDP_HID_VIRTUAL_CABLE_ATTRIBUTE_ID = 0x0204
 _SDP_HID_RECONNECT_INITIATE_ATTRIBUTE_ID = 0x0205
 _SDP_HID_DESCRIPTOR_LIST_ATTRIBUTE_ID = 0x0206
 _SDP_HID_LANG_ID_BASE_LIST_ATTRIBUTE_ID = 0x0207
+_SDP_HID_REMOTE_WAKE_ATTRIBUTE_ID = 0x020A
 _SDP_HID_PROFILE_VERSION_ATTRIBUTE_ID = 0x020B
+_SDP_HID_SUPERVISION_TIMEOUT_ATTRIBUTE_ID = 0x020C
 _SDP_HID_NORMALLY_CONNECTABLE_ATTRIBUTE_ID = 0x020D
 _SDP_HID_BOOT_DEVICE_ATTRIBUTE_ID = 0x020E
+_SDP_HIDSSR_HOST_MAX_LATENCY_ATTRIBUTE_ID = 0x020F
+_SDP_HIDSSR_HOST_MIN_TIMEOUT_ATTRIBUTE_ID = 0x0210
 
 _LANGUAGE_BASE_EN_US = 0x0100
 _LANGUAGE_ID_EN_US = 0x0409
+_REFERENCE_HID_COUNTRY_CODE = 0x21
+_REFERENCE_HID_SUPERVISION_TIMEOUT = 0x0C80
+_REFERENCE_HIDSSR_HOST_MAX_LATENCY = 0xFFFF
+_REFERENCE_HIDSSR_HOST_MIN_TIMEOUT = 0xFFFF
 
 
 @dataclass(frozen=True)
@@ -668,7 +676,7 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
             ),
             ServiceAttribute(
                 _SDP_HID_COUNTRY_CODE_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_8(0x00),
+                DataElement.unsigned_integer_8(_REFERENCE_HID_COUNTRY_CODE),
             ),
             ServiceAttribute(
                 _SDP_HID_VIRTUAL_CABLE_ATTRIBUTE_ID,
@@ -705,8 +713,16 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
                 ),
             ),
             ServiceAttribute(
+                _SDP_HID_REMOTE_WAKE_ATTRIBUTE_ID,
+                DataElement.boolean(True),
+            ),
+            ServiceAttribute(
                 _SDP_HID_PROFILE_VERSION_ATTRIBUTE_ID,
                 DataElement.unsigned_integer_16(0x0101),
+            ),
+            ServiceAttribute(
+                _SDP_HID_SUPERVISION_TIMEOUT_ATTRIBUTE_ID,
+                DataElement.unsigned_integer_16(_REFERENCE_HID_SUPERVISION_TIMEOUT),
             ),
             ServiceAttribute(
                 _SDP_HID_NORMALLY_CONNECTABLE_ATTRIBUTE_ID,
@@ -715,6 +731,14 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
             ServiceAttribute(
                 _SDP_HID_BOOT_DEVICE_ATTRIBUTE_ID,
                 DataElement.boolean(False),
+            ),
+            ServiceAttribute(
+                _SDP_HIDSSR_HOST_MAX_LATENCY_ATTRIBUTE_ID,
+                DataElement.unsigned_integer_16(_REFERENCE_HIDSSR_HOST_MAX_LATENCY),
+            ),
+            ServiceAttribute(
+                _SDP_HIDSSR_HOST_MIN_TIMEOUT_ATTRIBUTE_ID,
+                DataElement.unsigned_integer_16(_REFERENCE_HIDSSR_HOST_MIN_TIMEOUT),
             ),
         ]
     }

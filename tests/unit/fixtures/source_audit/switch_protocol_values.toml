@@ -176,6 +176,37 @@ status = "version-pinned"
 handoff = ["unit_004"]
 
 [[entry]]
+id = "bumble_hidp_output_report_boundary"
+fixture_name = "bumble_0_0_230_hidp_output_report_boundary"
+area = "transport"
+value = "bumble.hid DATA messages include one HIDP header byte before report data; Device EVENT_INTERRUPT_DATA and EVENT_CONTROL_DATA emit the PDU including that header; SET_REPORT callback receives report_id separated from report_data and callback status controls the HID handshake"
+classification = "source fact"
+source = [
+    '.venv\Lib\site-packages\bumble\hid.py:119-125',
+    '.venv\Lib\site-packages\bumble\hid.py:311-328',
+    '.venv\Lib\site-packages\bumble\hid.py:370-384',
+    '.venv\Lib\site-packages\bumble\hid.py:407-446',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\btstack-output-report-callbacks.md:24-37',
+]
+status = "version-pinned"
+handoff = ["unit_005"]
+
+[[entry]]
+id = "btstack_reference_hid_sdp_policy"
+fixture_name = "btstack_reference_hid_sdp_policy"
+area = "transport"
+value = "swbt-daemon production HID SDP policy uses HID country code 0x21, remote wake true, supervision timeout 0x0c80, SSR host max latency 0xffff, and SSR host min timeout 0xffff; BTstack hid_create_sdp_record serializes remote wake, supervision timeout, and SSR latency attributes"
+classification = "implementation fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\btstack_bridge\production_ports.c:55-63',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\vendor\btstack\src\classic\hid_device.c:267-321',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\vendor\btstack\src\bluetooth_sdp.h:184-190',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\tests\daemon_production_hid_sdp_record_test.c:10-28',
+]
+status = "handoff-ready"
+handoff = ["unit_005"]
+
+[[entry]]
 id = "swbt_daemon_reference_discovery_identity"
 fixture_name = "swbt_daemon_reference_discovery_identity"
 area = "transport"

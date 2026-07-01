@@ -27,6 +27,8 @@ REQUIRED_ENTRY_IDS = {
     "bumble_hid_device_api",
     "bumble_classic_visibility",
     "bumble_l2cap_connection_events",
+    "bumble_hidp_output_report_boundary",
+    "btstack_reference_hid_sdp_policy",
     "swbt_daemon_reference_discovery_identity",
     "swbt_daemon_reference_discovery_identity_hci",
     "report_period_default",
@@ -108,6 +110,35 @@ def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
     assert "no semantic input reflection" in condition
     assert "semantic input reflection" in value
     assert "key store behavior remain unverified" in value
+
+
+def test_bumble_hidp_output_report_boundary_is_version_pinned_source_fact() -> None:
+    entry = _entry_by_id("bumble_hidp_output_report_boundary")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "version-pinned"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "HIDP header byte" in value
+    assert "EVENT_INTERRUPT_DATA" in value
+    assert "EVENT_CONTROL_DATA" in value
+    assert "SET_REPORT callback receives report_id separated" in value
+
+
+def test_btstack_reference_hid_sdp_policy_is_handoff_ready() -> None:
+    entry = _entry_by_id("btstack_reference_hid_sdp_policy")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "handoff-ready"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "country code 0x21" in value
+    assert "remote wake true" in value
+    assert "supervision timeout 0x0c80" in value
+    assert "SSR host max latency 0xffff" in value
+    assert "SSR host min timeout 0xffff" in value
 
 
 def test_default_report_period_remains_configurable() -> None:

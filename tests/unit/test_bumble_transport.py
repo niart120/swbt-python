@@ -271,6 +271,17 @@ def test_bumble_transport_records_custom_device_name_in_diagnostics() -> None:
     asyncio.run(run())
 
 
+def test_bumble_hid_service_record_matches_reference_sdp_policy() -> None:
+    service_records = bumble_module._build_hid_service_records(b"\x00")
+    attributes = {attribute.id: attribute.value for attribute in service_records[0x00010001]}
+
+    assert attributes[0x0203].value == 0x21
+    assert attributes[0x020A].value is True
+    assert attributes[0x020C].value == 0x0C80
+    assert attributes[0x020F].value == 0xFFFF
+    assert attributes[0x0210].value == 0xFFFF
+
+
 def test_bumble_open_failure_is_mapped_to_transport_open_error() -> None:
     async def run() -> None:
         trace = StringIO()
