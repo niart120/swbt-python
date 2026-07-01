@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import platform
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
@@ -24,6 +26,10 @@ if TYPE_CHECKING:
 _HID_SERVICE_RECORD_HANDLE = 0x00010001
 _HID_REPORT_DESCRIPTOR_TYPE = 0x22
 _HID_OUTPUT_REPORT_TYPE = 0x02
+_HID_CONTROL_PSM = 0x0011
+_HID_INTERRUPT_PSM = 0x0013
+_DEFAULT_DEVICE_NAME = "Pro Controller"
+_REFERENCE_CLASS_OF_DEVICE = 0x002508
 
 _SDP_HID_PARSER_VERSION_ATTRIBUTE_ID = 0x0201
 _SDP_HID_DEVICE_SUBCLASS_ATTRIBUTE_ID = 0x0202
@@ -52,7 +58,13 @@ _OpenTransport = Callable[[str], Awaitable[_BumbleHandle]]
 
 
 class _BumbleDeviceRuntime(Protocol):
+    EVENT_CONNECTION: str
+    EVENT_CONNECTION_FAILURE: str
+    on_connection_request: Callable[[object, int, int], None]
     powered_on: bool
+
+    def on(self, event: str, callback: Callable[..., None]) -> None:
+        """Register a Bumble device event callback."""
 
     async def power_on(self) -> None:
         """Power on the Bumble device."""
@@ -72,6 +84,8 @@ class _BumbleHidRuntime(Protocol):
     EVENT_CONTROL_DATA: str
     l2cap_intr_channel: object | None
     l2cap_ctrl_channel: object | None
+    on_l2cap_channel_open: Callable[[object], None]
+    on_l2cap_channel_close: Callable[[object], None]
 
     def on(self, event: str, callback: Callable[[bytes], None]) -> None:
         """Register a HID helper event callback."""
@@ -104,6 +118,7 @@ class BumbleHidTransport:
         self,
         *,
         adapter: str,
+        device_name: str = _DEFAULT_DEVICE_NAME,
         diagnostics: DiagnosticsRecorder | None = None,
         _open_transport: _OpenTransport | None = None,
         _initialize_device: _InitializeDevice | None = None,
@@ -112,9 +127,17 @@ class BumbleHidTransport:
     ) -> None:
         """Create a Bumble transport for an adapter string."""
         self._adapter = adapter
+        self._device_name = device_name
         self._diagnostics = diagnostics
         self._open_transport = _open_transport or _default_open_transport
-        self._initialize_device = _initialize_device or _default_initialize_device
+        if _initialize_device is None:
+
+            async def initialize_device(handle: _BumbleHandle) -> _BumbleRuntime:
+                return await _default_initialize_device(handle, device_name=self._device_name)
+
+            self._initialize_device = initialize_device
+        else:
+            self._initialize_device = _initialize_device
         self._start_advertising = _start_advertising or _default_start_advertising
         self._close_runtime = _close_runtime or _default_close_runtime
         self._handle: _BumbleHandle | None = None
@@ -123,16 +146,24 @@ class BumbleHidTransport:
         self._control_callback: ControlDataCallback | None = None
         self._connected_callback: ConnectedCallback | None = None
         self._disconnected_callback: DisconnectedCallback | None = None
+        self._l2cap_connected_emitted = False
 
     async def open(self) -> None:
         """Open the configured Bumble adapter."""
         if self._handle is not None:
             return
+        self._record_event(
+            "bumble_runtime",
+            bumble_version=_package_version("bumble"),
+            os_detail=platform.platform(),
+        )
         self._record_event("transport_open_start", adapter=self._adapter)
         try:
             self._handle = await self._open_transport(self._adapter)
             self._runtime = await self._initialize_device(self._handle)
+            self._register_device_callbacks(self._runtime.device)
             self._register_hid_callbacks(self._runtime.hid_device)
+            self._register_l2cap_lifecycle_bridge(self._runtime.hid_device)
         except Exception as error:
             await self._cleanup_open_failure()
             self._record_error(error)
@@ -142,6 +173,8 @@ class BumbleHidTransport:
             "bumble_device_initialized",
             adapter=self._adapter,
             classic_enabled=True,
+            device_name=self._device_name,
+            class_of_device=f"0x{_REFERENCE_CLASS_OF_DEVICE:06x}",
         )
         self._record_event(
             "sdp_record_registered",
@@ -172,6 +205,7 @@ class BumbleHidTransport:
         runtime = self._runtime
         self._handle = None
         self._runtime = None
+        self._l2cap_connected_emitted = False
         if runtime is not None:
             await self._close_runtime(runtime)
         await handle.close()
@@ -219,6 +253,110 @@ class BumbleHidTransport:
             self._dispatch_control_data,
         )
 
+    def _register_device_callbacks(self, device: _BumbleDeviceRuntime) -> None:
+        device.on(device.EVENT_CONNECTION, self._handle_device_connection)
+        device.on(device.EVENT_CONNECTION_FAILURE, self._handle_connection_failure)
+        self._register_connection_request_bridge(device)
+
+    def _register_connection_request_bridge(self, device: _BumbleDeviceRuntime) -> None:
+        original_connection_request = device.on_connection_request
+
+        def on_connection_request(
+            bd_addr: object,
+            class_of_device: int,
+            link_type: int,
+        ) -> None:
+            self._record_event(
+                "connection_request",
+                adapter=self._adapter,
+                class_of_device=f"0x{class_of_device:06x}",
+                link_type=link_type,
+                peer_address=str(bd_addr),
+            )
+            original_connection_request(bd_addr, class_of_device, link_type)
+
+        device.on_connection_request = on_connection_request
+
+    def _register_l2cap_lifecycle_bridge(self, hid_device: _BumbleHidRuntime) -> None:
+        original_open = hid_device.on_l2cap_channel_open
+        original_close = hid_device.on_l2cap_channel_close
+
+        def on_l2cap_channel_open(l2cap_channel: object) -> None:
+            original_open(l2cap_channel)
+            self._record_l2cap_channel_event("l2cap_channel_open", l2cap_channel)
+            self._notify_connected_if_ready()
+
+        def on_l2cap_channel_close(l2cap_channel: object) -> None:
+            original_close(l2cap_channel)
+            self._record_l2cap_channel_event("l2cap_channel_close", l2cap_channel)
+            self._l2cap_connected_emitted = False
+
+        hid_device.on_l2cap_channel_open = on_l2cap_channel_open
+        hid_device.on_l2cap_channel_close = on_l2cap_channel_close
+
+    def _handle_device_connection(self, connection: object) -> None:
+        self._l2cap_connected_emitted = False
+        fields: dict[str, object] = {"adapter": self._adapter}
+        connection_handle = getattr(connection, "handle", None)
+        peer_address = getattr(connection, "peer_address", None)
+        if connection_handle is not None:
+            fields["connection_handle"] = connection_handle
+        if peer_address is not None:
+            fields["peer_address"] = str(peer_address)
+        self._record_event("host_connection", **fields)
+        self._register_connection_callbacks(connection)
+
+    def _register_connection_callbacks(self, connection: object) -> None:
+        on_event = getattr(connection, "on", None)
+        if not callable(on_event):
+            return
+        on_event(
+            getattr(connection, "EVENT_DISCONNECTION", "disconnection"),
+            self._handle_device_disconnection,
+        )
+        on_event(
+            getattr(connection, "EVENT_CLASSIC_PAIRING", "classic_pairing"),
+            lambda *_args: self._record_event("classic_pairing", adapter=self._adapter),
+        )
+        on_event(
+            getattr(connection, "EVENT_CLASSIC_PAIRING_FAILURE", "classic_pairing_failure"),
+            lambda reason=None, *_args: self._record_event(
+                "classic_pairing_failure",
+                adapter=self._adapter,
+                reason=reason,
+            ),
+        )
+        on_event(
+            getattr(connection, "EVENT_PAIRING_START", "pairing_start"),
+            lambda *_args: self._record_event("pairing_start", adapter=self._adapter),
+        )
+        on_event(
+            getattr(connection, "EVENT_PAIRING", "pairing"),
+            lambda *_args: self._record_event("pairing_complete", adapter=self._adapter),
+        )
+        on_event(
+            getattr(connection, "EVENT_PAIRING_FAILURE", "pairing_failure"),
+            lambda reason=None, *_args: self._record_event(
+                "pairing_failure",
+                adapter=self._adapter,
+                reason=reason,
+            ),
+        )
+
+    def _handle_connection_failure(self, error: object) -> None:
+        self._record_event(
+            "connection_failure",
+            adapter=self._adapter,
+            error_type=type(error).__name__,
+            message=str(error),
+        )
+
+    def _handle_device_disconnection(self, reason: int | None = None) -> None:
+        self._l2cap_connected_emitted = False
+        self._record_event("disconnected", adapter=self._adapter, reason=reason)
+        if self._disconnected_callback is not None:
+            self._dispatch_disconnected_callback(reason)
+
     def _dispatch_interrupt_data(self, payload: bytes) -> None:
         if self._interrupt_callback is None:
             return
@@ -234,13 +372,43 @@ class BumbleHidTransport:
         callback: Callable[[bytes], Awaitable[None]],
         payload: bytes,
     ) -> None:
+        self._dispatch_awaitable(callback(payload))
+
+    def _dispatch_connected_callback(self) -> None:
+        if self._connected_callback is not None:
+            self._dispatch_awaitable(self._connected_callback())
+
+    def _dispatch_disconnected_callback(self, reason: int | None) -> None:
+        if self._disconnected_callback is not None:
+            self._dispatch_awaitable(self._disconnected_callback(reason))
+
+    def _dispatch_awaitable(self, awaitable: Awaitable[None]) -> None:
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError as error:
             self._record_error(error)
             return
-        task = asyncio.ensure_future(callback(payload), loop=loop)
+        task = asyncio.ensure_future(awaitable, loop=loop)
         task.add_done_callback(self._record_callback_error)
+
+    def _notify_connected_if_ready(self) -> None:
+        if self._runtime is None or self._l2cap_connected_emitted:
+            return
+        hid_device = self._runtime.hid_device
+        if hid_device.l2cap_ctrl_channel is None or hid_device.l2cap_intr_channel is None:
+            return
+        self._l2cap_connected_emitted = True
+        self._record_event("connected", adapter=self._adapter)
+        self._dispatch_connected_callback()
+
+    def _record_l2cap_channel_event(self, event: str, l2cap_channel: object) -> None:
+        psm = getattr(l2cap_channel, "psm", None)
+        self._record_event(
+            event,
+            adapter=self._adapter,
+            channel=_hid_channel_name(psm),
+            psm=_format_psm(psm),
+        )
 
     def _record_callback_error(self, task: asyncio.Future[None]) -> None:
         if task.cancelled():
@@ -267,6 +435,7 @@ class BumbleHidTransport:
         runtime = self._runtime
         self._handle = None
         self._runtime = None
+        self._l2cap_connected_emitted = False
         if runtime is not None:
             await self._close_runtime(runtime)
         if handle is not None:
@@ -279,19 +448,18 @@ async def _default_open_transport(adapter: str) -> _BumbleHandle:
     return cast("_BumbleHandle", await open_transport(adapter))
 
 
-async def _default_initialize_device(handle: _BumbleHandle) -> _BumbleRuntime:
-    from bumble import core  # noqa: PLC0415
+async def _default_initialize_device(
+    handle: _BumbleHandle,
+    *,
+    device_name: str,
+) -> _BumbleRuntime:
     from bumble.device import Device, DeviceConfiguration  # noqa: PLC0415
     from bumble.hid import Device as HidDevice  # noqa: PLC0415
 
     profile = ProControllerProfile()
     config = DeviceConfiguration(
-        name="swbt-python",
-        class_of_device=_pack_class_of_device(
-            service_classes=0,
-            major_device_class=core.ClassOfDevice.MajorDeviceClass.PERIPHERAL,
-            minor_device_class=core.ClassOfDevice.PeripheralMinorDeviceClass.GAMEPAD,
-        ),
+        name=device_name,
+        class_of_device=_REFERENCE_CLASS_OF_DEVICE,
         le_enabled=False,
         classic_enabled=True,
         connectable=True,
@@ -326,13 +494,25 @@ async def _default_close_runtime(runtime: _BumbleRuntime) -> None:
         await runtime.device.power_off()
 
 
-def _pack_class_of_device(
-    *,
-    service_classes: int,
-    major_device_class: int,
-    minor_device_class: int,
-) -> int:
-    return service_classes << 13 | major_device_class << 8 | minor_device_class << 2
+def _hid_channel_name(psm: object) -> str:
+    if psm == _HID_CONTROL_PSM:
+        return "control"
+    if psm == _HID_INTERRUPT_PSM:
+        return "interrupt"
+    return "unknown"
+
+
+def _format_psm(psm: object) -> str:
+    if isinstance(psm, int):
+        return f"0x{psm:04x}"
+    return "unknown"
+
+
+def _package_version(package_name: str) -> str:
+    try:
+        return version(package_name)
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]:
@@ -350,8 +530,6 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
         ServiceAttribute,
     )
 
-    control_psm = 0x0011
-    interrupt_psm = 0x0013
     return {
         _HID_SERVICE_RECORD_HANDLE: [
             ServiceAttribute(
@@ -369,7 +547,7 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
                         DataElement.sequence(
                             [
                                 DataElement.uuid(core.BT_L2CAP_PROTOCOL_ID),
-                                DataElement.unsigned_integer_16(control_psm),
+                                DataElement.unsigned_integer_16(_HID_CONTROL_PSM),
                             ]
                         ),
                         DataElement.sequence([DataElement.uuid(core.BT_HIDP_PROTOCOL_ID)]),
@@ -412,7 +590,7 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
                                 DataElement.sequence(
                                     [
                                         DataElement.uuid(core.BT_L2CAP_PROTOCOL_ID),
-                                        DataElement.unsigned_integer_16(interrupt_psm),
+                                        DataElement.unsigned_integer_16(_HID_INTERRUPT_PSM),
                                     ]
                                 ),
                                 DataElement.sequence([DataElement.uuid(core.BT_HIDP_PROTOCOL_ID)]),
