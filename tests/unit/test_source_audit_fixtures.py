@@ -28,6 +28,7 @@ REQUIRED_ENTRY_IDS = {
     "bumble_classic_visibility",
     "bumble_l2cap_connection_events",
     "bumble_reference_classic_link_policy",
+    "bumble_acl_packet_queue_drain_boundary",
     "bumble_hidp_output_report_boundary",
     "btstack_reference_hid_sdp_policy",
     "swbt_daemon_reference_discovery_identity",
@@ -108,6 +109,7 @@ def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
     assert "reset-state M4 attempt" in condition
     assert "link-policy M4 hardware test" in condition
     assert "link-policy-only M4 hardware test" in condition
+    assert "observation-window M4 hardware test" in condition
     assert "discoverable / connectable" in value
     assert "Classic pairing" in value
     assert "HID control / interrupt L2CAP open" in value
@@ -116,6 +118,11 @@ def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
     assert "Classic default link policy 0x0005" in value
     assert "a2 01" in value
     assert "a1 21" in value
+    assert "observation-window M4 run" in value
+    assert "subcommand 0x02 x1 and 0x08 x8" in value
+    assert "0x21 replies for all observed subcommands" in value
+    assert "no unsupported_subcommand or error events" in value
+    assert "no Bumble debug log packets-in-flight backlog matches" in value
     assert "without HID L2CAP MTU 100 re-registration" in value
     assert "0x8e/0x80 profile prefix change" in value
     assert "no SDP PSM query" in value
@@ -138,6 +145,21 @@ def test_bumble_hidp_output_report_boundary_is_version_pinned_source_fact() -> N
     assert "EVENT_INTERRUPT_DATA" in value
     assert "EVENT_CONTROL_DATA" in value
     assert "SET_REPORT callback receives report_id separated" in value
+
+
+def test_bumble_acl_packet_queue_drain_boundary_is_implementation_policy() -> None:
+    entry = _entry_by_id("bumble_acl_packet_queue_drain_boundary")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "implementation-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "hid.HID.send_data writes the HID interrupt PDU" in value
+    assert "Host.send_acl_sdu" in value
+    assert "DataPacketQueue exposes pending" in value
+    assert "drain(connection_handle)" in value
+    assert "connection.device.host.get_data_packet_queue(handle)" in value
 
 
 def test_bumble_reference_classic_link_policy_is_implementation_policy() -> None:

@@ -73,6 +73,7 @@ class ReportLoop:
             await self.send_next_report()
 
     async def _send_report(self, report: bytes, *, reason: str) -> None:
+        await self._transport.send_interrupt(report)
         report_id = report[0]
         counter = self._report_counters.get(report_id, 0) + 1
         self._report_counters[report_id] = counter
@@ -83,4 +84,3 @@ class ReportLoop:
                 reason=reason,
                 report_id=f"0x{report_id:02x}",
             )
-        await self._transport.send_interrupt(report)

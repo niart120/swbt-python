@@ -186,9 +186,66 @@ class FakeHidDevice:
 class FakeL2capChannel:
     """Fake L2CAP channel with only the PSM used by Bumble HID."""
 
-    def __init__(self, psm: int) -> None:
+    def __init__(self, psm: int, connection: object | None = None) -> None:
         """Create a fake L2CAP channel."""
         self.psm = psm
+        self.connection = connection
+
+
+class FakeAclPacketQueue:
+    """Fake Bumble ACL packet queue."""
+
+    def __init__(self, *, clears_pending: bool = True) -> None:
+        """Create an empty drain record."""
+        self.drained_handles: list[int] = []
+        self.pending = 1
+        self.clears_pending = clears_pending
+
+    async def drain(self, connection_handle: int) -> None:
+        """Record one drain wait."""
+        self.drained_handles.append(connection_handle)
+        if self.clears_pending:
+            self.pending = 0
+
+
+class FakeAclPacketQueueHost:
+    """Fake Bumble host exposing per-connection ACL queues."""
+
+    def __init__(self, acl_packet_queue: FakeAclPacketQueue) -> None:
+        """Create a fake host with one queue."""
+        self.acl_packet_queue = acl_packet_queue
+        self.requested_handles: list[int] = []
+
+    def get_data_packet_queue(self, connection_handle: int) -> FakeAclPacketQueue:
+        """Return the queue for a fake connection handle."""
+        self.requested_handles.append(connection_handle)
+        return self.acl_packet_queue
+
+
+class FakeDeviceWithAclPacketQueueHost:
+    """Fake Bumble device exposing an ACL queue host."""
+
+    def __init__(self, host: FakeAclPacketQueueHost) -> None:
+        """Create a fake device with a host."""
+        self.host = host
+
+
+class FakeL2capConnection:
+    """Fake L2CAP connection with an ACL packet queue."""
+
+    def __init__(self, *, handle: int, acl_packet_queue: FakeAclPacketQueue) -> None:
+        """Create a fake connection."""
+        self.handle = handle
+        self.acl_packet_queue = acl_packet_queue
+
+
+class FakeL2capConnectionWithHostQueue:
+    """Fake L2CAP connection that reaches ACL queues via device.host."""
+
+    def __init__(self, *, handle: int, host: FakeAclPacketQueueHost) -> None:
+        """Create a fake connection with host-backed queue lookup."""
+        self.handle = handle
+        self.device = FakeDeviceWithAclPacketQueueHost(host)
 
 
 class FakeConnection:
@@ -638,6 +695,116 @@ def test_bumble_send_fails_until_l2cap_channels_are_connected() -> None:
             await transport.send_interrupt(b"\x30")
         with pytest.raises(ClosedError):
             await transport.send_control(b"\x01")
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_send_interrupt_waits_for_acl_queue_drain() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        acl_packet_queue = FakeAclPacketQueue()
+        connection = FakeL2capConnection(
+            handle=0x0048,
+            acl_packet_queue=acl_packet_queue,
+        )
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013, connection=connection))
+
+        await transport.send_interrupt(b"\x30")
+
+        assert hid_device.interrupt_payloads == [b"\x30"]
+        assert acl_packet_queue.drained_handles == [0x0048]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_send_interrupt_falls_back_to_host_acl_queue_drain() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        acl_packet_queue = FakeAclPacketQueue()
+        host = FakeAclPacketQueueHost(acl_packet_queue)
+        connection = FakeL2capConnectionWithHostQueue(
+            handle=0x0049,
+            host=host,
+        )
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013, connection=connection))
+
+        await transport.send_interrupt(b"\x30")
+
+        assert hid_device.interrupt_payloads == [b"\x30"]
+        assert host.requested_handles == [0x0049]
+        assert acl_packet_queue.drained_handles == [0x0049]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_send_interrupt_drain_stops_when_acl_queue_makes_no_progress() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        acl_packet_queue = FakeAclPacketQueue(clears_pending=False)
+        connection = FakeL2capConnection(
+            handle=0x004A,
+            acl_packet_queue=acl_packet_queue,
+        )
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013, connection=connection))
+
+        await asyncio.wait_for(transport.send_interrupt(b"\x30"), timeout=1.0)
+
+        assert hid_device.interrupt_payloads == [b"\x30"]
+        assert acl_packet_queue.drained_handles == [0x004A]
 
         await transport.close()
 

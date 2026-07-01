@@ -192,6 +192,23 @@ status = "implementation-policy"
 handoff = ["unit_005"]
 
 [[entry]]
+id = "bumble_acl_packet_queue_drain_boundary"
+fixture_name = "bumble_acl_packet_queue_drain_boundary"
+area = "transport"
+value = "Bumble 0.0.230 hid.HID.send_data writes the HID interrupt PDU to the L2CAP interrupt channel; L2CAP send ultimately enqueues ACL packets through Host.send_acl_sdu; DataPacketQueue exposes pending and async drain(connection_handle). swbt-python treats send_interrupt as complete after the matching ACL packet queue drains, using connection.acl_packet_queue when present and falling back to connection.device.host.get_data_packet_queue(handle)."
+classification = "implementation fact"
+source = [
+    '.venv\Lib\site-packages\bumble\hid.py:321-330',
+    '.venv\Lib\site-packages\bumble\l2cap.py:1214-1222',
+    '.venv\Lib\site-packages\bumble\host.py:48-187',
+    '.venv\Lib\site-packages\bumble\host.py:839-884',
+    '.venv\Lib\site-packages\bumble\device.py:1533-1541',
+    '.venv\Lib\site-packages\bumble\device.py:2076-2082',
+]
+status = "implementation-policy"
+handoff = ["unit_005"]
+
+[[entry]]
 id = "bumble_hidp_output_report_boundary"
 fixture_name = "bumble_0_0_230_hidp_output_report_boundary"
 area = "transport"
@@ -267,9 +284,9 @@ handoff = ["unit_001", "unit_002", "unit_005"]
 id = "swbt_python_adapter_driver_boundary"
 fixture_name = "swbt_python_adapter_driver_boundary"
 area = "hardware"
-value = "swbt-python observed Bumble USB HCI transport open/close, Bumble Device generation, Classic HID initialization, SDP / HID descriptor registration, discoverable / connectable, Classic pairing, HID control / interrupt L2CAP open, connected, neutral 0x30 report transmit, and close on adapter usb:0 with CSR8510 A10 on WinUSB; unit_005 M4 post-transport-fix, SDP service-name, reset-state attempts, no-report-window, single-0x30, prefix, and MTU diagnostics reached pairing, encryption, and L2CAP open but observed no HID CONTROL PDU, HID INTERRUPT PDU, output_report_rx, subcommand_rx, or subcommand_reply_tx before Switch-side reason 19 disconnect; link-policy-only M4 run configured Classic default link policy 0x0005, received Switch HID interrupt output PDU a2 01 for subcommand 0x02, and transmitted HID interrupt reply PDU a1 21 before clean disconnect without HID L2CAP MTU 100 re-registration or the 0x8e/0x80 profile prefix change; latest pre-link-policy debug logs observed direct HID PSM 0x0011/0x0013 L2CAP connection requests but no SDP PSM query; semantic input reflection, reconnect, and key store behavior remain unverified in swbt-python"
+value = "swbt-python observed Bumble USB HCI transport open/close, Bumble Device generation, Classic HID initialization, SDP / HID descriptor registration, discoverable / connectable, Classic pairing, HID control / interrupt L2CAP open, connected, neutral 0x30 report transmit, and close on adapter usb:0 with CSR8510 A10 on WinUSB; unit_005 M4 post-transport-fix, SDP service-name, reset-state attempts, no-report-window, single-0x30, prefix, and MTU diagnostics reached pairing, encryption, and L2CAP open but observed no HID CONTROL PDU, HID INTERRUPT PDU, output_report_rx, subcommand_rx, or subcommand_reply_tx before Switch-side reason 19 disconnect; link-policy-only M4 run configured Classic default link policy 0x0005, received Switch HID interrupt output PDU a2 01 for subcommand 0x02, and transmitted HID interrupt reply PDU a1 21 before clean disconnect without HID L2CAP MTU 100 re-registration or the 0x8e/0x80 profile prefix change; observation-window M4 run with Bumble ACL queue drain observed subcommand 0x02 x1 and 0x08 x8, transmitted 0x21 replies for all observed subcommands, recorded no unsupported_subcommand or error events, and had no Bumble debug log packets-in-flight backlog matches; latest pre-link-policy debug logs observed direct HID PSM 0x0011/0x0013 L2CAP connection requests but no SDP PSM query; semantic input reflection, reconnect, and key store behavior remain unverified in swbt-python"
 classification = "hardware observation"
-condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; M2 advertising smoke, M3 pairing/L2CAP hardware test, M4 subcommand sequence attempts, post-transport-fix M4 attempts, SDP service-name M4 attempt, reset-state M4 attempt, no-report-window diagnostics, single-0x30 diagnostics, MTU-100 diagnostic, link-policy M4 hardware test, and link-policy-only M4 hardware test; no semantic input reflection"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; M2 advertising smoke, M3 pairing/L2CAP hardware test, M4 subcommand sequence attempts, post-transport-fix M4 attempts, SDP service-name M4 attempt, reset-state M4 attempt, no-report-window diagnostics, single-0x30 diagnostics, MTU-100 diagnostic, link-policy M4 hardware test, link-policy-only M4 hardware test, and observation-window M4 hardware test; no semantic input reflection"
 source = [
     'docs\hardware-test-log.md',
     'spec\complete\unit_004\M3_PAIRING_L2CAP.md',
