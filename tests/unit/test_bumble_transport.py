@@ -92,6 +92,7 @@ class FakeHidDevice:
         self.handlers: dict[str, Callable[[bytes], None]] = {}
         self.interrupt_payloads: list[bytes] = []
         self.control_payloads: list[tuple[int, bytes]] = []
+        self.set_report_callback: Callable[[int, int, int, bytes], object] | None = None
 
     def on(self, event: str, callback: Callable[[bytes], None]) -> None:
         """Register one fake event callback."""
@@ -109,6 +110,16 @@ class FakeHidDevice:
     def send_control_data(self, report_type: int, data: bytes) -> None:
         """Record control data."""
         self.control_payloads.append((report_type, data))
+
+    def register_set_report_cb(self, callback: Callable[[int, int, int, bytes], object]) -> None:
+        """Register a fake SET_REPORT callback."""
+        self.set_report_callback = callback
+
+    def emit_set_report(self, report_id: int, report_type: int, report_data: bytes) -> object:
+        """Emit one fake SET_REPORT call."""
+        assert self.set_report_callback is not None
+        report_size = len(report_data) + 1
+        return self.set_report_callback(report_id, report_type, report_size, report_data)
 
     def on_l2cap_channel_open(self, l2cap_channel: object) -> None:
         """Record one fake L2CAP channel as open."""
@@ -444,6 +455,43 @@ def test_bumble_hid_data_callbacks_strip_hidp_output_data_header() -> None:
 
         assert interrupt_payloads == [bytes.fromhex("01 00")]
         assert control_payloads == [bytes.fromhex("10 2a")]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_set_report_callback_forwards_output_report() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        control_payloads: list[bytes] = []
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+        transport.on_control_data(lambda payload: _append_payload(control_payloads, payload))
+
+        await transport.open()
+
+        result = hid_device.emit_set_report(
+            report_id=0x01,
+            report_type=0x02,
+            report_data=bytes.fromhex("00 00"),
+        )
+        await asyncio.sleep(0)
+
+        assert control_payloads == [bytes.fromhex("01 00 00")]
+        assert getattr(result, "status") == 0xFF
 
         await transport.close()
 

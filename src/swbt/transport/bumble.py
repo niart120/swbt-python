@@ -27,6 +27,8 @@ _HID_SERVICE_RECORD_HANDLE = 0x00010001
 _HID_REPORT_DESCRIPTOR_TYPE = 0x22
 _HID_OUTPUT_REPORT_TYPE = 0x02
 _HIDP_DATA_MESSAGE_TYPE = 0x0A
+_HID_GET_SET_SUCCESS = 0xFF
+_HID_GET_SET_UNSUPPORTED_REQUEST = 0x02
 _HID_CONTROL_PSM = 0x0011
 _HID_INTERRUPT_PSM = 0x0013
 _DEFAULT_DEVICE_NAME = "Pro Controller"
@@ -45,6 +47,12 @@ _SDP_HID_BOOT_DEVICE_ATTRIBUTE_ID = 0x020E
 
 _LANGUAGE_BASE_EN_US = 0x0100
 _LANGUAGE_ID_EN_US = 0x0409
+
+
+@dataclass(frozen=True)
+class _BumbleGetSetStatus:
+    data: bytes = b""
+    status: int = 0
 
 
 class _BumbleHandle(Protocol):
@@ -253,6 +261,30 @@ class BumbleHidTransport:
             hid_device.EVENT_CONTROL_DATA,
             self._dispatch_control_data,
         )
+        self._register_set_report_callback(hid_device)
+
+    def _register_set_report_callback(self, hid_device: _BumbleHidRuntime) -> None:
+        register_set_report = getattr(hid_device, "register_set_report_cb", None)
+        if not callable(register_set_report):
+            return
+
+        def on_set_report(
+            report_id: int,
+            report_type: int,
+            report_size: int,
+            report_data: bytes,
+        ) -> _BumbleGetSetStatus:
+            _ = report_size
+            if report_type != _HID_OUTPUT_REPORT_TYPE:
+                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+            if not 0 <= report_id <= 0xFF:
+                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+            report = bytes((report_id,)) + bytes(report_data)
+            if not self._dispatch_control_report(report):
+                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+            return _BumbleGetSetStatus(status=_HID_GET_SET_SUCCESS)
+
+        register_set_report(on_set_report)
 
     def _register_device_callbacks(self, device: _BumbleDeviceRuntime) -> None:
         device.on(device.EVENT_CONNECTION, self._handle_device_connection)
@@ -359,20 +391,28 @@ class BumbleHidTransport:
             self._dispatch_disconnected_callback(reason)
 
     def _dispatch_interrupt_data(self, payload: bytes) -> None:
-        if self._interrupt_callback is None:
-            return
         report = _decode_hidp_output_report(payload)
         if report is None:
             return
-        self._dispatch_callback(self._interrupt_callback, report)
+        self._dispatch_interrupt_report(report)
 
     def _dispatch_control_data(self, payload: bytes) -> None:
-        if self._control_callback is None:
-            return
         report = _decode_hidp_output_report(payload)
         if report is None:
             return
-        self._dispatch_callback(self._control_callback, report)
+        self._dispatch_control_report(report)
+
+    def _dispatch_interrupt_report(self, payload: bytes) -> bool:
+        if self._interrupt_callback is None:
+            return False
+        self._dispatch_callback(self._interrupt_callback, payload)
+        return True
+
+    def _dispatch_control_report(self, payload: bytes) -> bool:
+        if self._control_callback is None:
+            return False
+        self._dispatch_callback(self._control_callback, payload)
+        return True
 
     def _dispatch_callback(
         self,
