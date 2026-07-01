@@ -68,6 +68,29 @@ def test_release_buttons_clears_next_periodic_report() -> None:
     asyncio.run(run())
 
 
+def test_release_only_clears_requested_buttons_in_next_periodic_report() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+
+            await pad.press(Button.A, Button.L, Button.R)
+            pressed_count = len(transport.sent_interrupt_reports)
+            pressed_reports = await transport.wait_for_interrupt_report_count(pressed_count + 1)
+            assert pressed_reports[-1][3:6] == bytes.fromhex("48 00 40")
+
+            await pad.release(Button.L)
+            released_count = len(transport.sent_interrupt_reports)
+            released_reports = await transport.wait_for_interrupt_report_count(
+                released_count + 1
+            )
+            assert released_reports[-1][3:6] == bytes.fromhex("48 00 00")
+
+    asyncio.run(run())
+
+
 def test_set_input_updates_snapshot_and_next_periodic_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
