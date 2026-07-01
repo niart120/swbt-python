@@ -51,7 +51,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 - `spec/initial/risks.md`
 - `spec/complete/unit_001/M0_PROTOCOL_CORE.md`
 - `spec/wip/unit_002/M1_SWITCH_GAMEPAD_FAKE_TRANSPORT.md`
-- `spec/wip/unit_004/M3_PAIRING_L2CAP.md`
+- `spec/complete/unit_004/M3_PAIRING_L2CAP.md`
 - `spec/wip/unit_010/DIAGNOSTICS_TRACE_SCHEMA.md`
 - `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 

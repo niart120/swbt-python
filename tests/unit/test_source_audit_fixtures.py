@@ -26,6 +26,9 @@ REQUIRED_ENTRY_IDS = {
     "hid_report_descriptor",
     "bumble_hid_device_api",
     "bumble_classic_visibility",
+    "bumble_l2cap_connection_events",
+    "swbt_daemon_reference_discovery_identity",
+    "swbt_daemon_reference_discovery_identity_hci",
     "report_period_default",
     "swbt_python_adapter_driver_boundary",
     "swbt_daemon_csr8510_winusb_observation",
@@ -97,10 +100,13 @@ def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
 
     assert isinstance(condition, str)
     assert isinstance(value, str)
-    assert "M2 advertising smoke only" in condition
+    assert "M3 pairing/L2CAP hardware test" in condition
     assert "discoverable / connectable" in value
-    assert "no Switch pairing" in condition
-    assert "input reflection remain unverified" in value
+    assert "Classic pairing" in value
+    assert "HID control / interrupt L2CAP open" in value
+    assert "no semantic input reflection" in condition
+    assert "semantic input reflection" in value
+    assert "key store behavior remain unverified" in value
 
 
 def test_default_report_period_remains_configurable() -> None:

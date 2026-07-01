@@ -1,6 +1,7 @@
 """In-memory HID transport for integration tests."""
 
 import asyncio
+from typing import Literal
 
 from swbt.errors import ClosedError
 from swbt.transport.base import (
@@ -20,6 +21,9 @@ class FakeHidTransport:
         self._open_count = 0
         self._close_count = 0
         self._events: list[str] = []
+        self._control_channel_open = False
+        self._interrupt_channel_open = False
+        self._connected_emitted = False
         self._sent_interrupt_reports: list[bytes] = []
         self._sent_control_reports: list[bytes] = []
         self._interrupt_report_event = asyncio.Event()
@@ -76,15 +80,39 @@ class FakeHidTransport:
         if not self._is_open:
             return
         self._is_open = False
+        self._control_channel_open = False
+        self._interrupt_channel_open = False
+        self._connected_emitted = False
         self._close_count += 1
         self._events.append("close")
 
     async def connect(self) -> None:
         """Emit a fake host connection event."""
         self._require_open()
-        self._events.append("connected")
-        if self._connected_callback is not None:
-            await self._connected_callback()
+        self._control_channel_open = True
+        self._interrupt_channel_open = True
+        await self._emit_connected_once()
+
+    async def open_l2cap_channel(self, channel: Literal["control", "interrupt"]) -> None:
+        """Emit one fake L2CAP channel-open event."""
+        self._require_open()
+        if channel == "control":
+            self._control_channel_open = True
+            self._events.append("l2cap_control_open")
+        else:
+            self._interrupt_channel_open = True
+            self._events.append("l2cap_interrupt_open")
+        await self._emit_connected_once()
+
+    async def disconnect(self, reason: int | None = None) -> None:
+        """Emit a fake host disconnection event."""
+        self._require_open()
+        self._control_channel_open = False
+        self._interrupt_channel_open = False
+        self._connected_emitted = False
+        self._events.append("disconnected")
+        if self._disconnected_callback is not None:
+            await self._disconnected_callback(reason)
 
     async def inject_interrupt_data(self, payload: bytes) -> None:
         """Inject host-to-device data into the registered interrupt callback."""
@@ -154,3 +182,15 @@ class FakeHidTransport:
         if not self._is_open:
             msg = "fake transport is not open"
             raise ClosedError(msg)
+
+    async def _emit_connected_once(self) -> None:
+        if (
+            self._connected_emitted
+            or not self._control_channel_open
+            or not self._interrupt_channel_open
+        ):
+            return
+        self._connected_emitted = True
+        self._events.append("connected")
+        if self._connected_callback is not None:
+            await self._connected_callback()

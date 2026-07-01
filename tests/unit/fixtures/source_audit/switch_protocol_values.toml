@@ -157,6 +157,52 @@ status = "version-pinned"
 handoff = ["unit_003"]
 
 [[entry]]
+id = "bumble_l2cap_connection_events"
+fixture_name = "bumble_0_0_230_l2cap_connection_events"
+area = "transport"
+value = "bumble.hid.HID registers Classic HID control PSM 0x0011 and interrupt PSM 0x0013; on_l2cap_channel_open sets l2cap_ctrl_channel/l2cap_intr_channel; Device.on_connection_request observes incoming BR/EDR connection requests before connection complete; Device emits connection/connection_failure; Connection emits disconnection, classic_pairing, pairing_start, pairing, and pairing_failure"
+classification = "source fact"
+source = [
+    '.venv\Lib\site-packages\bumble\hid.py:43-44',
+    '.venv\Lib\site-packages\bumble\hid.py:221-224',
+    '.venv\Lib\site-packages\bumble\hid.py:274-299',
+    '.venv\Lib\site-packages\bumble\device.py:41-42',
+    '.venv\Lib\site-packages\bumble\device.py:1719-1753',
+    '.venv\Lib\site-packages\bumble\device.py:4622-4651',
+    '.venv\Lib\site-packages\bumble\device.py:6051-6110',
+    'uv.lock:142-165',
+]
+status = "version-pinned"
+handoff = ["unit_004"]
+
+[[entry]]
+id = "swbt_daemon_reference_discovery_identity"
+fixture_name = "swbt_daemon_reference_discovery_identity"
+area = "transport"
+value = "swbt-daemon production path uses device_name=\"Pro Controller\" and hid_device_subclass=0x2508u, then passes them to Classic GAP as local_name and class_of_device"
+classification = "implementation fact"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\btstack_bridge\production_ports.c:54',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\btstack_bridge\production_ports.c:66',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\btstack_bridge\production_btstack_impl.c:130-131',
+]
+status = "handoff-ready"
+handoff = ["unit_004"]
+
+[[entry]]
+id = "swbt_daemon_reference_discovery_identity_hci"
+fixture_name = "swbt_daemon_reference_discovery_identity_hci"
+area = "hardware"
+value = "swbt-daemon HCI dump observed class of device 0x002508 and local name / EIR Pro Controller before incoming Switch-side connection attempts"
+classification = "hardware observation"
+condition = "Windows native; CSR8510 A10; WinUSB; BTstack production backend; Switch2 firmware 22.1.0; HCI dump during pairing investigation"
+source = [
+    'E:\documents\VSCodeWorkspace\swbt-daemon\docs\hardware-test-log.md:293',
+]
+status = "hardware-observed-only"
+handoff = ["unit_004"]
+
+[[entry]]
 id = "report_period_default"
 fixture_name = "report_period_default_8000us"
 area = "report-loop"
@@ -174,13 +220,14 @@ handoff = ["unit_001", "unit_002", "unit_005"]
 id = "swbt_python_adapter_driver_boundary"
 fixture_name = "swbt_python_adapter_driver_boundary"
 area = "hardware"
-value = "swbt-python observed Bumble USB HCI transport open/close, Bumble Device generation, Classic HID initialization, SDP / HID descriptor registration, discoverable / connectable, and close on adapter usb:0 with CSR8510 A10 on WinUSB; pairing, L2CAP, subcommands, report loop, and input reflection remain unverified in swbt-python"
+value = "swbt-python observed Bumble USB HCI transport open/close, Bumble Device generation, Classic HID initialization, SDP / HID descriptor registration, discoverable / connectable, Classic pairing, HID control / interrupt L2CAP open, connected, one neutral 0x30 report transmit, and close on adapter usb:0 with CSR8510 A10 on WinUSB; subcommands, semantic input reflection, reconnect, and key store behavior remain unverified in swbt-python"
 classification = "hardware observation"
-condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; M2 advertising smoke only; no Switch pairing"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; M2 advertising smoke and M3 pairing/L2CAP hardware test; no semantic input reflection"
 source = [
     'docs\hardware-test-log.md',
-    'spec\complete\unit_003\M2_BUMBLE_HID_TRANSPORT.md',
+    'spec\complete\unit_004\M3_PAIRING_L2CAP.md',
     'tests\hardware\test_bumble_transport.py',
+    'tests\hardware\test_pairing_l2cap.py',
 ]
 status = "hardware-observed-only"
 handoff = ["unit_003", "unit_004", "unit_005", "unit_011"]

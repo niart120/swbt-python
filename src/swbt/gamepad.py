@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from types import TracebackType
 
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
-from swbt.errors import ClosedError, ConnectionTimeoutError, SwbtError, TransportOpenError
+from swbt.errors import ClosedError, ConnectionTimeoutError, SwbtError
 from swbt.input import Button, InputState
 from swbt.protocol.output_report import OutputReportParser
 from swbt.protocol.subcommand import SubcommandResponder
@@ -77,21 +77,28 @@ class SwitchGamepad:
         async with self._lifecycle_lock:
             if self._is_open:
                 return
-            if self._transport is None:
-                msg = "a transport must be provided until Bumble transport is implemented"
-                raise TransportOpenError(msg)
+            transport = self._ensure_transport()
+            self._diagnostics.record_run_metadata(adapter=self._config.adapter)
             self._connection_state = "opening"
             self._register_transport_callbacks()
             self._connected_event.clear()
-            await self._transport.open()
-            self._report_loop = ReportLoop(
-                transport=self._transport,
-                state_store=self._state_store,
-                report_period_us=self._config.report_period_us,
-                diagnostics=self._diagnostics,
-            )
-            self._connection_state = "advertising"
-            self._is_open = True
+            try:
+                await transport.open()
+                self._report_loop = ReportLoop(
+                    transport=transport,
+                    state_store=self._state_store,
+                    report_period_us=self._config.report_period_us,
+                    diagnostics=self._diagnostics,
+                )
+                self._connection_state = "advertising"
+                self._is_open = True
+                await transport.start_advertising()
+            except Exception:
+                self._connection_state = "failed"
+                await transport.close()
+                self._report_loop = None
+                self._is_open = False
+                raise
 
     async def wait_connected(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
         """Wait until the transport reports a completed connection."""
@@ -103,7 +110,14 @@ class SwitchGamepad:
                 await self._connected_event.wait()
         except TimeoutError as error:
             msg = "connection timed out"
-            raise ConnectionTimeoutError(msg) from error
+            connection_error = ConnectionTimeoutError(msg)
+            self._diagnostics.record_event(
+                "connection_timeout",
+                state=self._connection_state,
+                timeout=timeout,
+            )
+            self._diagnostics.record_error(connection_error, recoverable=True)
+            raise connection_error from error
 
     async def close(self, *, neutral: bool = True) -> None:
         """Close the transport and leave the gamepad in a closed state."""
@@ -218,4 +232,24 @@ class SwitchGamepad:
             self._report_loop.start()
 
     async def _handle_disconnected(self, reason: int | None) -> None:
-        _ = reason
+        self._diagnostics.record_event("disconnected", reason=reason)
+        self._connected_event.clear()
+        await self._state_store.neutral()
+        if self._report_loop is not None:
+            await self._report_loop.stop()
+            self._report_loop = None
+        if self._transport is not None and self._is_open:
+            await self._transport.close()
+        self._is_open = False
+        self._connection_state = "closed"
+
+    def _ensure_transport(self) -> HidDeviceTransport:
+        if self._transport is None:
+            from swbt.transport.bumble import BumbleHidTransport  # noqa: PLC0415
+
+            self._transport = BumbleHidTransport(
+                adapter=self._config.adapter,
+                device_name=self._config.device_name,
+                diagnostics=self._diagnostics,
+            )
+        return self._transport
