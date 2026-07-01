@@ -226,6 +226,12 @@ class SwitchGamepad:
                     subcommand_id=subcommand_id,
                 )
                 raise
+            self._diagnostics.record_event(
+                "subcommand_reply_tx",
+                packet_id=output_report.packet_id,
+                report_id=f"0x{reply[0]:02x}",
+                subcommand_id=subcommand_id,
+            )
             self._report_loop.queue_reply(reply)
         except SwbtError as error:
             self._connection_state = "failed"

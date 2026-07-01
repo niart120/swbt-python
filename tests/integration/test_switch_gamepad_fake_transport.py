@@ -218,6 +218,12 @@ def test_output_report_rx_and_subcommand_rx_share_packet_id() -> None:
             "packet_id": 0x12,
             "subcommand_id": "0x02",
         } in events
+        assert {
+            "event": "subcommand_reply_tx",
+            "packet_id": 0x12,
+            "report_id": "0x21",
+            "subcommand_id": "0x02",
+        } in events
 
     asyncio.run(run())
 

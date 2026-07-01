@@ -83,7 +83,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | todo | `0x02` device info reply が監査済み payload を返す | regression | unit | no | M0 の不足補完 |
 | todo | `0x10` SPI read reply が address と size に応じた data を返す | regression | unit | no | `spi_flash_boundary_and_seed_map` を期待値 source にする |
 | green | 未対応 subcommand が diagnostics event を生成する | new | integration | no | `test_callback_exception_is_recorded_in_trace_and_status` で `unsupported_subcommand` と `error` event を確認 |
-| todo | fake transport 注入時に `0x21` reply が `0x30` より先に送られる | regression | integration | no | M1 の再確認 |
+| green | fake transport 注入時に `0x21` reply が `0x30` より先に送られる | regression | integration | no | `test_subcommand_reply_queue_takes_priority_over_periodic_input` と `test_output_report_rx_and_subcommand_rx_share_packet_id` で送信順序と reply trace 対応付けを確認 |
 | todo | 実機で `0x01` output report を受信できる | new | hardware | yes | 承認が必要 |
 | todo | 観測された subcommand sequence が trace に残る | new | hardware | yes | firmware / adapter 条件付き |
 | todo | 主要 subcommand に `0x21` reply を返せる | new | hardware | yes | output と reply tx を trace で対応付ける |
@@ -117,6 +117,8 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | command | result | notes |
 |---|---|---|
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_callback_exception_is_recorded_in_trace_and_status -q` | pass | 1 passed。未対応 subcommand の packet id、payload、subcommand id が `unsupported_subcommand` event に残り、既存の failed/error path も維持される |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_output_report_rx_and_subcommand_rx_share_packet_id -q` | pass | 1 passed。`output_report_rx`、`subcommand_rx`、`subcommand_reply_tx` が同じ packet id / subcommand id で対応付くことを確認した |
+| `uv run pytest tests\hardware --collect-only -q` | pass | 3 tests collected。M4 の `test_switch_subcommand_sequence_gets_0x21_replies` を収集できる。実機・adapter open は未実行 |
 | `uv run pytest tests/unit tests/integration` | pending | M4 実装後に local automated gate として実行する |
 | `uv run pytest -m hardware` | pending-approval | Switch-facing output report / reply 送信の明示承認後に実行する |
 

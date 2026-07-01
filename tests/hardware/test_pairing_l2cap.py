@@ -61,6 +61,64 @@ def test_switch_pairing_l2cap_records_diagnostics(
     assert _contains_event(events, "transport_close_complete", adapter=swbt_bumble_adapter)
 
 
+@pytest.mark.hardware
+def test_switch_subcommand_sequence_gets_0x21_replies(
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    trace_path = swbt_hardware_artifact_dir / "subcommand-sequence.jsonl"
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad = SwitchGamepad(
+                adapter=swbt_bumble_adapter,
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                await pad.open()
+                await pad.wait_connected(timeout=60.0)
+                await _wait_for_subcommand_reply_trace(
+                    trace_path,
+                    timeout=15.0,
+                )
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+
+    assert _contains_event(events, "output_report_rx", report_id="0x01")
+    assert _contains_event(events, "subcommand_rx")
+    assert _contains_event(events, "subcommand_reply_tx")
+    assert _contains_event(events, "report_tx", report_id="0x21", reason="subcommand_reply")
+    assert not _contains_event(events, "unsupported_subcommand")
+
+
+async def _wait_for_subcommand_reply_trace(
+    trace_path: Path,
+    *,
+    timeout: float,
+) -> None:
+    async with asyncio.timeout(timeout):
+        while True:
+            events = _read_jsonl(trace_path)
+            if (
+                _contains_event(events, "output_report_rx", report_id="0x01")
+                and _contains_event(events, "subcommand_rx")
+                and _contains_event(events, "subcommand_reply_tx")
+                and _contains_event(events, "report_tx", report_id="0x21", reason="subcommand_reply")
+            ):
+                return
+            await asyncio.sleep(0.05)
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
 def _contains_event(
     events: list[dict[str, Any]],
     event_name: str,
