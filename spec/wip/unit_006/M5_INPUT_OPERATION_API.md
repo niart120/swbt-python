@@ -85,9 +85,9 @@
 | green | `set_input()` で left / right stick が report に反映される | new | integration | no | `test_set_input_reflects_left_and_right_sticks_in_next_periodic_report` で normalized stick を固定 |
 | green | disconnect callback で内部 state が neutral へ戻る | regression | integration | no | `test_disconnect_callback_neutralizes_state_and_stops_report_loop` で固定 |
 | green | `status()` が report counter と last subcommand を返す | new | integration | no | `test_status_returns_report_counters_last_subcommand_and_raw_rumble` で raw rumble も固定 |
-| todo | 実機で `await pad.tap(Button.A)` が Switch UI に反映される | new | hardware | yes | release gate に直結 |
-| todo | 実機で L+R が一定 tick 数以上送信される | new | hardware | yes | trace と画面反映を分けて記録 |
-| todo | 実機で `neutral()` 後に入力が残らない | new | hardware | yes | cleanup 条件 |
+| pending-approval | 実機で `await pad.tap(Button.A)` が Switch UI に反映される | new | hardware | yes | `test_switch_input_operation_sequence_for_manual_reflection` と手元 UI 観測を hardware log に記録する |
+| pending-approval | 実機で L+R が一定 tick 数以上送信される | new | hardware | yes | 同 hardware test の `hold_lr_reports_sent` checkpoint と画面反映を分けて記録する |
+| pending-approval | 実機で `neutral()` 後に入力が残らない | new | hardware | yes | 同 hardware test の `neutral_complete` checkpoint と画面残留なしを記録する |
 | todo | disconnect 時に内部 state が neutral へ戻る | edge | hardware | yes | wire 上の neutral 送信可否も記録 |
 
 ## 8. 設計メモ
@@ -123,6 +123,7 @@
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_tap_button_a_records_press_and_release_reports -q` | pass | 1 passed。既存の tap fake transport test を M5 regression item の根拠として確認 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_press_buttons_are_reflected_in_periodic_report -q` | pass | 1 passed。既存の press periodic report test を M5 regression item の根拠として確認 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_disconnect_callback_neutralizes_state_and_stops_report_loop -q` | pass | 1 passed。既存の disconnect neutral reset test を lifecycle item の根拠として確認 |
+| `uv run pytest tests\hardware\test_input_operations.py --collect-only -q` | pass | 1 test collected。実機未承認のため hardware test は収集確認のみ |
 | `uv run pytest tests/unit tests/integration` | pending | M5 実装後に local automated gate として実行する |
 | `uv run pytest -m hardware` | pending-approval | periodic input report loop と実機入力反映の明示承認後に実行する |
 
