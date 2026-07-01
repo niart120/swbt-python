@@ -128,9 +128,14 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_output_report_rx_and_subcommand_rx_share_packet_id -q` | pass | 1 passed。`output_report_rx`、`subcommand_rx`、`subcommand_reply_tx` が同じ packet id / subcommand id で対応付くことを確認した |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_subcommand_reply_queue_takes_priority_over_periodic_input -q` | pass | 1 passed。reply queue の `0x21` が次送信で periodic `0x30` より先に送られる |
 | `uv run pytest tests\hardware --collect-only -q` | pass | 3 tests collected。M4 の `test_switch_subcommand_sequence_gets_0x21_replies` を収集できる。実機・adapter open は未実行 |
-| `uv run pytest tests\unit tests\integration -q` | pass | 105 passed。M4 実機前の非実機 gate として実行した |
 | `uv run pytest tests\unit\test_bumble_transport.py tests\unit\test_source_audit_fixtures.py -q` | pass | 20 passed。HIDP DATA header、SET_REPORT callback、HID SDP policy、source-audit fixture を確認した |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | 20 passed。interrupt / control 経由の output report と reply queue を fake transport で確認した |
+| `uv sync --dev` | pass | Resolved 41 packages / Checked 41 packages |
+| `uv run ruff format --check .` | pass | 36 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\unit` | pass | 91 passed。Bumble import 境界テストは pytest process の import 履歴に依存しない subprocess 検証へ更新済み |
+| `uv run pytest tests\integration` | pass | 20 passed。fake transport integration の全件を確認した |
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_sequence_gets_0x21_replies -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_005\20260701-232123 --log-file .pytest_cache\hardware\unit_005\20260701-232123\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | L2CAP open と periodic `0x30` 13 件後、Switch 側 reason 19 で切断。`output_report_rx` は未観測 |
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_sequence_gets_0x21_replies -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_005\20260701-232352 --log-file .pytest_cache\hardware\unit_005\20260701-232352\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | M4 test だけ temporary `report_period_us=50000` で実行。`0x30` 2 件後に Switch 側 reason 19 で切断。`output_report_rx` は未観測 |
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_sequence_gets_0x21_replies -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_005\20260701-232634 --log-file .pytest_cache\hardware\unit_005\20260701-232634\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | temporary に Bumble report loop を host output まで遅延。`report_tx` なしでも L2CAP open 後に Switch 側 reason 19 で切断。`output_report_rx` は未観測 |
@@ -163,6 +168,6 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
 - [x] subcommand ID、reply payload、SPI data の根拠監査を実施し、状態を更新した
-- [ ] M4 の local automated gate を実行し、検証欄を結果で更新した
+- [x] M4 の local automated gate を実行し、検証欄を結果で更新した
 - [x] 実機検証は承認、command、cleanup、結果を `docs/hardware-test-log.md` に記録した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する
