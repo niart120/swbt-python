@@ -79,7 +79,7 @@ def test_switch_subcommand_sequence_gets_0x21_replies(
                 await pad.wait_connected(timeout=60.0)
                 await _wait_for_subcommand_reply_trace(
                     trace_path,
-                    timeout=15.0,
+                    timeout_seconds=15.0,
                 )
             finally:
                 await pad.close(neutral=True)
@@ -98,9 +98,9 @@ def test_switch_subcommand_sequence_gets_0x21_replies(
 async def _wait_for_subcommand_reply_trace(
     trace_path: Path,
     *,
-    timeout: float,
+    timeout_seconds: float,
 ) -> None:
-    async with asyncio.timeout(timeout):
+    async with asyncio.timeout(timeout_seconds):
         while True:
             events = _read_jsonl(trace_path)
             if (

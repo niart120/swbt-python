@@ -2,7 +2,7 @@ import asyncio
 import json
 from collections.abc import Callable
 from io import StringIO
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -273,7 +273,10 @@ def test_bumble_transport_records_custom_device_name_in_diagnostics() -> None:
 
 def test_bumble_hid_service_record_matches_reference_sdp_policy() -> None:
     service_records = bumble_module._build_hid_service_records(b"\x00")
-    attributes = {attribute.id: attribute.value for attribute in service_records[0x00010001]}
+    attributes: dict[int, Any] = {}
+    for attribute in service_records[0x00010001]:
+        typed_attribute = cast("Any", attribute)
+        attributes[typed_attribute.id] = typed_attribute.value
 
     assert attributes[0x0203].value == 0x21
     assert attributes[0x020A].value is True
@@ -502,7 +505,7 @@ def test_bumble_set_report_callback_forwards_output_report() -> None:
         await asyncio.sleep(0)
 
         assert control_payloads == [bytes.fromhex("01 00 00")]
-        assert getattr(result, "status") == 0xFF
+        assert cast("Any", result).status == 0xFF
 
         await transport.close()
 
