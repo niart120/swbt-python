@@ -403,12 +403,47 @@ def test_bumble_hid_data_callbacks_are_forwarded() -> None:
         transport.on_control_data(lambda payload: _append_payload(control_payloads, payload))
 
         await transport.open()
-        hid_device.emit(hid_device.EVENT_INTERRUPT_DATA, b"\x30")
-        hid_device.emit(hid_device.EVENT_CONTROL_DATA, b"\x01")
+        hid_device.emit(hid_device.EVENT_INTERRUPT_DATA, b"\xa2\x30")
+        hid_device.emit(hid_device.EVENT_CONTROL_DATA, b"\xa2\x01")
         await asyncio.sleep(0)
 
         assert interrupt_payloads == [b"\x30"]
         assert control_payloads == [b"\x01"]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_hid_data_callbacks_strip_hidp_output_data_header() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        interrupt_payloads: list[bytes] = []
+        control_payloads: list[bytes] = []
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+        transport.on_interrupt_data(lambda payload: _append_payload(interrupt_payloads, payload))
+        transport.on_control_data(lambda payload: _append_payload(control_payloads, payload))
+
+        await transport.open()
+        hid_device.emit(hid_device.EVENT_INTERRUPT_DATA, bytes.fromhex("a2 01 00"))
+        hid_device.emit(hid_device.EVENT_CONTROL_DATA, bytes.fromhex("a2 10 2a"))
+        await asyncio.sleep(0)
+
+        assert interrupt_payloads == [bytes.fromhex("01 00")]
+        assert control_payloads == [bytes.fromhex("10 2a")]
 
         await transport.close()
 

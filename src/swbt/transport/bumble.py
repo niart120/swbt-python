@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 _HID_SERVICE_RECORD_HANDLE = 0x00010001
 _HID_REPORT_DESCRIPTOR_TYPE = 0x22
 _HID_OUTPUT_REPORT_TYPE = 0x02
+_HIDP_DATA_MESSAGE_TYPE = 0x0A
 _HID_CONTROL_PSM = 0x0011
 _HID_INTERRUPT_PSM = 0x0013
 _DEFAULT_DEVICE_NAME = "Pro Controller"
@@ -360,12 +361,18 @@ class BumbleHidTransport:
     def _dispatch_interrupt_data(self, payload: bytes) -> None:
         if self._interrupt_callback is None:
             return
-        self._dispatch_callback(self._interrupt_callback, payload)
+        report = _decode_hidp_output_report(payload)
+        if report is None:
+            return
+        self._dispatch_callback(self._interrupt_callback, report)
 
     def _dispatch_control_data(self, payload: bytes) -> None:
         if self._control_callback is None:
             return
-        self._dispatch_callback(self._control_callback, payload)
+        report = _decode_hidp_output_report(payload)
+        if report is None:
+            return
+        self._dispatch_callback(self._control_callback, report)
 
     def _dispatch_callback(
         self,
@@ -506,6 +513,18 @@ def _format_psm(psm: object) -> str:
     if isinstance(psm, int):
         return f"0x{psm:04x}"
     return "unknown"
+
+
+def _decode_hidp_output_report(pdu: bytes) -> bytes | None:
+    if not pdu:
+        return None
+    message_type = pdu[0] >> 4
+    report_type = pdu[0] & 0x03
+    if message_type != _HIDP_DATA_MESSAGE_TYPE:
+        return None
+    if report_type != _HID_OUTPUT_REPORT_TYPE:
+        return None
+    return pdu[1:]
 
 
 def _package_version(package_name: str) -> str:
