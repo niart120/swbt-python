@@ -84,10 +84,10 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | green | `0x10` SPI read reply が address と size に応じた data を返す | regression | unit | no | `test_spi_flash_read_subcommand_returns_request_prefix_and_seed_data` と `test_virtual_spi_flash_*` で seed data と範囲条件を確認 |
 | green | 未対応 subcommand が diagnostics event を生成する | new | integration | no | `test_callback_exception_is_recorded_in_trace_and_status` で `unsupported_subcommand` と `error` event を確認 |
 | green | fake transport 注入時に `0x21` reply が `0x30` より先に送られる | regression | integration | no | `test_subcommand_reply_queue_takes_priority_over_periodic_input` と `test_output_report_rx_and_subcommand_rx_share_packet_id` で送信順序と reply trace 対応付けを確認 |
-| todo | 実機で `0x01` output report を受信できる | new | hardware | yes | 承認が必要 |
-| todo | 観測された subcommand sequence が trace に残る | new | hardware | yes | firmware / adapter 条件付き |
-| todo | 主要 subcommand に `0x21` reply を返せる | new | hardware | yes | output と reply tx を trace で対応付ける |
-| todo | 未対応 subcommand があれば docs に反映されている | characterization | hardware | yes | 後続 unit の source |
+| fail | 実機で `0x01` output report を受信できる | new | hardware | yes | 2026-07-01 の M4 3 試行では L2CAP open 後に `output_report_rx` 未観測のまま Switch 側が reason 19 で切断 |
+| fail | 観測された subcommand sequence が trace に残る | new | hardware | yes | `subcommand_rx` 未観測。failure trace は `docs/hardware-test-log.md` に記録 |
+| blocked | 主要 subcommand に `0x21` reply を返せる | new | hardware | yes | host output report が未到達のため、実機での reply tx は未検証 |
+| observed | 未対応 subcommand があれば docs に反映されている | characterization | hardware | yes | 未対応 subcommand は未観測。未到達状態を hardware log に反映 |
 
 ## 8. 設計メモ
 
@@ -95,6 +95,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 - `SubcommandResponder` の unit test は source fact または実機 fixture を明示してから green にする。
 - fail-safe reply を作る場合でも、未対応 subcommand を diagnostics から消さない。
 - M4 は入力 UI 反映の成否を最終判定にしない。反映は M5 の範囲。
+- 2026-07-01 の M4 実機試行では、Bumble 0.0.230 / CSR8510 A10 / WinUSB / `usb:0` 条件で HID control / interrupt channel open までは到達したが、Switch から HID output report は来なかった。periodic `0x30` の default 8000 us、temporary 50000 us、host output まで periodic を開始しない実験のいずれでも reason 19 で切断されたため、原因は「早すぎる `0x30`」単独では説明できない。これは hardware observation と inference であり、未確認の一般仕様に昇格しない。
 
 ## 9. 対象ファイル
 
@@ -123,8 +124,11 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_output_report_rx_and_subcommand_rx_share_packet_id -q` | pass | 1 passed。`output_report_rx`、`subcommand_rx`、`subcommand_reply_tx` が同じ packet id / subcommand id で対応付くことを確認した |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_subcommand_reply_queue_takes_priority_over_periodic_input -q` | pass | 1 passed。reply queue の `0x21` が次送信で periodic `0x30` より先に送られる |
 | `uv run pytest tests\hardware --collect-only -q` | pass | 3 tests collected。M4 の `test_switch_subcommand_sequence_gets_0x21_replies` を収集できる。実機・adapter open は未実行 |
-| `uv run pytest tests/unit tests/integration` | pending | M4 実装後に local automated gate として実行する |
-| `uv run pytest -m hardware` | pending-approval | Switch-facing output report / reply 送信の明示承認後に実行する |
+| `uv run pytest tests\unit tests\integration -q` | pass | 105 passed。M4 実機前の非実機 gate として実行した |
+| `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_sequence_gets_0x21_replies -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_005\20260701-232123 --log-file .pytest_cache\hardware\unit_005\20260701-232123\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | L2CAP open と periodic `0x30` 13 件後、Switch 側 reason 19 で切断。`output_report_rx` は未観測 |
+| `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_sequence_gets_0x21_replies -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_005\20260701-232352 --log-file .pytest_cache\hardware\unit_005\20260701-232352\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | M4 test だけ temporary `report_period_us=50000` で実行。`0x30` 2 件後に Switch 側 reason 19 で切断。`output_report_rx` は未観測 |
+| `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_sequence_gets_0x21_replies -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_005\20260701-232634 --log-file .pytest_cache\hardware\unit_005\20260701-232634\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | temporary に Bumble report loop を host output まで遅延。`report_tx` なしでも L2CAP open 後に Switch 側 reason 19 で切断。`output_report_rx` は未観測 |
+| `uv run pytest -m hardware` | fail-partial | unit_005 対象の M4 hardware test は未完了。Bumble adapter と Switch-facing command は承認済みで実行した |
 
 ## 11. 実機実行条件
 
