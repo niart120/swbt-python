@@ -28,7 +28,6 @@ class ReportLoop:
         self._report_period_seconds = report_period_us / 1_000_000
         self._input_report_builder = input_report_builder or InputReportBuilder()
         self._diagnostics = diagnostics
-        self._report_counters: dict[int, int] = {}
         self._reply_queue: deque[bytes] = deque()
         self._timer = 0
         self._task: asyncio.Task[None] | None = None
@@ -75,12 +74,5 @@ class ReportLoop:
     async def _send_report(self, report: bytes, *, reason: str) -> None:
         await self._transport.send_interrupt(report)
         report_id = report[0]
-        counter = self._report_counters.get(report_id, 0) + 1
-        self._report_counters[report_id] = counter
         if self._diagnostics is not None:
-            self._diagnostics.record_event(
-                "report_tx",
-                counter=counter,
-                reason=reason,
-                report_id=f"0x{report_id:02x}",
-            )
+            self._diagnostics.record_report_tx(report_id=report_id, reason=reason)

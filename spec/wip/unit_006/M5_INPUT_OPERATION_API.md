@@ -84,7 +84,7 @@
 | todo | `release()` が指定 button だけを clear する | new | integration | no | 他入力の保持 |
 | todo | `set_input()` で left / right stick が report に反映される | new | integration | no | M0 builder を使う |
 | todo | disconnect callback で内部 state が neutral へ戻る | regression | integration | no | lifecycle |
-| todo | `status()` が report counter と last subcommand を返す | new | integration | no | diagnostics schema と整合 |
+| green | `status()` が report counter と last subcommand を返す | new | integration | no | `test_status_returns_report_counters_last_subcommand_and_raw_rumble` で raw rumble も固定 |
 | todo | 実機で `await pad.tap(Button.A)` が Switch UI に反映される | new | hardware | yes | release gate に直結 |
 | todo | 実機で L+R が一定 tick 数以上送信される | new | hardware | yes | trace と画面反映を分けて記録 |
 | todo | 実機で `neutral()` 後に入力が残らない | new | hardware | yes | cleanup 条件 |
@@ -116,6 +116,8 @@
 
 | command | result | notes |
 |---|---|---|
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_status_returns_report_counters_last_subcommand_and_raw_rumble -q` | pass | 1 passed。red は `GamepadStatus` に `report_counters` がない `AttributeError`、green で counter、last subcommand、raw rumble を確認 |
+| `uv run pytest tests\integration -q` | pass | 21 passed。diagnostics counter / subcommand trace の既存 integration も回帰なし |
 | `uv run pytest tests/unit tests/integration` | pending | M5 実装後に local automated gate として実行する |
 | `uv run pytest -m hardware` | pending-approval | periodic input report loop と実機入力反映の明示承認後に実行する |
 

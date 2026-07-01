@@ -246,6 +246,28 @@ def test_output_report_rx_and_subcommand_rx_share_packet_id() -> None:
     asyncio.run(run())
 
 
+def test_status_returns_report_counters_last_subcommand_and_raw_rumble() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        request_device_info = bytes.fromhex("01 2a 10 11 12 13 14 15 16 17 02")
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            await pad.tap(Button.A, duration=0)
+
+            await transport.inject_interrupt_data(request_device_info)
+            await transport.wait_for_interrupt_report_id(0x21)
+
+            status = pad.status()
+
+            assert status.report_counters == {0x30: 2, 0x21: 1}
+            assert status.last_subcommand_id == 0x02
+            assert status.raw_rumble == bytes.fromhex("10 11 12 13 14 15 16 17")
+
+    asyncio.run(run())
+
+
 def test_close_with_neutral_records_trailing_neutral_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

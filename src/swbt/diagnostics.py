@@ -30,6 +30,9 @@ class GamepadStatus:
     """Snapshot of gamepad status exposed by SwitchGamepad.status()."""
 
     connection_state: str
+    report_counters: dict[int, int]
+    last_subcommand_id: int | None
+    raw_rumble: bytes | None
     last_error: DiagnosticsEvent | None
 
 
@@ -39,12 +42,30 @@ class DiagnosticsRecorder:
     def __init__(self, trace_writer: TextIO | None = None) -> None:
         """Create an empty recorder."""
         self._events: list[DiagnosticsEvent] = []
+        self._report_counters: dict[int, int] = {}
+        self._last_subcommand_id: int | None = None
+        self._raw_rumble: bytes | None = None
         self._trace_writer = trace_writer
 
     @property
     def events(self) -> tuple[DiagnosticsEvent, ...]:
         """Return recorded events in order."""
         return tuple(self._events)
+
+    @property
+    def report_counters(self) -> dict[int, int]:
+        """Return sent report counters keyed by report ID."""
+        return dict(self._report_counters)
+
+    @property
+    def last_subcommand_id(self) -> int | None:
+        """Return the last observed subcommand ID."""
+        return self._last_subcommand_id
+
+    @property
+    def raw_rumble(self) -> bytes | None:
+        """Return the last observed raw rumble payload."""
+        return self._raw_rumble
 
     @property
     def last_error(self) -> DiagnosticsEvent | None:
@@ -59,6 +80,30 @@ class DiagnosticsRecorder:
         diagnostics_event = DiagnosticsEvent(event=event, fields=dict(fields))
         self._append(diagnostics_event)
         return diagnostics_event
+
+    def record_report_tx(self, *, report_id: int, reason: str) -> DiagnosticsEvent:
+        """Record one sent report and increment its counter."""
+        counter = self._report_counters.get(report_id, 0) + 1
+        self._report_counters[report_id] = counter
+        return self.record_event(
+            "report_tx",
+            counter=counter,
+            reason=reason,
+            report_id=f"0x{report_id:02x}",
+        )
+
+    def record_subcommand_rx(self, *, packet_id: int | None, subcommand_id: int) -> None:
+        """Record the latest observed subcommand ID."""
+        self._last_subcommand_id = subcommand_id
+        self.record_event(
+            "subcommand_rx",
+            packet_id=packet_id,
+            subcommand_id=f"0x{subcommand_id:02x}",
+        )
+
+    def record_raw_rumble(self, raw_rumble: bytes) -> None:
+        """Record the latest raw rumble bytes."""
+        self._raw_rumble = bytes(raw_rumble)
 
     def record_run_metadata(self, *, adapter: str) -> DiagnosticsEvent:
         """Record environment metadata for one diagnostics run."""
