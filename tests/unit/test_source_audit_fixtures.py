@@ -108,6 +108,7 @@ def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
     assert "Classic pairing" in value
     assert "HID control / interrupt L2CAP open" in value
     assert "SDP service-name attempts" in value
+    assert "no SDP PSM query" in value
     assert "no output_report_rx" in value
     assert "no semantic input reflection" in condition
     assert "semantic input reflection" in value
