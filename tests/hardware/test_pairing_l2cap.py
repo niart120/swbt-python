@@ -107,7 +107,9 @@ async def _wait_for_subcommand_reply_trace(
                 _contains_event(events, "output_report_rx", report_id="0x01")
                 and _contains_event(events, "subcommand_rx")
                 and _contains_event(events, "subcommand_reply_tx")
-                and _contains_event(events, "report_tx", report_id="0x21", reason="subcommand_reply")
+                and _contains_event(
+                    events, "report_tx", report_id="0x21", reason="subcommand_reply"
+                )
             ):
                 return
             await asyncio.sleep(0.05)
