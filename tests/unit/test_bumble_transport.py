@@ -278,6 +278,13 @@ def test_bumble_hid_service_record_matches_reference_sdp_policy() -> None:
         typed_attribute = cast("Any", attribute)
         attributes[typed_attribute.id] = typed_attribute.value
 
+    language_base = attributes[0x0006]
+    hid_language_base_sequence = attributes[0x0207].value
+    hid_language_base = hid_language_base_sequence[0]
+
+    assert attributes[0x0100].value == b"Pro Controller"
+    assert [element.value for element in language_base.value] == [0x656E, 0x006A, 0x0100]
+    assert [element.value for element in hid_language_base.value] == [0x0409, 0x0100]
     assert attributes[0x0203].value == 0x21
     assert attributes[0x020A].value is True
     assert attributes[0x020C].value == 0x0C80

@@ -195,11 +195,11 @@ handoff = ["unit_005"]
 id = "btstack_reference_hid_sdp_policy"
 fixture_name = "btstack_reference_hid_sdp_policy"
 area = "transport"
-value = "swbt-daemon production HID SDP policy uses HID country code 0x21, remote wake true, supervision timeout 0x0c80, SSR host max latency 0xffff, and SSR host min timeout 0xffff; BTstack hid_create_sdp_record serializes remote wake, supervision timeout, and SSR latency attributes"
+value = "swbt-daemon production HID SDP policy uses SDP service name attribute 0x0100 from device_name, LanguageBaseAttributeIDList en/UTF-8/base 0x0100, HID language base 0x0409/0x0100, HID country code 0x21, remote wake true, supervision timeout 0x0c80, SSR host max latency 0xffff, and SSR host min timeout 0xffff; BTstack hid_create_sdp_record serializes service name, language base, remote wake, supervision timeout, and SSR latency attributes"
 classification = "implementation fact"
 source = [
     'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\btstack_bridge\production_ports.c:55-63',
-    'E:\documents\VSCodeWorkspace\swbt-daemon\vendor\btstack\src\classic\hid_device.c:267-321',
+    'E:\documents\VSCodeWorkspace\swbt-daemon\vendor\btstack\src\classic\hid_device.c:206-321',
     'E:\documents\VSCodeWorkspace\swbt-daemon\vendor\btstack\src\bluetooth_sdp.h:184-190',
     'E:\documents\VSCodeWorkspace\swbt-daemon\tests\daemon_production_hid_sdp_record_test.c:10-28',
 ]

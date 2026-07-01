@@ -60,7 +60,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
 | Switch HID / report bytes | required | done | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` の `output_report_parser_layout`、`subcommand_reply_0x21_layout`、`subcommand_reply_payloads`、`spi_flash_boundary_and_seed_map`、`raw_rumble_payload` を source fact / implementation fact として使う |
-| Bumble / transport | required | done | `bumble_hid_device_api`、`bumble_hidp_output_report_boundary`、`btstack_reference_hid_sdp_policy` を使う。Bumble `0.0.230` の DATA / SET_REPORT callback 境界と参照実装の HID SDP policy は根拠化済み。実機 sequence の callback timing は M4 実行時の hardware observation として別記録にする |
+| Bumble / transport | required | done | `bumble_hid_device_api`、`bumble_hidp_output_report_boundary`、`btstack_reference_hid_sdp_policy` を使う。Bumble `0.0.230` の DATA / SET_REPORT callback 境界、参照実装の HID SDP policy、service name / language base 属性は根拠化済み。実機 sequence の callback timing は M4 実行時の hardware observation として別記録にする |
 | OS / driver / adapter | required | done | `swbt_daemon_csr8510_winusb_observation` は既存 daemon の条件付き観測であり、Bumble / 別 firmware へ一般化しない。M4 実機 trace は adapter、driver、Bumble version、Switch firmware 付きで `docs/hardware-test-log.md` に記録する |
 
 ## 6. 振る舞い仕様
@@ -87,7 +87,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | green | Bumble HIDP DATA の output header を除去して上位へ渡す | regression | unit | no | `test_bumble_hid_data_callbacks_strip_hidp_output_data_header` で DATA PDU の HIDP header を transport 境界で剥がすことを確認 |
 | green | Bumble SET_REPORT callback の output report を上位へ渡す | regression | unit | no | `test_bumble_set_report_callback_forwards_output_report` で `report_id + report_data` と handshake status を確認 |
 | green | control channel の output report でも `0x21` reply を返す | regression | integration | no | `test_control_output_report_injection_sends_subcommand_reply` で control 経由の output report が responder と reply queue に到達することを確認 |
-| green | HID SDP policy が参照実装と一致する | regression | unit | no | `test_bumble_hid_service_record_matches_reference_sdp_policy` で country code、remote wake、supervision timeout、SSR host max/min を確認 |
+| green | HID SDP policy が参照実装と一致する | regression | unit | no | `test_bumble_hid_service_record_matches_reference_sdp_policy` で service name、LanguageBaseAttributeIDList、HID language base、country code、remote wake、supervision timeout、SSR host max/min を確認 |
 | fail | 実機で `0x01` output report を受信できる | new | hardware | yes | 2026-07-01 の M4 post-transport-fix 試行でも L2CAP open 後に `output_report_rx` 未観測のまま Switch 側が reason 19 で切断 |
 | fail | 観測された subcommand sequence が trace に残る | new | hardware | yes | `subcommand_rx` 未観測。post-fix failure trace と no-report-window diagnostic は `docs/hardware-test-log.md` に記録 |
 | blocked | 主要 subcommand に `0x21` reply を返せる | new | hardware | yes | host output report が未到達のため、実機での reply tx は未検証 |
@@ -99,7 +99,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 - `SubcommandResponder` の unit test は source fact または実機 fixture を明示してから green にする。
 - fail-safe reply を作る場合でも、未対応 subcommand を diagnostics から消さない。
 - M4 は入力 UI 反映の成否を最終判定にしない。反映は M5 の範囲。
-- 2026-07-01 の M4 実機試行では、Bumble 0.0.230 / CSR8510 A10 / WinUSB / `usb:0` 条件で HID control / interrupt channel open までは到達したが、Switch から HID output report は来なかった。HIDP DATA header 除去、SET_REPORT callback、control channel output report、HID SDP policy は非実機テストで green。post-fix 実機試行でも `output_report_rx` は未観測で、50,000,000 us の no-report-window diagnostic でも reason 19 で切断された。原因は「早すぎる `0x30`」単独では説明できない。これは hardware observation と inference であり、未確認の一般仕様に昇格しない。
+- 2026-07-01 の M4 実機試行では、Bumble 0.0.230 / CSR8510 A10 / WinUSB / `usb:0` 条件で HID control / interrupt channel open までは到達したが、Switch から HID output report は来なかった。HIDP DATA header 除去、SET_REPORT callback、control channel output report、HID SDP policy は非実機テストで green。HID SDP policy は post-fix 実機後に service name と language base まで参照実装へ合わせたため、追加実機確認が必要。post-fix 実機試行でも `output_report_rx` は未観測で、50,000,000 us の no-report-window diagnostic でも reason 19 で切断された。原因は「早すぎる `0x30`」単独では説明できない。これは hardware observation と inference であり、未確認の一般仕様に昇格しない。
 
 ## 9. 対象ファイル
 
@@ -128,7 +128,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_output_report_rx_and_subcommand_rx_share_packet_id -q` | pass | 1 passed。`output_report_rx`、`subcommand_rx`、`subcommand_reply_tx` が同じ packet id / subcommand id で対応付くことを確認した |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_subcommand_reply_queue_takes_priority_over_periodic_input -q` | pass | 1 passed。reply queue の `0x21` が次送信で periodic `0x30` より先に送られる |
 | `uv run pytest tests\hardware --collect-only -q` | pass | 3 tests collected。M4 の `test_switch_subcommand_sequence_gets_0x21_replies` を収集できる。実機・adapter open は未実行 |
-| `uv run pytest tests\unit\test_bumble_transport.py tests\unit\test_source_audit_fixtures.py -q` | pass | 20 passed。HIDP DATA header、SET_REPORT callback、HID SDP policy、source-audit fixture を確認した |
+| `uv run pytest tests\unit\test_bumble_transport.py tests\unit\test_source_audit_fixtures.py -q` | pass | 21 passed。HIDP DATA header、SET_REPORT callback、HID SDP service name / language base / policy、source-audit fixture を確認した |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | 20 passed。interrupt / control 経由の output report と reply queue を fake transport で確認した |
 | `uv sync --dev` | pass | Resolved 41 packages / Checked 41 packages |
 | `uv run ruff format --check .` | pass | 36 files already formatted |

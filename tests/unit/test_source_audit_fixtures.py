@@ -134,6 +134,9 @@ def test_btstack_reference_hid_sdp_policy_is_handoff_ready() -> None:
     value = entry["value"]
 
     assert isinstance(value, str)
+    assert "service name attribute 0x0100" in value
+    assert "LanguageBaseAttributeIDList en/UTF-8/base 0x0100" in value
+    assert "HID language base 0x0409/0x0100" in value
     assert "country code 0x21" in value
     assert "remote wake true" in value
     assert "supervision timeout 0x0c80" in value
