@@ -191,6 +191,12 @@ class SwitchGamepad:
         await self._report_loop.send_current_input()
 
     async def _handle_interrupt_data(self, payload: bytes) -> None:
+        await self._handle_output_report_data(payload)
+
+    async def _handle_control_data(self, payload: bytes) -> None:
+        await self._handle_output_report_data(payload)
+
+    async def _handle_output_report_data(self, payload: bytes) -> None:
         try:
             output_report = self._output_report_parser.parse(payload)
             subcommand_id = (
@@ -236,9 +242,6 @@ class SwitchGamepad:
         except SwbtError as error:
             self._connection_state = "failed"
             self._diagnostics.record_error(error, recoverable=False)
-
-    async def _handle_control_data(self, payload: bytes) -> None:
-        _ = payload
 
     async def _handle_connected(self) -> None:
         self._connection_state = "connected"
