@@ -371,7 +371,7 @@ def test_callback_exception_is_recorded_in_trace_and_status() -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
-        unsupported_subcommand = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 ff")
+        unsupported_subcommand = bytes.fromhex("01 2a 00 00 00 00 00 00 00 00 ff 01 02")
         pad = SwitchGamepad(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
@@ -389,6 +389,12 @@ def test_callback_exception_is_recorded_in_trace_and_status() -> None:
         assert status.connection_state == "failed"
         assert status.last_error is not None
         assert status.last_error.error_type == "UnsupportedSubcommandError"
+        assert {
+            "event": "unsupported_subcommand",
+            "packet_id": 0x2A,
+            "payload": "0102",
+            "subcommand_id": "0xff",
+        } in events
         assert {
             "event": "error",
             "error_type": "UnsupportedSubcommandError",
