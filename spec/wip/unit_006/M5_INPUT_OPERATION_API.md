@@ -117,14 +117,20 @@
 | command | result | notes |
 |---|---|---|
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_status_returns_report_counters_last_subcommand_and_raw_rumble -q` | pass | 1 passed。red は `GamepadStatus` に `report_counters` がない `AttributeError`、green で counter、last subcommand、raw rumble を確認 |
-| `uv run pytest tests\integration -q` | pass | 21 passed。diagnostics counter / subcommand trace の既存 integration も回帰なし |
+| `uv run pytest tests\integration -q` | pass | 23 passed。diagnostics counter / subcommand trace の既存 integration も回帰なし |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_release_only_clears_requested_buttons_in_next_periodic_report -q` | pass | 1 passed。既存実装が条件を満たしていたため red は発生せず、characterization として追加 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_set_input_reflects_left_and_right_sticks_in_next_periodic_report -q` | pass | 1 passed。既存実装が条件を満たしていたため red は発生せず、characterization として追加 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_tap_button_a_records_press_and_release_reports -q` | pass | 1 passed。既存の tap fake transport test を M5 regression item の根拠として確認 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_press_buttons_are_reflected_in_periodic_report -q` | pass | 1 passed。既存の press periodic report test を M5 regression item の根拠として確認 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_disconnect_callback_neutralizes_state_and_stops_report_loop -q` | pass | 1 passed。既存の disconnect neutral reset test を lifecycle item の根拠として確認 |
 | `uv run pytest tests\hardware\test_input_operations.py --collect-only -q` | pass | 1 test collected。実機未承認のため hardware test は収集確認のみ |
-| `uv run pytest tests/unit tests/integration` | pending | M5 実装後に local automated gate として実行する |
+| `uv sync --dev` | pass | Resolved 41 packages / Checked 41 packages |
+| `uv run ruff format --check .` | pass | 37 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\unit -q` | pass | 97 passed |
+| `uv run pytest tests\integration -q` | pass | 23 passed |
+| `uv run pytest tests\unit tests\integration -q` | pass | 120 passed |
 | `uv run pytest -m hardware` | pending-approval | periodic input report loop と実機入力反映の明示承認後に実行する |
 
 ## 11. 実機実行条件
@@ -150,7 +156,7 @@
 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
-- [ ] input operation API と status の実装を完了した
-- [ ] M5 の local automated gate を実行し、検証欄を結果で更新した
+- [x] input operation API と status の実装を完了した
+- [x] M5 の local automated gate を実行し、検証欄を結果で更新した
 - [ ] 実機入力反映は承認、command、cleanup、結果を `docs/hardware-test-log.md` に記録した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する

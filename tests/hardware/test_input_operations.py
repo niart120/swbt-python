@@ -109,9 +109,17 @@ async def _wait_for_report_counter(
     minimum_count: int,
     timeout_seconds: float,
 ) -> None:
-    async with asyncio.timeout(timeout_seconds):
-        while pad.status().report_counters.get(report_id, 0) < minimum_count:
-            await asyncio.sleep(0.01)
+    interval_seconds = 0.01
+    attempts = max(1, int(timeout_seconds / interval_seconds))
+
+    for _ in range(attempts):
+        if pad.status().report_counters.get(report_id, 0) >= minimum_count:
+            return
+        await asyncio.sleep(interval_seconds)
+
+    current_count = pad.status().report_counters.get(report_id, 0)
+    msg = f"report 0x{report_id:02x} count stayed at {current_count}, expected {minimum_count}"
+    raise TimeoutError(msg)
 
 
 def _record_probe_event(trace: TextIO, event: str, **fields: object) -> None:

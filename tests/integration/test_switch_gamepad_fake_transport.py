@@ -83,9 +83,7 @@ def test_release_only_clears_requested_buttons_in_next_periodic_report() -> None
 
             await pad.release(Button.L)
             released_count = len(transport.sent_interrupt_reports)
-            released_reports = await transport.wait_for_interrupt_report_count(
-                released_count + 1
-            )
+            released_reports = await transport.wait_for_interrupt_report_count(released_count + 1)
             assert released_reports[-1][3:6] == bytes.fromhex("48 00 00")
 
     asyncio.run(run())
