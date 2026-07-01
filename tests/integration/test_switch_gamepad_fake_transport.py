@@ -4,7 +4,7 @@ from io import StringIO
 
 import pytest
 
-from swbt import Button, DiagnosticsConfig, InputState, SwitchGamepad
+from swbt import Button, DiagnosticsConfig, InputState, Stick, SwitchGamepad
 from swbt.errors import ConnectionTimeoutError
 from swbt.transport.fake import FakeHidTransport
 
@@ -106,6 +106,29 @@ def test_set_input_updates_snapshot_and_next_periodic_report() -> None:
             start_count = len(transport.sent_interrupt_reports)
             reports = await transport.wait_for_interrupt_report_count(start_count + 1)
             assert reports[-1][3:6] == bytes.fromhex("02 00 00")
+
+    asyncio.run(run())
+
+
+def test_set_input_reflects_left_and_right_sticks_in_next_periodic_report() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        state = InputState.neutral().with_sticks(
+            left_stick=Stick.normalized(x=1.0, y=-1.0),
+            right_stick=Stick.normalized(x=-1.0, y=1.0),
+        )
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            await pad.set_input(state)
+
+            start_count = len(transport.sent_interrupt_reports)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 1)
+            report = reports[-1]
+
+            assert report[6:9] == bytes.fromhex("ff 0f 00")
+            assert report[9:12] == bytes.fromhex("00 f0 ff")
 
     asyncio.run(run())
 
