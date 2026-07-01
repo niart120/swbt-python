@@ -26,8 +26,13 @@ if TYPE_CHECKING:
 _HID_SERVICE_RECORD_HANDLE = 0x00010001
 _HID_REPORT_DESCRIPTOR_TYPE = 0x22
 _HID_OUTPUT_REPORT_TYPE = 0x02
+_HIDP_DATA_MESSAGE_TYPE = 0x0A
+_HID_GET_SET_SUCCESS = 0xFF
+_HID_GET_SET_UNSUPPORTED_REQUEST = 0x02
 _HID_CONTROL_PSM = 0x0011
 _HID_INTERRUPT_PSM = 0x0013
+_REFERENCE_LINK_POLICY_ENABLE_ROLE_SWITCH = 0x0001
+_REFERENCE_LINK_POLICY_ENABLE_SNIFF_MODE = 0x0004
 _DEFAULT_DEVICE_NAME = "Pro Controller"
 _REFERENCE_CLASS_OF_DEVICE = 0x002508
 
@@ -38,12 +43,34 @@ _SDP_HID_VIRTUAL_CABLE_ATTRIBUTE_ID = 0x0204
 _SDP_HID_RECONNECT_INITIATE_ATTRIBUTE_ID = 0x0205
 _SDP_HID_DESCRIPTOR_LIST_ATTRIBUTE_ID = 0x0206
 _SDP_HID_LANG_ID_BASE_LIST_ATTRIBUTE_ID = 0x0207
+_SDP_HID_REMOTE_WAKE_ATTRIBUTE_ID = 0x020A
 _SDP_HID_PROFILE_VERSION_ATTRIBUTE_ID = 0x020B
+_SDP_HID_SUPERVISION_TIMEOUT_ATTRIBUTE_ID = 0x020C
 _SDP_HID_NORMALLY_CONNECTABLE_ATTRIBUTE_ID = 0x020D
 _SDP_HID_BOOT_DEVICE_ATTRIBUTE_ID = 0x020E
+_SDP_HIDSSR_HOST_MAX_LATENCY_ATTRIBUTE_ID = 0x020F
+_SDP_HIDSSR_HOST_MIN_TIMEOUT_ATTRIBUTE_ID = 0x0210
+_SDP_PRIMARY_LANGUAGE_SERVICE_NAME_ATTRIBUTE_ID = 0x0100
 
 _LANGUAGE_BASE_EN_US = 0x0100
+_SDP_LANGUAGE_CODE_ENGLISH = 0x656E
+_SDP_CHARACTER_ENCODING_UTF8 = 0x006A
 _LANGUAGE_ID_EN_US = 0x0409
+_REFERENCE_HID_COUNTRY_CODE = 0x21
+_REFERENCE_HID_SUPERVISION_TIMEOUT = 0x0C80
+_REFERENCE_HIDSSR_HOST_MAX_LATENCY = 0xFFFF
+_REFERENCE_HIDSSR_HOST_MIN_TIMEOUT = 0xFFFF
+
+
+@dataclass(frozen=True)
+class _BumbleGetSetStatus:
+    data: bytes = b""
+    status: int = 0
+
+
+_REFERENCE_DEFAULT_LINK_POLICY_SETTINGS = (
+    _REFERENCE_LINK_POLICY_ENABLE_ROLE_SWITCH | _REFERENCE_LINK_POLICY_ENABLE_SNIFF_MODE
+)
 
 
 class _BumbleHandle(Protocol):
@@ -103,6 +130,7 @@ class _BumbleRuntime:
     hid_device: _BumbleHidRuntime
     service_record_count: int
     hid_descriptor_size: int
+    classic_link_policy_settings: int | None = None
     advertising_started: bool = False
 
 
@@ -195,6 +223,12 @@ class BumbleHidTransport:
             return
         await self._start_advertising(self._runtime)
         self._runtime.advertising_started = True
+        if self._runtime.classic_link_policy_settings is not None:
+            self._record_event(
+                "classic_link_policy_configured",
+                adapter=self._adapter,
+                settings=f"0x{self._runtime.classic_link_policy_settings:04x}",
+            )
         self._record_event("advertising_start", adapter=self._adapter)
 
     async def close(self) -> None:
@@ -218,6 +252,7 @@ class BumbleHidTransport:
             msg = "Bumble interrupt channel is not connected"
             raise ClosedError(msg)
         self._runtime.hid_device.send_data(payload)
+        await _drain_bumble_acl_queue(self._runtime.hid_device.l2cap_intr_channel)
 
     async def send_control(self, payload: bytes) -> None:
         """Send one control report."""
@@ -252,6 +287,30 @@ class BumbleHidTransport:
             hid_device.EVENT_CONTROL_DATA,
             self._dispatch_control_data,
         )
+        self._register_set_report_callback(hid_device)
+
+    def _register_set_report_callback(self, hid_device: _BumbleHidRuntime) -> None:
+        register_set_report = getattr(hid_device, "register_set_report_cb", None)
+        if not callable(register_set_report):
+            return
+
+        def on_set_report(
+            report_id: int,
+            report_type: int,
+            report_size: int,
+            report_data: bytes,
+        ) -> _BumbleGetSetStatus:
+            _ = report_size
+            if report_type != _HID_OUTPUT_REPORT_TYPE:
+                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+            if not 0 <= report_id <= 0xFF:
+                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+            report = bytes((report_id,)) + bytes(report_data)
+            if not self._dispatch_control_report(report):
+                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+            return _BumbleGetSetStatus(status=_HID_GET_SET_SUCCESS)
+
+        register_set_report(on_set_report)
 
     def _register_device_callbacks(self, device: _BumbleDeviceRuntime) -> None:
         device.on(device.EVENT_CONNECTION, self._handle_device_connection)
@@ -358,14 +417,28 @@ class BumbleHidTransport:
             self._dispatch_disconnected_callback(reason)
 
     def _dispatch_interrupt_data(self, payload: bytes) -> None:
-        if self._interrupt_callback is None:
+        report = _decode_hidp_output_report(payload)
+        if report is None:
             return
-        self._dispatch_callback(self._interrupt_callback, payload)
+        self._dispatch_interrupt_report(report)
 
     def _dispatch_control_data(self, payload: bytes) -> None:
-        if self._control_callback is None:
+        report = _decode_hidp_output_report(payload)
+        if report is None:
             return
+        self._dispatch_control_report(report)
+
+    def _dispatch_interrupt_report(self, payload: bytes) -> bool:
+        if self._interrupt_callback is None:
+            return False
+        self._dispatch_callback(self._interrupt_callback, payload)
+        return True
+
+    def _dispatch_control_report(self, payload: bytes) -> bool:
+        if self._control_callback is None:
+            return False
         self._dispatch_callback(self._control_callback, payload)
+        return True
 
     def _dispatch_callback(
         self,
@@ -462,15 +535,20 @@ async def _default_initialize_device(
         class_of_device=_REFERENCE_CLASS_OF_DEVICE,
         le_enabled=False,
         classic_enabled=True,
-        connectable=True,
-        discoverable=True,
+        # Bumble applies these flags during power_on; keep them off until after
+        # the Classic link policy command is sent.
+        connectable=False,
+        discoverable=False,
     )
     device = Device.from_config_with_hci(
         config,
         cast("TransportSource", handle.source),
         cast("TransportSink", handle.sink),
     )
-    service_records = _build_hid_service_records(profile.hid_report_descriptor)
+    service_records = _build_hid_service_records(
+        profile.hid_report_descriptor,
+        device_name=device_name,
+    )
     device.sdp_service_records = service_records
     hid_device = HidDevice(device)
     return _BumbleRuntime(
@@ -482,11 +560,13 @@ async def _default_initialize_device(
 
 
 async def _default_start_advertising(runtime: _BumbleRuntime) -> None:
-    if runtime.device.powered_on:
-        await runtime.device.set_connectable(True)
-        await runtime.device.set_discoverable(True)
-        return
-    await runtime.device.power_on()
+    if not runtime.device.powered_on:
+        await runtime.device.power_on()
+    link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
+    if link_policy_settings is not None:
+        runtime.classic_link_policy_settings = link_policy_settings
+    await runtime.device.set_connectable(True)
+    await runtime.device.set_discoverable(True)
 
 
 async def _default_close_runtime(runtime: _BumbleRuntime) -> None:
@@ -508,6 +588,69 @@ def _format_psm(psm: object) -> str:
     return "unknown"
 
 
+def _decode_hidp_output_report(pdu: bytes) -> bytes | None:
+    if not pdu:
+        return None
+    message_type = pdu[0] >> 4
+    report_type = pdu[0] & 0x03
+    if message_type != _HIDP_DATA_MESSAGE_TYPE:
+        return None
+    if report_type != _HID_OUTPUT_REPORT_TYPE:
+        return None
+    return pdu[1:]
+
+
+async def _configure_reference_classic_link_policy(device: object) -> int | None:
+    """Set the reference Classic default link policy when Bumble exposes HCI access."""
+    from bumble import hci  # noqa: PLC0415
+
+    send_sync_command = getattr(device, "send_sync_command", None)
+    if not callable(send_sync_command):
+        return None
+    host = getattr(device, "host", None)
+    supports_command = getattr(host, "supports_command", None)
+    if callable(supports_command) and not supports_command(
+        hci.HCI_WRITE_DEFAULT_LINK_POLICY_SETTINGS_COMMAND
+    ):
+        return None
+    await send_sync_command(
+        hci.HCI_Write_Default_Link_Policy_Settings_Command(
+            default_link_policy_settings=_REFERENCE_DEFAULT_LINK_POLICY_SETTINGS
+        )
+    )
+    return _REFERENCE_DEFAULT_LINK_POLICY_SETTINGS
+
+
+async def _drain_bumble_acl_queue(l2cap_channel: object) -> None:
+    """Wait until Bumble reports no pending ACL packets for the channel."""
+    connection = getattr(l2cap_channel, "connection", None)
+    connection_handle = getattr(connection, "handle", None)
+    acl_packet_queue = getattr(connection, "acl_packet_queue", None)
+    if acl_packet_queue is None and isinstance(connection_handle, int):
+        device = getattr(connection, "device", None)
+        host = getattr(device, "host", None)
+        get_data_packet_queue = getattr(host, "get_data_packet_queue", None)
+        if callable(get_data_packet_queue):
+            acl_packet_queue = get_data_packet_queue(connection_handle)
+    drain = getattr(acl_packet_queue, "drain", None)
+    if not isinstance(connection_handle, int) or not callable(drain):
+        return
+    try:
+        last_pending: int | None = None
+        while True:
+            pending = getattr(acl_packet_queue, "pending", 0)
+            if not isinstance(pending, int) or pending <= 0 or pending == last_pending:
+                return
+            last_pending = pending
+            drain_result = drain(connection_handle)
+            if isinstance(drain_result, Awaitable):
+                await drain_result
+                continue
+            return
+    except ValueError:
+        return
+
+
 def _package_version(package_name: str) -> str:
     try:
         return version(package_name)
@@ -515,7 +658,11 @@ def _package_version(package_name: str) -> str:
         return "unknown"
 
 
-def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]:
+def _build_hid_service_records(
+    hid_descriptor: bytes,
+    *,
+    device_name: str = _DEFAULT_DEVICE_NAME,
+) -> dict[int, list[object]]:
     from bumble import core  # noqa: PLC0415
     from bumble.sdp import (  # noqa: PLC0415
         SDP_ADDITIONAL_PROTOCOL_DESCRIPTOR_LIST_ATTRIBUTE_ID,
@@ -562,11 +709,15 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
                 SDP_LANGUAGE_BASE_ATTRIBUTE_ID_LIST_ATTRIBUTE_ID,
                 DataElement.sequence(
                     [
-                        DataElement.unsigned_integer_16(_LANGUAGE_ID_EN_US),
-                        DataElement.unsigned_integer_16(106),
+                        DataElement.unsigned_integer_16(_SDP_LANGUAGE_CODE_ENGLISH),
+                        DataElement.unsigned_integer_16(_SDP_CHARACTER_ENCODING_UTF8),
                         DataElement.unsigned_integer_16(_LANGUAGE_BASE_EN_US),
                     ]
                 ),
+            ),
+            ServiceAttribute(
+                _SDP_PRIMARY_LANGUAGE_SERVICE_NAME_ATTRIBUTE_ID,
+                DataElement.text_string(device_name.encode("utf-8")),
             ),
             ServiceAttribute(
                 SDP_BLUETOOTH_PROFILE_DESCRIPTOR_LIST_ATTRIBUTE_ID,
@@ -609,7 +760,7 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
             ),
             ServiceAttribute(
                 _SDP_HID_COUNTRY_CODE_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_8(0x00),
+                DataElement.unsigned_integer_8(_REFERENCE_HID_COUNTRY_CODE),
             ),
             ServiceAttribute(
                 _SDP_HID_VIRTUAL_CABLE_ATTRIBUTE_ID,
@@ -646,8 +797,16 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
                 ),
             ),
             ServiceAttribute(
+                _SDP_HID_REMOTE_WAKE_ATTRIBUTE_ID,
+                DataElement.boolean(True),
+            ),
+            ServiceAttribute(
                 _SDP_HID_PROFILE_VERSION_ATTRIBUTE_ID,
                 DataElement.unsigned_integer_16(0x0101),
+            ),
+            ServiceAttribute(
+                _SDP_HID_SUPERVISION_TIMEOUT_ATTRIBUTE_ID,
+                DataElement.unsigned_integer_16(_REFERENCE_HID_SUPERVISION_TIMEOUT),
             ),
             ServiceAttribute(
                 _SDP_HID_NORMALLY_CONNECTABLE_ATTRIBUTE_ID,
@@ -656,6 +815,14 @@ def _build_hid_service_records(hid_descriptor: bytes) -> dict[int, list[object]]
             ServiceAttribute(
                 _SDP_HID_BOOT_DEVICE_ATTRIBUTE_ID,
                 DataElement.boolean(False),
+            ),
+            ServiceAttribute(
+                _SDP_HIDSSR_HOST_MAX_LATENCY_ATTRIBUTE_ID,
+                DataElement.unsigned_integer_16(_REFERENCE_HIDSSR_HOST_MAX_LATENCY),
+            ),
+            ServiceAttribute(
+                _SDP_HIDSSR_HOST_MIN_TIMEOUT_ATTRIBUTE_ID,
+                DataElement.unsigned_integer_16(_REFERENCE_HIDSSR_HOST_MIN_TIMEOUT),
             ),
         ]
     }

@@ -2,6 +2,7 @@ import builtins
 import importlib
 import inspect
 import pkgutil
+import subprocess
 import sys
 
 import pytest
@@ -11,14 +12,30 @@ from swbt import SwitchGamepad
 
 
 def test_public_api_import_does_not_import_bumble() -> None:
-    imported_bumble_modules = [
-        module_name
-        for module_name in sys.modules
-        if module_name == "bumble" or module_name.startswith("bumble.")
-    ]
+    code = """
+import sys
 
-    assert swbt.SwitchGamepad is SwitchGamepad
-    assert imported_bumble_modules == []
+import swbt
+from swbt import SwitchGamepad
+
+imported_bumble_modules = [
+    module_name
+    for module_name in sys.modules
+    if module_name == "bumble" or module_name.startswith("bumble.")
+]
+assert swbt.SwitchGamepad is SwitchGamepad
+if imported_bumble_modules:
+    raise AssertionError(imported_bumble_modules)
+"""
+
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_public_api_import_does_not_resolve_bumble(monkeypatch: pytest.MonkeyPatch) -> None:

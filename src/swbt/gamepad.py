@@ -8,7 +8,7 @@ from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStat
 from swbt.errors import ClosedError, ConnectionTimeoutError, SwbtError
 from swbt.input import Button, InputState
 from swbt.protocol.output_report import OutputReportParser
-from swbt.protocol.subcommand import SubcommandResponder
+from swbt.protocol.subcommand import SubcommandResponder, UnsupportedSubcommandError
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
@@ -191,6 +191,12 @@ class SwitchGamepad:
         await self._report_loop.send_current_input()
 
     async def _handle_interrupt_data(self, payload: bytes) -> None:
+        await self._handle_output_report_data(payload)
+
+    async def _handle_control_data(self, payload: bytes) -> None:
+        await self._handle_output_report_data(payload)
+
+    async def _handle_output_report_data(self, payload: bytes) -> None:
         try:
             output_report = self._output_report_parser.parse(payload)
             subcommand_id = (
@@ -216,14 +222,26 @@ class SwitchGamepad:
                 msg = "gamepad is not open"
                 raise ClosedError(msg)
             state = await self._state_store.snapshot()
-            reply = self._subcommand_responder.respond(output_report, state=state)
+            try:
+                reply = self._subcommand_responder.respond(output_report, state=state)
+            except UnsupportedSubcommandError:
+                self._diagnostics.record_event(
+                    "unsupported_subcommand",
+                    packet_id=output_report.packet_id,
+                    payload=output_report.subcommand_payload.hex(),
+                    subcommand_id=subcommand_id,
+                )
+                raise
+            self._diagnostics.record_event(
+                "subcommand_reply_tx",
+                packet_id=output_report.packet_id,
+                report_id=f"0x{reply[0]:02x}",
+                subcommand_id=subcommand_id,
+            )
             self._report_loop.queue_reply(reply)
         except SwbtError as error:
             self._connection_state = "failed"
             self._diagnostics.record_error(error, recoverable=False)
-
-    async def _handle_control_data(self, payload: bytes) -> None:
-        _ = payload
 
     async def _handle_connected(self) -> None:
         self._connection_state = "connected"

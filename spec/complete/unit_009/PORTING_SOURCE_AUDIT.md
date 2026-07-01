@@ -56,7 +56,7 @@
 - `spec/initial/risks.md`
 - `spec/complete/unit_001/M0_PROTOCOL_CORE.md`
 - `spec/wip/unit_003/M2_BUMBLE_HID_TRANSPORT.md`
-- `spec/wip/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md`
+- `spec/complete/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md`
 - `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 
 ## 5. 根拠監査
@@ -102,7 +102,7 @@
 |---|---|---|
 | `spec/complete/unit_001/M0_PROTOCOL_CORE.md` | modify | protocol value audit status |
 | `spec/wip/unit_003/M2_BUMBLE_HID_TRANSPORT.md` | modify | Bumble / descriptor / OS audit status |
-| `spec/wip/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md` | modify | observed subcommand audit |
+| `spec/complete/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md` | modify | observed subcommand audit |
 | `spec/dev-journal.md` | unchanged | 小さい未解決観測は今回なし |
 | `docs/hardware-test-log.md` | unchanged | 実機 run は今回なし。既存 matrix と README の未検証境界を参照 |
 | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` | new | 監査済み protocol / transport source fixture |

@@ -128,6 +128,24 @@ def test_output_report_injection_sends_subcommand_reply() -> None:
     asyncio.run(run())
 
 
+def test_control_output_report_injection_sends_subcommand_reply() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+
+            await transport.inject_control_data(request_device_info)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[0] == 0x21
+            assert reply[14] == 0x02
+
+    asyncio.run(run())
+
+
 def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
@@ -216,6 +234,12 @@ def test_output_report_rx_and_subcommand_rx_share_packet_id() -> None:
         assert {
             "event": "subcommand_rx",
             "packet_id": 0x12,
+            "subcommand_id": "0x02",
+        } in events
+        assert {
+            "event": "subcommand_reply_tx",
+            "packet_id": 0x12,
+            "report_id": "0x21",
             "subcommand_id": "0x02",
         } in events
 
@@ -371,7 +395,7 @@ def test_callback_exception_is_recorded_in_trace_and_status() -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
-        unsupported_subcommand = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 ff")
+        unsupported_subcommand = bytes.fromhex("01 2a 00 00 00 00 00 00 00 00 ff 01 02")
         pad = SwitchGamepad(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
@@ -389,6 +413,12 @@ def test_callback_exception_is_recorded_in_trace_and_status() -> None:
         assert status.connection_state == "failed"
         assert status.last_error is not None
         assert status.last_error.error_type == "UnsupportedSubcommandError"
+        assert {
+            "event": "unsupported_subcommand",
+            "packet_id": 0x2A,
+            "payload": "0102",
+            "subcommand_id": "0xff",
+        } in events
         assert {
             "event": "error",
             "error_type": "UnsupportedSubcommandError",

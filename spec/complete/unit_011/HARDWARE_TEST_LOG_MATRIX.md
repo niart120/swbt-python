@@ -49,7 +49,7 @@ Bumble adapter、Switch 実機、OS / driver、dongle、firmware に依存する
 - `spec/initial/risks.md`
 - `spec/wip/unit_003/M2_BUMBLE_HID_TRANSPORT.md`
 - `spec/complete/unit_004/M3_PAIRING_L2CAP.md`
-- `spec/wip/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md`
+- `spec/complete/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md`
 - `spec/wip/unit_006/M5_INPUT_OPERATION_API.md`
 - `spec/wip/unit_007/M6_RECONNECT_KEYSTORE_DIAGNOSTICS.md`
 - `spec/wip/unit_012/INITIAL_RELEASE_GATE.md`

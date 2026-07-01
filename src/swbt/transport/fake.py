@@ -121,6 +121,13 @@ class FakeHidTransport:
         if self._interrupt_callback is not None:
             await self._interrupt_callback(bytes(payload))
 
+    async def inject_control_data(self, payload: bytes) -> None:
+        """Inject host-to-device data into the registered control callback."""
+        self._require_open()
+        self._events.append("control_rx")
+        if self._control_callback is not None:
+            await self._control_callback(bytes(payload))
+
     async def send_interrupt(self, payload: bytes) -> None:
         """Record an interrupt report."""
         self._require_open()

@@ -27,6 +27,10 @@ REQUIRED_ENTRY_IDS = {
     "bumble_hid_device_api",
     "bumble_classic_visibility",
     "bumble_l2cap_connection_events",
+    "bumble_reference_classic_link_policy",
+    "bumble_acl_packet_queue_drain_boundary",
+    "bumble_hidp_output_report_boundary",
+    "btstack_reference_hid_sdp_policy",
     "swbt_daemon_reference_discovery_identity",
     "swbt_daemon_reference_discovery_identity_hci",
     "report_period_default",
@@ -101,12 +105,94 @@ def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
     assert isinstance(condition, str)
     assert isinstance(value, str)
     assert "M3 pairing/L2CAP hardware test" in condition
+    assert "SDP service-name M4 attempt" in condition
+    assert "reset-state M4 attempt" in condition
+    assert "link-policy M4 hardware test" in condition
+    assert "link-policy-only M4 hardware test" in condition
+    assert "observation-window M4 hardware test" in condition
     assert "discoverable / connectable" in value
     assert "Classic pairing" in value
     assert "HID control / interrupt L2CAP open" in value
+    assert "SDP service-name" in value
+    assert "reset-state attempts" in value
+    assert "Classic default link policy 0x0005" in value
+    assert "a2 01" in value
+    assert "a1 21" in value
+    assert "observation-window M4 run" in value
+    assert "subcommand 0x02 x1 and 0x08 x8" in value
+    assert "0x21 replies for all observed subcommands" in value
+    assert "no unsupported_subcommand or error events" in value
+    assert "no Bumble debug log packets-in-flight backlog matches" in value
+    assert "without HID L2CAP MTU 100 re-registration" in value
+    assert "0x8e/0x80 profile prefix change" in value
+    assert "no SDP PSM query" in value
+    assert "observed no HID CONTROL PDU" in value
+    assert "output_report_rx" in value
     assert "no semantic input reflection" in condition
     assert "semantic input reflection" in value
     assert "key store behavior remain unverified" in value
+
+
+def test_bumble_hidp_output_report_boundary_is_version_pinned_source_fact() -> None:
+    entry = _entry_by_id("bumble_hidp_output_report_boundary")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "version-pinned"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "HIDP header byte" in value
+    assert "EVENT_INTERRUPT_DATA" in value
+    assert "EVENT_CONTROL_DATA" in value
+    assert "SET_REPORT callback receives report_id separated" in value
+
+
+def test_bumble_acl_packet_queue_drain_boundary_is_implementation_policy() -> None:
+    entry = _entry_by_id("bumble_acl_packet_queue_drain_boundary")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "implementation-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "hid.HID.send_data writes the HID interrupt PDU" in value
+    assert "Host.send_acl_sdu" in value
+    assert "DataPacketQueue exposes pending" in value
+    assert "drain(connection_handle)" in value
+    assert "connection.device.host.get_data_packet_queue(handle)" in value
+
+
+def test_bumble_reference_classic_link_policy_is_implementation_policy() -> None:
+    entry = _entry_by_id("bumble_reference_classic_link_policy")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "implementation-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "ROLE_SWITCH|SNIFF_MODE" in value
+    assert "0x0005" in value
+    assert "before connectable/discoverable advertising" in value
+    assert "outgoing classic ACL" in value
+    assert "not treated as an incoming Switch connection fix" in value
+
+
+def test_btstack_reference_hid_sdp_policy_is_handoff_ready() -> None:
+    entry = _entry_by_id("btstack_reference_hid_sdp_policy")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "handoff-ready"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "service name attribute 0x0100" in value
+    assert "LanguageBaseAttributeIDList en/UTF-8/base 0x0100" in value
+    assert "HID language base 0x0409/0x0100" in value
+    assert "country code 0x21" in value
+    assert "remote wake true" in value
+    assert "supervision timeout 0x0c80" in value
+    assert "SSR host max latency 0xffff" in value
+    assert "SSR host min timeout 0xffff" in value
 
 
 def test_default_report_period_remains_configurable() -> None:
