@@ -79,11 +79,11 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | fake transport で `tap(Button.A)` が press / release の順に report を残す | regression | integration | no | M1 から継続 |
-| todo | `press(Button.L, Button.R)` が次の periodic reports に反映される | regression | integration | no | tick 数を決定的に検証 |
+| green | fake transport で `tap(Button.A)` が press / release の順に report を残す | regression | integration | no | `test_tap_button_a_records_press_and_release_reports` で固定 |
+| green | `press(Button.L, Button.R)` が次の periodic reports に反映される | regression | integration | no | `test_press_buttons_are_reflected_in_periodic_report` で固定 |
 | green | `release()` が指定 button だけを clear する | new | integration | no | `test_release_only_clears_requested_buttons_in_next_periodic_report` で他入力の保持を固定 |
 | green | `set_input()` で left / right stick が report に反映される | new | integration | no | `test_set_input_reflects_left_and_right_sticks_in_next_periodic_report` で normalized stick を固定 |
-| todo | disconnect callback で内部 state が neutral へ戻る | regression | integration | no | lifecycle |
+| green | disconnect callback で内部 state が neutral へ戻る | regression | integration | no | `test_disconnect_callback_neutralizes_state_and_stops_report_loop` で固定 |
 | green | `status()` が report counter と last subcommand を返す | new | integration | no | `test_status_returns_report_counters_last_subcommand_and_raw_rumble` で raw rumble も固定 |
 | todo | 実機で `await pad.tap(Button.A)` が Switch UI に反映される | new | hardware | yes | release gate に直結 |
 | todo | 実機で L+R が一定 tick 数以上送信される | new | hardware | yes | trace と画面反映を分けて記録 |
@@ -120,6 +120,9 @@
 | `uv run pytest tests\integration -q` | pass | 21 passed。diagnostics counter / subcommand trace の既存 integration も回帰なし |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_release_only_clears_requested_buttons_in_next_periodic_report -q` | pass | 1 passed。既存実装が条件を満たしていたため red は発生せず、characterization として追加 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_set_input_reflects_left_and_right_sticks_in_next_periodic_report -q` | pass | 1 passed。既存実装が条件を満たしていたため red は発生せず、characterization として追加 |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_tap_button_a_records_press_and_release_reports -q` | pass | 1 passed。既存の tap fake transport test を M5 regression item の根拠として確認 |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_press_buttons_are_reflected_in_periodic_report -q` | pass | 1 passed。既存の press periodic report test を M5 regression item の根拠として確認 |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_disconnect_callback_neutralizes_state_and_stops_report_loop -q` | pass | 1 passed。既存の disconnect neutral reset test を lifecycle item の根拠として確認 |
 | `uv run pytest tests/unit tests/integration` | pending | M5 実装後に local automated gate として実行する |
 | `uv run pytest -m hardware` | pending-approval | periodic input report loop と実機入力反映の明示承認後に実行する |
 
