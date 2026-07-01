@@ -103,9 +103,11 @@ def test_swbt_python_adapter_boundary_is_condition_scoped_observation() -> None:
     assert isinstance(condition, str)
     assert isinstance(value, str)
     assert "M3 pairing/L2CAP hardware test" in condition
+    assert "SDP service-name M4 attempt" in condition
     assert "discoverable / connectable" in value
     assert "Classic pairing" in value
     assert "HID control / interrupt L2CAP open" in value
+    assert "SDP service-name attempts" in value
     assert "no output_report_rx" in value
     assert "no semantic input reflection" in condition
     assert "semantic input reflection" in value

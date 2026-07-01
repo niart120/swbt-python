@@ -88,8 +88,8 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | green | Bumble SET_REPORT callback の output report を上位へ渡す | regression | unit | no | `test_bumble_set_report_callback_forwards_output_report` で `report_id + report_data` と handshake status を確認 |
 | green | control channel の output report でも `0x21` reply を返す | regression | integration | no | `test_control_output_report_injection_sends_subcommand_reply` で control 経由の output report が responder と reply queue に到達することを確認 |
 | green | HID SDP policy が参照実装と一致する | regression | unit | no | `test_bumble_hid_service_record_matches_reference_sdp_policy` で service name、LanguageBaseAttributeIDList、HID language base、country code、remote wake、supervision timeout、SSR host max/min を確認 |
-| fail | 実機で `0x01` output report を受信できる | new | hardware | yes | 2026-07-01 の M4 post-transport-fix 試行でも L2CAP open 後に `output_report_rx` 未観測のまま Switch 側が reason 19 で切断 |
-| fail | 観測された subcommand sequence が trace に残る | new | hardware | yes | `subcommand_rx` 未観測。post-fix failure trace と no-report-window diagnostic は `docs/hardware-test-log.md` に記録 |
+| fail | 実機で `0x01` output report を受信できる | new | hardware | yes | 2026-07-02 の SDP service-name / language-base 反映後も L2CAP open 後に `output_report_rx` 未観測のまま Switch 側が reason 19 で切断 |
+| fail | 観測された subcommand sequence が trace に残る | new | hardware | yes | `subcommand_rx` 未観測。post-fix / SDP service-name failure trace と no-report-window diagnostic は `docs/hardware-test-log.md` に記録 |
 | blocked | 主要 subcommand に `0x21` reply を返せる | new | hardware | yes | host output report が未到達のため、実機での reply tx は未検証 |
 | observed | 未対応 subcommand があれば docs に反映されている | characterization | hardware | yes | 未対応 subcommand は未観測。未到達状態を hardware log に反映 |
 
@@ -99,7 +99,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 - `SubcommandResponder` の unit test は source fact または実機 fixture を明示してから green にする。
 - fail-safe reply を作る場合でも、未対応 subcommand を diagnostics から消さない。
 - M4 は入力 UI 反映の成否を最終判定にしない。反映は M5 の範囲。
-- 2026-07-01 の M4 実機試行では、Bumble 0.0.230 / CSR8510 A10 / WinUSB / `usb:0` 条件で HID control / interrupt channel open までは到達したが、Switch から HID output report は来なかった。HIDP DATA header 除去、SET_REPORT callback、control channel output report、HID SDP policy は非実機テストで green。HID SDP policy は post-fix 実機後に service name と language base まで参照実装へ合わせたため、追加実機確認が必要。post-fix 実機試行でも `output_report_rx` は未観測で、50,000,000 us の no-report-window diagnostic でも reason 19 で切断された。原因は「早すぎる `0x30`」単独では説明できない。これは hardware observation と inference であり、未確認の一般仕様に昇格しない。
+- 2026-07-01 から 2026-07-02 の M4 実機試行では、Bumble 0.0.230 / CSR8510 A10 / WinUSB / `usb:0` 条件で HID control / interrupt channel open までは到達したが、Switch から HID output report は来なかった。HIDP DATA header 除去、SET_REPORT callback、control channel output report、HID SDP service name / language base / policy は非実機テストで green。service name と language base を参照実装へ合わせた後の追加実機確認でも `output_report_rx` は未観測で、50,000,000 us の no-report-window diagnostic でも reason 19 で切断された。原因は「早すぎる `0x30`」単独では説明できない。これは hardware observation と inference であり、未確認の一般仕様に昇格しない。
 
 ## 9. 対象ファイル
 
@@ -142,6 +142,8 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_sequence_gets_0x21_replies -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_005\20260701-234045 --log-file .pytest_cache\hardware\unit_005\20260701-234045\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | HIDP DATA / SET_REPORT / control channel handling 修正後。SET_REPORT callback 登録、pairing、L2CAP open までは到達。`output_report_rx` は未観測 |
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_sequence_gets_0x21_replies -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_005\20260701-234437 --log-file .pytest_cache\hardware\unit_005\20260701-234437\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | HID SDP policy 参照実装合わせ後。pairing、encryption、L2CAP open までは到達。`output_report_rx` は未観測 |
 | `uv run python -` | observed-fail | `.pytest_cache\hardware\unit_005\20260701-234549\subcommand-sequence-no-report-window.jsonl` に記録。50,000,000 us no-report-window で periodic `0x30` を出さずに観測しても `output_report_rx` は来ず、Switch 側 reason 19 で切断 |
+| `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_sequence_gets_0x21_replies -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_005\20260702-000120 --log-file .pytest_cache\hardware\unit_005\20260702-000120\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | HID SDP service name / language base 参照実装合わせ後。pairing、encryption、L2CAP open までは到達。`output_report_rx` は未観測 |
+| `uv run python -` | observed-fail | `.pytest_cache\hardware\unit_005\20260702-000302\subcommand-sequence-no-report-window.jsonl` に記録。HID SDP service name / language base 反映後、50,000,000 us no-report-window で periodic `0x30` を出さずに観測しても `output_report_rx` は来ず、Switch 側 reason 19 で切断 |
 | `uv run pytest -m hardware` | fail-partial | unit_005 対象の M4 hardware test は未完了。Bumble adapter と Switch-facing command は承認済みで実行した |
 
 ## 11. 実機実行条件
