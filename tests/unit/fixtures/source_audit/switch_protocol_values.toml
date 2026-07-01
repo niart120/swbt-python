@@ -251,9 +251,9 @@ handoff = ["unit_001", "unit_002", "unit_005"]
 id = "swbt_python_adapter_driver_boundary"
 fixture_name = "swbt_python_adapter_driver_boundary"
 area = "hardware"
-value = "swbt-python observed Bumble USB HCI transport open/close, Bumble Device generation, Classic HID initialization, SDP / HID descriptor registration, discoverable / connectable, Classic pairing, HID control / interrupt L2CAP open, connected, one neutral 0x30 report transmit, and close on adapter usb:0 with CSR8510 A10 on WinUSB; unit_005 M4 attempts reached L2CAP open but observed no output_report_rx before Switch-side reason 19 disconnect; semantic input reflection, reconnect, and key store behavior remain unverified in swbt-python"
+value = "swbt-python observed Bumble USB HCI transport open/close, Bumble Device generation, Classic HID initialization, SDP / HID descriptor registration, discoverable / connectable, Classic pairing, HID control / interrupt L2CAP open, connected, neutral 0x30 report transmit, and close on adapter usb:0 with CSR8510 A10 on WinUSB; unit_005 M4 post-transport-fix attempts reached pairing, encryption, and L2CAP open but observed no HID CONTROL PDU, HID INTERRUPT PDU, output_report_rx, subcommand_rx, or subcommand_reply_tx before Switch-side reason 19 disconnect; a no-report-window diagnostic also reached no output_report_rx; semantic input reflection, reconnect, and key store behavior remain unverified in swbt-python"
 classification = "hardware observation"
-condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; M2 advertising smoke, M3 pairing/L2CAP hardware test, and M4 subcommand sequence attempts; no semantic input reflection"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; M2 advertising smoke, M3 pairing/L2CAP hardware test, M4 subcommand sequence attempts, post-transport-fix M4 attempts, and no-report-window diagnostic; no semantic input reflection"
 source = [
     'docs\hardware-test-log.md',
     'spec\complete\unit_004\M3_PAIRING_L2CAP.md',
