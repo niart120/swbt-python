@@ -82,7 +82,10 @@ class SwitchGamepad:
             if self._is_open:
                 return
             transport = self._ensure_transport()
-            self._diagnostics.record_run_metadata(adapter=self._config.adapter)
+            self._diagnostics.record_run_metadata(
+                adapter=self._config.adapter,
+                key_store_path=self._config.key_store_path,
+            )
             self._connection_state = "opening"
             self._register_transport_callbacks()
             self._connected_event.clear()

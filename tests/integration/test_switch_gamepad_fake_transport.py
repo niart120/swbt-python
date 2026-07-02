@@ -1,6 +1,8 @@
 import asyncio
 import json
+import platform
 from io import StringIO
+from pathlib import Path
 
 import pytest
 
@@ -71,6 +73,34 @@ def test_open_only_does_not_start_advertising() -> None:
         assert transport.events == ("open",)
 
         await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+
+def test_key_store_path_is_recorded_in_run_metadata(tmp_path: Path) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        key_store_path = tmp_path / "keys.json"
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            key_store_path=str(key_store_path),
+            transport=transport,
+        )
+
+        await pad.open()
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "run_metadata",
+            "adapter": "usb:0",
+            "key_store_exists": False,
+            "key_store_path": str(key_store_path),
+            "os": platform.system(),
+            "package_version": "0.1.0",
+            "python_version": platform.python_version(),
+        } in events
 
     asyncio.run(run())
 
