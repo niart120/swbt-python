@@ -94,7 +94,7 @@
 | refactor-skipped | 公開 API docstring が Google-style で引数、返値、属性、例外境界を説明する | new | unit | no | `tests/unit/test_public_api_docstrings.py` で固定。動作変更なし |
 | todo | `examples/tap_a.py` の fake variant が実機なしで test できる | new | integration | no | examples drift 防止 |
 | refactor-skipped | `swbt-probe adapters --help` が動く | new | unit | no | `tests/unit/test_probe_cli.py` で entry point と help を固定。adapter open なし |
-| todo | `swbt-probe pair --help` が承認境界を読める説明を持つ | new | unit | no | 実行はしない |
+| refactor-skipped | `swbt-probe pair --help` が承認境界を読める説明を持つ | new | unit | no | `tests/unit/test_probe_cli.py` で固定。実行はしない |
 | todo | README に Windows 専用 dongle / WinUSB 注意点がある | regression | unit | no | docs check でもよい |
 | todo | README に確認済み構成と未確認構成が分かれている | regression | unit | no | release gate |
 | todo | README が `unit_006` 後の Button A / neutral observed-pass を stale な「未記録」と矛盾なく説明する | regression | unit | no | 現 README はまだ「確認済み構成なし」と書いている |
@@ -140,6 +140,8 @@
 | `uv run ruff check src\swbt\gamepad.py src\swbt\input.py src\swbt\diagnostics.py tests\unit\test_public_api_docstrings.py` | pass | 今回追加した docstring と test の lint を確認した |
 | `uv run pytest tests\unit\test_probe_cli.py -q` | pass | 2 passed。`swbt-probe` entry point と `adapters --help` が adapter open なしで動くことを確認した |
 | `uv run ruff check pyproject.toml src\swbt\probe.py tests\unit\test_probe_cli.py` | pass | CLI entry point、probe module、CLI test の lint を確認した |
+| `uv run pytest tests\unit\test_probe_cli.py -q` | pass | 3 passed。`pair --help` が adapter、trace、timeout、Switch-facing 承認境界を説明することを確認した |
+| `uv run ruff check src\swbt\probe.py tests\unit\test_probe_cli.py` | pass | `pair --help` 追加後の CLI module と test の lint を確認した |
 | `uv run pytest tests/unit tests/integration` | pending | M7 実装後に local automated gate として実行する |
 | `uv run swbt-probe adapters` | pending-approval | adapter open を伴う場合は承認後に実行する |
 | `uv run swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pending-approval | Switch-facing 動作の明示承認後に実行する |

@@ -27,3 +27,23 @@ def test_swbt_probe_adapters_help_runs_without_opening_adapter() -> None:
     assert "swbt-probe adapters" in result.stdout
     assert "--json" in result.stdout
     assert "does not open a Bluetooth adapter" in help_text
+
+
+def test_swbt_probe_pair_help_describes_approval_boundary() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "swbt.probe", "pair", "--help"],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    help_text = " ".join(result.stdout.split())
+
+    assert "usage:" in result.stdout
+    assert "swbt-probe pair" in result.stdout
+    assert "--adapter" in result.stdout
+    assert "--trace" in result.stdout
+    assert "--timeout" in result.stdout
+    assert "requires explicit approval" in help_text
+    assert "Switch-facing" in help_text
