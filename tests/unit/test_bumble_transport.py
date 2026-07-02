@@ -702,6 +702,62 @@ def test_bumble_close_is_idempotent() -> None:
     asyncio.run(run())
 
 
+def test_bumble_concurrent_close_waits_for_in_flight_close() -> None:
+    class BlockingHandle(FakeBumbleHandle):
+        def __init__(self) -> None:
+            super().__init__()
+            self.close_started = asyncio.Event()
+            self.close_release = asyncio.Event()
+
+        async def close(self) -> None:
+            self.close_started.set()
+            await self.close_release.wait()
+            await super().close()
+
+    async def run() -> None:
+        handle = BlockingHandle()
+        device = FakeBumbleDevice()
+        diagnostics = DiagnosticsRecorder()
+
+        async def open_transport(adapter: str) -> BlockingHandle:
+            _ = adapter
+            return handle
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert opened_handle is handle
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        await transport.start_advertising()
+        first_close = asyncio.create_task(transport.close())
+        await handle.close_started.wait()
+
+        second_close = asyncio.create_task(transport.close())
+        await asyncio.sleep(0)
+
+        assert second_close.done() is False
+
+        handle.close_release.set()
+        await asyncio.wait_for(first_close, timeout=0.1)
+        await asyncio.wait_for(second_close, timeout=0.1)
+
+        close_events = [
+            event for event in diagnostics.events if event.event == "transport_close_complete"
+        ]
+        assert len(close_events) == 1
+        assert handle.close_count == 1
+        assert device.power_off_count == 1
+
+    asyncio.run(run())
+
+
 def test_bumble_close_disables_classic_scan_before_power_off() -> None:
     class ClosingDevice(FakeBumbleDevice):
         def __init__(self) -> None:

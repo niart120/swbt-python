@@ -261,6 +261,7 @@ class BumbleHidTransport:
         self._disconnected_callback: DisconnectedCallback | None = None
         self._l2cap_connected_emitted = False
         self._disconnected_callback_emitted = False
+        self._close_lock = asyncio.Lock()
 
     async def open(self) -> None:
         """Open the configured Bumble adapter."""
@@ -320,18 +321,19 @@ class BumbleHidTransport:
 
     async def close(self) -> None:
         """Close the Bumble adapter if it is open."""
-        if self._handle is None:
-            return
-        handle = self._handle
-        runtime = self._runtime
-        self._handle = None
-        self._runtime = None
-        self._l2cap_connected_emitted = False
-        self._disconnected_callback_emitted = False
-        if runtime is not None:
-            await self._close_runtime(runtime)
-        await handle.close()
-        self._record_event("transport_close_complete", adapter=self._adapter)
+        async with self._close_lock:
+            if self._handle is None:
+                return
+            handle = self._handle
+            runtime = self._runtime
+            self._handle = None
+            self._runtime = None
+            self._l2cap_connected_emitted = False
+            self._disconnected_callback_emitted = False
+            if runtime is not None:
+                await self._close_runtime(runtime)
+            await handle.close()
+            self._record_event("transport_close_complete", adapter=self._adapter)
 
     async def request_disconnect(self) -> DisconnectRequestResult:
         """Request HID channel disconnection through Bumble when channels exist."""
