@@ -164,6 +164,7 @@ class SwitchGamepad:
             self._diagnostics.record_event(
                 "active_reconnect_result",
                 peer_count=0,
+                route="active_reconnect",
                 status="no_bond",
             )
             return ConnectionResult(
@@ -175,6 +176,7 @@ class SwitchGamepad:
             self._diagnostics.record_event(
                 "active_reconnect_result",
                 peer_count=len(peers),
+                route="active_reconnect",
                 status="ambiguous_bond",
             )
             return ConnectionResult(
@@ -189,6 +191,7 @@ class SwitchGamepad:
         self._diagnostics.record_event(
             "active_reconnect_attempt",
             peer_address=peer.address,
+            route="active_reconnect",
         )
         try:
             await self._transport.connect_bonded_peer(
@@ -201,6 +204,7 @@ class SwitchGamepad:
                 "active_reconnect_result",
                 failure_reason="connection_timeout",
                 peer_address=peer.address,
+                route="active_reconnect",
                 status="timeout",
             )
             await self.close(neutral=True)
@@ -217,6 +221,7 @@ class SwitchGamepad:
                 failure_reason="transport_error",
                 message=str(error),
                 peer_address=peer.address,
+                route="active_reconnect",
                 status="failed",
             )
             self._diagnostics.record_error(error, recoverable=True)
@@ -231,6 +236,7 @@ class SwitchGamepad:
         self._diagnostics.record_event(
             "active_reconnect_result",
             peer_address=peer.address,
+            route="active_reconnect",
             status="connected",
         )
         return ConnectionResult(
@@ -253,6 +259,7 @@ class SwitchGamepad:
         self._diagnostics.record_event(
             "connect_pairing_fallback",
             reason="no_bond",
+            route="pairing",
         )
         await self.pair(timeout=timeout)
         return ConnectionResult(route="pairing", status="connected")
@@ -455,6 +462,7 @@ class SwitchGamepad:
             self._diagnostics.record_event(
                 "incoming_connection",
                 previous_state=previous_state,
+                route="incoming",
             )
         self._connection_state = "connected"
         self._connected_event.set()

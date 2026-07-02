@@ -81,6 +81,7 @@ def test_incoming_connection_trace_does_not_use_active_reconnect_events() -> Non
         assert {
             "event": "incoming_connection",
             "previous_state": "advertising",
+            "route": "incoming",
         } in events
         assert "active_reconnect_attempt" not in event_names
         assert "active_reconnect_result" not in event_names
@@ -827,10 +828,12 @@ def test_reconnect_records_bonded_peer_selection_without_advertising(
                 assert {
                     "event": "active_reconnect_attempt",
                     "peer_address": peer_addresses[0],
+                    "route": "active_reconnect",
                 } in events
                 assert {
                     "event": "active_reconnect_result",
                     "peer_address": peer_addresses[0],
+                    "route": "active_reconnect",
                     "status": "connected",
                 } in events
                 assert "active_reconnect" in transport.events
@@ -839,6 +842,7 @@ def test_reconnect_records_bonded_peer_selection_without_advertising(
                 assert {
                     "event": "active_reconnect_result",
                     "peer_count": len(peer_addresses),
+                    "route": "active_reconnect",
                     "status": "ambiguous_bond",
                 } in events
                 assert "active_reconnect" not in transport.events
@@ -866,6 +870,7 @@ def test_connect_prefers_active_reconnect_when_one_bond_exists() -> None:
         assert {
             "event": "active_reconnect_result",
             "peer_address": peer_address,
+            "route": "active_reconnect",
             "status": "connected",
         } in events
         assert "active_reconnect" in transport.events
@@ -898,6 +903,7 @@ def test_connect_allows_pairing_only_when_no_bond_and_allowed() -> None:
         assert {
             "event": "connect_pairing_fallback",
             "reason": "no_bond",
+            "route": "pairing",
         } in events
 
     asyncio.run(run())
@@ -956,6 +962,7 @@ def test_active_reconnect_failure_records_reason_without_advertising(
             "event": "active_reconnect_result",
             "failure_reason": failure_reason,
             "peer_address": peer_address,
+            "route": "active_reconnect",
             "status": status,
         }
         expected_event.update(extra_fields)
