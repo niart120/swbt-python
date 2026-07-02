@@ -78,7 +78,7 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         (SwitchGamepad.press, ("Args:", "buttons")),
         (SwitchGamepad.set_input, ("Args:", "state")),
         (SwitchGamepad.release, ("Args:", "buttons")),
-        (SwitchGamepad.neutral, ("InputState.neutral()")),
+        (SwitchGamepad.neutral, ("InputState.neutral()",)),
         (SwitchGamepad.tap, ("Args:", "buttons", "duration", "Raises:", "ClosedError")),
         (SwitchGamepad.status, ("Returns:", "GamepadStatus")),
         (SwitchGamepad.snapshot, ("Returns:", "InputState")),
