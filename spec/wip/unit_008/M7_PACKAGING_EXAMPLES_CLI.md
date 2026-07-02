@@ -28,7 +28,7 @@
 | developer | `examples/tap_a.py` | 最小利用例が読める | 実行には実機承認が必要 |
 | developer | fake example | 実機なしで public API の最小例を CI で確認できる | Bumble 型を公開しない |
 | developer | `swbt-probe adapters` | adapter 候補と環境情報を確認できる | adapter open を伴う場合は承認条件を分ける |
-| developer | `swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pairing probe と trace 保存ができる | Switch-facing 動作の承認が必要 |
+| developer | `swbt-probe pair --adapter usb:0 --key-store switch-bond.json --trace trace.jsonl` | pairing probe と trace 保存ができる | Switch-facing 動作の承認が必要 |
 
 ## 2. 対象範囲
 
@@ -38,7 +38,7 @@
 - `examples/pairing_probe.py`。
 - `examples/hardware_bringup.py`。
 - `swbt-probe adapters`。
-- `swbt-probe pair --adapter usb:0 --trace trace.jsonl`。
+- `swbt-probe pair --adapter usb:0 --key-store switch-bond.json --trace trace.jsonl`。
 - README の Windows / Linux 注意点、確認済み構成、未確認構成、実機安全境界。
 - 開発者向け gate 手順。
 - `unit_006` の実機確認結果を README / examples / CLI 説明へ反映する。
@@ -80,7 +80,7 @@
 | fake example test | examples | fake transport で実機なし test が通る | CI 対象 |
 | hardware example | `examples/hardware_bringup.py` | 実行前承認条件が README から辿れる | 自動実行しない |
 | adapters CLI | `swbt-probe adapters` | adapter 候補と環境情報を出す | adapter open の有無を明示 |
-| pair CLI | `swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pairing probe を行い trace を保存する | 明示承認が必要 |
+| pair CLI | `swbt-probe pair --adapter usb:0 --key-store switch-bond.json --trace trace.jsonl` | pairing probe を行い trace を保存する | 明示承認が必要 |
 | README | documentation | 確認済み構成と未確認構成が分かれている | documentation drift 対策 |
 | hardware usage example | approved `usb:0` run | 実行前に承認範囲、artifact、cleanup が分かる | 実行は自動化しない |
 | public API docstrings | `swbt.__all__` の主要型と `SwitchGamepad` の操作 | Google-style の `Attributes` / `Args` / `Returns` / `Raises` が公開契約を説明する | packaging 前の API surface 固定 |
@@ -166,7 +166,7 @@
 | `uv run pytest tests/unit tests/integration -q` | pass | 169 passed |
 | `uv run swbt-probe adapters --json` | pass | adapter を開かず、candidate `usb:0`、platform、Python 3.13.5、Bumble 0.0.230、`opens_adapter=false` を表示した |
 | `uv run swbt-probe pair --help` | pass | adapter、key store、trace、timeout と explicit approval 境界を表示した |
-| `uv run swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pending-approval | Switch-facing 動作の明示承認後に実行する |
+| `uv run swbt-probe pair --adapter usb:0 --key-store .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair\keys.json --trace .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair\pair-trace.jsonl --timeout 30` | pending-approval | Switch-facing 動作の明示承認後に実行する。現時点では承認未取得のため未実行 |
 
 ## 11. 実機実行条件
 
@@ -193,7 +193,7 @@
 
 - [x] 対象範囲と対象外を初期設計から切り出した
 - [x] TDD Test List の初期案を作成した
-- [ ] package metadata、examples、CLI、README の実装を完了した
-- [ ] M7 の build と local automated gate を実行し、検証欄を結果で更新した
+- [x] package metadata、examples、CLI、README の実装を完了した
+- [x] M7 の build と local automated gate を実行し、検証欄を結果で更新した
 - [ ] adapter / Switch-facing CLI 検証は承認、command、cleanup、結果を記録した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する
