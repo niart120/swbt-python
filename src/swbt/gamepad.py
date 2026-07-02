@@ -240,6 +240,23 @@ class SwitchGamepad:
             peer_count=1,
         )
 
+    async def connect(
+        self,
+        *,
+        timeout: float | None = None,  # noqa: ASYNC109
+        allow_pairing: bool = False,
+    ) -> ConnectionResult:
+        """Connect using bonded reconnect first, then optional pairing fallback."""
+        reconnect_result = await self.reconnect(timeout=timeout)
+        if reconnect_result.status != "no_bond" or not allow_pairing:
+            return reconnect_result
+        self._diagnostics.record_event(
+            "connect_pairing_fallback",
+            reason="no_bond",
+        )
+        await self.pair(timeout=timeout)
+        return ConnectionResult(route="pairing", status="connected")
+
     async def close(self, *, neutral: bool = True) -> None:
         """Close the transport and leave the gamepad in a closed state."""
         async with self._lifecycle_lock:

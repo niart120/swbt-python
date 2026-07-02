@@ -846,6 +846,63 @@ def test_reconnect_records_bonded_peer_selection_without_advertising(
     asyncio.run(run())
 
 
+def test_connect_prefers_active_reconnect_when_one_bond_exists() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        peer_address = "01:02:03:04:05:06"
+        transport = FakeHidTransport(bonded_peer_addresses=(peer_address,))
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            result = await pad.connect(timeout=0.1)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert result.route == "active_reconnect"
+        assert result.status == "connected"
+        assert result.peer_address == peer_address
+        assert {
+            "event": "active_reconnect_result",
+            "peer_address": peer_address,
+            "status": "connected",
+        } in events
+        assert "active_reconnect" in transport.events
+        assert "start_advertising" not in transport.events
+
+    asyncio.run(run())
+
+
+def test_connect_allows_pairing_only_when_no_bond_and_allowed() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            connect_task = asyncio.create_task(pad.connect(timeout=1.0, allow_pairing=True))
+            await asyncio.sleep(0)
+
+            assert transport.events == ("open", "start_advertising")
+
+            await transport.connect()
+            result = await asyncio.wait_for(connect_task, timeout=0.1)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert result.route == "pairing"
+        assert result.status == "connected"
+        assert {
+            "event": "connect_pairing_fallback",
+            "reason": "no_bond",
+        } in events
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize(
     (
         "active_reconnect_auto_connect",
