@@ -34,6 +34,32 @@ def test_async_context_opens_and_closes_fake_transport() -> None:
     asyncio.run(run())
 
 
+def test_async_context_exception_requests_disconnect_and_reraises() -> None:
+    class ExpectedError(Exception):
+        """Exception raised inside the gamepad context."""
+
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        with pytest.raises(ExpectedError):
+            async with SwitchGamepad(transport=transport) as pad:
+                await transport.connect()
+                await pad.wait_connected(timeout=1.0)
+                raise ExpectedError
+
+        assert transport.close_count == 1
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnect_request_closed",
+            "close",
+        )
+
+    asyncio.run(run())
+
+
 def test_press_buttons_are_reflected_in_periodic_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
