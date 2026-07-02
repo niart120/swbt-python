@@ -452,6 +452,11 @@ class SwitchGamepad:
                 await self._transport.close()
             self._is_open = False
             self._connection_state = "closed"
+            self._diagnostics.record_event(
+                "reconnect_disabled",
+                next_state=self._connection_state,
+                reason=reason,
+            )
         finally:
             self._disconnect_event.set()
 

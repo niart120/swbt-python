@@ -703,6 +703,34 @@ def test_disconnect_callback_neutralizes_state_and_stops_report_loop() -> None:
     asyncio.run(run())
 
 
+def test_disconnect_with_reconnect_disabled_records_closed_terminal_state() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(bonded_peer_addresses=("01:02:03:04:05:06",))
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=1000,
+        ) as pad:
+            await transport.connect()
+            await transport.disconnect(reason=0x13)
+
+            assert pad.status().connection_state == "closed"
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "reconnect_disabled",
+            "next_state": "closed",
+            "reason": 0x13,
+        } in events
+        assert "active_reconnect" not in transport.events
+        assert "start_advertising" not in transport.events
+
+    asyncio.run(run())
+
+
 def test_pair_timeout_records_advertising_failure_position_in_trace() -> None:
     async def run() -> None:
         trace = StringIO()
