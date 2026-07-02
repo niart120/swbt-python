@@ -790,6 +790,71 @@ def test_reconnect_records_bonded_peer_selection_without_advertising(
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    (
+        "active_reconnect_auto_connect",
+        "active_reconnect_error",
+        "status",
+        "failure_reason",
+        "extra_fields",
+    ),
+    [
+        (
+            True,
+            RuntimeError("connection refused"),
+            "failed",
+            "transport_error",
+            {"error_type": "RuntimeError", "message": "connection refused"},
+        ),
+        (
+            False,
+            None,
+            "timeout",
+            "connection_timeout",
+            {},
+        ),
+    ],
+)
+def test_active_reconnect_failure_records_reason_without_advertising(
+    active_reconnect_auto_connect: bool,
+    active_reconnect_error: Exception | None,
+    status: str,
+    failure_reason: str,
+    extra_fields: dict[str, object],
+) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        peer_address = "01:02:03:04:05:06"
+        transport = FakeHidTransport(
+            bonded_peer_addresses=(peer_address,),
+            active_reconnect_auto_connect=active_reconnect_auto_connect,
+            active_reconnect_error=active_reconnect_error,
+        )
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            result = await pad.reconnect(timeout=0.001)
+            assert pad.status().connection_state == "closed"
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        expected_event = {
+            "event": "active_reconnect_result",
+            "failure_reason": failure_reason,
+            "peer_address": peer_address,
+            "status": status,
+        }
+        expected_event.update(extra_fields)
+
+        assert result.status == status
+        assert expected_event in events
+        assert "active_reconnect" in transport.events
+        assert "start_advertising" not in transport.events
+
+    asyncio.run(run())
+
+
 def test_concurrent_press_and_release_preserve_button_state() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

@@ -199,6 +199,7 @@ class SwitchGamepad:
         except TimeoutError:
             self._diagnostics.record_event(
                 "active_reconnect_result",
+                failure_reason="connection_timeout",
                 peer_address=peer.address,
                 status="timeout",
             )
@@ -213,6 +214,7 @@ class SwitchGamepad:
             self._diagnostics.record_event(
                 "active_reconnect_result",
                 error_type=type(error).__name__,
+                failure_reason="transport_error",
                 message=str(error),
                 peer_address=peer.address,
                 status="failed",
