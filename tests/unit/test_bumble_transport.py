@@ -137,6 +137,7 @@ class FakeHidDevice:
         self.handlers: dict[str, Callable[[bytes], None]] = {}
         self.interrupt_payloads: list[bytes] = []
         self.control_payloads: list[tuple[int, bytes]] = []
+        self.disconnect_calls: list[str] = []
         self.set_report_callback: Callable[[int, int, int, bytes], object] | None = None
 
     def on(self, event: str, callback: Callable[[bytes], None]) -> None:
@@ -159,6 +160,16 @@ class FakeHidDevice:
     def register_set_report_cb(self, callback: Callable[[int, int, int, bytes], object]) -> None:
         """Register a fake SET_REPORT callback."""
         self.set_report_callback = callback
+
+    async def disconnect_interrupt_channel(self) -> None:
+        """Record a fake interrupt channel disconnect request."""
+        self.disconnect_calls.append("interrupt")
+        self.l2cap_intr_channel = None
+
+    async def disconnect_control_channel(self) -> None:
+        """Record a fake control channel disconnect request."""
+        self.disconnect_calls.append("control")
+        self.l2cap_ctrl_channel = None
 
     def emit_set_report(self, report_id: int, report_type: int, report_data: bytes) -> object:
         """Emit one fake SET_REPORT call."""
@@ -884,6 +895,39 @@ def test_bumble_l2cap_channel_open_records_diagnostics_and_connects_after_both_c
         } in events
         assert {"event": "connected", "adapter": "usb:0"} in events
         assert connected_count == 1
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_request_disconnect_calls_interrupt_then_control_helpers() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0011))
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013))
+
+        result = await transport.request_disconnect()
+
+        assert result.status == "requested"
+        assert result.channels == ("interrupt", "control")
+        assert hid_device.disconnect_calls == ["interrupt", "control"]
 
         await transport.close()
 

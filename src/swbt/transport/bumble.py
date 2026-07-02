@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profile import ProControllerProfile
+from swbt.transport.base import DisconnectRequestResult
 
 if TYPE_CHECKING:
     from bumble.transport.common import TransportSink, TransportSource
@@ -122,6 +123,12 @@ class _BumbleHidRuntime(Protocol):
 
     def send_control_data(self, report_type: int, data: bytes) -> None:
         """Send a control-channel HID data message."""
+
+    async def disconnect_interrupt_channel(self) -> None:
+        """Request interrupt-channel disconnection."""
+
+    async def disconnect_control_channel(self) -> None:
+        """Request control-channel disconnection."""
 
 
 @dataclass
@@ -244,6 +251,42 @@ class BumbleHidTransport:
             await self._close_runtime(runtime)
         await handle.close()
         self._record_event("transport_close_complete", adapter=self._adapter)
+
+    async def request_disconnect(self) -> DisconnectRequestResult:
+        """Request HID channel disconnection through Bumble when channels exist."""
+        self._require_open()
+        if self._runtime is None:
+            return DisconnectRequestResult(
+                status="unavailable",
+                reason="runtime_not_initialized",
+            )
+        hid_device = self._runtime.hid_device
+        disconnect_steps: list[tuple[str, Callable[[], Awaitable[None]]]] = []
+        if hid_device.l2cap_intr_channel is not None:
+            disconnect_steps.append(("interrupt", hid_device.disconnect_interrupt_channel))
+        if hid_device.l2cap_ctrl_channel is not None:
+            disconnect_steps.append(("control", hid_device.disconnect_control_channel))
+        if not disconnect_steps:
+            return DisconnectRequestResult(
+                status="unavailable",
+                reason="channels_not_connected",
+            )
+        requested_channels: list[str] = []
+        for channel_name, disconnect_channel in disconnect_steps:
+            try:
+                await disconnect_channel()
+            except Exception as error:  # noqa: BLE001
+                return DisconnectRequestResult(
+                    status="failed",
+                    channels=tuple(requested_channels),
+                    error_type=type(error).__name__,
+                    message=str(error),
+                )
+            requested_channels.append(channel_name)
+        return DisconnectRequestResult(
+            status="requested",
+            channels=tuple(requested_channels),
+        )
 
     async def send_interrupt(self, payload: bytes) -> None:
         """Send one interrupt report."""
