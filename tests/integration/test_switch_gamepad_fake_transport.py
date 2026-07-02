@@ -24,7 +24,12 @@ def test_async_context_opens_and_closes_fake_transport() -> None:
         assert transport.is_open is False
         assert transport.open_count == 1
         assert transport.close_count == 1
-        assert transport.events == ("open", "start_advertising", "close")
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "request_disconnect_unavailable",
+            "close",
+        )
 
     asyncio.run(run())
 
@@ -430,6 +435,31 @@ def test_close_request_timeout_records_terminal_state_and_closes_transport(
             "request_disconnect",
             "close",
         )
+
+    asyncio.run(run())
+
+
+def test_close_without_connection_records_disconnect_unavailable() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+
+        await pad.open()
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "disconnect_request",
+            "status": "unavailable",
+            "reason": "channels_not_connected",
+        } in events
+        assert transport.close_count == 1
+        assert pad.status().connection_state == "closed"
 
     asyncio.run(run())
 

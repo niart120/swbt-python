@@ -132,23 +132,22 @@ class SwitchGamepad:
                 await self._send_trailing_neutral_if_connected()
             if self._report_loop is not None:
                 await self._report_loop.stop()
-            if self._connected_event.is_set():
-                self._disconnect_event.clear()
-                disconnect_result = await self._transport.request_disconnect()
-                self._record_disconnect_request_result(disconnect_result)
-                if disconnect_result.status == "requested":
-                    disconnect_closed = await self._wait_for_disconnect_request_closed()
-                    if disconnect_closed:
-                        self._diagnostics.record_event(
-                            "disconnect_request_terminal",
-                            status="closed",
-                        )
-                    else:
-                        self._diagnostics.record_event(
-                            "disconnect_request_terminal",
-                            status="timeout",
-                            timeout=DISCONNECT_REQUEST_TIMEOUT_SECONDS,
-                        )
+            self._disconnect_event.clear()
+            disconnect_result = await self._transport.request_disconnect()
+            self._record_disconnect_request_result(disconnect_result)
+            if disconnect_result.status == "requested":
+                disconnect_closed = await self._wait_for_disconnect_request_closed()
+                if disconnect_closed:
+                    self._diagnostics.record_event(
+                        "disconnect_request_terminal",
+                        status="closed",
+                    )
+                else:
+                    self._diagnostics.record_event(
+                        "disconnect_request_terminal",
+                        status="timeout",
+                        timeout=DISCONNECT_REQUEST_TIMEOUT_SECONDS,
+                    )
             await self._transport.close()
             self._report_loop = None
             self._is_open = False
