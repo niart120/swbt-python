@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import platform
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profile import ProControllerProfile
@@ -377,9 +378,20 @@ class BumbleHidTransport:
                 link_type=link_type,
                 peer_address=str(bd_addr),
             )
-            original_connection_request(bd_addr, class_of_device, link_type)
+            _call_connection_request_without_deprecated_sync_command(
+                device,
+                original_connection_request,
+                bd_addr,
+                class_of_device,
+                link_type,
+            )
 
         device.on_connection_request = on_connection_request
+        _replace_host_connection_request_listener(
+            device,
+            original_connection_request,
+            on_connection_request,
+        )
 
     def _register_l2cap_lifecycle_bridge(self, hid_device: _BumbleHidRuntime) -> None:
         original_open = hid_device.on_l2cap_channel_open
@@ -764,6 +776,58 @@ def _safe_event_value(value: object) -> object:
     if value is None or isinstance(value, int | str | bool | float):
         return value
     return str(value)
+
+
+def _call_connection_request_without_deprecated_sync_command(
+    device: object,
+    connection_request: Callable[[object, int, int], None],
+    bd_addr: object,
+    class_of_device: int,
+    link_type: int,
+) -> None:
+    """Run Bumble's connection request handler without its deprecated sync helper."""
+    host = getattr(device, "host", None)
+    send_async_command = getattr(host, "send_async_command", None)
+    if host is None or not callable(send_async_command):
+        connection_request(bd_addr, class_of_device, link_type)
+        return
+
+    from bumble import utils  # noqa: PLC0415
+
+    missing = object()
+    host_dict = getattr(host, "__dict__", None)
+    previous_instance_attr = (
+        host_dict.get("send_command_sync", missing) if isinstance(host_dict, dict) else missing
+    )
+
+    def send_command_sync(command: object) -> None:
+        utils.AsyncRunner.spawn(send_async_command(command))
+
+    host_with_attrs = cast("Any", host)
+    host_with_attrs.send_command_sync = send_command_sync
+    try:
+        connection_request(bd_addr, class_of_device, link_type)
+    finally:
+        if previous_instance_attr is missing:
+            del host_with_attrs.send_command_sync
+        else:
+            host_with_attrs.send_command_sync = previous_instance_attr
+
+
+def _replace_host_connection_request_listener(
+    device: object,
+    original_connection_request: Callable[[object, int, int], None],
+    replacement_connection_request: Callable[[object, int, int], None],
+) -> None:
+    host = getattr(device, "host", None)
+    remove_listener = getattr(host, "remove_listener", None)
+    on = getattr(host, "on", None)
+    if not callable(remove_listener) or not callable(on):
+        return
+
+    with suppress(KeyError, ValueError):
+        remove_listener("connection_request", original_connection_request)
+    on("connection_request", replacement_connection_request)
 
 
 def _decode_hidp_output_report(pdu: bytes) -> bytes | None:

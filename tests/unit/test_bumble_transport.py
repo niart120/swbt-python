@@ -1,5 +1,6 @@
 import asyncio
 import json
+import warnings
 from collections.abc import Callable
 from io import StringIO
 from typing import Any, cast
@@ -90,6 +91,63 @@ class FakeBumbleHost:
         """Record one supported-command probe."""
         self.supported_commands.append(command)
         return True
+
+
+class FakeDeprecatedConnectionRequestHost:
+    """Fake Bumble host whose sync command helper is deprecated."""
+
+    def __init__(self) -> None:
+        """Create an empty command recorder."""
+        self.async_commands: list[object] = []
+        self.sync_commands: list[object] = []
+        self.handlers: dict[str, list[Callable[..., None]]] = {}
+
+    def on(self, event: str, callback: Callable[..., None]) -> None:
+        """Register one fake host event callback."""
+        self.handlers.setdefault(event, []).append(callback)
+
+    def remove_listener(self, event: str, callback: Callable[..., None]) -> None:
+        """Remove one fake host event callback."""
+        self.handlers[event].remove(callback)
+
+    def emit(self, event: str, *args: object) -> None:
+        """Emit one fake host event."""
+        for callback in list(self.handlers[event]):
+            callback(*args)
+
+    async def send_async_command(self, command: object) -> object:
+        """Record one async command send."""
+        self.async_commands.append(command)
+        return object()
+
+    def send_command_sync(self, command: object) -> None:
+        """Simulate Bumble 0.0.230's deprecated helper."""
+        self.sync_commands.append(command)
+        warnings.warn(
+            "Use utils.AsyncRunner.spawn() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+
+class FakeBumbleDeviceWithDeprecatedConnectionAccept(FakeBumbleDevice):
+    """Fake device whose connection request handler uses the deprecated helper."""
+
+    def __init__(self, host: FakeDeprecatedConnectionRequestHost) -> None:
+        """Create a fake device with a deprecated connection accept path."""
+        super().__init__()
+        self.host = host
+        self.host.on("connection_request", self.on_connection_request)
+
+    def on_connection_request(
+        self,
+        bd_addr: object,
+        class_of_device: int,
+        link_type: int,
+    ) -> None:
+        """Record and accept one fake incoming connection request."""
+        self.connection_requests.append((bd_addr, class_of_device, link_type))
+        self.host.send_command_sync("accept_connection")
 
 
 class FakeBumbleDeviceWithLinkPolicy(FakeBumbleDevice):
@@ -1131,6 +1189,43 @@ def test_bumble_connection_request_is_recorded_before_connection_complete() -> N
             "peer_address": "01:02:03:04:05:06",
         } in events
         assert device.connection_requests == [("01:02:03:04:05:06", 0x2508, 1)]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_connection_request_bridge_avoids_deprecated_sync_command_warning() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+        host = FakeDeprecatedConnectionRequestHost()
+        device = FakeBumbleDeviceWithDeprecatedConnectionAccept(host)
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            host.emit("connection_request", "01:02:03:04:05:06", 0x2508, 1)
+        await asyncio.sleep(0)
+
+        assert device.connection_requests == [("01:02:03:04:05:06", 0x2508, 1)]
+        assert host.sync_commands == []
+        assert host.async_commands == ["accept_connection"]
 
         await transport.close()
 
