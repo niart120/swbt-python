@@ -22,6 +22,13 @@ class DisconnectRequestResult:
     message: str | None = None
 
 
+@dataclass(frozen=True)
+class BondedPeer:
+    """Peer address discovered from a transport key store."""
+
+    address: str
+
+
 class HidDeviceTransport(Protocol):
     """Abstract HID device transport used by SwitchGamepad."""
 
@@ -36,6 +43,17 @@ class HidDeviceTransport(Protocol):
 
     async def request_disconnect(self) -> DisconnectRequestResult:
         """Request a remote HID/L2CAP disconnect when the transport supports it."""
+
+    async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
+        """Return known bonded peers without exposing transport-specific key objects."""
+
+    async def connect_bonded_peer(
+        self,
+        peer_address: str,
+        *,
+        connect_timeout: float | None,
+    ) -> None:
+        """Start an active reconnect attempt to a bonded peer."""
 
     async def send_interrupt(self, payload: bytes) -> None:
         """Send one HID interrupt report."""

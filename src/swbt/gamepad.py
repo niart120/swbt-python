@@ -3,6 +3,7 @@
 import asyncio
 from dataclasses import dataclass
 from types import TracebackType
+from typing import Literal
 
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
 from swbt.errors import ClosedError, ConnectionTimeoutError, SwbtError
@@ -14,6 +15,19 @@ from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
 
 DISCONNECT_REQUEST_TIMEOUT_SECONDS = 0.25
+
+ConnectionRoute = Literal["active_reconnect", "pairing"]
+ConnectionStatus = Literal["connected", "no_bond", "ambiguous_bond", "timeout", "failed"]
+
+
+@dataclass(frozen=True)
+class ConnectionResult:
+    """Result of an explicit connection strategy."""
+
+    route: ConnectionRoute
+    status: ConnectionStatus
+    peer_address: str | None = None
+    peer_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -132,6 +146,98 @@ class SwitchGamepad:
             self._diagnostics.record_error(connection_error, recoverable=True)
             raise connection_error from error
 
+    async def reconnect(self, timeout: float | None = None) -> ConnectionResult:  # noqa: ASYNC109
+        """Try active reconnect with exactly one bonded peer."""
+        if not self._is_open:
+            await self.open()
+        if self._transport is None:
+            msg = "gamepad is not open"
+            raise ClosedError(msg)
+        peers = await self._transport.list_bonded_peers()
+        selection = self._bonded_peer_selection(len(peers))
+        self._diagnostics.record_event(
+            "bonded_peers_discovered",
+            peer_count=len(peers),
+            selection=selection,
+        )
+        if not peers:
+            self._diagnostics.record_event(
+                "active_reconnect_result",
+                peer_count=0,
+                status="no_bond",
+            )
+            return ConnectionResult(
+                route="active_reconnect",
+                status="no_bond",
+                peer_count=0,
+            )
+        if len(peers) > 1:
+            self._diagnostics.record_event(
+                "active_reconnect_result",
+                peer_count=len(peers),
+                status="ambiguous_bond",
+            )
+            return ConnectionResult(
+                route="active_reconnect",
+                status="ambiguous_bond",
+                peer_count=len(peers),
+            )
+
+        peer = peers[0]
+        self._connection_state = "reconnecting"
+        self._connected_event.clear()
+        self._diagnostics.record_event(
+            "active_reconnect_attempt",
+            peer_address=peer.address,
+        )
+        try:
+            await self._transport.connect_bonded_peer(
+                peer.address,
+                connect_timeout=timeout,
+            )
+            await self._wait_for_reconnect_connected(max_wait=timeout)
+        except TimeoutError:
+            self._diagnostics.record_event(
+                "active_reconnect_result",
+                peer_address=peer.address,
+                status="timeout",
+            )
+            await self.close(neutral=True)
+            return ConnectionResult(
+                route="active_reconnect",
+                status="timeout",
+                peer_address=peer.address,
+                peer_count=1,
+            )
+        except Exception as error:  # noqa: BLE001
+            self._diagnostics.record_event(
+                "active_reconnect_result",
+                error_type=type(error).__name__,
+                message=str(error),
+                peer_address=peer.address,
+                status="failed",
+            )
+            self._diagnostics.record_error(error, recoverable=True)
+            await self.close(neutral=True)
+            return ConnectionResult(
+                route="active_reconnect",
+                status="failed",
+                peer_address=peer.address,
+                peer_count=1,
+            )
+
+        self._diagnostics.record_event(
+            "active_reconnect_result",
+            peer_address=peer.address,
+            status="connected",
+        )
+        return ConnectionResult(
+            route="active_reconnect",
+            status="connected",
+            peer_address=peer.address,
+            peer_count=1,
+        )
+
     async def close(self, *, neutral: bool = True) -> None:
         """Close the transport and leave the gamepad in a closed state."""
         async with self._lifecycle_lock:
@@ -233,6 +339,30 @@ class SwitchGamepad:
                 return True
         except TimeoutError:
             return False
+
+    async def _wait_for_reconnect_connected(self, *, max_wait: float | None) -> None:
+        if max_wait is None:
+            await self._connected_event.wait()
+            return
+        try:
+            async with asyncio.timeout(max_wait):
+                await self._connected_event.wait()
+        except TimeoutError as error:
+            self._diagnostics.record_event(
+                "connection_timeout",
+                route="active_reconnect",
+                state=self._connection_state,
+                timeout=max_wait,
+            )
+            raise TimeoutError from error
+
+    @staticmethod
+    def _bonded_peer_selection(peer_count: int) -> str:
+        if peer_count == 0:
+            return "none"
+        if peer_count == 1:
+            return "selected"
+        return "ambiguous"
 
     def _record_disconnect_request_result(self, result: DisconnectRequestResult) -> None:
         fields: dict[str, object] = {"status": result.status}

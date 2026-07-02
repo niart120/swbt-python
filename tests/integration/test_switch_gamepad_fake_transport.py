@@ -732,6 +732,64 @@ def test_pair_timeout_records_advertising_failure_position_in_trace() -> None:
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    ("peer_addresses", "status", "selection"),
+    [
+        ((), "no_bond", "none"),
+        (("01:02:03:04:05:06",), "connected", "selected"),
+        (("01:02:03:04:05:06", "0a:0b:0c:0d:0e:0f"), "ambiguous_bond", "ambiguous"),
+    ],
+)
+def test_reconnect_records_bonded_peer_selection_without_advertising(
+    peer_addresses: tuple[str, ...],
+    status: str,
+    selection: str,
+) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(bonded_peer_addresses=peer_addresses)
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            result = await pad.reconnect(timeout=0.1)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert result.status == status
+        assert {
+            "event": "bonded_peers_discovered",
+            "peer_count": len(peer_addresses),
+            "selection": selection,
+        } in events
+        assert "start_advertising" not in transport.events
+
+        if peer_addresses:
+            if len(peer_addresses) == 1:
+                assert result.peer_address == peer_addresses[0]
+                assert {
+                    "event": "active_reconnect_attempt",
+                    "peer_address": peer_addresses[0],
+                } in events
+                assert {
+                    "event": "active_reconnect_result",
+                    "peer_address": peer_addresses[0],
+                    "status": "connected",
+                } in events
+                assert "active_reconnect" in transport.events
+            else:
+                assert result.peer_address is None
+                assert {
+                    "event": "active_reconnect_result",
+                    "peer_count": len(peer_addresses),
+                    "status": "ambiguous_bond",
+                } in events
+                assert "active_reconnect" not in transport.events
+
+    asyncio.run(run())
+
+
 def test_concurrent_press_and_release_preserve_button_state() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

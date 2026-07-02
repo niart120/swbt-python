@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profile import ProControllerProfile
-from swbt.transport.base import DisconnectRequestResult
+from swbt.transport.base import BondedPeer, DisconnectRequestResult
 
 if TYPE_CHECKING:
     from bumble.transport.common import TransportSink, TransportSource
@@ -89,6 +89,7 @@ _OpenTransport = Callable[[str], Awaitable[_BumbleHandle]]
 class _BumbleDeviceRuntime(Protocol):
     EVENT_CONNECTION: str
     EVENT_CONNECTION_FAILURE: str
+    keystore: _BumbleKeyStoreRuntime | None
     on_connection_request: Callable[[object, int, int], None]
     powered_on: bool
 
@@ -106,6 +107,20 @@ class _BumbleDeviceRuntime(Protocol):
 
     async def set_discoverable(self, discoverable: bool = True) -> None:
         """Set Classic discoverable state."""
+
+    async def connect(
+        self,
+        peer_address: str,
+        *,
+        transport: object,
+        timeout: float | None = None,  # noqa: ASYNC109
+    ) -> object:
+        """Connect to a Bluetooth peer."""
+
+
+class _BumbleKeyStoreRuntime(Protocol):
+    async def get_all(self) -> list[tuple[str, object]]:
+        """Return all key entries keyed by peer address."""
 
 
 class _BumbleHidRuntime(Protocol):
@@ -295,6 +310,38 @@ class BumbleHidTransport:
         return DisconnectRequestResult(
             status="requested",
             channels=tuple(requested_channels),
+        )
+
+    async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
+        """Return bonded peer addresses from the Bumble key store."""
+        self._require_open()
+        if self._runtime is None:
+            return ()
+        await self._ensure_classic_runtime_ready(self._runtime)
+        key_store = self._runtime.device.keystore
+        if key_store is None:
+            return ()
+        entries = await key_store.get_all()
+        return tuple(BondedPeer(address=address) for address, _keys in entries)
+
+    async def connect_bonded_peer(
+        self,
+        peer_address: str,
+        *,
+        connect_timeout: float | None,
+    ) -> None:
+        """Start an active BR/EDR reconnect attempt with Bumble."""
+        self._require_open()
+        if self._runtime is None:
+            msg = "Bumble runtime is not initialized"
+            raise ClosedError(msg)
+        await self._ensure_classic_runtime_ready(self._runtime)
+        from bumble.core import PhysicalTransport  # noqa: PLC0415
+
+        await self._runtime.device.connect(
+            peer_address,
+            transport=PhysicalTransport.BR_EDR,
+            timeout=connect_timeout,
         )
 
     async def send_interrupt(self, payload: bytes) -> None:
@@ -684,6 +731,19 @@ class BumbleHidTransport:
     def _record_error(self, error: Exception) -> None:
         if self._diagnostics is not None:
             self._diagnostics.record_error(error, recoverable=False)
+
+    async def _ensure_classic_runtime_ready(self, runtime: _BumbleRuntime) -> None:
+        if not runtime.device.powered_on:
+            await runtime.device.power_on()
+        if runtime.classic_link_policy_settings is None:
+            link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
+            if link_policy_settings is not None:
+                runtime.classic_link_policy_settings = link_policy_settings
+                self._record_event(
+                    "classic_link_policy_configured",
+                    adapter=self._adapter,
+                    settings=f"0x{link_policy_settings:04x}",
+                )
 
     async def _cleanup_open_failure(self) -> None:
         handle = self._handle
