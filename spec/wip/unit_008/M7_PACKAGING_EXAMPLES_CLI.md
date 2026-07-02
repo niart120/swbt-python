@@ -98,7 +98,7 @@
 | refactor-skipped | README に Windows 専用 dongle / WinUSB 注意点がある | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
 | refactor-skipped | README に確認済み構成と未確認構成が分かれている | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
 | refactor-skipped | README が `unit_006` 後の Button A / neutral observed-pass を stale な「未記録」と矛盾なく説明する | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
-| todo | examples が `tap(Button.A)` / `neutral()` の最小手順と実機承認境界を分けている | new | integration | no | fake variant を CI で確認する |
+| refactor-skipped | examples が `tap(Button.A)` / `neutral()` の最小手順と実機承認境界を分けている | new | integration | no | `examples/tap_a.py`、`examples/pairing_probe.py`、`examples/hardware_bringup.py` を `tests/integration/test_examples.py` で固定 |
 | todo | `swbt-probe adapters` が developer machine で adapter 情報を表示する | characterization | bumble | yes | adapter open を伴う場合は承認が必要 |
 | todo | `swbt-probe pair` が trace を保存する | characterization | hardware | yes | Switch-facing 動作の承認が必要 |
 
@@ -146,6 +146,8 @@
 | `uv run ruff check examples\tap_a.py tests\integration\test_examples.py` | pass | tap_a example と integration test の lint を確認した |
 | `uv run pytest tests\unit\test_readme_docs.py -q` | pass | 3 passed。README が確認済み / 未確認構成、専用 dongle / WinUSB 注意点、Button A / neutral 観測を hardware log と矛盾なく説明することを確認した |
 | `uv run ruff check tests\unit\test_readme_docs.py` | pass | README docs test の lint を確認した |
+| `uv run pytest tests\integration\test_examples.py -q` | pass | 2 passed。`tap_a` fake transport 実行と、`pairing_probe.py` / `hardware_bringup.py --help` の承認境界説明を確認した |
+| `uv run ruff check examples\tap_a.py examples\pairing_probe.py examples\hardware_bringup.py tests\integration\test_examples.py` | pass | examples 3 件と integration test の lint を確認した |
 | `uv run pytest tests/unit tests/integration` | pending | M7 実装後に local automated gate として実行する |
 | `uv run swbt-probe adapters` | pending-approval | adapter open を伴う場合は承認後に実行する |
 | `uv run swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pending-approval | Switch-facing 動作の明示承認後に実行する |

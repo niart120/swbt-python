@@ -2,12 +2,16 @@
 
 import asyncio
 import importlib.util
+import subprocess
+import sys
 from collections.abc import Awaitable
 from pathlib import Path
 from typing import Protocol, cast
 
 from swbt import Button, InputState, SwitchGamepad
 from swbt.transport.fake import FakeHidTransport
+
+EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"
 
 
 class TapAOnce(Protocol):
@@ -18,7 +22,7 @@ class TapAOnce(Protocol):
 
 
 def _load_tap_a_once() -> TapAOnce:
-    example_path = Path(__file__).resolve().parents[2] / "examples" / "tap_a.py"
+    example_path = EXAMPLES_DIR / "tap_a.py"
     spec = importlib.util.spec_from_file_location("swbt_example_tap_a", example_path)
     assert spec is not None
     assert spec.loader is not None
@@ -47,3 +51,21 @@ def test_tap_a_example_can_run_with_fake_transport() -> None:
 
     assert Button.A.name == "A"
     asyncio.run(run())
+
+
+def test_hardware_examples_help_describes_approval_boundary() -> None:
+    for example_name in ("pairing_probe.py", "hardware_bringup.py"):
+        result = subprocess.run(  # noqa: S603
+            [sys.executable, str(EXAMPLES_DIR / example_name), "--help"],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+        help_text = " ".join(result.stdout.split())
+        assert "--adapter" in result.stdout
+        assert "--trace" in result.stdout
+        assert "--timeout" in result.stdout
+        assert "explicit approval" in help_text
+        assert "cleanup" in help_text
