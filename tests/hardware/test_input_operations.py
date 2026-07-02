@@ -27,8 +27,7 @@ def test_switch_input_operation_sequence_for_manual_reflection(
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
             try:
-                await pad.open()
-                await pad.wait_connected(timeout=60.0)
+                await pad.pair(timeout=60.0)
                 await _wait_for_event(trace_path, "subcommand_reply_tx", timeout_seconds=15.0)
 
                 _record_probe_event(trace, "manual_input_checkpoint", operation="tap_a_start")
@@ -114,8 +113,7 @@ def test_switch_input_after_full_handshake_for_manual_reflection(
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
             try:
-                await pad.open()
-                await pad.wait_connected(timeout=60.0)
+                await pad.pair(timeout=60.0)
                 await _wait_for_full_handshake(trace_path, timeout_seconds=20.0)
 
                 _record_probe_event(

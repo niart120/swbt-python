@@ -23,8 +23,7 @@ def test_switch_pairing_l2cap_records_diagnostics(
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
             try:
-                await pad.open()
-                await pad.wait_connected(timeout=60.0)
+                await pad.pair(timeout=60.0)
             finally:
                 await pad.close(neutral=True)
 
@@ -75,8 +74,7 @@ def test_switch_subcommand_sequence_gets_0x21_replies(
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
             try:
-                await pad.open()
-                await pad.wait_connected(timeout=60.0)
+                await pad.pair(timeout=60.0)
                 await _wait_for_subcommand_reply_trace(
                     trace_path,
                     timeout_seconds=15.0,
@@ -109,8 +107,7 @@ def test_switch_subcommand_observation_window_replies_to_all_observed_commands(
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
             try:
-                await pad.open()
-                await pad.wait_connected(timeout=60.0)
+                await pad.pair(timeout=60.0)
                 await _wait_for_subcommand_observation_window(
                     trace_path,
                     min_observation_seconds=5.0,
