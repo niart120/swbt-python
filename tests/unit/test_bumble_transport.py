@@ -518,6 +518,54 @@ def test_bumble_close_is_idempotent() -> None:
     asyncio.run(run())
 
 
+def test_bumble_close_disables_classic_scan_before_power_off() -> None:
+    class ClosingDevice(FakeBumbleDevice):
+        def __init__(self) -> None:
+            super().__init__()
+            self.close_operations: list[str] = []
+
+        async def set_discoverable(self, discoverable: bool = True) -> None:
+            self.close_operations.append(f"discoverable:{discoverable}")
+            await super().set_discoverable(discoverable)
+
+        async def set_connectable(self, connectable: bool = True) -> None:
+            self.close_operations.append(f"connectable:{connectable}")
+            await super().set_connectable(connectable)
+
+        async def power_off(self) -> None:
+            self.close_operations.append("power_off")
+            await super().power_off()
+
+    async def run() -> None:
+        device = ClosingDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        await transport.start_advertising()
+        await transport.close()
+
+        assert device.close_operations[-3:] == [
+            "discoverable:False",
+            "connectable:False",
+            "power_off",
+        ]
+
+    asyncio.run(run())
+
+
 def test_bumble_start_advertising_powers_on_initialized_runtime() -> None:
     async def run() -> None:
         trace = StringIO()

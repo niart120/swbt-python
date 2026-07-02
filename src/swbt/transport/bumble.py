@@ -735,6 +735,8 @@ async def _default_start_advertising(runtime: _BumbleRuntime) -> None:
 
 async def _default_close_runtime(runtime: _BumbleRuntime) -> None:
     if runtime.device.powered_on:
+        await runtime.device.set_discoverable(False)
+        await runtime.device.set_connectable(False)
         await runtime.device.power_off()
 
 
