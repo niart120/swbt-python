@@ -19,6 +19,7 @@
 - Discovery visibility hold: 2026-07-02 に `usb:0` を `Pro Controller` として 90 秒間 discoverable / connectable に保持した。trace は `advertising_start`、`manual_advertising_hold_start duration_seconds=90`、`manual_advertising_hold_complete`、`transport_close_complete` を記録したが、`host_connection` は記録しなかった。外部 scanner から見えたかどうかはこの artifact だけでは確定できない。
 - Close cleanup scan disable: 2026-07-02 に close cleanup を修正後、`usb:0` を 5 秒間だけ `Pro Controller` として advertise し、close で Classic scan を停止する診断を実行した。trace は `host_connection` を記録し、debug log は close path の `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 0` が `SUCCESS` で完了したことを記録した。ユーザは iPhone 側で `Pro Controller` 表示が消えたことを目視した。
 - Context manager resource scope run: 2026-07-03 に `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で unit_015 smoke を実行した。`open()` only smoke は `transport_open_complete` と `transport_close_complete` を記録し、`advertising_start` と `host_connection` を記録しなかった。`pair()` close smoke は `advertising_start`、`connection_request`、`host_connection`、`classic_pairing`、HID control / interrupt L2CAP open、`connected`、trailing neutral `0x30`、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete` を記録した。Button A path は full observed handshake 後に `tap(Button.A)`、neutral、close まで到達し、`manual_input_checkpoint post_handshake_tap_a_complete` と `post_handshake_neutral_complete` を記録した。この pytest は on-wire sequence と checkpoint を確認するが、Switch UI 反映は自動判定しない。
+- Reconnect key store run: 2026-07-03 に `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で unit_007 reconnect keystore characterization を実行した。初回 pairing は `key_store_update status=succeeded` を記録した。key store ありの active reconnect は保存済み peer 1 件を選択し、`Device.connect(..., BR_EDR)` により `host_connection` までは到達したが、HID control / interrupt channel open 前に reason 19 で切断され、`active_reconnect_result status=timeout failure_reason=connection_timeout` になった。この active reconnect trace では `advertising_start`、`classic_pairing`、`key_store_update` は出ていない。ただし Switch UI の起動条件を trace に記録していなかったため、HOME / 通常画面で待機した active reconnect 結果としては扱わない。incoming 側は `key_store_exists=true` の状態で `route=incoming`、HID channel open、subcommand sequence を観測したが、`classic_pairing` と `key_store_update` も再度出たため、pairing-free な bond reuse としては扱わない。
 
 ## Run Entry Template
 
@@ -44,13 +45,38 @@
 
 ## Hardware Matrix
 
-| OS | Bluetooth dongle | Driver | Adapter | Switch model | Firmware | Pairing | L2CAP | Subcommands | Input reflected | Result source | Last updated | Notes |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Windows | CSR8510 A10 | WinUSB / libwdi 6.1.7600.16385 | `usb:0` | 未記録 | 未記録 | observed-pass | pass | pass for full observed M5 handshake sequence | observed-pass | 2026-07-02 M5 post-handshake input run | 2026-07-02 | `Pro Controller` / Class of Device `0x002508` で L2CAP open 後、shared timer / reply holdoff 実装の rerun で `0x02`、`0x08`、`0x10` x8、`0x03`、`0x04`、`0x40`、`0x30` x2、`0x48`、`0x21` を受信し、対応する `0x21` reply tx まで到達。続く post-handshake input run で full observed handshake 後の `tap(Button.A)` が Switch UI に反映され、neutral 後の入力残りなしをユーザが目視した |
-| Linux | 未検証 | libusb 想定 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期保証対象に含めるか未決 |
-| macOS | 未検証 | 未検証 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期検証対象外 |
+| OS | Bluetooth dongle | Driver | Adapter | Switch model | Firmware | Pairing | L2CAP | Subcommands | Input reflected | Reconnect | Result source | Last updated | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Windows | CSR8510 A10 | WinUSB / libwdi 6.1.7600.16385 | `usb:0` | 未記録 | 未記録 | observed-pass | pass | pass for full observed M5 handshake sequence | observed-pass | inconclusive; 起動条件を記録した再実行が必要 | 2026-07-03 unit_007 reconnect keystore run | 2026-07-03 | `Pro Controller` / Class of Device `0x002508` で L2CAP open 後、shared timer / reply holdoff 実装の rerun で `0x02`、`0x08`、`0x10` x8、`0x03`、`0x04`、`0x40`、`0x30` x2、`0x48`、`0x21` を受信し、対応する `0x21` reply tx まで到達。続く post-handshake input run で full observed handshake 後の `tap(Button.A)` が Switch UI に反映され、neutral 後の入力残りなしをユーザが目視した。unit_007 active reconnect は peer 選択と active attempt を記録したが、Switch UI 起動条件が未記録のため HOME / 通常画面条件の結果としては扱わない。incoming は route 分離を確認したが pairing-free bond reuse とは断定しない |
+| Linux | 未検証 | libusb 想定 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期保証対象に含めるか未決 |
+| macOS | 未検証 | 未検証 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期検証対象外 |
 
 ## Run Entries
+
+### 2026-07-03: unit_007 reconnect run with unrecorded Switch UI condition
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-007-reconnect-keystore` at `21013fb`
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed in previous Bumble debug logs for this adapter
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Initial pairing traces recorded neutral `0x30` on close. Incoming attempt recorded periodic/input `0x30` and `0x21` subcommand replies after HID channel open.
+- command / test: `uv run pytest tests\hardware\test_reconnect_keystore.py -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore --log-file .pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved with `承認`. Scope used here was adapter `usb:0`, USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising for explicit pairing and incoming observation, initial pairing, key store write, active reconnect request, HID control / interrupt channel open wait, Switch-facing output report / subcommand handling when connected, periodic report loop, neutral, disconnect request, closed event wait, and cleanup.
+- 起動条件: 未記録。この run だけでは、active reconnect 開始時の Switch が HOME / 通常アプリ画面だったのか、コントローラー探索 / 持ち方・順番を変える画面だったのかを区別できない。
+- result: pass, `2 passed in 72.56s`. Initial pairing for active reconnect wrote `.pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore\active-reconnect-key-store.json` and recorded `key_store_update status=succeeded`. The active reconnect attempt opened with `key_store_exists=true`, discovered one bonded peer, recorded `active_reconnect_attempt`, reached `host_connection` for `C8:48:05:F7:B5:21/P`, then disconnected with reason 19 before HID control / interrupt channel open. The final result was `active_reconnect_result status=timeout failure_reason=connection_timeout`; the trace did not record `advertising_start`, `classic_pairing`, or `key_store_update` during active reconnect. Incoming observation opened with `key_store_exists=true`, recorded `advertising_start`, `incoming_connection route=incoming`, HID control / interrupt `l2cap_channel_open`, `connected`, and subcommand receive/reply events. That incoming trace also recorded `classic_pairing` and `key_store_update status=succeeded`, so this run does not prove pairing-free incoming bond reuse.
+- artifact: `.pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore\active-reconnect-initial-pair.jsonl`
+- artifact: `.pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore\active-reconnect-attempt.jsonl`
+- artifact: `.pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore\incoming-reconnect-initial-pair.jsonl`
+- artifact: `.pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore\incoming-reconnect-attempt.jsonl`
+- artifact: `.pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore\pytest-debug.log`
+- cleanup: all test paths closed the gamepad in `finally`. Active reconnect recorded `transport_close_complete` after timeout handling. Incoming attempt recorded `disconnect_request status=requested`, `disconnect_request_terminal status=closed`, and `transport_close_complete`.
+- notes: Treat this run as inconclusive for active reconnect success or failure under the intended user scenario. The next run must record the operator condition: initial pairing starts from the controller search / change grip order screen; active reconnect starts after returning to HOME or another normal screen, without controller search UI open. Some incoming close paths recorded post-close `ClosedError` diagnostics while queued report work was draining; cleanup still reached `transport_close_complete`.
 
 ### 2026-07-03: unit_015 resource open did not advertise, explicit pair and Button A path passed
 

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -7,12 +8,22 @@ import pytest
 
 from swbt import DiagnosticsConfig, SwitchGamepad
 
+_INITIAL_PAIRING_OPERATOR_WAIT_SECONDS = 5.0
+_ACTIVE_RECONNECT_OPERATOR_WAIT_SECONDS = 10.0
+_INCOMING_OPERATOR_WAIT_SECONDS = 5.0
+
 
 @pytest.mark.hardware
 def test_switch_active_reconnect_with_key_store_records_result(
     swbt_bumble_adapter: str,
     swbt_hardware_artifact_dir: Path,
 ) -> None:
+    """Characterize active reconnect from a stored key.
+
+    A pytest pass proves key-store creation, active reconnect attempt/result
+    trace, and cleanup only. `timeout` or `failed` is a valid characterized
+    result and must not be reported as active reconnect success.
+    """
     key_store_path = swbt_hardware_artifact_dir / "active-reconnect-key-store.json"
     pair_trace_path = swbt_hardware_artifact_dir / "active-reconnect-initial-pair.jsonl"
     reconnect_trace_path = swbt_hardware_artifact_dir / "active-reconnect-attempt.jsonl"
@@ -25,6 +36,12 @@ def test_switch_active_reconnect_with_key_store_records_result(
             trace_path=pair_trace_path,
         )
         with reconnect_trace_path.open("w", encoding="utf-8") as trace:
+            await _wait_for_operator_condition(
+                trace,
+                operation="operator_prepare_active_reconnect",
+                expected_switch_screen="home_or_normal_screen_not_change_grip_order",
+                wait_seconds=_ACTIVE_RECONNECT_OPERATOR_WAIT_SECONDS,
+            )
             pad = SwitchGamepad(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
@@ -52,6 +69,12 @@ def test_switch_active_reconnect_with_key_store_records_result(
 
     assert key_store_path.exists()
     assert _contains_event(pair_events, "key_store_update", status="succeeded")
+    assert _contains_event(
+        reconnect_events,
+        "manual_reconnect_checkpoint",
+        operation="operator_prepare_active_reconnect",
+        expected_switch_screen="home_or_normal_screen_not_change_grip_order",
+    )
     assert _contains_event(reconnect_events, "bonded_peers_discovered", selection="selected")
     assert _contains_event(reconnect_events, "active_reconnect_attempt", route="active_reconnect")
     result_event = _first_event(reconnect_events, "active_reconnect_result")
@@ -68,10 +91,16 @@ def test_switch_active_reconnect_with_key_store_records_result(
 
 
 @pytest.mark.hardware
-def test_switch_incoming_bond_reuse_trace_stays_separate_from_active_reconnect(
+def test_switch_incoming_connection_trace_stays_separate_from_active_reconnect(
     swbt_bumble_adapter: str,
     swbt_hardware_artifact_dir: Path,
 ) -> None:
+    """Characterize incoming connection trace separately from active reconnect.
+
+    A pytest pass proves that this route does not emit active reconnect events.
+    It does not prove pairing-free incoming bond reuse; `classic_pairing` and
+    `key_store_update` in the trace must be classified in the hardware log.
+    """
     key_store_path = swbt_hardware_artifact_dir / "incoming-reconnect-key-store.json"
     pair_trace_path = swbt_hardware_artifact_dir / "incoming-reconnect-initial-pair.jsonl"
     incoming_trace_path = swbt_hardware_artifact_dir / "incoming-reconnect-attempt.jsonl"
@@ -90,6 +119,12 @@ def test_switch_incoming_bond_reuse_trace_stays_separate_from_active_reconnect(
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
             try:
+                await _wait_for_operator_condition(
+                    trace,
+                    operation="operator_prepare_incoming_connection",
+                    expected_switch_screen="controller_search_or_change_grip_order",
+                    wait_seconds=_INCOMING_OPERATOR_WAIT_SECONDS,
+                )
                 await pad.pair(timeout=60.0)
                 await asyncio.sleep(1.0)
             finally:
@@ -103,6 +138,12 @@ def test_switch_incoming_bond_reuse_trace_stays_separate_from_active_reconnect(
 
     assert key_store_path.exists()
     assert _contains_event(pair_events, "key_store_update", status="succeeded")
+    assert _contains_event(
+        incoming_events,
+        "manual_reconnect_checkpoint",
+        operation="operator_prepare_incoming_connection",
+        expected_switch_screen="controller_search_or_change_grip_order",
+    )
     assert _contains_event(incoming_events, "incoming_connection", route="incoming")
     assert "active_reconnect_attempt" not in incoming_event_names
     assert "active_reconnect_result" not in incoming_event_names
@@ -116,6 +157,12 @@ async def _pair_with_key_store(
     trace_path: Path,
 ) -> None:
     with trace_path.open("w", encoding="utf-8") as trace:
+        await _wait_for_operator_condition(
+            trace,
+            operation="operator_prepare_initial_pairing",
+            expected_switch_screen="controller_search_or_change_grip_order",
+            wait_seconds=_INITIAL_PAIRING_OPERATOR_WAIT_SECONDS,
+        )
         pad = SwitchGamepad(
             adapter=adapter,
             key_store_path=str(key_store_path),
@@ -154,6 +201,29 @@ def _delete_file_if_exists(path: Path) -> None:
         path.unlink()
     except FileNotFoundError:
         return
+
+
+async def _wait_for_operator_condition(
+    trace: TextIO,
+    *,
+    operation: str,
+    expected_switch_screen: str,
+    wait_seconds: float,
+) -> None:
+    _record_probe_event(
+        trace,
+        "manual_reconnect_checkpoint",
+        operation=operation,
+        expected_switch_screen=expected_switch_screen,
+        wait_seconds=wait_seconds,
+    )
+    sys.stderr.write(
+        "SWBT hardware: "
+        f"{operation}; expected_switch_screen={expected_switch_screen}; "
+        f"waiting {wait_seconds:.0f}s\n"
+    )
+    sys.stderr.flush()
+    await asyncio.sleep(wait_seconds)
 
 
 def _record_probe_event(trace: TextIO, event: str, **fields: object) -> None:
