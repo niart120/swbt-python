@@ -69,8 +69,8 @@
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
 | Switch HID / report bytes | required | done for neutral bytes / no new bytes | trailing neutral は既存 `0x30` input report を使う。新しい report layout は追加しない |
-| Bumble / transport | required | done for source, unit tests, and hardware | Bumble 0.0.230 の `disconnect_interrupt_channel()`、`disconnect_control_channel()`、`on_l2cap_channel_close()` を source fact として確認し、`BumbleHidTransport.request_disconnect()` と L2CAP close bridge を unit test で固定した。2026-07-02 の修正前 hardware run では Switch 実機で L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで観測したが、`transport_close_complete` が欠落した。race 修正後の rerun では `connected`、neutral `0x30`、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete` を観測した |
-| OS / driver / adapter | required | observed | Windows / CSR8510 A10 / WinUSB / `usb:0` で、修正後の connected close ordering を観測した。artifact は `.pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity\close-disconnect.jsonl` |
+| Bumble / transport | required | done for source, unit tests, and hardware | Bumble 0.0.230 の `disconnect_interrupt_channel()`、`disconnect_control_channel()`、`on_l2cap_channel_close()` を source fact として確認し、`BumbleHidTransport.request_disconnect()` と L2CAP close bridge を unit test で固定した。2026-07-02 の修正前 hardware run では Switch 実機で L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで観測したが、`transport_close_complete` が欠落した。race 修正後の rerun では `connected`、neutral `0x30`、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete` を観測した。後続の visibility 調査で Bumble 0.0.230 `Device.power_off()` が Classic scan を明示停止しないことを source fact として確認し、`BumbleHidTransport.close()` が `set_discoverable(False)` / `set_connectable(False)` を呼ぶことを unit test と hardware で固定した |
+| OS / driver / adapter | required | observed | Windows / CSR8510 A10 / WinUSB / `usb:0` で、修正後の connected close ordering を観測した。artifact は `.pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity\close-disconnect.jsonl` と `.pytest_cache\hardware\unit_014\20260702-220940-close-disconnect-after-scan-cleanup\close-disconnect.jsonl` |
 
 ### 5.1 監査済み事実 / 仮説
 
@@ -79,6 +79,8 @@
 | `SwitchGamepad.close()` は trailing neutral、report loop stop、`request_disconnect()`、closed event wait or 250 ms timeout、transport close の順で処理する | implementation fact | `src/swbt/gamepad.py`, `tests/integration/test_switch_gamepad_fake_transport.py` | current |
 | `HidDeviceTransport` は `request_disconnect()` を持ち、`requested` / `unavailable` / `failed` を `DisconnectRequestResult` で返す | implementation fact | `src/swbt/transport/base.py`, `tests/unit/test_public_api_boundary.py` | current |
 | `BumbleHidTransport.close()` は runtime close と handle close を行い、`transport_close_complete` を記録する | implementation fact | `src/swbt/transport/bumble.py` | current |
+| `BumbleHidTransport.close()` は `power_off()` 前に `set_discoverable(False)` / `set_connectable(False)` を呼び、Classic inquiry / page scan を明示停止する | implementation fact / hardware observation | `src/swbt/transport/bumble.py`, `tests/unit/test_bumble_transport.py`, `.pytest_cache/hardware/unit_014/20260702-220455-close-scan-disable/close-scan-disable-debug.log` | current |
+| Bumble 0.0.230 `Device.power_off()` は Classic scan を明示停止せず、`host.flush()` と `powered_on=False` だけを行う | source fact | `.venv/Lib/site-packages/bumble/device.py:3027` | local package source |
 | Bumble 0.0.230 `Device` は control / interrupt channel 別の disconnect helper を持つ | source fact | `.venv/Lib/site-packages/bumble/hid.py:257`, `.venv/Lib/site-packages/bumble/hid.py:264` | local package source |
 | Bumble 0.0.230 `Device` は L2CAP channel close callback で control / interrupt channel field を `None` にする | source fact | `.venv/Lib/site-packages/bumble/hid.py:298` | local package source |
 | swbt-daemon は shutdown graceful disconnect で neutral、HID disconnect request、closed event or 250 ms timeout、power-off を分けた | implementation fact / hardware observation | `E:/documents/VSCodeWorkspace/swbt-daemon/work-units/complete/local_100/SHUTDOWN_GRACEFUL_DISCONNECT.md` | reference |
@@ -116,6 +118,7 @@
 | done | Bumble 0.0.230 source に基づき control / interrupt channel disconnect helper の呼び出しを unit test で固定する | new | unit | no | `test_bumble_request_disconnect_calls_interrupt_then_control_helpers`。片側 channel と helper failure も固定 |
 | done | diagnostics trace が requested / closed / timeout / unavailable / failed を分ける | new | integration | no | `disconnect_request` と `disconnect_request_terminal` を fake integration で確認 |
 | done | hardware run で connected close の neutral、disconnect request or unavailable、closed or timeout、transport close ordering を記録する | characterization | hardware | yes | 明示承認後に実行。修正後 run は `connected`、neutral `0x30`、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete`、`manual_close_checkpoint close_complete` まで観測 |
+| done | close 後に Classic scan が controller に残らない | regression | unit / hardware | yes | `test_bumble_close_disables_classic_scan_before_power_off` で固定。hardware diagnostic は close path の final `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 0` `SUCCESS` と、iPhone 側の `Pro Controller` 表示消滅を確認 |
 
 ## 8. 設計メモ
 
@@ -123,6 +126,7 @@
 - `close(neutral=True)` の主目的は入力安全と resource cleanup である。remote close request の確認は品質向上だが、失敗しても `close()` が戻れない設計にしない。
 - daemon reference は BTstack の `hid_device_disconnect(hid_cid)` 由来であり、Bumble では同一 API ではない。事実として再利用するのは「neutral と link close と adapter close を分ける設計」であって、関数名や event 名をそのまま移植しない。
 - Bumble の channel 別 disconnect helper は interrupt、control の順で呼ぶ。片側 channel だけ残っている場合は残存 channel だけ requested として扱う。
+- Bumble 0.0.230 の `Device.power_off()` だけでは Classic scan disable が発行されないため、runtime close では `power_off()` 前に `set_discoverable(False)` / `set_connectable(False)` を明示する。
 - `disconnecting` 中の新規 input command は `ReportLoop` 停止後なら `ClosedError`、停止前なら既存の state update として扱う。public API として disconnecting 中の command ordering は保証しない。
 - callback 解除 surface は追加していない。host disconnect では callback 側が transport を閉じる。user close 中に disconnected callback が来た場合は、callback 側では neutral / report loop stop まで行い、final transport close は `close()` 本体に残す。
 
@@ -155,10 +159,18 @@
 | `uv run pytest tests\unit\test_bumble_transport.py tests\unit\test_public_api_boundary.py -q` | pass | 27 passed in 0.43s |
 | `uv run pytest tests/unit -q` | pass | 104 passed in 0.56s |
 | `uv run pytest tests/integration -q` | pass | 31 passed in 0.49s |
+| `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_close_disables_classic_scan_before_power_off tests\unit\test_bumble_transport.py::test_bumble_close_is_idempotent -q` | pass | 2 passed。close が discoverable / connectable を false にしてから power off することを固定した |
+| `uv run ruff format --check src\swbt\transport\bumble.py tests\unit\test_bumble_transport.py` | pass | 2 files already formatted |
+| `uv run ruff check src\swbt\transport\bumble.py tests\unit\test_bumble_transport.py` | pass | All checks passed |
+| `uv run pytest tests\unit\test_bumble_transport.py -q` | pass | 23 passed in 0.25s。Classic scan disable cleanup test 追加後 |
+| `uv run pytest tests\unit -q` | pass | 105 passed in 0.53s。Classic scan disable cleanup test 追加後 |
+| `uv run pytest tests\integration -q` | pass | 31 passed in 0.49s。Classic scan disable cleanup 追加後 |
 | `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a --log-file .pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | 修正前 run。`connected`、trailing neutral、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで到達したが、`transport_close_complete` 欠落で fail |
 | `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix --log-file .pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | 修正後 run。`advertising_start` 後に `host_connection` が来ず、60 秒で `ConnectionTimeoutError` |
 | `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry --log-file .pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | 修正後 rerun。1 回目と同じ pre-connection timeout。connected close ordering は未検証 |
 | `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity --log-file .pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity\pytest-debug.log --log-file-level=DEBUG -q -s` | pass | 1 passed, 1 warning in 6.80s。`connected`、neutral `0x30`、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete`、`manual_close_checkpoint close_complete` を観測 |
+| one-off `uv run python -` close scan disable diagnostic | pass | artifact `.pytest_cache\hardware\unit_014\20260702-220455-close-scan-disable\`。close path で final `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 0` `SUCCESS` を確認。ユーザは iPhone 側で `Pro Controller` 表示消滅を目視した |
+| `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-220940-close-disconnect-after-scan-cleanup --log-file .pytest_cache\hardware\unit_014\20260702-220940-close-disconnect-after-scan-cleanup\pytest-debug.log --log-file-level=DEBUG -q -s` | pass | 1 passed, 1 warning in 3.02s。`host_connection`、`classic_pairing`、HID control / interrupt L2CAP `connected`、neutral `0x30`、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete`、final `scan_enable: 0` `SUCCESS` を観測。この run は full observed subcommand handshake 後 close ではない |
 
 ## 11. 実機実行条件
 
