@@ -139,7 +139,7 @@ class SwitchGamepad:
 
 ```python
 async def open(self) -> None: ...
-async def pair(self, timeout: float | None = None) -> ConnectionResult: ...
+async def pair(self, timeout: float | None = None) -> None: ...
 async def reconnect(self, timeout: float | None = None) -> ConnectionResult: ...
 async def connect(
     self,
@@ -147,7 +147,6 @@ async def connect(
     timeout: float | None = None,
     allow_pairing: bool = False,
 ) -> ConnectionResult: ...
-async def wait_connected(self, timeout: float | None = None) -> None: ...
 async def close(self, *, neutral: bool = True) -> None: ...
 ```
 
@@ -159,9 +158,9 @@ async def close(self, *, neutral: bool = True) -> None: ...
 
 `connect()` は通常利用向けの入口である。保存済み bond があれば `reconnect()` を優先し、bond がない場合は `allow_pairing=True` のときだけ `pair()` へ進む。
 
-`wait_connected()` は低水準の待機 helper であり、接続戦略を開始しない。`close()` は送信 loop と transport を停止する。
+`close()` は送信 loop と transport を停止する。
 
-接続 API の戻り値は `ConnectionResult` とする。文字列 `Literal` ではなく、接続経路を表す enum と、bond reuse / pairing fallback の有無を持つ小さな値オブジェクトにする。詳細な field は M6 の key store / reconnect 実装時に固定する。
+`connect()` / `reconnect()` の戻り値は `ConnectionResult` とする。文字列 `Literal` ではなく、接続経路を表す enum と、bond reuse / pairing fallback の有無を持つ小さな値オブジェクトにする。詳細な field は M6 の key store / reconnect 実装時に固定する。`pair()` は初回 pairing の明示入口であり、接続戦略の選択結果は返さない。
 
 `close()` は冪等にする。複数回呼び出しても例外を出さず、後始末が未完了の箇所だけを処理する。
 

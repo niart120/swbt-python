@@ -91,7 +91,7 @@ M7 packaging / examples / CLI
 
 - `async with SwitchGamepad(transport=fake)` を実装する
 - `open()` / `close()` を実装する
-- `wait_connected()` を fake transport で検証できるようにする
+- fake transport の connected callback で `connected` 状態へ遷移することを検証する
 - `set_input()` / `neutral()` を実装する
 - `press()` / `release()` / `tap()` を実装する
 - `ReportLoop` で periodic `0x30` を送る

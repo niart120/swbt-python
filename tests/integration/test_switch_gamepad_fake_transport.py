@@ -80,9 +80,8 @@ def test_async_context_exception_requests_disconnect_and_reraises() -> None:
         """Exception raised inside the gamepad context."""
 
     async def raise_inside_context(transport: FakeHidTransport) -> None:
-        async with SwitchGamepad(transport=transport) as pad:
+        async with SwitchGamepad(transport=transport):
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
             raise ExpectedError
 
     async def run() -> None:
@@ -109,7 +108,6 @@ def test_press_buttons_are_reflected_in_periodic_report() -> None:
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
             await pad.press(Button.L, Button.R)
 
             start_count = len(transport.sent_interrupt_reports)
@@ -128,7 +126,6 @@ def test_release_buttons_clears_next_periodic_report() -> None:
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
 
             await pad.press(Button.L, Button.R)
             pressed_count = len(transport.sent_interrupt_reports)
@@ -149,7 +146,6 @@ def test_release_only_clears_requested_buttons_in_next_periodic_report() -> None
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
 
             await pad.press(Button.A, Button.L, Button.R)
             pressed_count = len(transport.sent_interrupt_reports)
@@ -171,7 +167,6 @@ def test_set_input_updates_snapshot_and_next_periodic_report() -> None:
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
             await pad.set_input(state)
 
             assert pad.snapshot() == state
@@ -193,7 +188,6 @@ def test_set_input_reflects_left_and_right_sticks_in_next_periodic_report() -> N
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
             await pad.set_input(state)
 
             start_count = len(transport.sent_interrupt_reports)
@@ -213,7 +207,6 @@ def test_neutral_updates_snapshot_and_clears_next_periodic_report() -> None:
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
             await pad.set_input(pressed)
             pressed_count = len(transport.sent_interrupt_reports)
             pressed_reports = await transport.wait_for_interrupt_report_count(pressed_count + 1)
@@ -234,9 +227,8 @@ def test_output_report_injection_sends_subcommand_reply() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+        async with SwitchGamepad(transport=transport, report_period_us=1000):
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
 
             await transport.inject_interrupt_data(request_device_info)
             reply = await transport.wait_for_interrupt_report_id(0x21)
@@ -252,9 +244,8 @@ def test_control_output_report_injection_sends_subcommand_reply() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+        async with SwitchGamepad(transport=transport, report_period_us=1000):
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
 
             await transport.inject_control_data(request_device_info)
             reply = await transport.wait_for_interrupt_report_id(0x21)
@@ -270,9 +261,8 @@ def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with SwitchGamepad(transport=transport, report_period_us=100_000) as pad:
+        async with SwitchGamepad(transport=transport, report_period_us=100_000):
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
 
             start_count = len(transport.sent_interrupt_reports)
             await transport.inject_interrupt_data(request_device_info)
@@ -296,7 +286,6 @@ def test_report_tx_counter_distinguishes_0x21_and_0x30() -> None:
             report_period_us=1000,
         ) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
             await pad.press(Button.A)
             await transport.wait_for_interrupt_report_id(0x30)
 
@@ -335,9 +324,8 @@ def test_output_report_rx_and_subcommand_rx_share_packet_id() -> None:
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
             report_period_us=1000,
-        ) as pad:
+        ):
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
             await transport.inject_interrupt_data(request_device_info)
             await transport.wait_for_interrupt_report_id(0x21)
 
@@ -372,7 +360,6 @@ def test_status_returns_report_counters_last_subcommand_and_raw_rumble() -> None
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
             await pad.tap(Button.A, duration=0)
 
             await transport.inject_interrupt_data(request_device_info)
@@ -394,7 +381,6 @@ def test_close_with_neutral_records_trailing_neutral_report() -> None:
 
         await pad.open()
         await transport.connect()
-        await pad.wait_connected(timeout=1.0)
         await pad.press(Button.A)
         await pad.close(neutral=True)
 
@@ -412,7 +398,6 @@ def test_connected_close_requests_disconnect_after_trailing_neutral() -> None:
 
         await pad.open()
         await transport.connect()
-        await pad.wait_connected(timeout=1.0)
         await pad.press(Button.A)
 
         await pad.close(neutral=True)
@@ -444,7 +429,6 @@ def test_close_waits_for_disconnect_request_closed_event_once() -> None:
 
         await pad.open()
         await transport.connect()
-        await pad.wait_connected(timeout=1.0)
 
         close_task = asyncio.create_task(pad.close(neutral=True))
         await transport.wait_for_disconnect_request()
@@ -487,7 +471,6 @@ def test_close_request_disconnected_callback_leaves_final_close_to_user_close() 
 
         await pad.open()
         await transport.connect()
-        await pad.wait_connected(timeout=1.0)
 
         close_task = asyncio.create_task(pad.close(neutral=True))
         await transport.wait_for_disconnect_request()
@@ -537,7 +520,6 @@ def test_close_request_timeout_records_terminal_state_and_closes_transport(
 
         await pad.open()
         await transport.connect()
-        await pad.wait_connected(timeout=1.0)
         await pad.close(neutral=True)
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
@@ -600,7 +582,6 @@ def test_close_request_failure_records_failure_and_closes_transport() -> None:
 
         await pad.open()
         await transport.connect()
-        await pad.wait_connected(timeout=1.0)
         await pad.close(neutral=True)
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
@@ -625,7 +606,6 @@ def test_host_disconnect_racing_user_close_closes_once_and_neutralizes_state() -
 
         await pad.open()
         await transport.connect()
-        await pad.wait_connected(timeout=1.0)
         await pad.press(Button.A)
 
         close_task = asyncio.create_task(pad.close(neutral=True))
@@ -647,22 +627,19 @@ def test_host_disconnect_racing_user_close_closes_once_and_neutralizes_state() -
     asyncio.run(run())
 
 
-def test_fake_l2cap_channels_must_both_open_before_wait_connected_completes() -> None:
+def test_fake_l2cap_channels_must_both_open_before_connection_is_complete() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
         async with SwitchGamepad(transport=transport) as pad:
-            connected = asyncio.create_task(pad.wait_connected(timeout=1.0))
-            await asyncio.sleep(0)
-
             await transport.open_l2cap_channel("control")
             await asyncio.sleep(0)
 
-            assert connected.done() is False
+            assert pad.status().connection_state == "opened"
 
             await transport.open_l2cap_channel("interrupt")
-            await asyncio.wait_for(connected, timeout=0.1)
 
+            assert pad.status().connection_state == "connected"
             assert transport.events == (
                 "open",
                 "l2cap_control_open",
@@ -679,7 +656,6 @@ def test_disconnect_callback_neutralizes_state_and_stops_report_loop() -> None:
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
             await pad.press(Button.A)
             await transport.wait_for_interrupt_report_id(0x30)
 
@@ -693,29 +669,6 @@ def test_disconnect_callback_neutralizes_state_and_stops_report_loop() -> None:
             assert transport.is_open is False
             assert transport.close_count == 1
             assert len(transport.sent_interrupt_reports) == report_count
-
-    asyncio.run(run())
-
-
-def test_wait_connected_timeout_records_opened_failure_position_in_trace() -> None:
-    async def run() -> None:
-        trace = StringIO()
-        transport = FakeHidTransport()
-
-        async with SwitchGamepad(
-            diagnostics=DiagnosticsConfig(trace_writer=trace),
-            transport=transport,
-        ) as pad:
-            with pytest.raises(ConnectionTimeoutError):
-                await pad.wait_connected(timeout=0.001)
-
-        events = [json.loads(line) for line in trace.getvalue().splitlines()]
-
-        assert {
-            "event": "connection_timeout",
-            "state": "opened",
-            "timeout": 0.001,
-        } in events
 
     asyncio.run(run())
 
@@ -755,7 +708,6 @@ def test_concurrent_press_and_release_preserve_button_state() -> None:
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
 
             await asyncio.gather(
                 pad.press(Button.L),
@@ -786,7 +738,6 @@ def test_callback_exception_is_recorded_and_close_cleans_up() -> None:
 
         await pad.open()
         await transport.connect()
-        await pad.wait_connected(timeout=1.0)
 
         await transport.inject_interrupt_data(unsupported_subcommand)
         status = pad.status()
@@ -814,7 +765,6 @@ def test_callback_exception_is_recorded_in_trace_and_status() -> None:
 
         await pad.open()
         await transport.connect()
-        await pad.wait_connected(timeout=1.0)
 
         await transport.inject_interrupt_data(unsupported_subcommand)
 
@@ -848,7 +798,6 @@ def test_tap_button_a_records_press_and_release_reports() -> None:
 
         async with SwitchGamepad(transport=transport) as pad:
             await transport.connect()
-            await pad.wait_connected(timeout=1.0)
 
             await pad.tap(Button.A, duration=0)
 
@@ -862,30 +811,14 @@ def test_tap_button_a_records_press_and_release_reports() -> None:
     asyncio.run(run())
 
 
-def test_wait_connected_completes_after_fake_connected_callback() -> None:
+def test_fake_connected_callback_sets_connected_status() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
         async with SwitchGamepad(transport=transport) as pad:
-            connected = asyncio.create_task(pad.wait_connected(timeout=1.0))
-            await asyncio.sleep(0)
-
-            assert connected.done() is False
-
             await transport.connect()
-            await asyncio.wait_for(connected, timeout=0.1)
 
+            assert pad.status().connection_state == "connected"
             assert transport.events == ("open", "connected")
-
-    asyncio.run(run())
-
-
-def test_wait_connected_timeout_raises_connection_timeout_error() -> None:
-    async def run() -> None:
-        transport = FakeHidTransport()
-
-        async with SwitchGamepad(transport=transport) as pad:
-            with pytest.raises(ConnectionTimeoutError):
-                await pad.wait_connected(timeout=0.001)
 
     asyncio.run(run())

@@ -112,10 +112,6 @@ class SwitchGamepad:
             raise ClosedError(msg)
         self._connection_state = "advertising"
         await self._transport.start_advertising()
-        await self.wait_connected(timeout=timeout)
-
-    async def wait_connected(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
-        """Wait until the transport reports a completed connection."""
         if timeout is None:
             await self._connected_event.wait()
             return
