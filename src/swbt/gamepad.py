@@ -11,7 +11,9 @@ from swbt.protocol.output_report import OutputReportParser
 from swbt.protocol.subcommand import SubcommandResponder, UnsupportedSubcommandError
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
-from swbt.transport.base import HidDeviceTransport
+from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
+
+DISCONNECT_REQUEST_TIMEOUT_SECONDS = 0.25
 
 
 @dataclass(frozen=True)
@@ -54,8 +56,10 @@ class SwitchGamepad:
         self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
+        self._disconnect_event = asyncio.Event()
         self._connection_state = "closed"
         self._is_open = False
+        self._close_in_progress = False
 
     async def __aenter__(self) -> "SwitchGamepad":
         """Open the gamepad for an async context manager."""
@@ -124,15 +128,35 @@ class SwitchGamepad:
         async with self._lifecycle_lock:
             if not self._is_open or self._transport is None:
                 return
-            self._connection_state = "disconnecting"
-            if neutral:
-                await self._send_trailing_neutral_if_connected()
-            if self._report_loop is not None:
-                await self._report_loop.stop()
-            await self._transport.close()
-            self._report_loop = None
-            self._is_open = False
-            self._connection_state = "closed"
+            self._close_in_progress = True
+            try:
+                self._connection_state = "disconnecting"
+                if neutral:
+                    await self._send_trailing_neutral_if_connected()
+                if self._report_loop is not None:
+                    await self._report_loop.stop()
+                self._disconnect_event.clear()
+                disconnect_result = await self._transport.request_disconnect()
+                self._record_disconnect_request_result(disconnect_result)
+                if disconnect_result.status == "requested":
+                    disconnect_closed = await self._wait_for_disconnect_request_closed()
+                    if disconnect_closed:
+                        self._diagnostics.record_event(
+                            "disconnect_request_terminal",
+                            status="closed",
+                        )
+                    else:
+                        self._diagnostics.record_event(
+                            "disconnect_request_terminal",
+                            status="timeout",
+                            timeout=DISCONNECT_REQUEST_TIMEOUT_SECONDS,
+                        )
+                await self._transport.close()
+                self._report_loop = None
+                self._is_open = False
+                self._connection_state = "closed"
+            finally:
+                self._close_in_progress = False
 
     async def press(self, *buttons: Button) -> None:
         """Add buttons to the current input state."""
@@ -192,6 +216,26 @@ class SwitchGamepad:
             msg = "gamepad is not open"
             raise ClosedError(msg)
         await self._report_loop.send_current_input()
+
+    async def _wait_for_disconnect_request_closed(self) -> bool:
+        try:
+            async with asyncio.timeout(DISCONNECT_REQUEST_TIMEOUT_SECONDS):
+                await self._disconnect_event.wait()
+                return True
+        except TimeoutError:
+            return False
+
+    def _record_disconnect_request_result(self, result: DisconnectRequestResult) -> None:
+        fields: dict[str, object] = {"status": result.status}
+        if result.channels:
+            fields["channels"] = list(result.channels)
+        if result.reason is not None:
+            fields["reason"] = result.reason
+        if result.error_type is not None:
+            fields["error_type"] = result.error_type
+        if result.message is not None:
+            fields["message"] = result.message
+        self._diagnostics.record_event("disconnect_request", **fields)
 
     async def _handle_interrupt_data(self, payload: bytes) -> None:
         await self._handle_output_report_data(payload)
@@ -256,14 +300,19 @@ class SwitchGamepad:
     async def _handle_disconnected(self, reason: int | None) -> None:
         self._diagnostics.record_event("disconnected", reason=reason)
         self._connected_event.clear()
-        await self._state_store.neutral()
-        if self._report_loop is not None:
-            await self._report_loop.stop()
-            self._report_loop = None
-        if self._transport is not None and self._is_open:
-            await self._transport.close()
-        self._is_open = False
-        self._connection_state = "closed"
+        try:
+            await self._state_store.neutral()
+            if self._report_loop is not None:
+                await self._report_loop.stop()
+                self._report_loop = None
+            if self._close_in_progress:
+                return
+            if self._transport is not None and self._is_open:
+                await self._transport.close()
+            self._is_open = False
+            self._connection_state = "closed"
+        finally:
+            self._disconnect_event.set()
 
     def _ensure_transport(self) -> HidDeviceTransport:
         if self._transport is None:

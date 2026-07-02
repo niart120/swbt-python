@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import platform
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profile import ProControllerProfile
+from swbt.transport.base import DisconnectRequestResult
 
 if TYPE_CHECKING:
     from bumble.transport.common import TransportSink, TransportSource
@@ -123,6 +125,12 @@ class _BumbleHidRuntime(Protocol):
     def send_control_data(self, report_type: int, data: bytes) -> None:
         """Send a control-channel HID data message."""
 
+    async def disconnect_interrupt_channel(self) -> None:
+        """Request interrupt-channel disconnection."""
+
+    async def disconnect_control_channel(self) -> None:
+        """Request control-channel disconnection."""
+
 
 @dataclass
 class _BumbleRuntime:
@@ -175,6 +183,7 @@ class BumbleHidTransport:
         self._connected_callback: ConnectedCallback | None = None
         self._disconnected_callback: DisconnectedCallback | None = None
         self._l2cap_connected_emitted = False
+        self._disconnected_callback_emitted = False
 
     async def open(self) -> None:
         """Open the configured Bumble adapter."""
@@ -240,10 +249,47 @@ class BumbleHidTransport:
         self._handle = None
         self._runtime = None
         self._l2cap_connected_emitted = False
+        self._disconnected_callback_emitted = False
         if runtime is not None:
             await self._close_runtime(runtime)
         await handle.close()
         self._record_event("transport_close_complete", adapter=self._adapter)
+
+    async def request_disconnect(self) -> DisconnectRequestResult:
+        """Request HID channel disconnection through Bumble when channels exist."""
+        self._require_open()
+        if self._runtime is None:
+            return DisconnectRequestResult(
+                status="unavailable",
+                reason="runtime_not_initialized",
+            )
+        hid_device = self._runtime.hid_device
+        disconnect_steps: list[tuple[str, Callable[[], Awaitable[None]]]] = []
+        if hid_device.l2cap_intr_channel is not None:
+            disconnect_steps.append(("interrupt", hid_device.disconnect_interrupt_channel))
+        if hid_device.l2cap_ctrl_channel is not None:
+            disconnect_steps.append(("control", hid_device.disconnect_control_channel))
+        if not disconnect_steps:
+            return DisconnectRequestResult(
+                status="unavailable",
+                reason="channels_not_connected",
+            )
+        requested_channels: list[str] = []
+        for channel_name, disconnect_channel in disconnect_steps:
+            try:
+                await disconnect_channel()
+            except Exception as error:  # noqa: BLE001
+                return DisconnectRequestResult(
+                    status="failed",
+                    channels=tuple(requested_channels),
+                    error_type=type(error).__name__,
+                    message=str(error),
+                )
+            requested_channels.append(channel_name)
+        return DisconnectRequestResult(
+            status="requested",
+            channels=tuple(requested_channels),
+        )
 
     async def send_interrupt(self, payload: bytes) -> None:
         """Send one interrupt report."""
@@ -332,9 +378,20 @@ class BumbleHidTransport:
                 link_type=link_type,
                 peer_address=str(bd_addr),
             )
-            original_connection_request(bd_addr, class_of_device, link_type)
+            _call_connection_request_without_deprecated_sync_command(
+                device,
+                original_connection_request,
+                bd_addr,
+                class_of_device,
+                link_type,
+            )
 
         device.on_connection_request = on_connection_request
+        _replace_host_connection_request_listener(
+            device,
+            original_connection_request,
+            on_connection_request,
+        )
 
     def _register_l2cap_lifecycle_bridge(self, hid_device: _BumbleHidRuntime) -> None:
         original_open = hid_device.on_l2cap_channel_open
@@ -349,12 +406,14 @@ class BumbleHidTransport:
             original_close(l2cap_channel)
             self._record_l2cap_channel_event("l2cap_channel_close", l2cap_channel)
             self._l2cap_connected_emitted = False
+            self._notify_disconnected_if_channels_closed()
 
         hid_device.on_l2cap_channel_open = on_l2cap_channel_open
         hid_device.on_l2cap_channel_close = on_l2cap_channel_close
 
     def _handle_device_connection(self, connection: object) -> None:
         self._l2cap_connected_emitted = False
+        self._disconnected_callback_emitted = False
         fields: dict[str, object] = {"adapter": self._adapter}
         connection_handle = getattr(connection, "handle", None)
         peer_address = getattr(connection, "peer_address", None)
@@ -516,8 +575,7 @@ class BumbleHidTransport:
     def _handle_device_disconnection(self, reason: int | None = None) -> None:
         self._l2cap_connected_emitted = False
         self._record_event("disconnected", adapter=self._adapter, reason=reason)
-        if self._disconnected_callback is not None:
-            self._dispatch_disconnected_callback(reason)
+        self._notify_disconnected_once(reason)
 
     def _dispatch_interrupt_data(self, payload: bytes) -> None:
         report = _decode_hidp_output_report(payload)
@@ -576,6 +634,21 @@ class BumbleHidTransport:
         self._l2cap_connected_emitted = True
         self._record_event("connected", adapter=self._adapter)
         self._dispatch_connected_callback()
+
+    def _notify_disconnected_if_channels_closed(self) -> None:
+        if self._runtime is None:
+            return
+        hid_device = self._runtime.hid_device
+        if hid_device.l2cap_ctrl_channel is not None or hid_device.l2cap_intr_channel is not None:
+            return
+        self._notify_disconnected_once(None)
+
+    def _notify_disconnected_once(self, reason: int | None) -> None:
+        if self._disconnected_callback_emitted:
+            return
+        self._disconnected_callback_emitted = True
+        if self._disconnected_callback is not None:
+            self._dispatch_disconnected_callback(reason)
 
     def _record_l2cap_channel_event(self, event: str, l2cap_channel: object) -> None:
         psm = getattr(l2cap_channel, "psm", None)
@@ -674,6 +747,8 @@ async def _default_start_advertising(runtime: _BumbleRuntime) -> None:
 
 async def _default_close_runtime(runtime: _BumbleRuntime) -> None:
     if runtime.device.powered_on:
+        await runtime.device.set_discoverable(False)
+        await runtime.device.set_connectable(False)
         await runtime.device.power_off()
 
 
@@ -701,6 +776,58 @@ def _safe_event_value(value: object) -> object:
     if value is None or isinstance(value, int | str | bool | float):
         return value
     return str(value)
+
+
+def _call_connection_request_without_deprecated_sync_command(
+    device: object,
+    connection_request: Callable[[object, int, int], None],
+    bd_addr: object,
+    class_of_device: int,
+    link_type: int,
+) -> None:
+    """Run Bumble's connection request handler without its deprecated sync helper."""
+    host = getattr(device, "host", None)
+    send_async_command = getattr(host, "send_async_command", None)
+    if host is None or not callable(send_async_command):
+        connection_request(bd_addr, class_of_device, link_type)
+        return
+
+    from bumble import utils  # noqa: PLC0415
+
+    missing = object()
+    host_dict = getattr(host, "__dict__", None)
+    previous_instance_attr = (
+        host_dict.get("send_command_sync", missing) if isinstance(host_dict, dict) else missing
+    )
+
+    def send_command_sync(command: object) -> None:
+        utils.AsyncRunner.spawn(send_async_command(command))
+
+    host_with_attrs = cast("Any", host)
+    host_with_attrs.send_command_sync = send_command_sync
+    try:
+        connection_request(bd_addr, class_of_device, link_type)
+    finally:
+        if previous_instance_attr is missing:
+            del host_with_attrs.send_command_sync
+        else:
+            host_with_attrs.send_command_sync = previous_instance_attr
+
+
+def _replace_host_connection_request_listener(
+    device: object,
+    original_connection_request: Callable[[object, int, int], None],
+    replacement_connection_request: Callable[[object, int, int], None],
+) -> None:
+    host = getattr(device, "host", None)
+    remove_listener = getattr(host, "remove_listener", None)
+    on = getattr(host, "on", None)
+    if not callable(remove_listener) or not callable(on):
+        return
+
+    with suppress(KeyError, ValueError):
+        remove_listener("connection_request", original_connection_request)
+    on("connection_request", replacement_connection_request)
 
 
 def _decode_hidp_output_report(pdu: bytes) -> bytes | None:

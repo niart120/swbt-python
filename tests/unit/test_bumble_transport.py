@@ -1,5 +1,6 @@
 import asyncio
 import json
+import warnings
 from collections.abc import Callable
 from io import StringIO
 from typing import Any, cast
@@ -92,6 +93,63 @@ class FakeBumbleHost:
         return True
 
 
+class FakeDeprecatedConnectionRequestHost:
+    """Fake Bumble host whose sync command helper is deprecated."""
+
+    def __init__(self) -> None:
+        """Create an empty command recorder."""
+        self.async_commands: list[object] = []
+        self.sync_commands: list[object] = []
+        self.handlers: dict[str, list[Callable[..., None]]] = {}
+
+    def on(self, event: str, callback: Callable[..., None]) -> None:
+        """Register one fake host event callback."""
+        self.handlers.setdefault(event, []).append(callback)
+
+    def remove_listener(self, event: str, callback: Callable[..., None]) -> None:
+        """Remove one fake host event callback."""
+        self.handlers[event].remove(callback)
+
+    def emit(self, event: str, *args: object) -> None:
+        """Emit one fake host event."""
+        for callback in list(self.handlers[event]):
+            callback(*args)
+
+    async def send_async_command(self, command: object) -> object:
+        """Record one async command send."""
+        self.async_commands.append(command)
+        return object()
+
+    def send_command_sync(self, command: object) -> None:
+        """Simulate Bumble 0.0.230's deprecated helper."""
+        self.sync_commands.append(command)
+        warnings.warn(
+            "Use utils.AsyncRunner.spawn() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+
+class FakeBumbleDeviceWithDeprecatedConnectionAccept(FakeBumbleDevice):
+    """Fake device whose connection request handler uses the deprecated helper."""
+
+    def __init__(self, host: FakeDeprecatedConnectionRequestHost) -> None:
+        """Create a fake device with a deprecated connection accept path."""
+        super().__init__()
+        self.host = host
+        self.host.on("connection_request", self.on_connection_request)
+
+    def on_connection_request(
+        self,
+        bd_addr: object,
+        class_of_device: int,
+        link_type: int,
+    ) -> None:
+        """Record and accept one fake incoming connection request."""
+        self.connection_requests.append((bd_addr, class_of_device, link_type))
+        self.host.send_command_sync("accept_connection")
+
+
 class FakeBumbleDeviceWithLinkPolicy(FakeBumbleDevice):
     """Fake Bumble device that accepts raw HCI commands."""
 
@@ -137,6 +195,8 @@ class FakeHidDevice:
         self.handlers: dict[str, Callable[[bytes], None]] = {}
         self.interrupt_payloads: list[bytes] = []
         self.control_payloads: list[tuple[int, bytes]] = []
+        self.disconnect_calls: list[str] = []
+        self.disconnect_error: Exception | None = None
         self.set_report_callback: Callable[[int, int, int, bytes], object] | None = None
 
     def on(self, event: str, callback: Callable[[bytes], None]) -> None:
@@ -159,6 +219,20 @@ class FakeHidDevice:
     def register_set_report_cb(self, callback: Callable[[int, int, int, bytes], object]) -> None:
         """Register a fake SET_REPORT callback."""
         self.set_report_callback = callback
+
+    async def disconnect_interrupt_channel(self) -> None:
+        """Record a fake interrupt channel disconnect request."""
+        if self.disconnect_error is not None:
+            raise self.disconnect_error
+        self.disconnect_calls.append("interrupt")
+        self.l2cap_intr_channel = None
+
+    async def disconnect_control_channel(self) -> None:
+        """Record a fake control channel disconnect request."""
+        if self.disconnect_error is not None:
+            raise self.disconnect_error
+        self.disconnect_calls.append("control")
+        self.l2cap_ctrl_channel = None
 
     def emit_set_report(self, report_id: int, report_type: int, report_data: bytes) -> object:
         """Emit one fake SET_REPORT call."""
@@ -498,6 +572,54 @@ def test_bumble_close_is_idempotent() -> None:
 
         assert handle.close_count == 1
         assert device.power_off_count == 1
+
+    asyncio.run(run())
+
+
+def test_bumble_close_disables_classic_scan_before_power_off() -> None:
+    class ClosingDevice(FakeBumbleDevice):
+        def __init__(self) -> None:
+            super().__init__()
+            self.close_operations: list[str] = []
+
+        async def set_discoverable(self, discoverable: bool = True) -> None:
+            self.close_operations.append(f"discoverable:{discoverable}")
+            await super().set_discoverable(discoverable)
+
+        async def set_connectable(self, connectable: bool = True) -> None:
+            self.close_operations.append(f"connectable:{connectable}")
+            await super().set_connectable(connectable)
+
+        async def power_off(self) -> None:
+            self.close_operations.append("power_off")
+            await super().power_off()
+
+    async def run() -> None:
+        device = ClosingDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        await transport.start_advertising()
+        await transport.close()
+
+        assert device.close_operations[-3:] == [
+            "discoverable:False",
+            "connectable:False",
+            "power_off",
+        ]
 
     asyncio.run(run())
 
@@ -890,6 +1012,150 @@ def test_bumble_l2cap_channel_open_records_diagnostics_and_connects_after_both_c
     asyncio.run(run())
 
 
+def test_bumble_request_disconnect_calls_interrupt_then_control_helpers() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0011))
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013))
+
+        result = await transport.request_disconnect()
+
+        assert result.status == "requested"
+        assert result.channels == ("interrupt", "control")
+        assert hid_device.disconnect_calls == ["interrupt", "control"]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_request_disconnect_handles_single_connected_channel() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013))
+
+        result = await transport.request_disconnect()
+
+        assert result.status == "requested"
+        assert result.channels == ("interrupt",)
+        assert hid_device.disconnect_calls == ["interrupt"]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_request_disconnect_reports_helper_failure() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        hid_device.disconnect_error = RuntimeError("helper failed")
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013))
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0011))
+
+        result = await transport.request_disconnect()
+
+        assert result.status == "failed"
+        assert result.channels == ()
+        assert result.error_type == "RuntimeError"
+        assert result.message == "helper failed"
+        assert hid_device.disconnect_calls == []
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_l2cap_channel_close_notifies_disconnected_after_both_channels() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        disconnected_reasons: list[int | None] = []
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        async def on_disconnected(reason: int | None) -> None:
+            disconnected_reasons.append(reason)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+        transport.on_disconnected(on_disconnected)
+
+        await transport.open()
+        control = FakeL2capChannel(0x0011)
+        interrupt = FakeL2capChannel(0x0013)
+        hid_device.on_l2cap_channel_open(control)
+        hid_device.on_l2cap_channel_open(interrupt)
+
+        hid_device.on_l2cap_channel_close(control)
+        await asyncio.sleep(0)
+        assert disconnected_reasons == []
+
+        hid_device.on_l2cap_channel_close(interrupt)
+        await asyncio.sleep(0)
+
+        assert disconnected_reasons == [None]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
 def test_bumble_connection_request_is_recorded_before_connection_complete() -> None:
     async def run() -> None:
         trace = StringIO()
@@ -923,6 +1189,43 @@ def test_bumble_connection_request_is_recorded_before_connection_complete() -> N
             "peer_address": "01:02:03:04:05:06",
         } in events
         assert device.connection_requests == [("01:02:03:04:05:06", 0x2508, 1)]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_connection_request_bridge_avoids_deprecated_sync_command_warning() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+        host = FakeDeprecatedConnectionRequestHost()
+        device = FakeBumbleDeviceWithDeprecatedConnectionAccept(host)
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            host.emit("connection_request", "01:02:03:04:05:06", 0x2508, 1)
+        await asyncio.sleep(0)
+
+        assert device.connection_requests == [("01:02:03:04:05:06", 0x2508, 1)]
+        assert host.sync_commands == []
+        assert host.async_commands == ["accept_connection"]
 
         await transport.close()
 

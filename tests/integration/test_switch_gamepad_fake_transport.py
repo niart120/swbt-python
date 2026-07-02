@@ -4,6 +4,7 @@ from io import StringIO
 
 import pytest
 
+import swbt.gamepad as gamepad_module
 from swbt import Button, DiagnosticsConfig, InputState, Stick, SwitchGamepad
 from swbt.errors import ConnectionTimeoutError
 from swbt.transport.fake import FakeHidTransport
@@ -23,7 +24,41 @@ def test_async_context_opens_and_closes_fake_transport() -> None:
         assert transport.is_open is False
         assert transport.open_count == 1
         assert transport.close_count == 1
-        assert transport.events == ("open", "start_advertising", "close")
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "request_disconnect_unavailable",
+            "close",
+        )
+
+    asyncio.run(run())
+
+
+def test_async_context_exception_requests_disconnect_and_reraises() -> None:
+    class ExpectedError(Exception):
+        """Exception raised inside the gamepad context."""
+
+    async def raise_inside_context(transport: FakeHidTransport) -> None:
+        async with SwitchGamepad(transport=transport) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            raise ExpectedError
+
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        with pytest.raises(ExpectedError):
+            await raise_inside_context(transport)
+
+        assert transport.close_count == 1
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnect_request_closed",
+            "close",
+        )
 
     asyncio.run(run())
 
@@ -326,6 +361,254 @@ def test_close_with_neutral_records_trailing_neutral_report() -> None:
         assert transport.is_open is False
         assert transport.sent_interrupt_reports[-1][0] == 0x30
         assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+    asyncio.run(run())
+
+
+def test_connected_close_requests_disconnect_after_trailing_neutral() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = SwitchGamepad(transport=transport, report_period_us=100_000)
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+        await pad.press(Button.A)
+
+        await pad.close(neutral=True)
+
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnect_request_closed",
+            "close",
+        )
+        assert transport.disconnect_request_sent_interrupt_count == 1
+        assert transport.sent_interrupt_reports[-1][0] == 0x30
+        assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("00 00 00")
+        assert transport.close_count == 1
+
+    asyncio.run(run())
+
+
+def test_close_waits_for_disconnect_request_closed_event_once() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(disconnect_request_auto_complete=False)
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=100_000,
+        )
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+
+        close_task = asyncio.create_task(pad.close(neutral=True))
+        await transport.wait_for_disconnect_request()
+        await asyncio.sleep(0)
+
+        assert close_task.done() is False
+
+        await transport.complete_disconnect_request(reason=0x13)
+        await transport.complete_disconnect_request(reason=0x13)
+        await asyncio.wait_for(close_task, timeout=0.1)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "disconnect_request",
+            "status": "requested",
+            "channels": ["control", "interrupt"],
+        } in events
+        assert {"event": "disconnect_request_terminal", "status": "closed"} in events
+        assert transport.close_count == 1
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnect_request_closed",
+            "close",
+        )
+
+    asyncio.run(run())
+
+
+def test_close_request_disconnected_callback_leaves_final_close_to_user_close() -> None:
+    async def run() -> None:
+        close_wait = asyncio.Event()
+        transport = FakeHidTransport(
+            disconnect_request_auto_complete=False,
+            close_wait=close_wait,
+        )
+        pad = SwitchGamepad(transport=transport, report_period_us=100_000)
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+
+        close_task = asyncio.create_task(pad.close(neutral=True))
+        await transport.wait_for_disconnect_request()
+
+        callback_task = asyncio.create_task(transport.complete_disconnect_request(reason=0x13))
+        await asyncio.wait_for(callback_task, timeout=0.1)
+        await transport.wait_for_close_start()
+
+        assert close_task.done() is False
+        assert transport.is_open is True
+        assert transport.close_count == 0
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnect_request_closed",
+        )
+
+        close_wait.set()
+        await asyncio.wait_for(close_task, timeout=0.1)
+
+        assert transport.is_open is False
+        assert transport.close_count == 1
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnect_request_closed",
+            "close",
+        )
+
+    asyncio.run(run())
+
+
+def test_close_request_timeout_records_terminal_state_and_closes_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(disconnect_request_auto_complete=False)
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=100_000,
+        )
+        monkeypatch.setattr(gamepad_module, "DISCONNECT_REQUEST_TIMEOUT_SECONDS", 0.001)
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "disconnect_request",
+            "status": "requested",
+            "channels": ["control", "interrupt"],
+        } in events
+        assert {
+            "event": "disconnect_request_terminal",
+            "status": "timeout",
+            "timeout": 0.001,
+        } in events
+        assert pad.status().connection_state == "closed"
+        assert transport.close_count == 1
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "close",
+        )
+
+    asyncio.run(run())
+
+
+def test_close_without_connection_records_disconnect_unavailable() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+
+        await pad.open()
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "disconnect_request",
+            "status": "unavailable",
+            "reason": "channels_not_connected",
+        } in events
+        assert transport.close_count == 1
+        assert pad.status().connection_state == "closed"
+
+    asyncio.run(run())
+
+
+def test_close_request_failure_records_failure_and_closes_transport() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(disconnect_request_error=RuntimeError("request failed"))
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "disconnect_request",
+            "status": "failed",
+            "error_type": "RuntimeError",
+            "message": "request failed",
+        } in events
+        assert not any(event.get("event") == "disconnect_request_terminal" for event in events)
+        assert transport.close_count == 1
+        assert pad.status().connection_state == "closed"
+
+    asyncio.run(run())
+
+
+def test_host_disconnect_racing_user_close_closes_once_and_neutralizes_state() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport(disconnect_request_auto_complete=False)
+        pad = SwitchGamepad(transport=transport, report_period_us=100_000)
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+        await pad.press(Button.A)
+
+        close_task = asyncio.create_task(pad.close(neutral=True))
+        await transport.wait_for_disconnect_request()
+        await transport.disconnect(reason=0x13)
+        await asyncio.wait_for(close_task, timeout=0.1)
+
+        assert pad.snapshot() == InputState.neutral()
+        assert pad.status().connection_state == "closed"
+        assert transport.close_count == 1
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnected",
+            "close",
+        )
 
     asyncio.run(run())
 

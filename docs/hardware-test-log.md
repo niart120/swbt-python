@@ -11,6 +11,13 @@
 - Pairing run: 2026-07-01 に `Pro Controller` / Class of Device `0x002508` で M3 pairing / L2CAP pass。`classic_pairing`、HID control / interrupt channel open、`connected` を記録済み
 - Subcommand run: 2026-07-02 に Classic default link policy `0x0005` のみを残した最小実装で M4 subcommand sequence が pass。続く observation window run では Bumble ACL queue drain 後、5 秒以上の実機観測で `0x02` 1 件と `0x08` 8 件を受信し、全件に `0x21` reply を送信した。trace は `classic_link_policy_configured`、Switch からの `0x01` output report、`subcommand_rx`、`subcommand_reply_tx`、`report_tx` reason `subcommand_reply` 9 件を記録し、`unsupported_subcommand` と `error` は 0 件だった。debug log は `packets in flight` backlog 行 0 件だった。link policy 反映前の試行では、HIDP DATA header 除去、SET_REPORT callback、control channel output report、HID SDP policy、service name / language base、daemon-aligned `0x8e` / `0x80` prefix、HID L2CAP local MTU `100` を反映しても `output_report_rx` 未観測のまま Switch 側 reason 19 で切断されていた
 - Input reflection run: 2026-07-02 に `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で M5 input operation sequence を実行した。pytest は `1 passed` だが、これは接続、subcommand reply、`0x30` report 送信、manual checkpoint、clean close を確認するだけで、Switch UI 反映を自動判定しない。初回ユーザ画面観測では Switch のデバイス登録画面が全く動かなかったため、M5 の semantic input reflection は observed-fail。debug log では A button bytes `08 00 00`、L+R button bytes `40 00 40`、neutral bytes `00 00 00` を含む `a1 30` HID interrupt send は確認済み。後続の pairing diagnostics run では `link_key_available` と `connection_encryption_change` は出たが、`pairing_complete` と `connection_authentication` は出ず、Switch は `0x02` と repeated `0x08` から進まなかった。daemon `local_037` の実機履歴では `0x21` reply timer 固定を shared input report timer に直すと repeated `0x08` から `0x10` / `0x03` へ進んだため、swbt-python でも shared timer / reply holdoff を実装した。2026-07-02 shared timer rerun では `0x02`、`0x08`、`0x10`、`0x03`、`0x04`、`0x40`、`0x30`、`0x48`、`0x21`、`0x30` まで進み、ユーザは Switch 側で pairing 完了を目視した。続く post-handshake input run では full observed handshake 後に `tap(Button.A)` を送信し、ユーザは Switch UI への A 反映と neutral 後の入力残りなしを目視した。
+- Close disconnect run: 2026-07-02 の unit_014 connected close run は `connected` 後に non-neutral 入力を送らず、trailing neutral、Bumble L2CAP channel close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで観測した。初回は `transport_close_complete` が trace に出ず、user close 中の disconnected callback が final close を先取りする race として fake integration test で再現し、`0979bd4` で修正した。修正後の rerun では `host_connection`、control / interrupt L2CAP open、`connected`、neutral `0x30`、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete`、`manual_close_checkpoint close_complete` まで通過した。後続の visibility 調査で Bumble 0.0.230 の `power_off()` だけでは Classic scan が残ることを確認し、close cleanup に `set_discoverable(False)` / `set_connectable(False)` を追加した。修正後の close disconnect rerun は `1 passed`、final `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 0` `SUCCESS` まで確認した。この run は full observed subcommand handshake 後 close ではなく、HID control / interrupt L2CAP `connected` 直後の close ordering を確認する。最後に full observed handshake 後、Button A で登録画面を抜け、neutral、disconnect、post-close UI 確認まで行う path を実行し、ユーザは登録画面脱出と接続解除を目視した。Bumble 0.0.230 の incoming Classic connection handler が deprecated `send_command_sync()` を使う警告は host listener bridge で `AsyncRunner.spawn(host.send_async_command(...))` へ差し替えて解消し、同じ path は `-W error` 付きで `1 passed in 7.85s` になった。
+- Subcommand follow-up: 2026-07-02 にユーザが疎通不良を疑ったため、non-neutral 入力なしで subcommand observation window を再実行した。run は `advertising_start` まで進んだが `host_connection` が来ず、60 秒で `ConnectionTimeoutError` になった。この観測は、Switch からの output report / subcommand / `0x21` reply 疎通を確認できていない。
+- Problem investigation: 2026-07-02 の L2CAP-only follow-up でも `advertising_start` まで進んだ後、`host_connection` が来ず 60 秒 timeout した。少なくともこの時点の問題は subcommand reply や input report ではなく、Switch が advertised `Pro Controller` へ接続要求を出していない段階にある。
+- Problem retry: 2026-07-02 に Switch 側を接続画面へ入り直した想定で L2CAP-only check を再試行したが、再び `advertising_start` 後に `host_connection` が来ず 60 秒 timeout した。HCI debug log にも `HCI_CONNECTION_REQUEST_EVENT` はなかった。
+- New pairing attempt: 2026-07-02 にユーザが Switch 側の pairing 情報削除と新規追加画面での探索を確認した状態で L2CAP-only check を再試行した。Bumble 側は `Pro Controller` / Class of Device `0x002508` / extended inquiry response を設定し、最終的な `scan_enable: 3` も成功したが、`host_connection` と HCI `HCI_CONNECTION_REQUEST_EVENT` は来ず 60 秒 timeout した。この run は pairing 失敗ではなく、pairing 開始前の discovery / connection request 未到達として扱う。
+- Discovery visibility hold: 2026-07-02 に `usb:0` を `Pro Controller` として 90 秒間 discoverable / connectable に保持した。trace は `advertising_start`、`manual_advertising_hold_start duration_seconds=90`、`manual_advertising_hold_complete`、`transport_close_complete` を記録したが、`host_connection` は記録しなかった。外部 scanner から見えたかどうかはこの artifact だけでは確定できない。
+- Close cleanup scan disable: 2026-07-02 に close cleanup を修正後、`usb:0` を 5 秒間だけ `Pro Controller` として advertise し、close で Classic scan を停止する診断を実行した。trace は `host_connection` を記録し、debug log は close path の `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 0` が `SUCCESS` で完了したことを記録した。ユーザは iPhone 側で `Pro Controller` 表示が消えたことを目視した。
 
 ## Run Entry Template
 
@@ -43,6 +50,226 @@
 | macOS | 未検証 | 未検証 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期検証対象外 |
 
 ## Run Entries
+
+### 2026-07-02: unit_014 close request reached closed event but missed final transport close
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch before commit `0979bd4`
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed in adjacent Bumble debug logs for this adapter
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Trace recorded one trailing neutral `0x30` input report from `pad.close(neutral=True)` and no non-neutral input operation
+- command / test: `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a --log-file .pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved the unit_014 hardware validation. Scope included USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, periodic report loop, trailing neutral, remote close request, closed event wait or timeout, and cleanup. User explicitly asked not to send A twice or otherwise re-enter the device connection screen; this test sent no A input.
+- result: fail. Pytest assertion failed because `transport_close_complete` was missing. Trace includes `host_connection`, `classic_pairing`, `link_key_available`, `connection_encryption_change`, L2CAP control / interrupt open, `connected`, `manual_close_checkpoint close_start`, one neutral `report_tx`, interrupt and control `l2cap_channel_close`, `disconnect_request status=requested`, public `disconnected reason=null`, Bumble `disconnected reason=0`, `disconnect_request_terminal status=closed`, and `manual_close_checkpoint close_complete`.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a\close-disconnect.jsonl`, `.pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a\pytest-debug.log`
+- cleanup: `pad.close(neutral=True)` ran from `finally`. Trace reached `manual_close_checkpoint close_complete`, but did not record `transport_close_complete`. The observed failure was reproduced without hardware by `test_close_request_disconnected_callback_leaves_final_close_to_user_close` and fixed in commit `0979bd4`.
+- notes: This run proves only that the close request reached L2CAP close and the public closed terminal event on this hardware. It does not validate the fixed final transport close ordering.
+
+### 2026-07-02: unit_014 post-fix close disconnect passed on Switch link
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch at commit `c08d4b1` with clean worktree before the run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Trace recorded one trailing neutral `0x30` input report from `pad.close(neutral=True)` and no non-neutral input operation
+- command / test: `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity --log-file .pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user asked to run one more connection check for the same unit_014 hardware scope. Scope included USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, periodic report loop, trailing neutral, remote close request, closed event wait or timeout, and cleanup. No A input or other non-neutral input operation was sent.
+- result: pass, `1 passed, 1 warning in 6.80s`. Trace includes `host_connection`, `classic_pairing`, `link_key_available`, `connection_encryption_change`, L2CAP control / interrupt open, `connected`, `manual_close_checkpoint close_start`, one neutral `report_tx`, interrupt and control `l2cap_channel_close`, `disconnect_request status=requested`, `disconnect_request_terminal status=closed`, Bumble `disconnected reason=0`, public `disconnected reason=0`, `transport_close_complete`, and `manual_close_checkpoint close_complete`.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity\close-disconnect.jsonl`, `.pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity\pytest-debug.log`
+- cleanup: `pad.close(neutral=True)` ran from `finally`; trace recorded `transport_close_complete` and `manual_close_checkpoint close_complete`. No non-neutral input operation was sent.
+- notes: This run validates the post-fix connected close ordering for this hardware configuration. Trace still records separate public disconnection observations for L2CAP close (`reason=null`) and device disconnection (`reason=0`); `close()` remains idempotent and completed.
+
+### 2026-07-02: subcommand observation follow-up timed out before host connection
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch at commit `918325d` with clean worktree before the run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us, but report loop did not start because `connected` was not reached
+- command / test: `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_observation_window_replies_to_all_observed_commands -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-211829-subcommand-observation --log-file .pytest_cache\hardware\unit_014\20260702-211829-subcommand-observation\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user asked to check communication again because the Switch-side behavior did not look connected. Scope included USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, subcommand observation and reply if connected, periodic neutral reports, and cleanup. No A input or other non-neutral input operation was sent.
+- result: fail, `ConnectionTimeoutError` after 60 seconds. Trace includes `transport_open_start`, `bumble_device_initialized`, `sdp_record_registered`, `hid_device_initialized`, `transport_open_complete`, `classic_link_policy_configured`, `advertising_start`, `connection_timeout state=advertising`, `disconnect_request status=unavailable reason=channels_not_connected`, and `transport_close_complete`. Trace does not include `connection_request`, `host_connection`, `l2cap_channel_open`, `connected`, `output_report_rx`, `subcommand_rx`, or `subcommand_reply_tx`.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-211829-subcommand-observation\subcommand-observation-window.jsonl`, `.pytest_cache\hardware\unit_014\20260702-211829-subcommand-observation\pytest-debug.log`
+- cleanup: `pad.close(neutral=True)` ran from `finally`; trace recorded `transport_close_complete`. No non-neutral input operation was sent.
+- notes: This run did not reach the Switch protocol layer. The observed failure point is before host connection, so it supports the user's observation that this attempt did not look like a live controller communication session.
+
+### 2026-07-02: L2CAP-only follow-up timed out before host connection
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch at commit `1bd4050` with clean worktree before the run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us, but report loop did not start because `connected` was not reached
+- command / test: `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_pairing_l2cap_records_diagnostics -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-212504-pairing-l2cap-check --log-file .pytest_cache\hardware\unit_014\20260702-212504-pairing-l2cap-check\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved continuing the problem investigation. Scope included USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open if connected, and cleanup. No A input or other non-neutral input operation was sent.
+- result: fail, `ConnectionTimeoutError` after 60 seconds. Trace includes `transport_open_start`, `bumble_device_initialized`, `sdp_record_registered`, `hid_device_initialized`, `transport_open_complete`, `classic_link_policy_configured`, `advertising_start`, `connection_timeout state=advertising`, `disconnect_request status=unavailable reason=channels_not_connected`, and `transport_close_complete`. Trace does not include `connection_request`, `host_connection`, `classic_pairing`, `l2cap_channel_open`, or `connected`.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-212504-pairing-l2cap-check\pairing-l2cap.jsonl`, `.pytest_cache\hardware\unit_014\20260702-212504-pairing-l2cap-check\pytest-debug.log`
+- cleanup: `pad.close(neutral=True)` ran from `finally`; trace recorded `transport_close_complete`. No non-neutral input operation was sent.
+- notes: This reproduces the pre-host-connection timeout with the narrower L2CAP diagnostics test. The problem is upstream of Switch output report / subcommand handling in this run.
+
+### 2026-07-02: L2CAP-only retry timed out before host connection
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch at commit `5e860cb` with clean worktree before the run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us, but report loop did not start because `connected` was not reached
+- command / test: `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_pairing_l2cap_records_diagnostics -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-212834-pairing-l2cap-retry --log-file .pytest_cache\hardware\unit_014\20260702-212834-pairing-l2cap-retry\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user asked for one more retry. Scope matched the previous L2CAP-only problem investigation: USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open if connected, and cleanup. No A input or other non-neutral input operation was sent.
+- result: fail, `ConnectionTimeoutError` after 60 seconds. Trace includes `transport_open_start`, `bumble_device_initialized`, `sdp_record_registered`, `hid_device_initialized`, `transport_open_complete`, `classic_link_policy_configured`, `advertising_start`, `connection_timeout state=advertising`, `disconnect_request status=unavailable reason=channels_not_connected`, and `transport_close_complete`. Trace does not include `connection_request`, `host_connection`, `classic_pairing`, `l2cap_channel_open`, or `connected`. HCI debug log query found no `HCI_CONNECTION_REQUEST_EVENT`.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-212834-pairing-l2cap-retry\pairing-l2cap.jsonl`, `.pytest_cache\hardware\unit_014\20260702-212834-pairing-l2cap-retry\pytest-debug.log`
+- cleanup: `pad.close(neutral=True)` ran from `finally`; trace recorded `transport_close_complete`. No non-neutral input operation was sent.
+- notes: This repeat strengthens the finding that the current failure mode is pre-host-connection. It does not exercise L2CAP, output reports, subcommands, input reports, or close request ordering.
+
+### 2026-07-02: new pairing L2CAP check timed out before host connection
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch at commit `ceefe2a` with clean worktree before the run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us, but report loop did not start because `connected` was not reached
+- command / test: `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_pairing_l2cap_records_diagnostics -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-213824-new-pairing-l2cap --log-file .pytest_cache\hardware\unit_014\20260702-213824-new-pairing-l2cap\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user reported that Switch-side pairing information had been deleted and the Switch was searching from the new controller addition screen, then asked to try a fresh connection. Scope matched the L2CAP-only problem investigation: USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing if the Switch initiated it, HID control / interrupt L2CAP open if connected, and cleanup. No A input or other non-neutral input operation was sent.
+- result: fail, `ConnectionTimeoutError` after 60 seconds. Trace includes `transport_open_start`, `bumble_device_initialized` with `device_name="Pro Controller"` and `class_of_device="0x002508"`, `sdp_record_registered`, `hid_device_initialized`, `transport_open_complete`, `classic_link_policy_configured`, `advertising_start`, `connection_timeout state=advertising`, `disconnect_request status=unavailable reason=channels_not_connected`, and `transport_close_complete`. Trace does not include `connection_request`, `host_connection`, `classic_pairing`, `l2cap_channel_open`, or `connected`. HCI debug log shows `HCI_WRITE_LOCAL_NAME_COMMAND`, `HCI_WRITE_CLASS_OF_DEVICE_COMMAND`, `HCI_WRITE_EXTENDED_INQUIRY_RESPONSE_COMMAND`, and final `HCI_WRITE_SCAN_ENABLE_COMMAND` with `scan_enable: 3` returning `SUCCESS`; the same log query found no `HCI_CONNECTION_REQUEST_EVENT` or `HCI_CONNECTION_COMPLETE_EVENT`.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-213824-new-pairing-l2cap\pairing-l2cap.jsonl`, `.pytest_cache\hardware\unit_014\20260702-213824-new-pairing-l2cap\pytest-debug.log`
+- cleanup: `pad.close(neutral=True)` ran from `finally`; trace recorded `transport_close_complete`. No non-neutral input operation was sent.
+- notes: This run was a new-connection attempt from the Switch side, but it did not reach pairing. The current failure point is before Switch host connection. Whether the Switch saw the inquiry response is not established by this artifact; that would need a separate discovery-side observation.
+
+### 2026-07-02: advertising hold recorded no host connection
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch at commit `b419cd7` with clean worktree before the run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log in adjacent runs
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: not used. This diagnostic used `BumbleHidTransport` directly and did not create `ReportLoop`
+- command / test: one-off `uv run python -` diagnostic script. It opened `BumbleHidTransport(adapter="usb:0")`, called `open()`, `start_advertising()`, recorded `manual_advertising_hold_start duration_seconds=90`, awaited `asyncio.sleep(90)`, recorded `manual_advertising_hold_complete`, and closed the transport in `finally`
+- approval: user agreed to continue verification after the pre-host-connection timeout diagnosis. Scope included USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or HID L2CAP observation only if the Switch initiated a connection, 90 second hold, and cleanup. No report loop, A input, or other non-neutral input operation was used.
+- result: observed-timeout/no-host-connection. Trace includes `transport_open_start`, `bumble_device_initialized` with `device_name="Pro Controller"` and `class_of_device="0x002508"`, `sdp_record_registered`, `hid_device_initialized`, `transport_open_complete`, `classic_link_policy_configured`, `advertising_start`, `manual_advertising_hold_start`, `manual_advertising_hold_complete`, and `transport_close_complete`. Trace does not include `connection_request`, `host_connection`, `classic_pairing`, `l2cap_channel_open`, or `connected`.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-215256-advertising-hold\advertising-hold.jsonl`
+- cleanup: one-off diagnostic closed the transport in `finally`; trace recorded `transport_close_complete`. No non-neutral input operation was sent.
+- notes: This run keeps the same failure boundary as the L2CAP-only timeout runs while removing report loop and pytest assertion behavior from the path. It does not prove whether another scanner could see the inquiry response.
+
+### 2026-07-02: close cleanup disabled Classic scan on the dongle
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch at commit `16e6039` with clean worktree before the run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log in adjacent runs
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: not used. This diagnostic used `BumbleHidTransport` directly and did not create `ReportLoop`
+- command / test: one-off `uv run python -` diagnostic script. It opened `BumbleHidTransport(adapter="usb:0")`, called `open()`, `start_advertising()`, recorded `manual_close_scan_disable_probe_advertising_hold_start duration_seconds=5`, awaited `asyncio.sleep(5)`, recorded `manual_close_scan_disable_probe_close_start`, and closed the transport in `finally`
+- approval: user explicitly approved running the close cleanup verification. Scope included USB Bluetooth dongle open, Classic HID Device initialization, short discoverable / connectable advertising, Switch host connection observation if the Switch initiated a connection, close path with `set_discoverable(False)` / `set_connectable(False)`, and cleanup. No report loop, A input, or other non-neutral input operation was used.
+- result: observed-pass for close scan disable. Trace includes `transport_open_start`, `bumble_device_initialized` with `device_name="Pro Controller"` and `class_of_device="0x002508"`, `sdp_record_registered`, `hid_device_initialized`, `transport_open_complete`, `classic_link_policy_configured`, `advertising_start`, `manual_close_scan_disable_probe_advertising_hold_start`, `host_connection`, `manual_close_scan_disable_probe_close_start`, `disconnected reason=0`, `transport_close_complete`, and `manual_close_scan_disable_probe_close_complete`. Debug log shows close path `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 2` followed by `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 0`, both with `status: SUCCESS`.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-220455-close-scan-disable\close-scan-disable.jsonl`, `.pytest_cache\hardware\unit_014\20260702-220455-close-scan-disable\close-scan-disable-debug.log`
+- cleanup: one-off diagnostic closed the transport in `finally`; trace recorded `transport_close_complete`. Debug log recorded final `scan_enable: 0` with `SUCCESS`. No non-neutral input operation was sent.
+- notes: This run confirms the software cleanup fix reaches the controller HCI boundary. It also shows that, at this moment, Switch did send a host connection request during the 5 second window. The user observed that `Pro Controller` disappeared from the iPhone Bluetooth discovery UI after this cleanup, supporting the conclusion that the earlier visible entry was caused by incomplete Classic scan cleanup rather than a still-running Python process.
+
+### 2026-07-02: unit_014 close disconnect passed after Classic scan cleanup fix
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch at commit `82ae916` with clean worktree before the run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log in adjacent runs
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Trace recorded one trailing neutral `0x30` input report from `pad.close(neutral=True)` and no non-neutral input operation
+- command / test: `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-220940-close-disconnect-after-scan-cleanup --log-file .pytest_cache\hardware\unit_014\20260702-220940-close-disconnect-after-scan-cleanup\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved rerunning the original unit_014 close disconnect validation after confirming the close cleanup bug. Scope included USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, periodic report loop, trailing neutral, remote close request, closed event wait or timeout, Classic scan disable on close, and cleanup. No A input or other non-neutral input operation was sent.
+- result: pass, `1 passed, 1 warning in 3.02s`. Trace includes `host_connection`, `classic_pairing`, `link_key_available`, `connection_encryption_change`, L2CAP control / interrupt open, `connected`, `manual_close_checkpoint close_start`, one neutral `report_tx`, interrupt and control `l2cap_channel_close`, `disconnect_request status=requested`, `disconnect_request_terminal status=closed`, Bumble `disconnected reason=0`, public `disconnected reason=0`, `transport_close_complete`, and `manual_close_checkpoint close_complete`. Debug log includes `HCI_CONNECTION_REQUEST_EVENT`, `HCI_CONNECTION_COMPLETE_EVENT`, and final close path `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 0` with `status: SUCCESS`.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-220940-close-disconnect-after-scan-cleanup\close-disconnect.jsonl`, `.pytest_cache\hardware\unit_014\20260702-220940-close-disconnect-after-scan-cleanup\pytest-debug.log`
+- cleanup: `pad.close(neutral=True)` ran from `finally`; trace recorded `transport_close_complete` and `manual_close_checkpoint close_complete`. Debug log recorded final `scan_enable: 0` with `SUCCESS`. No non-neutral input operation was sent.
+- notes: This run validates unit_014 connected close ordering after the Classic scan cleanup fix. It closes immediately after HID control / interrupt L2CAP `connected`; it does not wait for the full observed Switch subcommand handshake or Switch UI registration completion.
+
+### 2026-07-02: unit_014 post-handshake A exit and close passed without warning
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch with uncommitted warning fix for the first `-W error` run. The prior same-path UI observation run used commit `de8f39d`.
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log in adjacent runs
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Trace recorded full observed Switch handshake, Button A input reports, neutral reports, and one trailing neutral `0x30` from `pad.close(neutral=True)`
+- command / test: `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_after_full_handshake_and_a_exit_for_manual_ui_confirmation -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-warning-fix-listener --log-file .pytest_cache\hardware\unit_014\20260702-warning-fix-listener\pytest-debug.log --log-file-level=DEBUG -q -s -W error`
+- approval: user approved rerunning the same unit_014 hardware path to resolve the pytest warning. Scope included USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, full observed subcommand handshake, one explicit Button A tap to leave the registration screen, neutral, trailing neutral, remote close request, closed event wait or timeout, Classic scan disable on close, and cleanup.
+- result: pass, `1 passed in 7.85s` with `-W error`. Trace includes `connection_request`, `host_connection`, `classic_pairing`, `link_key_available`, `connection_encryption_change`, L2CAP control / interrupt open, `connected`, full observed handshake through `0x21`, `manual_close_checkpoint full_handshake_complete`, `tap_a_exit_pairing_screen_complete`, `neutral_after_a_complete`, `close_start`, trailing neutral `0x30`, interrupt and control `l2cap_channel_close`, `disconnect_request status=requested`, `disconnect_request_terminal status=closed`, public and Bumble `disconnected reason=0`, `transport_close_complete`, `close_complete`, and `post_close_ui_observation_window_complete`. User confirmed on the prior same-path run that Button A left the Switch registration screen as expected and that disconnect was visible.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-warning-fix-listener\post-handshake-a-close.jsonl`, `.pytest_cache\hardware\unit_014\20260702-warning-fix-listener\pytest-debug.log`; prior same-path UI observation artifact: `.pytest_cache\hardware\unit_014\20260702-221752-post-handshake-a-close\post-handshake-a-close.jsonl`, `.pytest_cache\hardware\unit_014\20260702-221752-post-handshake-a-close\pytest-debug.log`
+- cleanup: `pad.close(neutral=True)` ran from `finally`; trace recorded trailing neutral, close request terminal `closed`, `transport_close_complete`, and post-close UI observation window completion. Debug log recorded final Classic scan disable without any `DeprecationWarning` or `Use utils.AsyncRunner.spawn()` entry.
+- notes: The warning source was Bumble 0.0.230's host-registered incoming Classic connection handler calling deprecated `host.send_command_sync()`. swbt-python now replaces that host listener with its diagnostics bridge and runs the upstream handler while mapping `send_command_sync(command)` to `AsyncRunner.spawn(host.send_async_command(command))`.
+
+### 2026-07-02: unit_014 post-fix close disconnect reruns timed out before host connection
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-014-close-disconnect` branch at commit `0979bd4`
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us, but report loop did not start because `connected` was not reached
+- command / test: `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix --log-file .pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix\pytest-debug.log --log-file-level=DEBUG -q -s`; rerun: `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry --log-file .pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: same unit_014 hardware validation approval. Scope matched the connected close test, but both post-fix reruns stopped before Switch host connection.
+- result: fail for both reruns, `ConnectionTimeoutError` after 60 seconds. Both traces include `transport_open_start`, `bumble_device_initialized`, `sdp_record_registered`, `hid_device_initialized`, `transport_open_complete`, `classic_link_policy_configured`, `advertising_start`, `connection_timeout state=advertising`, `disconnect_request status=unavailable reason=channels_not_connected`, and `transport_close_complete`. Neither trace includes `connection_request`, `host_connection`, `classic_pairing`, `l2cap_channel_open`, `connected`, trailing neutral, or close request terminal state.
+- artifact: `.pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix\close-disconnect.jsonl`, `.pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix\pytest-debug.log`, `.pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry\close-disconnect.jsonl`, `.pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry\pytest-debug.log`
+- cleanup: each rerun executed `pad.close(neutral=True)` from `finally`; both traces recorded `transport_close_complete`. No non-neutral input operation was sent.
+- notes: These reruns do not exercise unit_014 connected close behavior after commit `0979bd4`. The observed failure point is before Switch host connection.
 
 ### 2026-07-02: unit_006 post-handshake Button A input reflected on Switch UI
 
