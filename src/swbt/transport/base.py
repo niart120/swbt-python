@@ -1,12 +1,25 @@
 """Transport protocol shared by gamepad and transport implementations."""
 
 from collections.abc import Awaitable, Callable
-from typing import Protocol
+from dataclasses import dataclass
+from typing import Literal, Protocol
 
 InterruptDataCallback = Callable[[bytes], Awaitable[None]]
 ControlDataCallback = Callable[[bytes], Awaitable[None]]
 ConnectedCallback = Callable[[], Awaitable[None]]
 DisconnectedCallback = Callable[[int | None], Awaitable[None]]
+DisconnectRequestStatus = Literal["requested", "unavailable", "failed"]
+
+
+@dataclass(frozen=True)
+class DisconnectRequestResult:
+    """Result of a best-effort remote HID disconnect request."""
+
+    status: DisconnectRequestStatus
+    channels: tuple[str, ...] = ()
+    reason: str | None = None
+    error_type: str | None = None
+    message: str | None = None
 
 
 class HidDeviceTransport(Protocol):
@@ -20,6 +33,9 @@ class HidDeviceTransport(Protocol):
 
     async def close(self) -> None:
         """Close transport resources."""
+
+    async def request_disconnect(self) -> DisconnectRequestResult:
+        """Request a remote HID/L2CAP disconnect when the transport supports it."""
 
     async def send_interrupt(self, payload: bytes) -> None:
         """Send one HID interrupt report."""

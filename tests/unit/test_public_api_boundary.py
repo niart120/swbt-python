@@ -9,6 +9,7 @@ import pytest
 
 import swbt
 from swbt import SwitchGamepad
+from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
 
 
 def test_public_api_import_does_not_import_bumble() -> None:
@@ -90,3 +91,15 @@ def test_switch_gamepad_signature_does_not_expose_bumble_types() -> None:
     )
 
     assert "bumble" not in annotation_text.lower()
+
+
+def test_hid_transport_disconnect_request_boundary_uses_plain_types() -> None:
+    signature = inspect.signature(HidDeviceTransport.request_disconnect)
+    annotation_text = repr(signature.return_annotation).lower()
+
+    result = DisconnectRequestResult(status="requested", channels=("interrupt", "control"))
+
+    assert list(signature.parameters) == ["self"]
+    assert "bumble" not in annotation_text
+    assert result.status == "requested"
+    assert result.channels == ("interrupt", "control")
