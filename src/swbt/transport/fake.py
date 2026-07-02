@@ -16,11 +16,12 @@ from swbt.transport.base import (
 class FakeHidTransport:
     """Record transport operations without opening Bluetooth resources."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, disconnect_request_auto_complete: bool = True) -> None:
         """Create a closed fake transport."""
         self._is_open = False
         self._open_count = 0
         self._close_count = 0
+        self._disconnect_request_auto_complete = disconnect_request_auto_complete
         self._events: list[str] = []
         self._control_channel_open = False
         self._interrupt_channel_open = False
@@ -29,6 +30,7 @@ class FakeHidTransport:
         self._sent_interrupt_reports: list[bytes] = []
         self._sent_control_reports: list[bytes] = []
         self._interrupt_report_event = asyncio.Event()
+        self._disconnect_request_event = asyncio.Event()
         self._interrupt_callback: InterruptDataCallback | None = None
         self._control_callback: ControlDataCallback | None = None
         self._connected_callback: ConnectedCallback | None = None
@@ -75,6 +77,8 @@ class FakeHidTransport:
             return
         self._is_open = True
         self._open_count += 1
+        self._disconnect_request_sent_interrupt_count = None
+        self._disconnect_request_event.clear()
         self._events.append("open")
 
     async def start_advertising(self) -> None:
@@ -98,23 +102,31 @@ class FakeHidTransport:
         self._require_open()
         if not self._control_channel_open and not self._interrupt_channel_open:
             self._events.append("request_disconnect_unavailable")
+            self._disconnect_request_event.set()
             return DisconnectRequestResult(
                 status="unavailable",
                 reason="channels_not_connected",
             )
         self._disconnect_request_sent_interrupt_count = len(self._sent_interrupt_reports)
         self._events.append("request_disconnect")
-        await self.complete_disconnect_request()
+        self._disconnect_request_event.set()
+        if self._disconnect_request_auto_complete:
+            await self.complete_disconnect_request()
         return DisconnectRequestResult(
             status="requested",
             channels=("control", "interrupt"),
         )
 
+    async def wait_for_disconnect_request(self, *, max_wait: float = 0.5) -> None:
+        """Wait until a fake remote disconnect request has been recorded."""
+        async with asyncio.timeout(max_wait):
+            await self._disconnect_request_event.wait()
+
     async def complete_disconnect_request(self, reason: int | None = None) -> None:
         """Emit the host-side close completion for a pending fake request."""
-        self._require_open()
         if not self._control_channel_open and not self._interrupt_channel_open:
             return
+        self._require_open()
         self._control_channel_open = False
         self._interrupt_channel_open = False
         self._connected_emitted = False

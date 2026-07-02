@@ -13,6 +13,8 @@ from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
 
+DISCONNECT_REQUEST_TIMEOUT_SECONDS = 0.25
+
 
 @dataclass(frozen=True)
 class SwitchGamepadConfig:
@@ -54,6 +56,7 @@ class SwitchGamepad:
         self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
+        self._disconnect_event = asyncio.Event()
         self._connection_state = "closed"
         self._is_open = False
 
@@ -130,7 +133,10 @@ class SwitchGamepad:
             if self._report_loop is not None:
                 await self._report_loop.stop()
             if self._connected_event.is_set():
-                await self._transport.request_disconnect()
+                self._disconnect_event.clear()
+                disconnect_result = await self._transport.request_disconnect()
+                if disconnect_result.status == "requested":
+                    await self._wait_for_disconnect_request_closed()
             await self._transport.close()
             self._report_loop = None
             self._is_open = False
@@ -195,6 +201,13 @@ class SwitchGamepad:
             raise ClosedError(msg)
         await self._report_loop.send_current_input()
 
+    async def _wait_for_disconnect_request_closed(self) -> None:
+        try:
+            async with asyncio.timeout(DISCONNECT_REQUEST_TIMEOUT_SECONDS):
+                await self._disconnect_event.wait()
+        except TimeoutError:
+            return
+
     async def _handle_interrupt_data(self, payload: bytes) -> None:
         await self._handle_output_report_data(payload)
 
@@ -258,6 +271,7 @@ class SwitchGamepad:
     async def _handle_disconnected(self, reason: int | None) -> None:
         self._diagnostics.record_event("disconnected", reason=reason)
         self._connected_event.clear()
+        self._disconnect_event.set()
         await self._state_store.neutral()
         if self._report_loop is not None:
             await self._report_loop.stop()

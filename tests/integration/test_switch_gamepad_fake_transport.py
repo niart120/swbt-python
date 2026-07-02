@@ -358,6 +358,38 @@ def test_connected_close_requests_disconnect_after_trailing_neutral() -> None:
     asyncio.run(run())
 
 
+def test_close_waits_for_disconnect_request_closed_event_once() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport(disconnect_request_auto_complete=False)
+        pad = SwitchGamepad(transport=transport, report_period_us=100_000)
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+
+        close_task = asyncio.create_task(pad.close(neutral=True))
+        await transport.wait_for_disconnect_request()
+        await asyncio.sleep(0)
+
+        assert close_task.done() is False
+
+        await transport.complete_disconnect_request(reason=0x13)
+        await transport.complete_disconnect_request(reason=0x13)
+        await asyncio.wait_for(close_task, timeout=0.1)
+
+        assert transport.close_count == 1
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnect_request_closed",
+            "close",
+        )
+
+    asyncio.run(run())
+
+
 def test_fake_l2cap_channels_must_both_open_before_wait_connected_completes() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
