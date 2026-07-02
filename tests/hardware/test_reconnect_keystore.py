@@ -115,9 +115,22 @@ def test_switch_active_reconnect_with_existing_key_store_records_result(
     assert _contains_event(reconnect_events, "active_reconnect_attempt", route="active_reconnect")
     result_event = _first_event(reconnect_events, "active_reconnect_result")
     assert result_event.get("route") == "active_reconnect"
-    assert result_event.get("status") in {"connected", "timeout", "failed"}
-    if result_event.get("status") != "connected":
-        assert result_event.get("failure_reason") in {"connection_timeout", "transport_error"}
+    assert result_event.get("status") == "connected"
+    assert _contains_event(
+        reconnect_events,
+        "l2cap_channel_open",
+        channel="control",
+        psm="0x0011",
+    )
+    assert _contains_event(
+        reconnect_events,
+        "l2cap_channel_open",
+        channel="interrupt",
+        psm="0x0013",
+    )
+    assert _contains_event(reconnect_events, "connected", adapter=swbt_bumble_adapter)
+    assert not _contains_event(reconnect_events, "classic_pairing")
+    assert not _contains_event(reconnect_events, "key_store_update")
     assert not _contains_event(reconnect_events, "advertising_start")
     assert _contains_event(
         reconnect_events,

@@ -86,6 +86,14 @@ class _BumbleHandle(Protocol):
 _OpenTransport = Callable[[str], Awaitable[_BumbleHandle]]
 
 
+class _BumbleConnectionRuntime(Protocol):
+    async def authenticate(self) -> None:
+        """Authenticate a Classic connection using stored link keys."""
+
+    async def encrypt(self, enable: bool = True) -> None:
+        """Enable or disable Classic connection encryption."""
+
+
 class _BumbleDeviceRuntime(Protocol):
     EVENT_CONNECTION: str
     EVENT_CONNECTION_FAILURE: str
@@ -114,7 +122,7 @@ class _BumbleDeviceRuntime(Protocol):
         *,
         transport: object,
         timeout: float | None = None,  # noqa: ASYNC109
-    ) -> object:
+    ) -> _BumbleConnectionRuntime:
         """Connect to a Bluetooth peer."""
 
 
@@ -397,11 +405,13 @@ class BumbleHidTransport:
         await self._ensure_classic_runtime_ready(self._runtime)
         from bumble.core import PhysicalTransport  # noqa: PLC0415
 
-        await self._runtime.device.connect(
+        connection = await self._runtime.device.connect(
             peer_address,
             transport=PhysicalTransport.BR_EDR,
             timeout=connect_timeout,
         )
+        await connection.authenticate()
+        await connection.encrypt(True)
         await self._runtime.hid_device.connect_control_channel()
         if self._runtime.hid_device.l2cap_ctrl_channel is not None:
             self._record_l2cap_channel_event(

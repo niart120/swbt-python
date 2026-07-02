@@ -30,14 +30,35 @@ class FakeBumbleHandle:
         self.close_count += 1
 
 
+class FakeBumbleConnection:
+    """Fake Classic connection returned by Bumble device.connect()."""
+
+    def __init__(self, operations: list[str]) -> None:
+        """Create a fake connection with operation tracing."""
+        self.operations = operations
+        self.authenticate_count = 0
+        self.encrypt_calls: list[bool] = []
+
+    async def authenticate(self) -> None:
+        """Record Classic authentication."""
+        self.authenticate_count += 1
+        self.operations.append("authenticate")
+
+    async def encrypt(self, enable: bool = True) -> None:
+        """Record Classic encryption enablement."""
+        self.encrypt_calls.append(enable)
+        self.operations.append(f"encrypt:{enable}")
+
+
 class FakeBumbleDevice:
     """Fake Bumble device runtime."""
 
     EVENT_CONNECTION = "connection"
     EVENT_CONNECTION_FAILURE = "connection_failure"
 
-    def __init__(self) -> None:
+    def __init__(self, *, operations: list[str] | None = None) -> None:
         """Create a fake device with power state."""
+        self.operations = operations if operations is not None else []
         self.powered_on = False
         self.power_on_count = 0
         self.power_off_count = 0
@@ -46,6 +67,7 @@ class FakeBumbleDevice:
         self.handlers: dict[str, list[Callable[..., None]]] = {}
         self.connection_requests: list[tuple[object, int, int]] = []
         self.connect_calls: list[tuple[str, object, float | None]] = []
+        self.connection = FakeBumbleConnection(self.operations)
         self.keystore: object | None = None
 
     async def power_on(self) -> None:
@@ -74,8 +96,9 @@ class FakeBumbleDevice:
         timeout: float | None = None,  # noqa: ASYNC109
     ) -> object:
         """Record one active connection attempt."""
+        self.operations.append("connect")
         self.connect_calls.append((peer_address, transport, timeout))
-        return object()
+        return self.connection
 
     def on(self, event: str, callback: Callable[..., None]) -> None:
         """Register one fake device event callback."""
@@ -204,8 +227,9 @@ class FakeHidDevice:
     EVENT_INTERRUPT_DATA = "interrupt_data"
     EVENT_CONTROL_DATA = "control_data"
 
-    def __init__(self) -> None:
+    def __init__(self, *, operations: list[str] | None = None) -> None:
         """Create a fake HID helper."""
+        self.operations = operations if operations is not None else []
         self.l2cap_intr_channel: object | None = None
         self.l2cap_ctrl_channel: object | None = None
         self.handlers: dict[str, Callable[[bytes], None]] = {}
@@ -253,11 +277,13 @@ class FakeHidDevice:
 
     async def connect_control_channel(self) -> None:
         """Record a fake active control-channel connection."""
+        self.operations.append("connect_control_channel")
         self.connect_calls.append("control")
         self.l2cap_ctrl_channel = FakeL2capChannel(0x0011)
 
     async def connect_interrupt_channel(self) -> None:
         """Record a fake active interrupt-channel connection."""
+        self.operations.append("connect_interrupt_channel")
         self.connect_calls.append("interrupt")
         self.l2cap_intr_channel = FakeL2capChannel(0x0013)
 
@@ -1198,8 +1224,9 @@ def test_bumble_active_reconnect_opens_hid_l2cap_channels_after_acl_connection()
     async def run() -> None:
         trace = StringIO()
         diagnostics = DiagnosticsRecorder(trace_writer=trace)
-        device = FakeBumbleDevice()
-        hid_device = FakeHidDevice()
+        operations: list[str] = []
+        device = FakeBumbleDevice(operations=operations)
+        hid_device = FakeHidDevice(operations=operations)
         connected_count = 0
 
         async def open_transport(adapter: str) -> FakeBumbleHandle:
@@ -1229,7 +1256,16 @@ def test_bumble_active_reconnect_opens_hid_l2cap_channels_after_acl_connection()
         assert len(device.connect_calls) == 1
         assert device.connect_calls[0][0] == "01:02:03:04:05:06"
         assert device.connect_calls[0][2] == 3.0
+        assert device.connection.authenticate_count == 1
+        assert device.connection.encrypt_calls == [True]
         assert hid_device.connect_calls == ["control", "interrupt"]
+        assert operations == [
+            "connect",
+            "authenticate",
+            "encrypt:True",
+            "connect_control_channel",
+            "connect_interrupt_channel",
+        ]
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
         assert {
