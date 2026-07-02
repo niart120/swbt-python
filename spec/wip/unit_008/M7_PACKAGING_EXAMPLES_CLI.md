@@ -68,8 +68,8 @@
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
 | Switch HID / report bytes | not applicable | not applicable | M7 は package / docs / CLI surface。protocol 値は既存 milestone の成果を参照する |
-| Bumble / transport | required | todo | CLI の adapter probe と pairing probe は Bumble API と version に依存する |
-| OS / driver / adapter | required | todo | README と `swbt-probe adapters` は Windows WinUSB / Linux libusb の実態を扱う |
+| Bumble / transport | required | done-for-implementation | `swbt-probe pair` は既存 `SwitchGamepad.pair()` 境界を使い、新しい Bumble API 仮定を追加しない。実機 run は承認待ち |
+| OS / driver / adapter | required | done-for-docs | README と `swbt-probe adapters --json` は hardware log の Windows / CSR8510 A10 / WinUSB と未確認 Linux / libusb を分けて表示する |
 
 ## 6. 振る舞い仕様
 
@@ -89,9 +89,9 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | package build が成功する | new | unit | no | `uv build` |
+| green | package build が成功する | new | unit | no | `uv build` で sdist / wheel build を確認 |
 | refactor-skipped | source distribution metadata が examples を含む | regression | unit | no | `tests/unit/test_package_metadata.py` で `examples/**` を固定 |
-| todo | installed package から `SwitchGamepad`、`Button`、`InputState`、`Stick` を import できる | regression | unit | no | public API |
+| green | installed package から `SwitchGamepad`、`Button`、`InputState`、`Stick` を import できる | regression | unit | no | built wheel を `sys.path` に入れて import を確認 |
 | refactor-skipped | 公開 API docstring が Google-style で引数、返値、属性、例外境界を説明する | new | unit | no | `tests/unit/test_public_api_docstrings.py` で固定。動作変更なし |
 | refactor-skipped | `examples/tap_a.py` の fake variant が実機なしで test できる | new | integration | no | `tests/integration/test_examples.py` で fake transport 実行を固定 |
 | refactor-skipped | `swbt-probe adapters --help` が動く | new | unit | no | `tests/unit/test_probe_cli.py` で entry point と help を固定。adapter open なし |
@@ -102,7 +102,7 @@
 | refactor-skipped | README に確認済み構成と未確認構成が分かれている | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
 | refactor-skipped | README が `unit_006` 後の Button A / neutral observed-pass を stale な「未記録」と矛盾なく説明する | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
 | refactor-skipped | examples が `tap(Button.A)` / `neutral()` の最小手順と実機承認境界を分けている | new | integration | no | `examples/tap_a.py`、`examples/pairing_probe.py`、`examples/hardware_bringup.py` を `tests/integration/test_examples.py` で固定 |
-| todo | `swbt-probe adapters` が developer machine で adapter 情報を表示する | characterization | bumble | yes | adapter open を伴う場合は承認が必要 |
+| green | `swbt-probe adapters` が developer machine で adapter 情報を表示する | characterization | unit | no | `uv run swbt-probe adapters --json` で adapter open なしの候補 / 環境情報を確認 |
 | todo | `swbt-probe pair` が trace を保存する | characterization | hardware | yes | Switch-facing 動作の承認が必要 |
 
 ## 8. 設計メモ
@@ -138,7 +138,7 @@
 
 | command | result | notes |
 |---|---|---|
-| `uv build` | pending | M7 実装後に package build gate として実行する |
+| `uv build` | pass | sdist `dist\swbt_python-0.1.0.tar.gz` と wheel `dist\swbt_python-0.1.0-py3-none-any.whl` を build できた |
 | `uv run pytest tests\unit\test_public_api_docstrings.py -q` | pass | 2 passed。公開 API docstring が Google-style section と公開契約 token を持つことを確認した |
 | `uv run ruff check src\swbt\gamepad.py src\swbt\input.py src\swbt\diagnostics.py tests\unit\test_public_api_docstrings.py` | pass | 今回追加した docstring と test の lint を確認した |
 | `uv run pytest tests\unit\test_probe_cli.py -q` | pass | 2 passed。`swbt-probe` entry point と `adapters --help` が adapter open なしで動くことを確認した |
@@ -157,8 +157,15 @@
 | `uv run ruff check examples\tap_a.py examples\pairing_probe.py examples\hardware_bringup.py tests\integration\test_examples.py` | pass | examples 3 件と integration test の lint を確認した |
 | `uv run pytest tests\unit\test_package_metadata.py -q` | pass | 1 passed。`source-include` に `examples/**` が含まれることを確認した |
 | `uv run ruff check pyproject.toml tests\unit\test_package_metadata.py` | pass | package metadata test の lint を確認した |
-| `uv run pytest tests/unit tests/integration` | pending | M7 実装後に local automated gate として実行する |
-| `uv run swbt-probe adapters` | pending-approval | adapter open を伴う場合は承認後に実行する |
+| `uv run --no-project python -c "<wheel import smoke>"` | pass | built wheel から `SwitchGamepad`、`Button`、`InputState`、`Stick` を import し、`swbt.__file__` が wheel path を指すことを確認した |
+| `uv run python -c "<sdist examples check>"` | pass | sdist に `examples/tap_a.py`、`examples/pairing_probe.py`、`examples/hardware_bringup.py` が含まれることを確認した |
+| `uv sync --dev` | pass | Resolved 41 packages / Checked 41 packages |
+| `uv run ruff format --check .` | pass | 50 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit tests/integration -q` | pass | 169 passed |
+| `uv run swbt-probe adapters --json` | pass | adapter を開かず、candidate `usb:0`、platform、Python 3.13.5、Bumble 0.0.230、`opens_adapter=false` を表示した |
+| `uv run swbt-probe pair --help` | pass | adapter、key store、trace、timeout と explicit approval 境界を表示した |
 | `uv run swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pending-approval | Switch-facing 動作の明示承認後に実行する |
 
 ## 11. 実機実行条件
