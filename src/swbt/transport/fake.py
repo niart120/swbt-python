@@ -8,6 +8,7 @@ from swbt.transport.base import (
     ConnectedCallback,
     ControlDataCallback,
     DisconnectedCallback,
+    DisconnectRequestResult,
     InterruptDataCallback,
 )
 
@@ -24,6 +25,7 @@ class FakeHidTransport:
         self._control_channel_open = False
         self._interrupt_channel_open = False
         self._connected_emitted = False
+        self._disconnect_request_sent_interrupt_count: int | None = None
         self._sent_interrupt_reports: list[bytes] = []
         self._sent_control_reports: list[bytes] = []
         self._interrupt_report_event = asyncio.Event()
@@ -62,6 +64,11 @@ class FakeHidTransport:
         """Return control reports sent by the gamepad."""
         return tuple(self._sent_control_reports)
 
+    @property
+    def disconnect_request_sent_interrupt_count(self) -> int | None:
+        """Return how many interrupt reports existed when disconnect was requested."""
+        return self._disconnect_request_sent_interrupt_count
+
     async def open(self) -> None:
         """Open the fake transport."""
         if self._is_open:
@@ -85,6 +92,35 @@ class FakeHidTransport:
         self._connected_emitted = False
         self._close_count += 1
         self._events.append("close")
+
+    async def request_disconnect(self) -> DisconnectRequestResult:
+        """Record a best-effort remote disconnect request."""
+        self._require_open()
+        if not self._control_channel_open and not self._interrupt_channel_open:
+            self._events.append("request_disconnect_unavailable")
+            return DisconnectRequestResult(
+                status="unavailable",
+                reason="channels_not_connected",
+            )
+        self._disconnect_request_sent_interrupt_count = len(self._sent_interrupt_reports)
+        self._events.append("request_disconnect")
+        await self.complete_disconnect_request()
+        return DisconnectRequestResult(
+            status="requested",
+            channels=("control", "interrupt"),
+        )
+
+    async def complete_disconnect_request(self, reason: int | None = None) -> None:
+        """Emit the host-side close completion for a pending fake request."""
+        self._require_open()
+        if not self._control_channel_open and not self._interrupt_channel_open:
+            return
+        self._control_channel_open = False
+        self._interrupt_channel_open = False
+        self._connected_emitted = False
+        self._events.append("disconnect_request_closed")
+        if self._disconnected_callback is not None:
+            await self._disconnected_callback(reason)
 
     async def connect(self) -> None:
         """Emit a fake host connection event."""

@@ -129,6 +129,8 @@ class SwitchGamepad:
                 await self._send_trailing_neutral_if_connected()
             if self._report_loop is not None:
                 await self._report_loop.stop()
+            if self._connected_event.is_set():
+                await self._transport.request_disconnect()
             await self._transport.close()
             self._report_loop = None
             self._is_open = False

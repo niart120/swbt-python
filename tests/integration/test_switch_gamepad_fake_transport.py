@@ -330,6 +330,34 @@ def test_close_with_neutral_records_trailing_neutral_report() -> None:
     asyncio.run(run())
 
 
+def test_connected_close_requests_disconnect_after_trailing_neutral() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = SwitchGamepad(transport=transport, report_period_us=100_000)
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+        await pad.press(Button.A)
+
+        await pad.close(neutral=True)
+
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnect_request_closed",
+            "close",
+        )
+        assert transport.disconnect_request_sent_interrupt_count == 1
+        assert transport.sent_interrupt_reports[-1][0] == 0x30
+        assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("00 00 00")
+        assert transport.close_count == 1
+
+    asyncio.run(run())
+
+
 def test_fake_l2cap_channels_must_both_open_before_wait_connected_completes() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
