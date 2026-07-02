@@ -2,8 +2,10 @@
 
 import argparse
 import json
+import platform
 import sys
 from collections.abc import Sequence
+from importlib.metadata import PackageNotFoundError, version
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -77,21 +79,35 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _run_adapters(args: argparse.Namespace) -> int:
     payload = {
-        "adapters": [],
+        "bumble_version": _package_version("bumble"),
+        "candidate_adapters": ["usb:0"],
         "opens_adapter": False,
-        "status": "adapter probing is not implemented in this command yet",
+        "platform": platform.platform(),
+        "python_version": platform.python_version(),
+        "status": "adapter listing does not open hardware",
     }
     if args.json:
         sys.stdout.write(f"{json.dumps(payload, sort_keys=True)}\n")
     else:
         sys.stdout.write("This command does not open a Bluetooth adapter.\n")
-        sys.stdout.write("Adapter probing will require an explicit hardware approval scope.\n")
+        sys.stdout.write(f"Platform: {payload['platform']}\n")
+        sys.stdout.write(f"Python: {payload['python_version']}\n")
+        sys.stdout.write(f"Bumble: {payload['bumble_version']}\n")
+        sys.stdout.write("Candidate adapters: usb:0\n")
+        sys.stdout.write("Opening an adapter requires an explicit hardware approval scope.\n")
     return 0
 
 
 def _run_pair(_args: argparse.Namespace) -> int:
     sys.stderr.write("swbt-probe pair is not implemented yet; no adapter was opened.\n")
     return 2
+
+
+def _package_version(package_name: str) -> str:
+    try:
+        return version(package_name)
+    except PackageNotFoundError:
+        return "unknown"
 
 
 if __name__ == "__main__":

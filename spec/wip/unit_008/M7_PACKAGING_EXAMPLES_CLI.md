@@ -95,6 +95,7 @@
 | refactor-skipped | 公開 API docstring が Google-style で引数、返値、属性、例外境界を説明する | new | unit | no | `tests/unit/test_public_api_docstrings.py` で固定。動作変更なし |
 | refactor-skipped | `examples/tap_a.py` の fake variant が実機なしで test できる | new | integration | no | `tests/integration/test_examples.py` で fake transport 実行を固定 |
 | refactor-skipped | `swbt-probe adapters --help` が動く | new | unit | no | `tests/unit/test_probe_cli.py` で entry point と help を固定。adapter open なし |
+| refactor-skipped | `swbt-probe adapters --json` が adapter を開かず候補 adapter と環境情報を表示する | new | unit | no | `tests/unit/test_probe_cli.py` で固定。Bumble import なし |
 | refactor-skipped | `swbt-probe pair --help` が承認境界を読める説明を持つ | new | unit | no | `tests/unit/test_probe_cli.py` で固定。実行はしない |
 | refactor-skipped | README に Windows 専用 dongle / WinUSB 注意点がある | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
 | refactor-skipped | README に確認済み構成と未確認構成が分かれている | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
@@ -143,6 +144,8 @@
 | `uv run ruff check pyproject.toml src\swbt\probe.py tests\unit\test_probe_cli.py` | pass | CLI entry point、probe module、CLI test の lint を確認した |
 | `uv run pytest tests\unit\test_probe_cli.py -q` | pass | 3 passed。`pair --help` が adapter、trace、timeout、Switch-facing 承認境界を説明することを確認した |
 | `uv run ruff check src\swbt\probe.py tests\unit\test_probe_cli.py` | pass | `pair --help` 追加後の CLI module と test の lint を確認した |
+| `uv run pytest tests\unit\test_probe_cli.py -q` | pass | 4 passed。`adapters --json` が adapter open なしで候補 adapter、platform、Python、Bumble version を出すことを確認した |
+| `uv run ruff check src\swbt\probe.py tests\unit\test_probe_cli.py` | pass | `adapters --json` 追加後の CLI module と test の lint を確認した |
 | `uv run pytest tests\integration\test_examples.py -q` | pass | 1 passed。`examples/tap_a.py` の `tap_a_once()` が fake transport で Button A press / release report を送ることを確認した |
 | `uv run ruff check examples\tap_a.py tests\integration\test_examples.py` | pass | tap_a example と integration test の lint を確認した |
 | `uv run pytest tests\unit\test_readme_docs.py -q` | pass | 3 passed。README が確認済み / 未確認構成、専用 dongle / WinUSB 注意点、Button A / neutral 観測を hardware log と矛盾なく説明することを確認した |

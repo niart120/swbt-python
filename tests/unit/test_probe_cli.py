@@ -1,5 +1,6 @@
 """swbt-probe command line surface tests."""
 
+import json
 import subprocess
 import sys
 import tomllib
@@ -27,6 +28,24 @@ def test_swbt_probe_adapters_help_runs_without_opening_adapter() -> None:
     assert "swbt-probe adapters" in result.stdout
     assert "--json" in result.stdout
     assert "does not open a Bluetooth adapter" in help_text
+
+
+def test_swbt_probe_adapters_json_reports_no_open_environment() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "swbt.probe", "adapters", "--json"],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+
+    assert payload["opens_adapter"] is False
+    assert payload["candidate_adapters"] == ["usb:0"]
+    assert payload["platform"]
+    assert payload["python_version"]
+    assert payload["bumble_version"]
 
 
 def test_swbt_probe_pair_help_describes_approval_boundary() -> None:
