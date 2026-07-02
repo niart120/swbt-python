@@ -155,6 +155,7 @@ class BumbleHidTransport:
         *,
         adapter: str,
         device_name: str = _DEFAULT_DEVICE_NAME,
+        key_store_path: str | None = None,
         diagnostics: DiagnosticsRecorder | None = None,
         _open_transport: _OpenTransport | None = None,
         _initialize_device: _InitializeDevice | None = None,
@@ -164,12 +165,17 @@ class BumbleHidTransport:
         """Create a Bumble transport for an adapter string."""
         self._adapter = adapter
         self._device_name = device_name
+        self._key_store_path = key_store_path
         self._diagnostics = diagnostics
         self._open_transport = _open_transport or _default_open_transport
         if _initialize_device is None:
 
             async def initialize_device(handle: _BumbleHandle) -> _BumbleRuntime:
-                return await _default_initialize_device(handle, device_name=self._device_name)
+                return await _default_initialize_device(
+                    handle,
+                    device_name=self._device_name,
+                    key_store_path=self._key_store_path,
+                )
 
             self._initialize_device = initialize_device
         else:
@@ -701,6 +707,7 @@ async def _default_initialize_device(
     handle: _BumbleHandle,
     *,
     device_name: str,
+    key_store_path: str | None = None,
 ) -> _BumbleRuntime:
     from bumble.device import Device, DeviceConfiguration  # noqa: PLC0415
     from bumble.hid import Device as HidDevice  # noqa: PLC0415
@@ -711,6 +718,7 @@ async def _default_initialize_device(
         class_of_device=_REFERENCE_CLASS_OF_DEVICE,
         le_enabled=False,
         classic_enabled=True,
+        keystore=_bumble_key_store_config(key_store_path),
         # Bumble applies these flags during power_on; keep them off until after
         # the Classic link policy command is sent.
         connectable=False,
@@ -733,6 +741,12 @@ async def _default_initialize_device(
         service_record_count=len(service_records),
         hid_descriptor_size=len(profile.hid_report_descriptor),
     )
+
+
+def _bumble_key_store_config(key_store_path: str | None) -> str | None:
+    if key_store_path is None:
+        return None
+    return f"JsonKeyStore:{key_store_path}"
 
 
 async def _default_start_advertising(runtime: _BumbleRuntime) -> None:

@@ -3,8 +3,11 @@ import json
 import warnings
 from collections.abc import Callable
 from io import StringIO
+from pathlib import Path
 from typing import Any, cast
 
+import bumble.device as bumble_device_module
+import bumble.hid as bumble_hid_module
 import pytest
 
 from swbt.diagnostics import DiagnosticsRecorder
@@ -465,6 +468,46 @@ def test_bumble_transport_records_custom_device_name_in_diagnostics() -> None:
         } in events
 
         await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_initialize_device_configures_json_key_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        captured_config: dict[str, Any] = {}
+
+        class FakeDeviceFactory:
+            @staticmethod
+            def from_config_with_hci(config: object, source: object, sink: object) -> object:
+                captured_config["keystore"] = getattr(config, "keystore", None)
+                captured_config["source"] = source
+                captured_config["sink"] = sink
+                return FakeBumbleDevice()
+
+        def create_hid_device(device: object) -> FakeHidDevice:
+            assert isinstance(device, FakeBumbleDevice)
+            return FakeHidDevice()
+
+        monkeypatch.setattr(bumble_device_module, "Device", FakeDeviceFactory)
+        monkeypatch.setattr(bumble_hid_module, "Device", create_hid_device)
+
+        key_store_path = tmp_path / "keys.json"
+        handle = FakeBumbleHandle()
+
+        await bumble_module._default_initialize_device(
+            handle,
+            device_name="Pro Controller",
+            key_store_path=str(key_store_path),
+        )
+
+        assert captured_config == {
+            "keystore": f"JsonKeyStore:{key_store_path}",
+            "source": handle.source,
+            "sink": handle.sink,
+        }
 
     asyncio.run(run())
 
