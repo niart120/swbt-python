@@ -934,6 +934,49 @@ def test_bumble_request_disconnect_calls_interrupt_then_control_helpers() -> Non
     asyncio.run(run())
 
 
+def test_bumble_l2cap_channel_close_notifies_disconnected_after_both_channels() -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        disconnected_reasons: list[int | None] = []
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        async def on_disconnected(reason: int | None) -> None:
+            disconnected_reasons.append(reason)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+        transport.on_disconnected(on_disconnected)
+
+        await transport.open()
+        control = FakeL2capChannel(0x0011)
+        interrupt = FakeL2capChannel(0x0013)
+        hid_device.on_l2cap_channel_open(control)
+        hid_device.on_l2cap_channel_open(interrupt)
+
+        hid_device.on_l2cap_channel_close(control)
+        await asyncio.sleep(0)
+        assert disconnected_reasons == []
+
+        hid_device.on_l2cap_channel_close(interrupt)
+        await asyncio.sleep(0)
+
+        assert disconnected_reasons == [None]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
 def test_bumble_connection_request_is_recorded_before_connection_complete() -> None:
     async def run() -> None:
         trace = StringIO()

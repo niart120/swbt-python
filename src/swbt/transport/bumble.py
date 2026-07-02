@@ -182,6 +182,7 @@ class BumbleHidTransport:
         self._connected_callback: ConnectedCallback | None = None
         self._disconnected_callback: DisconnectedCallback | None = None
         self._l2cap_connected_emitted = False
+        self._disconnected_callback_emitted = False
 
     async def open(self) -> None:
         """Open the configured Bumble adapter."""
@@ -247,6 +248,7 @@ class BumbleHidTransport:
         self._handle = None
         self._runtime = None
         self._l2cap_connected_emitted = False
+        self._disconnected_callback_emitted = False
         if runtime is not None:
             await self._close_runtime(runtime)
         await handle.close()
@@ -392,12 +394,14 @@ class BumbleHidTransport:
             original_close(l2cap_channel)
             self._record_l2cap_channel_event("l2cap_channel_close", l2cap_channel)
             self._l2cap_connected_emitted = False
+            self._notify_disconnected_if_channels_closed()
 
         hid_device.on_l2cap_channel_open = on_l2cap_channel_open
         hid_device.on_l2cap_channel_close = on_l2cap_channel_close
 
     def _handle_device_connection(self, connection: object) -> None:
         self._l2cap_connected_emitted = False
+        self._disconnected_callback_emitted = False
         fields: dict[str, object] = {"adapter": self._adapter}
         connection_handle = getattr(connection, "handle", None)
         peer_address = getattr(connection, "peer_address", None)
@@ -559,8 +563,7 @@ class BumbleHidTransport:
     def _handle_device_disconnection(self, reason: int | None = None) -> None:
         self._l2cap_connected_emitted = False
         self._record_event("disconnected", adapter=self._adapter, reason=reason)
-        if self._disconnected_callback is not None:
-            self._dispatch_disconnected_callback(reason)
+        self._notify_disconnected_once(reason)
 
     def _dispatch_interrupt_data(self, payload: bytes) -> None:
         report = _decode_hidp_output_report(payload)
@@ -619,6 +622,21 @@ class BumbleHidTransport:
         self._l2cap_connected_emitted = True
         self._record_event("connected", adapter=self._adapter)
         self._dispatch_connected_callback()
+
+    def _notify_disconnected_if_channels_closed(self) -> None:
+        if self._runtime is None:
+            return
+        hid_device = self._runtime.hid_device
+        if hid_device.l2cap_ctrl_channel is not None or hid_device.l2cap_intr_channel is not None:
+            return
+        self._notify_disconnected_once(None)
+
+    def _notify_disconnected_once(self, reason: int | None) -> None:
+        if self._disconnected_callback_emitted:
+            return
+        self._disconnected_callback_emitted = True
+        if self._disconnected_callback is not None:
+            self._dispatch_disconnected_callback(reason)
 
     def _record_l2cap_channel_event(self, event: str, l2cap_channel: object) -> None:
         psm = getattr(l2cap_channel, "psm", None)
