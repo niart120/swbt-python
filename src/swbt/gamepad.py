@@ -59,6 +59,7 @@ class SwitchGamepad:
         self._disconnect_event = asyncio.Event()
         self._connection_state = "closed"
         self._is_open = False
+        self._close_in_progress = False
 
     async def __aenter__(self) -> "SwitchGamepad":
         """Open the gamepad for an async context manager."""
@@ -127,31 +128,35 @@ class SwitchGamepad:
         async with self._lifecycle_lock:
             if not self._is_open or self._transport is None:
                 return
-            self._connection_state = "disconnecting"
-            if neutral:
-                await self._send_trailing_neutral_if_connected()
-            if self._report_loop is not None:
-                await self._report_loop.stop()
-            self._disconnect_event.clear()
-            disconnect_result = await self._transport.request_disconnect()
-            self._record_disconnect_request_result(disconnect_result)
-            if disconnect_result.status == "requested":
-                disconnect_closed = await self._wait_for_disconnect_request_closed()
-                if disconnect_closed:
-                    self._diagnostics.record_event(
-                        "disconnect_request_terminal",
-                        status="closed",
-                    )
-                else:
-                    self._diagnostics.record_event(
-                        "disconnect_request_terminal",
-                        status="timeout",
-                        timeout=DISCONNECT_REQUEST_TIMEOUT_SECONDS,
-                    )
-            await self._transport.close()
-            self._report_loop = None
-            self._is_open = False
-            self._connection_state = "closed"
+            self._close_in_progress = True
+            try:
+                self._connection_state = "disconnecting"
+                if neutral:
+                    await self._send_trailing_neutral_if_connected()
+                if self._report_loop is not None:
+                    await self._report_loop.stop()
+                self._disconnect_event.clear()
+                disconnect_result = await self._transport.request_disconnect()
+                self._record_disconnect_request_result(disconnect_result)
+                if disconnect_result.status == "requested":
+                    disconnect_closed = await self._wait_for_disconnect_request_closed()
+                    if disconnect_closed:
+                        self._diagnostics.record_event(
+                            "disconnect_request_terminal",
+                            status="closed",
+                        )
+                    else:
+                        self._diagnostics.record_event(
+                            "disconnect_request_terminal",
+                            status="timeout",
+                            timeout=DISCONNECT_REQUEST_TIMEOUT_SECONDS,
+                        )
+                await self._transport.close()
+                self._report_loop = None
+                self._is_open = False
+                self._connection_state = "closed"
+            finally:
+                self._close_in_progress = False
 
     async def press(self, *buttons: Button) -> None:
         """Add buttons to the current input state."""
@@ -295,15 +300,19 @@ class SwitchGamepad:
     async def _handle_disconnected(self, reason: int | None) -> None:
         self._diagnostics.record_event("disconnected", reason=reason)
         self._connected_event.clear()
-        self._disconnect_event.set()
-        await self._state_store.neutral()
-        if self._report_loop is not None:
-            await self._report_loop.stop()
-            self._report_loop = None
-        if self._transport is not None and self._is_open:
-            await self._transport.close()
-        self._is_open = False
-        self._connection_state = "closed"
+        try:
+            await self._state_store.neutral()
+            if self._report_loop is not None:
+                await self._report_loop.stop()
+                self._report_loop = None
+            if self._close_in_progress:
+                return
+            if self._transport is not None and self._is_open:
+                await self._transport.close()
+            self._is_open = False
+            self._connection_state = "closed"
+        finally:
+            self._disconnect_event.set()
 
     def _ensure_transport(self) -> HidDeviceTransport:
         if self._transport is None:
