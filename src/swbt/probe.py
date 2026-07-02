@@ -1,11 +1,15 @@
 """Command line probes for swbt hardware setup."""
 
 import argparse
+import asyncio
 import json
 import platform
 import sys
 from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+
+from swbt import DiagnosticsConfig, SwitchGamepad
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,7 +51,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="adapter moniker to use after approval, for example usb:0",
     )
     pair_parser.add_argument(
+        "--key-store",
+        dest="key_store_path",
+        help="pairing key store path for the approved pairing run",
+    )
+    pair_parser.add_argument(
         "--trace",
+        required=True,
+        type=Path,
         metavar="PATH",
         help="JSON Lines trace output path for the approved pairing run",
     )
@@ -99,8 +110,33 @@ def _run_adapters(args: argparse.Namespace) -> int:
 
 
 def _run_pair(_args: argparse.Namespace) -> int:
-    sys.stderr.write("swbt-probe pair is not implemented yet; no adapter was opened.\n")
-    return 2
+    asyncio.run(
+        _run_pair_probe(
+            adapter=_args.adapter,
+            key_store_path=_args.key_store_path,
+            pair_timeout=_args.timeout,
+            trace_path=_args.trace,
+        )
+    )
+    return 0
+
+
+async def _run_pair_probe(
+    *,
+    adapter: str,
+    key_store_path: str | None,
+    pair_timeout: float,
+    trace_path: Path,
+) -> None:
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    with trace_path.open("w", encoding="utf-8") as trace_writer:
+        diagnostics = DiagnosticsConfig(trace_writer=trace_writer)
+        async with SwitchGamepad(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            diagnostics=diagnostics,
+        ) as pad:
+            await pad.pair(timeout=pair_timeout)
 
 
 def _package_version(package_name: str) -> str:
