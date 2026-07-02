@@ -69,7 +69,7 @@
 | 振る舞い | 入力・状態 | 期待結果 | 備考 |
 |---|---|---|---|
 | resource scope enter | `async with SwitchGamepad(...)` | transport は open 済み、diagnostics metadata は記録済み、HID advertising は未開始 | state 名は `opened` とする |
-| explicit pairing entry | `await pad.pair(timeout=...)` | `transport.start_advertising()` を呼び、incoming 接続完了まで待つ | 既存 `open()` + `wait_connected()` 経路を移す |
+| explicit pairing entry | `await pad.pair(timeout=...)` | `transport.start_advertising()` を呼び、incoming 接続完了まで待つ | 既存の `open()` 暗黙 advertising 経路を移す |
 | explicit low-level advertising | 必要な場合のみ内部 helper または transport-level API | public API では `start_advertising()` を直接露出しない | 利用者には `pair()` / M6 `connect()` を見せる |
 | resource close | `__aexit__` / `close(neutral=True)` | unit_014 の ordering に従い cleanup する | connected でなければ disconnect request は unavailable |
 | no implicit pairing | `async with` のみ | `advertising_start` trace は出ない | 破壊的変更として固定する |
@@ -82,9 +82,10 @@
 | refactor-skipped | `async with SwitchGamepad(transport=fake)` は transport を open するが `start_advertising` を呼ばない | breaking | integration | no | red で `start_advertising` が残って失敗し、green で `open()` を resource open に限定した。追加 refactor は不要 |
 | refactor-skipped | `await pad.open()` は transport open と report loop 準備だけを行い advertising しない | breaking | integration | no | `test_open_only_does_not_start_advertising` で `opened` state と event `("open",)` を固定 |
 | refactor-skipped | `await pad.pair(timeout=...)` は advertising を開始し、fake connected callback で完了する | new | integration | no | `test_pair_starts_advertising_and_waits_for_fake_connection` で `start_advertising` と connected 完了を確認 |
-| refactor-skipped | `pair()` timeout は `connection_timeout` diagnostics を残す | regression | integration | no | `pair()` timeout は `advertising`、低水準 `wait_connected()` timeout は `opened` として記録する |
+| refactor-skipped | `pair()` timeout は `connection_timeout` diagnostics を残す | regression | integration | no | `pair()` timeout は `advertising` として記録する |
 | refactor-skipped | `close(neutral=True)` の connected cleanup ordering は維持される | regression | integration | no | close request / timeout / host-disconnect race tests を resource-scope event order に更新し、integration 全体で確認 |
 | refactor-skipped | public API import は Bumble を import しない | regression | unit | no | `test_public_api_import_does_not_import_bumble` を含む boundary tests で確認 |
+| done | 明示 `pair()` 後の full handshake から Button A path へ進める | regression | hardware | yes | `test_switch_input_after_full_handshake_for_manual_reflection` で on-wire sequence と checkpoint を確認。UI 反映は自動判定しない |
 | done | docs examples は `async with` 後に `connect()` または `pair()` を明示する | docs | docs | no | `spec/initial/api.md` の利用例を更新済み |
 
 ## 8. 設計メモ
@@ -93,7 +94,7 @@
 - `connected session scope` が必要になった場合は、後続で `SwitchGamepad.connected(...)` のような classmethod を検討する。M6 前には入れない。
 - `pair()` は初回 pairing のための明示 API とする。内部では HID advertising を開始するが、利用者に `start_advertising()` を直接呼ばせない。
 - M6 の `connect()` は bond 優先の便利 API として設計する。bond がなければ `allow_pairing=True` の場合だけ `pair()` に進む。
-- `wait_connected()` は低水準 helper として残すか、`pair()` / `connect()` の内部 API に寄せるかを実装時に決める。public に残す場合でも主導線にはしない。
+- `wait_connected()` は public API と private helper のどちらにも残さない。接続待ちと timeout diagnostics は `pair()` / M6 `connect()` / `reconnect()` の内部責務に寄せる。
 - 互換性は維持しない。既存 examples / tests は破壊的に更新する。
 - `open()` 後の state 名は `opened` とする。`advertising` は `pair()` が始まってからの state とする。
 
@@ -104,7 +105,7 @@
 | `src/swbt/gamepad.py` | modify | `__aenter__` / `open()` / `pair()` / lifecycle state |
 | `src/swbt/transport/base.py` | no change | `open()` / `start_advertising()` の既存 docstring が今回の責務分離と一致しているため変更なし |
 | `src/swbt/transport/fake.py` | no change | fake lifecycle event は既存の `open` / `start_advertising` / `connected` を利用 |
-| `src/swbt/diagnostics.py` | no change | 既存 `connection_timeout` event の state field で `opened` / `advertising` を区別 |
+| `src/swbt/diagnostics.py` | no change | 既存 `connection_timeout` event の state field で `advertising` を記録 |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | `async with` / `open()` / `pair()` の breaking tests |
 | `tests/unit/test_public_api_boundary.py` | no change | public API boundary の回帰確認だけを実行 |
 | `spec/initial/api.md` | modify | 利用例、context manager、接続 API。仕様整理として更新済み |
@@ -113,30 +114,32 @@
 
 ## 10. 検証
 
-実装後の automated gate 結果を記録する。実機 smoke は未実行のため、この unit は `spec/wip` に留める。
+実装後の automated gate と unit_015 smoke 結果を記録する。
 
 | command | result | notes |
 |---|---|---|
-| `uv run ruff format --check .` | pass | 39 files already formatted |
-| `uv run ruff check .` | pass | `pair(timeout=...)` は既存 `wait_connected(timeout=...)` と同じく public timeout API として `ASYNC109` を明示抑制 |
+| `uv run ruff format --check .` | pass | 40 files already formatted |
+| `uv run ruff check .` | pass | `pair(timeout=...)` は public timeout API として `ASYNC109` を明示抑制 |
 | `uv run ty check --no-progress` | pass | all checks passed |
-| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 34 passed |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 32 passed |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_async_context_opens_and_closes_fake_transport -q` | pass | first TDD item。red は `start_advertising` が残って失敗、green 後 pass |
 | `uv run pytest tests/unit/test_public_api_boundary.py -q` | pass | 5 passed。Bumble import boundary |
-| `uv run pytest tests/unit tests/integration -q` | pass | 140 passed |
-| `uv run pytest -m hardware` | pending-approval | complete 移動前に実機 smoke を行う場合は、adapter、command、Switch-facing 動作、cleanup plan の明示承認が必要 |
-| `git diff --check -- spec/initial/api.md spec/initial/lifecycle.md spec/wip/unit_015/CONTEXT_MANAGER_RESOURCE_SCOPE.md` | pass | docs whitespace check |
+| `uv run pytest tests/unit tests/integration -q` | pass | 138 passed |
+| `uv run pytest tests/hardware/test_context_manager_resource_scope.py::test_switch_gamepad_open_only_does_not_start_advertising_on_bumble -m bumble --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_015\20260703-004306-resource-open-only --log-file .pytest_cache\hardware\unit_015\20260703-004306-resource-open-only\pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 0.29s`。`open()` は `transport_open_complete` を記録し、`advertising_start` / `host_connection` を記録しなかった |
+| `uv run pytest tests/hardware/test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_015\20260703-004306-pair-close-smoke --log-file .pytest_cache\hardware\unit_015\20260703-004306-pair-close-smoke\pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 4.28s`。`pair()` が `advertising_start`、HID L2CAP `connected`、trailing neutral、disconnect terminal、`transport_close_complete` まで到達 |
+| `uv run pytest tests/hardware/test_input_operations.py::test_switch_input_after_full_handshake_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_015\20260703-004306-post-handshake-button-a --log-file .pytest_cache\hardware\unit_015\20260703-004306-post-handshake-button-a\pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 5.46s`。full observed handshake 後に `tap(Button.A)`、neutral、close checkpoint まで到達。Switch UI 反映は自動判定しない |
+| `git diff --check -- spec/initial/api.md spec/initial/lifecycle.md spec/complete/unit_015/CONTEXT_MANAGER_RESOURCE_SCOPE.md` | pass | docs whitespace check |
 
 ## 11. 実機実行条件
 
 | 項目 | 内容 |
 |---|---|
-| 実機要否 | pending decision。automated TDD に実機は不要だが、public lifecycle の破壊的変更を complete 扱いにする前の smoke は未実行 |
-| 承認範囲 | pending。実行する場合は adapter open、HID advertising、初回 pairing または既存接続、Button A smoke、neutral / close cleanup |
-| adapter | pending |
+| 実機要否 | done。public lifecycle の破壊的変更について、resource-only `open()` smoke、explicit `pair()` close smoke、full handshake 後の Button A path を実行済み |
+| 承認範囲 | user approved。実行範囲は adapter open、Classic HID Device initialization、resource-only `open()` without advertising、explicit `pair()` の discoverable / connectable / HID advertising、Switch pairing or existing connection、HID control / interrupt L2CAP open、periodic report loop after `connected`、full observed subcommand handshake、`tap(Button.A)`、neutral、trailing neutral、remote close request、closed event wait、cleanup |
+| adapter | `usb:0` |
 | 実行遮断 | 環境変数による遮断は採用しない。明示承認、対象 adapter、command、cleanup plan で管理する |
-| log / artifact | integration test diagnostics trace |
-| cleanup | fake transport close |
+| log / artifact | `.pytest_cache\hardware\unit_015\20260703-004306-resource-open-only\resource-open-only.jsonl`, `.pytest_cache\hardware\unit_015\20260703-004306-pair-close-smoke\close-disconnect.jsonl`, `.pytest_cache\hardware\unit_015\20260703-004306-post-handshake-button-a\post-handshake-input.jsonl`, `docs/hardware-test-log.md` |
+| cleanup | `pad.close(neutral=True)`。resource-only smoke は advertising に入らず close。pair close smoke と Button A path は disconnect request terminal、transport close complete を記録 |
 
 ## 12. 先送り事項
 
@@ -150,4 +153,4 @@
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件を記録した
 - [x] 実装後に検証結果を記録した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] 完了条件を満たしたら `spec/complete` へ移動する

@@ -18,6 +18,7 @@
 - New pairing attempt: 2026-07-02 にユーザが Switch 側の pairing 情報削除と新規追加画面での探索を確認した状態で L2CAP-only check を再試行した。Bumble 側は `Pro Controller` / Class of Device `0x002508` / extended inquiry response を設定し、最終的な `scan_enable: 3` も成功したが、`host_connection` と HCI `HCI_CONNECTION_REQUEST_EVENT` は来ず 60 秒 timeout した。この run は pairing 失敗ではなく、pairing 開始前の discovery / connection request 未到達として扱う。
 - Discovery visibility hold: 2026-07-02 に `usb:0` を `Pro Controller` として 90 秒間 discoverable / connectable に保持した。trace は `advertising_start`、`manual_advertising_hold_start duration_seconds=90`、`manual_advertising_hold_complete`、`transport_close_complete` を記録したが、`host_connection` は記録しなかった。外部 scanner から見えたかどうかはこの artifact だけでは確定できない。
 - Close cleanup scan disable: 2026-07-02 に close cleanup を修正後、`usb:0` を 5 秒間だけ `Pro Controller` として advertise し、close で Classic scan を停止する診断を実行した。trace は `host_connection` を記録し、debug log は close path の `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 0` が `SUCCESS` で完了したことを記録した。ユーザは iPhone 側で `Pro Controller` 表示が消えたことを目視した。
+- Context manager resource scope run: 2026-07-03 に `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で unit_015 smoke を実行した。`open()` only smoke は `transport_open_complete` と `transport_close_complete` を記録し、`advertising_start` と `host_connection` を記録しなかった。`pair()` close smoke は `advertising_start`、`connection_request`、`host_connection`、`classic_pairing`、HID control / interrupt L2CAP open、`connected`、trailing neutral `0x30`、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete` を記録した。Button A path は full observed handshake 後に `tap(Button.A)`、neutral、close まで到達し、`manual_input_checkpoint post_handshake_tap_a_complete` と `post_handshake_neutral_complete` を記録した。この pytest は on-wire sequence と checkpoint を確認するが、Switch UI 反映は自動判定しない。
 
 ## Run Entry Template
 
@@ -50,6 +51,30 @@
 | macOS | 未検証 | 未検証 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期検証対象外 |
 
 ## Run Entries
+
+### 2026-07-03: unit_015 resource open did not advertise, explicit pair and Button A path passed
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `main` at `42837e7` with uncommitted API removal and hardware-test updates
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed in previous Bumble debug logs for this adapter
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Pair close smoke recorded one trailing neutral `0x30` input report from `pad.close(neutral=True)`. Button A path recorded full observed handshake, `tap(Button.A)`, neutral reports, and close cleanup.
+- command / test: `uv run pytest tests/hardware/test_context_manager_resource_scope.py::test_switch_gamepad_open_only_does_not_start_advertising_on_bumble -m bumble --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_015\20260703-004306-resource-open-only --log-file .pytest_cache\hardware\unit_015\20260703-004306-resource-open-only\pytest-debug.log --log-file-level=DEBUG -q -s`
+- command / test: `uv run pytest tests/hardware/test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_015\20260703-004306-pair-close-smoke --log-file .pytest_cache\hardware\unit_015\20260703-004306-pair-close-smoke\pytest-debug.log --log-file-level=DEBUG -q -s`
+- command / test: `uv run pytest tests/hardware/test_input_operations.py::test_switch_input_after_full_handshake_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_015\20260703-004306-post-handshake-button-a --log-file .pytest_cache\hardware\unit_015\20260703-004306-post-handshake-button-a\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved unit_015 hardware validation. Scope used here was adapter `usb:0`, USB Bluetooth dongle open, Classic HID Device initialization, resource-only `open()` without HID advertising, explicit `pair()` with discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, periodic report loop after `connected`, full observed subcommand handshake for the Button A path, one `tap(Button.A)`, neutral, trailing neutral, remote close request, closed event wait, and cleanup.
+- result: pass. Resource-only smoke: `1 passed in 0.29s`; trace includes `transport_open_complete`, `disconnect_request status=unavailable`, and `transport_close_complete`; trace does not include `advertising_start` or `host_connection`. Pair close smoke: `1 passed in 4.28s`; trace includes `advertising_start`, `connection_request`, `host_connection`, `classic_pairing`, HID control / interrupt `l2cap_channel_open`, `connected`, `manual_close_checkpoint close_start`, one neutral `report_tx`, `disconnect_request status=requested`, `disconnect_request_terminal status=closed`, `transport_close_complete`, and `manual_close_checkpoint close_complete`. Button A path: `1 passed in 5.46s`; trace includes full observed handshake through `0x21`, `manual_input_checkpoint handshake_complete`, `post_handshake_tap_a_start`, `post_handshake_tap_a_complete`, `post_handshake_neutral_complete`, `disconnect_request status=requested`, `disconnect_request_terminal status=closed`, and `transport_close_complete`.
+- artifact: `.pytest_cache\hardware\unit_015\20260703-004306-resource-open-only\resource-open-only.jsonl`
+- artifact: `.pytest_cache\hardware\unit_015\20260703-004306-pair-close-smoke\close-disconnect.jsonl`
+- artifact: `.pytest_cache\hardware\unit_015\20260703-004306-post-handshake-button-a\post-handshake-input.jsonl`
+- cleanup: all tests closed the gamepad in `finally`. Resource-only smoke never entered advertising. Pair close smoke and Button A path recorded `transport_close_complete` after disconnect request terminal state.
+- notes: This validates the unit_015 lifecycle split, explicit `pair()` route, and Button A on-wire path for this hardware condition. It does not validate active bond reuse reconnect, key store behavior, or user-visible input reflection in this run.
 
 ### 2026-07-02: unit_014 close request reached closed event but missed final transport close
 
