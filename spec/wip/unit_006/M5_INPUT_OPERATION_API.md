@@ -60,9 +60,9 @@
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
 | Switch HID / report bytes | required | observed-fail | Button / stick report bytes は M0 の監査済み layout を使う。2026-07-02 M5 run の debug log で A `08 00 00`、L+R `40 00 40`、neutral `00 00 00` を含む `a1 30` 送信を確認したが、Switch UI は反映しなかった |
-| Bumble / transport | required | observed-fail | 2026-07-02 M5 run で L2CAP open、`0x01` output report、`0x21` reply、`0x30` input report 送信、clean close を確認したが、semantic input reflection は未達 |
+| Bumble / transport | required | observed-fail | 2026-07-02 M5 run で L2CAP open、`0x01` output report、`0x21` reply、`0x30` input report 送信、clean close を確認したが、semantic input reflection は未達。後続の pairing diagnostics run では `link_key_available` と encryption change は出たが、`0x02` / repeated `0x08` から進まなかった |
 | OS / driver / adapter | required | observed-fail | `docs/hardware-test-log.md` に Windows / CSR8510 A10 / WinUSB / Bumble 0.0.230 / `usb:0` 条件の observed-fail として記録した |
-| pairing / bonding path | required | observed-partial | swbt-python M5 trace は `classic_pairing` と L2CAP open を記録したが、pairing complete、authentication、encryption、link key の通過点をまだ記録していなかった。swbt-daemon `local_049` success は `pairing complete, status 00` と full subcommand sequence 後の UI input reflection、`local_073` reconnect success は link-key DB 使用と no new pairing を観測しているため、同等の pairing 経路通過とは扱わない |
+| pairing / bonding path | required | observed-partial | swbt-python M5 trace は `classic_pairing` と L2CAP open を記録した。pairing diagnostics run では `link_key_available` と `connection_encryption_change` も記録したが、`pairing_complete` と `connection_authentication` は未記録だった。swbt-daemon `local_049` success は `pairing complete, status 00` と full subcommand sequence 後の UI input reflection、`local_073` reconnect success は link-key DB 使用と no new pairing を観測しているため、同等の pairing 経路通過とは扱わない |
 
 ## 6. 振る舞い仕様
 
@@ -89,7 +89,9 @@
 | observed-fail | 実機で `await pad.tap(Button.A)` が Switch UI に反映される | new | hardware | yes | 2026-07-02 M5 run で A report bytes は送信されたが、ユーザ画面観測ではデバイス登録画面が全く動かなかった |
 | observed-partial | 実機で L+R が一定 tick 数以上送信される | new | hardware | yes | 2026-07-02 M5 run で L+R bytes を含む `0x30` が 30 tick 以上送信された。UI 反映は観測されず |
 | observed-partial | 実機で `neutral()` 後に入力が残らない | new | hardware | yes | 2026-07-02 M5 run で neutral bytes と clean close は確認。入力反映自体が未達のため UI 残留なしの意味検証は未確定 |
-| todo | 実機 trace で pairing complete / authentication / encryption / link key availability を記録する | diagnostic | hardware | yes | swbt-daemon success / reconnect logs との比較用。raw link key は記録しない |
+| observed-partial | 実機 trace で pairing complete / authentication / encryption / link key availability を記録する | diagnostic | hardware | yes | 2026-07-02 pairing diagnostics run は `link_key_available` と `connection_encryption_change` を記録した。`pairing_complete` と `connection_authentication` は未記録。raw link key は記録していない |
+| green | `0x21` subcommand reply が `0x30` と同じ timer sequence を消費する | regression | unit | no | daemon `local_037` の repeated `0x08` 脱出根拠に合わせ、`tests/unit/test_report_loop.py` で固定 |
+| green | `0x21` subcommand reply 後の periodic `0x30` を holdoff する | regression | unit | no | daemon `local_037` の reply periodic holdoff 方針に合わせ、periodic だけを holdoff。manual input は対象外 |
 | todo | disconnect 時に内部 state が neutral へ戻る | edge | hardware | yes | wire 上の neutral 送信可否も記録 |
 
 ## 8. 設計メモ
@@ -99,6 +101,7 @@
 - 実機反映が失敗した場合は、report bytes、send timing、subcommand sequence、Switch firmware を分けて原因を記録する。
 - pairing 経路は `classic_pairing` と L2CAP open だけで完了扱いにしない。次の実機 run では Bumble diagnostics の `pairing_complete`、`connection_authentication`、`connection_encryption_change`、必要に応じて `link_key_available` を確認し、swbt-daemon `local_049` / `local_073` と比較する。
 - swbt-daemon の UI 成功 run は `0x02` / `0x08` だけでなく、`0x10` SPI read、`0x03` report mode、`0x04` trigger buttons elapsed、`0x40` IMU、`0x48` vibration、`0x21` MCU、`0x30` player lights まで応答してから入力反映へ進んでいる。M5 の次回診断では subcommand sequence が repeated `0x08` で止まるか、known sequence へ進むかを分けて記録する。
+- daemon `local_037` では `0x21` subcommand reply の timer 固定を shared input report timer に直した run で repeated `0x08` から `0x10` / `0x03` へ進んだ。swbt-python でも `0x21` reply を periodic `0x30` と同じ timer sequence で送信し、reply 後の periodic `0x30` に 300ms holdoff を入れる。manual `tap()` / `neutral()` などの明示入力は holdoff 対象にしない。
 - macro scheduler は初期範囲に入れない。複雑な同時操作は後続設計に送る。
 
 ## 9. 対象ファイル
@@ -140,6 +143,9 @@
 | `uv run ruff check src\swbt\transport\bumble.py tests\unit\test_bumble_transport.py` | pass | All checks passed |
 | `uv run ruff format --check src\swbt\transport\bumble.py tests\unit\test_bumble_transport.py` | pass | 2 files already formatted |
 | `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_operation_sequence_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-pairing-diagnostics --log-file .pytest_cache\hardware\unit_006\20260702-pairing-diagnostics\pytest-debug.log --log-file-level=DEBUG -q -s` | observed-fail | Pytest は 1 passed / 1 warning in 6.51s。ユーザ観測では Switch のデバイス登録 / 認証画面は動かなかった。trace は `link_key_available`、`connection_encryption_change`、L2CAP open、`0x02` x1、`0x08` repeated を記録。`pairing_complete`、`connection_authentication`、`0x10` / `0x03` 以降は未記録 |
+| `uv run pytest tests\unit\test_report_loop.py -q` | pass | 2 passed。`0x21` reply shared timer と reply 後 periodic holdoff を固定 |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | 23 passed。callback からの immediate `0x21` reply 送信で既存 fake transport 振る舞いは回帰なし |
 | `uv run pytest -m hardware` | not run | M5 targeted hardware run が semantic input reflection fail のため、全 hardware marker の横展開は実施していない |
 
 ## 11. 実機実行条件
@@ -167,14 +173,16 @@
 |---|---:|---|---|---|
 | daemon UI success sequence | `pairing complete, status 00`、L2CAP open、`0x02/0x08/0x10/0x03/0x04/0x40/0x48/0x21/0x30` replies、L+R / Button A UI reflection | hardware observation | `E:\documents\VSCodeWorkspace\swbt-daemon\docs\hardware-test-log.md` `local_049` | swbt-python M5 run は `0x02` / `0x08` までで未到達 |
 | daemon pairing-free reconnect | link-key DB open、link key request response、no `pairing complete`、L2CAP open、Button A smoke | hardware observation | `E:\documents\VSCodeWorkspace\swbt-daemon\docs\hardware-test-log.md` `local_073` | swbt-python は reconnect / key store 対象外。current run では link key availability も未記録 |
-| swbt-python M5 pairing evidence | `host_connection`、`classic_pairing`、control / interrupt L2CAP open、`connected` | hardware observation | `docs/hardware-test-log.md` 2026-07-02 M5 run | pairing complete / authentication / encryption / link key は未記録だったため、daemon success と同等に扱わない |
+| swbt-python M5 pairing evidence | `host_connection`、`classic_pairing`、control / interrupt L2CAP open、`connected`、`link_key_available`、`connection_encryption_change` | hardware observation | `docs/hardware-test-log.md` 2026-07-02 M5 runs | `pairing_complete` / `connection_authentication` は未記録だったため、daemon success と同等に扱わない |
 | enhanced Bumble diagnostics | `pairing_complete`、`connection_authentication`、`connection_encryption_change`、`connection_encryption_key_refresh`、`link_key_available`、`classic_mode_change` | implementation fact | `src/swbt/transport/bumble.py`、`tests/unit/test_bumble_transport.py` | 次回 hardware run から比較に使う。raw link key は記録しない |
+| daemon shared timer escape from repeated `0x08` | `0x21` reply timer 固定を shared input report timer に直した run で `0x02` / `0x08` から `0x10` / `0x03` / `0x04` へ進んだ | hardware observation / implementation fact | `E:\documents\VSCodeWorkspace\swbt-daemon\work-units\complete\local_037\WINDOWS_HARDWARE_BRINGUP.md` | swbt-python に shared timer と reply periodic holdoff を実装。実機再検証は未実行 |
 
 ### 未解決事項
 
-- 次回の実機 run で enhanced diagnostics が `pairing_complete`、authentication、encryption を記録するか確認する。
+- 次回の実機 run で shared timer / reply holdoff 後に repeated `0x08` から `0x10` / `0x03` へ進むか確認する。
+- enhanced diagnostics が `pairing_complete`、authentication、encryption を記録するか確認する。
 - `link_key_available` が出るかどうかは Bumble の key store と Switch 側 bonding state に依存する。出ない場合も raw key をログへ出さない。
-- Switch が repeated `0x08` から known subcommand sequence へ進まない場合、UI 入力反映失敗の主因は report byte correctness ではなく controller initialization / adoption 側として扱う。
+- shared timer / reply holdoff 後も Switch が repeated `0x08` から known subcommand sequence へ進まない場合、次の候補は device info profile / local BD_ADDR / report options 差分として扱う。
 
 ## 14. チェックリスト
 
@@ -186,5 +194,6 @@
 - [x] M5 の local automated gate を実行し、検証欄を結果で更新した
 - [x] 実機入力反映検証は承認、command、cleanup、失敗結果を `docs/hardware-test-log.md` に記録した
 - [x] swbt-daemon の success / reconnect logs と突き合わせ、次回の pairing diagnostics に必要な trace events を追加した
+- [x] `0x21` reply shared timer と reply 後 periodic holdoff を実装し、unit / integration test で固定した
 - [ ] `tap(Button.A)` の Switch UI 反映と neutral 後の残留なしを確認した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する
