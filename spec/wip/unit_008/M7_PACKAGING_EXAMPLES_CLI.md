@@ -95,9 +95,9 @@
 | refactor-skipped | `examples/tap_a.py` の fake variant が実機なしで test できる | new | integration | no | `tests/integration/test_examples.py` で fake transport 実行を固定 |
 | refactor-skipped | `swbt-probe adapters --help` が動く | new | unit | no | `tests/unit/test_probe_cli.py` で entry point と help を固定。adapter open なし |
 | refactor-skipped | `swbt-probe pair --help` が承認境界を読める説明を持つ | new | unit | no | `tests/unit/test_probe_cli.py` で固定。実行はしない |
-| todo | README に Windows 専用 dongle / WinUSB 注意点がある | regression | unit | no | docs check でもよい |
-| todo | README に確認済み構成と未確認構成が分かれている | regression | unit | no | release gate |
-| todo | README が `unit_006` 後の Button A / neutral observed-pass を stale な「未記録」と矛盾なく説明する | regression | unit | no | 現 README はまだ「確認済み構成なし」と書いている |
+| refactor-skipped | README に Windows 専用 dongle / WinUSB 注意点がある | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
+| refactor-skipped | README に確認済み構成と未確認構成が分かれている | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
+| refactor-skipped | README が `unit_006` 後の Button A / neutral observed-pass を stale な「未記録」と矛盾なく説明する | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
 | todo | examples が `tap(Button.A)` / `neutral()` の最小手順と実機承認境界を分けている | new | integration | no | fake variant を CI で確認する |
 | todo | `swbt-probe adapters` が developer machine で adapter 情報を表示する | characterization | bumble | yes | adapter open を伴う場合は承認が必要 |
 | todo | `swbt-probe pair` が trace を保存する | characterization | hardware | yes | Switch-facing 動作の承認が必要 |
@@ -144,6 +144,8 @@
 | `uv run ruff check src\swbt\probe.py tests\unit\test_probe_cli.py` | pass | `pair --help` 追加後の CLI module と test の lint を確認した |
 | `uv run pytest tests\integration\test_examples.py -q` | pass | 1 passed。`examples/tap_a.py` の `tap_a_once()` が fake transport で Button A press / release report を送ることを確認した |
 | `uv run ruff check examples\tap_a.py tests\integration\test_examples.py` | pass | tap_a example と integration test の lint を確認した |
+| `uv run pytest tests\unit\test_readme_docs.py -q` | pass | 3 passed。README が確認済み / 未確認構成、専用 dongle / WinUSB 注意点、Button A / neutral 観測を hardware log と矛盾なく説明することを確認した |
+| `uv run ruff check tests\unit\test_readme_docs.py` | pass | README docs test の lint を確認した |
 | `uv run pytest tests/unit tests/integration` | pending | M7 実装後に local automated gate として実行する |
 | `uv run swbt-probe adapters` | pending-approval | adapter open を伴う場合は承認後に実行する |
 | `uv run swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pending-approval | Switch-facing 動作の明示承認後に実行する |
