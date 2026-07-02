@@ -257,11 +257,25 @@ class FakeConnection:
     EVENT_PAIRING_START = "pairing_start"
     EVENT_PAIRING = "pairing"
     EVENT_PAIRING_FAILURE = "pairing_failure"
+    EVENT_CONNECTION_AUTHENTICATION = "connection_authentication"
+    EVENT_CONNECTION_AUTHENTICATION_FAILURE = "connection_authentication_failure"
+    EVENT_CONNECTION_ENCRYPTION_CHANGE = "connection_encryption_change"
+    EVENT_CONNECTION_ENCRYPTION_FAILURE = "connection_encryption_failure"
+    EVENT_CONNECTION_ENCRYPTION_KEY_REFRESH = "connection_encryption_key_refresh"
+    EVENT_LINK_KEY = "link_key"
+    EVENT_MODE_CHANGE = "mode_change"
+    EVENT_MODE_CHANGE_FAILURE = "mode_change_failure"
 
     def __init__(self) -> None:
         """Create a fake connection."""
         self.handle = 0x000B
         self.peer_address = "01:02:03:04:05:06"
+        self.authenticated = False
+        self.encryption = 0
+        self.encryption_key_size = 0
+        self.sc = False
+        self.classic_mode = 0
+        self.classic_interval = 0
         self.handlers: dict[str, list[Callable[..., None]]] = {}
 
     def on(self, event: str, callback: Callable[..., None]) -> None:
@@ -272,6 +286,14 @@ class FakeConnection:
         """Emit one fake connection event."""
         for callback in self.handlers[event]:
             callback(*args)
+
+
+class FakePairingKeys:
+    """Fake Bumble pairing keys that do not expose real key material."""
+
+    def __init__(self, *, link_key: object | None) -> None:
+        """Create fake pairing keys with or without a link key marker."""
+        self.link_key = link_key
 
 
 class FakeOpenError(Exception):
@@ -938,7 +960,18 @@ def test_bumble_device_disconnection_records_reason_and_notifies_callback() -> N
         device.emit(device.EVENT_CONNECTION, connection)
         connection.emit(connection.EVENT_CLASSIC_PAIRING)
         connection.emit(connection.EVENT_PAIRING_START)
-        connection.emit(connection.EVENT_PAIRING)
+        connection.authenticated = True
+        connection.encryption = 1
+        connection.encryption_key_size = 16
+        connection.sc = True
+        connection.emit(connection.EVENT_PAIRING, FakePairingKeys(link_key=object()))
+        connection.emit(connection.EVENT_CONNECTION_AUTHENTICATION)
+        connection.emit(connection.EVENT_CONNECTION_ENCRYPTION_CHANGE)
+        connection.emit(connection.EVENT_CONNECTION_ENCRYPTION_KEY_REFRESH)
+        connection.emit(connection.EVENT_LINK_KEY)
+        connection.classic_mode = 2
+        connection.classic_interval = 24
+        connection.emit(connection.EVENT_MODE_CHANGE)
         connection.emit(connection.EVENT_DISCONNECTION, 0x13)
         await asyncio.sleep(0)
 
@@ -951,7 +984,43 @@ def test_bumble_device_disconnection_records_reason_and_notifies_callback() -> N
         } in events
         assert {"event": "classic_pairing", "adapter": "usb:0"} in events
         assert {"event": "pairing_start", "adapter": "usb:0"} in events
-        assert {"event": "pairing_complete", "adapter": "usb:0"} in events
+        assert {
+            "event": "pairing_complete",
+            "adapter": "usb:0",
+            "authenticated": True,
+            "encryption": 1,
+            "encryption_key_size": 16,
+            "secure_connections": True,
+            "has_link_key": True,
+        } in events
+        assert {
+            "event": "connection_authentication",
+            "adapter": "usb:0",
+            "authenticated": True,
+        } in events
+        assert {
+            "event": "connection_encryption_change",
+            "adapter": "usb:0",
+            "authenticated": True,
+            "encryption": 1,
+            "encryption_key_size": 16,
+            "secure_connections": True,
+        } in events
+        assert {
+            "event": "connection_encryption_key_refresh",
+            "adapter": "usb:0",
+            "authenticated": True,
+            "encryption": 1,
+            "encryption_key_size": 16,
+            "secure_connections": True,
+        } in events
+        assert {"event": "link_key_available", "adapter": "usb:0"} in events
+        assert {
+            "event": "classic_mode_change",
+            "adapter": "usb:0",
+            "mode": 2,
+            "interval": 24,
+        } in events
         assert {"event": "disconnected", "adapter": "usb:0", "reason": 0x13} in events
         assert disconnected_reasons == [0x13]
 

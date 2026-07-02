@@ -391,7 +391,7 @@ class BumbleHidTransport:
         )
         on_event(
             getattr(connection, "EVENT_PAIRING", "pairing"),
-            lambda *_args: self._record_event("pairing_complete", adapter=self._adapter),
+            lambda keys=None, *_args: self._record_pairing_complete(connection, keys),
         )
         on_event(
             getattr(connection, "EVENT_PAIRING_FAILURE", "pairing_failure"),
@@ -401,6 +401,109 @@ class BumbleHidTransport:
                 reason=reason,
             ),
         )
+        on_event(
+            getattr(connection, "EVENT_CONNECTION_AUTHENTICATION", "connection_authentication"),
+            lambda *_args: self._record_connection_authentication(connection),
+        )
+        on_event(
+            getattr(
+                connection,
+                "EVENT_CONNECTION_AUTHENTICATION_FAILURE",
+                "connection_authentication_failure",
+            ),
+            lambda error=None, *_args: self._record_event(
+                "connection_authentication_failure",
+                adapter=self._adapter,
+                error=_safe_event_value(error),
+            ),
+        )
+        on_event(
+            getattr(
+                connection,
+                "EVENT_CONNECTION_ENCRYPTION_CHANGE",
+                "connection_encryption_change",
+            ),
+            lambda *_args: self._record_connection_encryption_change(connection),
+        )
+        on_event(
+            getattr(
+                connection,
+                "EVENT_CONNECTION_ENCRYPTION_FAILURE",
+                "connection_encryption_failure",
+            ),
+            lambda error=None, *_args: self._record_event(
+                "connection_encryption_failure",
+                adapter=self._adapter,
+                error=_safe_event_value(error),
+            ),
+        )
+        on_event(
+            getattr(
+                connection,
+                "EVENT_CONNECTION_ENCRYPTION_KEY_REFRESH",
+                "connection_encryption_key_refresh",
+            ),
+            lambda *_args: self._record_connection_encryption_refresh(connection),
+        )
+        on_event(
+            getattr(connection, "EVENT_LINK_KEY", "link_key"),
+            lambda *_args: self._record_event("link_key_available", adapter=self._adapter),
+        )
+        on_event(
+            getattr(connection, "EVENT_MODE_CHANGE", "mode_change"),
+            lambda *_args: self._record_classic_mode_change(connection),
+        )
+        on_event(
+            getattr(connection, "EVENT_MODE_CHANGE_FAILURE", "mode_change_failure"),
+            lambda status=None, *_args: self._record_event(
+                "classic_mode_change_failure",
+                adapter=self._adapter,
+                status=status,
+            ),
+        )
+
+    def _record_pairing_complete(self, connection: object, keys: object | None) -> None:
+        fields = self._connection_security_fields(connection)
+        fields["has_link_key"] = _keys_include_link_key(keys)
+        self._record_event("pairing_complete", adapter=self._adapter, **fields)
+
+    def _record_connection_authentication(self, connection: object) -> None:
+        self._record_event(
+            "connection_authentication",
+            adapter=self._adapter,
+            authenticated=getattr(connection, "authenticated", None),
+        )
+
+    def _record_connection_encryption_change(self, connection: object) -> None:
+        self._record_event(
+            "connection_encryption_change",
+            adapter=self._adapter,
+            **self._connection_security_fields(connection),
+        )
+
+    def _record_connection_encryption_refresh(self, connection: object) -> None:
+        self._record_event(
+            "connection_encryption_key_refresh",
+            adapter=self._adapter,
+            **self._connection_security_fields(connection),
+        )
+
+    def _record_classic_mode_change(self, connection: object) -> None:
+        self._record_event(
+            "classic_mode_change",
+            adapter=self._adapter,
+            mode=getattr(connection, "classic_mode", None),
+            interval=getattr(connection, "classic_interval", None),
+        )
+
+    @staticmethod
+    def _connection_security_fields(connection: object) -> dict[str, object]:
+        return {
+            "authenticated": getattr(connection, "authenticated", None),
+            "encryption": getattr(connection, "encryption", None),
+            "encryption_key_size": getattr(connection, "encryption_key_size", None),
+            "secure_connections": getattr(connection, "sc", None),
+        }
 
     def _handle_connection_failure(self, error: object) -> None:
         self._record_event(
@@ -586,6 +689,18 @@ def _format_psm(psm: object) -> str:
     if isinstance(psm, int):
         return f"0x{psm:04x}"
     return "unknown"
+
+
+def _keys_include_link_key(keys: object | None) -> bool | None:
+    if keys is None:
+        return None
+    return getattr(keys, "link_key", None) is not None
+
+
+def _safe_event_value(value: object) -> object:
+    if value is None or isinstance(value, int | str | bool | float):
+        return value
+    return str(value)
 
 
 def _decode_hidp_output_report(pdu: bytes) -> bytes | None:
