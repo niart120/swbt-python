@@ -142,7 +142,7 @@ class DiagnosticsRecorder:
             reason=reason,
         )
 
-    def record_error(self, error: Exception, *, recoverable: bool) -> DiagnosticsEvent:
+    def record_error(self, error: BaseException, *, recoverable: bool) -> DiagnosticsEvent:
         """Record an exception as an error event."""
         event = DiagnosticsEvent(
             event="error",

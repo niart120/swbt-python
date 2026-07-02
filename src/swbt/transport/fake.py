@@ -24,7 +24,7 @@ class FakeHidTransport:
         disconnect_request_error: Exception | None = None,
         bonded_peer_addresses: tuple[str, ...] = (),
         active_reconnect_auto_connect: bool = True,
-        active_reconnect_error: Exception | None = None,
+        active_reconnect_error: BaseException | None = None,
         close_wait: asyncio.Event | None = None,
     ) -> None:
         """Create a closed fake transport."""

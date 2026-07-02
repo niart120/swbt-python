@@ -214,23 +214,17 @@ class SwitchGamepad:
                 peer_address=peer.address,
                 peer_count=1,
             )
-        except Exception as error:  # noqa: BLE001
-            self._diagnostics.record_event(
-                "active_reconnect_result",
-                error_type=type(error).__name__,
-                failure_reason="transport_error",
-                message=str(error),
+        except asyncio.CancelledError as error:
+            if self._current_task_is_cancelling():
+                raise
+            return await self._record_active_reconnect_transport_error(
+                error,
                 peer_address=peer.address,
-                route="active_reconnect",
-                status="failed",
             )
-            self._diagnostics.record_error(error, recoverable=True)
-            await self.close(neutral=True)
-            return ConnectionResult(
-                route="active_reconnect",
-                status="failed",
+        except Exception as error:  # noqa: BLE001
+            return await self._record_active_reconnect_transport_error(
+                error,
                 peer_address=peer.address,
-                peer_count=1,
             )
 
         self._diagnostics.record_event(
@@ -277,7 +271,15 @@ class SwitchGamepad:
                 if self._report_loop is not None:
                     await self._report_loop.stop()
                 self._disconnect_event.clear()
-                disconnect_result = await self._transport.request_disconnect()
+                try:
+                    disconnect_result = await self._transport.request_disconnect()
+                except ClosedError as error:
+                    disconnect_result = DisconnectRequestResult(
+                        status="unavailable",
+                        reason="transport_closed",
+                        error_type=type(error).__name__,
+                        message=str(error),
+                    )
                 self._record_disconnect_request_result(disconnect_result)
                 if disconnect_result.status == "requested":
                     disconnect_closed = await self._wait_for_disconnect_request_closed()
@@ -389,6 +391,35 @@ class SwitchGamepad:
         if peer_count == 1:
             return "selected"
         return "ambiguous"
+
+    @staticmethod
+    def _current_task_is_cancelling() -> bool:
+        task = asyncio.current_task()
+        return task is not None and task.cancelling() > 0
+
+    async def _record_active_reconnect_transport_error(
+        self,
+        error: BaseException,
+        *,
+        peer_address: str,
+    ) -> ConnectionResult:
+        self._diagnostics.record_event(
+            "active_reconnect_result",
+            error_type=type(error).__name__,
+            failure_reason="transport_error",
+            message=str(error),
+            peer_address=peer_address,
+            route="active_reconnect",
+            status="failed",
+        )
+        self._diagnostics.record_error(error, recoverable=True)
+        await self.close(neutral=True)
+        return ConnectionResult(
+            route="active_reconnect",
+            status="failed",
+            peer_address=peer_address,
+            peer_count=1,
+        )
 
     def _record_disconnect_request_result(self, result: DisconnectRequestResult) -> None:
         fields: dict[str, object] = {"status": result.status}
