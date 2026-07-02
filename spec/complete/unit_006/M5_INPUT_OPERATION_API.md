@@ -59,9 +59,9 @@
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | observed-fail | Button / stick report bytes は M0 の監査済み layout を使う。2026-07-02 M5 run の debug log で A `08 00 00`、L+R `40 00 40`、neutral `00 00 00` を含む `a1 30` 送信を確認したが、Switch UI は反映しなかった |
-| Bumble / transport | required | observed-partial | 2026-07-02 shared timer rerun で L2CAP open、`0x01` output report、full observed M5 handshake subcommand sequence、`0x21` reply、`0x30` input report 送信、clean close を確認し、ユーザは Switch 側の pairing 完了を目視した。`tap(Button.A)` の UI 反映と neutral 残留なしは未確定 |
-| OS / driver / adapter | required | observed-fail | `docs/hardware-test-log.md` に Windows / CSR8510 A10 / WinUSB / Bumble 0.0.230 / `usb:0` 条件の observed-fail として記録した |
+| Switch HID / report bytes | required | observed-pass | Button / stick report bytes は M0 の監査済み layout を使う。2026-07-02 post-handshake input run の debug log で A `08 00 00`、neutral `00 00 00` を含む `a1 30` 送信を確認し、ユーザが Switch UI の A 反映と neutral 後の入力残りなしを目視した |
+| Bumble / transport | required | observed-pass | 2026-07-02 shared timer rerun と post-handshake input run で L2CAP open、`0x01` output report、full observed M5 handshake subcommand sequence、`0x21` reply、`0x30` input report 送信、clean close を確認した。ユーザは Switch 側の pairing 完了、A 反映、neutral 後の入力残りなしを目視した |
+| OS / driver / adapter | required | observed-pass | `docs/hardware-test-log.md` に Windows / CSR8510 A10 / WinUSB / Bumble 0.0.230 / `usb:0` 条件の observed-pass として記録した |
 | pairing / bonding path | required | observed-pass | swbt-python M5 shared timer rerun は `classic_pairing`、L2CAP open、`link_key_available`、`connection_encryption_change`、full observed M5 handshake subcommand sequence を記録し、ユーザが Switch 側の pairing 完了を目視した。Bumble の `pairing_complete` / `connection_authentication` event は未記録のため、trace schema の不足として別扱いにする |
 
 ## 6. 振る舞い仕様
@@ -86,14 +86,14 @@
 | green | `set_input()` で left / right stick が report に反映される | new | integration | no | `test_set_input_reflects_left_and_right_sticks_in_next_periodic_report` で normalized stick を固定 |
 | green | disconnect callback で内部 state が neutral へ戻る | regression | integration | no | `test_disconnect_callback_neutralizes_state_and_stops_report_loop` で固定 |
 | green | `status()` が report counter と last subcommand を返す | new | integration | no | `test_status_returns_report_counters_last_subcommand_and_raw_rumble` で raw rumble も固定 |
-| observed-fail | 実機で `await pad.tap(Button.A)` が Switch UI に反映される | new | hardware | yes | 2026-07-02 M5 run で A report bytes は送信されたが、ユーザ画面観測ではデバイス登録画面が全く動かなかった |
+| observed-pass | 実機で `await pad.tap(Button.A)` が Switch UI に反映される | new | hardware | yes | 2026-07-02 post-handshake input run で full observed handshake 後に A report を送信し、ユーザが Switch UI への反映を目視した |
 | observed-partial | 実機で L+R が一定 tick 数以上送信される | new | hardware | yes | 2026-07-02 M5 run で L+R bytes を含む `0x30` が 30 tick 以上送信された。UI 反映は観測されず |
-| observed-partial | 実機で `neutral()` 後に入力が残らない | new | hardware | yes | 2026-07-02 M5 run で neutral bytes と clean close は確認。入力反映自体が未達のため UI 残留なしの意味検証は未確定 |
+| observed-pass | 実機で `neutral()` 後に入力が残らない | new | hardware | yes | 2026-07-02 post-handshake input run で neutral report 送信後、ユーザが入力残りなしを目視した |
 | observed-partial | 実機 trace で pairing complete / authentication / encryption / link key availability を記録する | diagnostic | hardware | yes | 2026-07-02 pairing diagnostics run は `link_key_available` と `connection_encryption_change` を記録した。`pairing_complete` と `connection_authentication` は未記録。raw link key は記録していない |
 | observed-pass | 実機で shared timer / reply holdoff 後に Switch 側 pairing が完了する | diagnostic | hardware | yes | 2026-07-02 shared timer rerun で full observed M5 handshake sequence へ進み、ユーザが Switch 側の pairing 完了を目視した |
 | green | `0x21` subcommand reply が `0x30` と同じ timer sequence を消費する | regression | unit | no | daemon `local_037` の repeated `0x08` 脱出根拠に合わせ、`tests/unit/test_report_loop.py` で固定 |
 | green | `0x21` subcommand reply 後の periodic `0x30` を holdoff する | regression | unit | no | daemon `local_037` の reply periodic holdoff 方針に合わせ、periodic だけを holdoff。manual input は対象外 |
-| todo | disconnect 時に内部 state が neutral へ戻る | edge | hardware | yes | wire 上の neutral 送信可否も記録 |
+| deferred | disconnect 中の wire 上 neutral 送信可否を記録する | edge | hardware | yes | 内部 state neutral 復帰は integration test で固定済み。切断競合時の wire 送信可否は reconnect / lifecycle edge として M6 以降で扱う |
 
 ## 8. 設計メモ
 
@@ -147,8 +147,13 @@
 | `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_operation_sequence_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-pairing-diagnostics --log-file .pytest_cache\hardware\unit_006\20260702-pairing-diagnostics\pytest-debug.log --log-file-level=DEBUG -q -s` | observed-fail | Pytest は 1 passed / 1 warning in 6.51s。ユーザ観測では Switch のデバイス登録 / 認証画面は動かなかった。trace は `link_key_available`、`connection_encryption_change`、L2CAP open、`0x02` x1、`0x08` repeated を記録。`pairing_complete`、`connection_authentication`、`0x10` / `0x03` 以降は未記録 |
 | `uv run pytest tests\unit\test_report_loop.py -q` | pass | 2 passed。`0x21` reply shared timer と reply 後 periodic holdoff を固定 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | 23 passed。callback からの immediate `0x21` reply 送信で既存 fake transport 振る舞いは回帰なし |
-| `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_operation_sequence_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-shared-timer-rerun --log-file .pytest_cache\hardware\unit_006\20260702-shared-timer-rerun\pytest-debug.log --log-file-level=DEBUG -q -s` | observed-partial | Pytest は 1 passed / 1 warning in 8.44s。trace は `0x02`、`0x08`、`0x10` x8、`0x03`、`0x04`、`0x40`、`0x30` x2、`0x48`、`0x21` と全件の `subcommand_reply_tx` を記録。ユーザは Switch 側で pairing 完了を目視した。`tap(Button.A)` UI 反映と neutral 残留なしは未確定 |
-| `uv run pytest -m hardware` | not run | M5 targeted hardware run が semantic input reflection fail のため、全 hardware marker の横展開は実施していない |
+| `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_operation_sequence_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-shared-timer-rerun --log-file .pytest_cache\hardware\unit_006\20260702-shared-timer-rerun\pytest-debug.log --log-file-level=DEBUG -q -s` | observed-partial | Pytest は 1 passed / 1 warning in 8.44s。trace は `0x02`、`0x08`、`0x10` x8、`0x03`、`0x04`、`0x40`、`0x30` x2、`0x48`、`0x21` と全件の `subcommand_reply_tx` を記録。ユーザは Switch 側で pairing 完了を目視した。この run 時点では `tap(Button.A)` UI 反映と neutral 残留なしは未確定で、後続の post-handshake input run で確認した |
+| `uv run pytest tests\hardware\test_input_operations.py --collect-only -q` | pass | 2 tests collected。post-handshake input reflection test 追加後の収集確認 |
+| `uv run ruff check tests\hardware\test_input_operations.py` | pass | All checks passed |
+| `uv run ruff format --check tests\hardware\test_input_operations.py` | pass | 1 file already formatted |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_after_full_handshake_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-post-handshake-input --log-file .pytest_cache\hardware\unit_006\20260702-post-handshake-input\pytest-debug.log --log-file-level=DEBUG -q -s` | observed-pass | Pytest は 1 passed / 1 warning in 9.45s。trace は full observed M5 handshake 後に `handshake_complete`、`post_handshake_tap_a_start`、`post_handshake_tap_a_complete`、`post_handshake_neutral_complete` を記録。debug log は A `08 00 00` を含む `0x30` report counters 20-23 と、counter 24 以降の neutral `00 00 00` を記録。ユーザは Switch UI への A 反映と neutral 後の入力残りなしを目視した |
+| `uv run pytest -m hardware` | not run | M5 は targeted post-handshake hardware run で完了条件を確認した。全 hardware marker の横展開は M5 の完了条件に含めない |
 
 ## 11. 実機実行条件
 
@@ -173,7 +178,7 @@
 
 | 項目 | 値 | 根拠分類 | source | status |
 |---|---:|---|---|---|
-| daemon UI success sequence | `pairing complete, status 00`、L2CAP open、`0x02/0x08/0x10/0x03/0x04/0x40/0x48/0x21/0x30` replies、L+R / Button A UI reflection | hardware observation | `E:\documents\VSCodeWorkspace\swbt-daemon\docs\hardware-test-log.md` `local_049` | swbt-python M5 run は `0x02` / `0x08` までで未到達 |
+| daemon UI success sequence | `pairing complete, status 00`、L2CAP open、`0x02/0x08/0x10/0x03/0x04/0x40/0x48/0x21/0x30` replies、L+R / Button A UI reflection | hardware observation | `E:\documents\VSCodeWorkspace\swbt-daemon\docs\hardware-test-log.md` `local_049` | swbt-python post-handshake input run は同系の full observed handshake 後に Button A UI reflection まで到達 |
 | daemon pairing-free reconnect | link-key DB open、link key request response、no `pairing complete`、L2CAP open、Button A smoke | hardware observation | `E:\documents\VSCodeWorkspace\swbt-daemon\docs\hardware-test-log.md` `local_073` | swbt-python は reconnect / key store 対象外。current run では link key availability も未記録 |
 | swbt-python M5 pairing evidence | `host_connection`、`classic_pairing`、control / interrupt L2CAP open、`connected`、`link_key_available`、`connection_encryption_change`、full observed M5 handshake sequence、Switch-side pairing completion | hardware observation | `docs/hardware-test-log.md` 2026-07-02 shared timer rerun | Switch 側 pairing 完了は observed-pass。Bumble の `pairing_complete` / `connection_authentication` event は未記録 |
 | enhanced Bumble diagnostics | `pairing_complete`、`connection_authentication`、`connection_encryption_change`、`connection_encryption_key_refresh`、`link_key_available`、`classic_mode_change` | implementation fact | `src/swbt/transport/bumble.py`、`tests/unit/test_bumble_transport.py` | 次回 hardware run から比較に使う。raw link key は記録しない |
@@ -183,7 +188,7 @@
 
 - enhanced diagnostics が `pairing_complete`、authentication、encryption を記録するか確認する。
 - `link_key_available` が出るかどうかは Bumble の key store と Switch 側 bonding state に依存する。出ない場合も raw key をログへ出さない。
-- `tap(Button.A)` の UI 反映と neutral 後の入力残留なしを別観測で確認する。
+- L+R の semantic UI 反映は未観測。M5 完了条件は Button A と neutral を優先し、L+R は送信 tick 数の観測に留める。
 
 ## 14. チェックリスト
 
@@ -197,5 +202,5 @@
 - [x] swbt-daemon の success / reconnect logs と突き合わせ、次回の pairing diagnostics に必要な trace events を追加した
 - [x] `0x21` reply shared timer と reply 後 periodic holdoff を実装し、unit / integration test で固定した
 - [x] shared timer rerun で full observed M5 handshake sequence と Switch 側 pairing 完了を確認した
-- [ ] `tap(Button.A)` の Switch UI 反映と neutral 後の残留なしを確認した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] `tap(Button.A)` の Switch UI 反映と neutral 後の残留なしを確認した
+- [x] 完了条件を満たしたため `spec/complete` へ移動する
