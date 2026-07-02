@@ -22,12 +22,17 @@ import asyncio
 from swbt import SwitchGamepad, Button
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0") as pad:
-        await pad.wait_connected()
+    async with SwitchGamepad(
+        adapter="usb:0",
+        key_store_path="switch-bond.json",
+    ) as pad:
+        await pad.connect(timeout=30.0, allow_pairing=True)
         await pad.tap(Button.A)
 
 asyncio.run(main())
 ```
+
+`connect()` は保存済み bond があれば bond reuse reconnect を優先する。初回 pairing まで許可する場合だけ `allow_pairing=True` を指定する。
 
 ### 2.2 複数ボタンを押す
 
@@ -36,8 +41,11 @@ import asyncio
 from swbt import SwitchGamepad, Button
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0") as pad:
-        await pad.wait_connected()
+    async with SwitchGamepad(
+        adapter="usb:0",
+        key_store_path="switch-bond.json",
+    ) as pad:
+        await pad.connect(timeout=30.0)
 
         await pad.press(Button.L, Button.R)
         await asyncio.sleep(0.5)
@@ -54,8 +62,11 @@ import asyncio
 from swbt import SwitchGamepad, InputState, Stick
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0") as pad:
-        await pad.wait_connected()
+    async with SwitchGamepad(
+        adapter="usb:0",
+        key_store_path="switch-bond.json",
+    ) as pad:
+        await pad.connect(timeout=30.0)
 
         await pad.set_input(
             InputState.neutral().with_sticks(
@@ -81,6 +92,9 @@ async def main() -> None:
     transport = FakeHidTransport()
 
     async with SwitchGamepad(transport=transport) as pad:
+        pairing = asyncio.create_task(pad.pair(timeout=1.0))
+        await transport.connect()
+        await pairing
         await pad.tap(Button.A)
 
     assert transport.sent_interrupt_reports
@@ -125,11 +139,29 @@ class SwitchGamepad:
 
 ```python
 async def open(self) -> None: ...
+async def pair(self, timeout: float | None = None) -> ConnectionResult: ...
+async def reconnect(self, timeout: float | None = None) -> ConnectionResult: ...
+async def connect(
+    self,
+    *,
+    timeout: float | None = None,
+    allow_pairing: bool = False,
+) -> ConnectionResult: ...
 async def wait_connected(self, timeout: float | None = None) -> None: ...
 async def close(self, *, neutral: bool = True) -> None: ...
 ```
 
-`open()` は transport を開き、必要な初期化を行う。`wait_connected()` は Switch との接続完了を待つ。`close()` は送信 loop と transport を停止する。
+`open()` は transport を開き、callback、diagnostics、report loop などの内部 resource を準備する。`open()` だけでは HID advertising、pairing、reconnect を開始しない。
+
+`pair()` は初回 pairing のための入口である。内部では HID advertising と incoming 接続待ちを開始する。
+
+`reconnect()` は保存済み bond を使う再接続だけを試行する。pairing fallback は行わない。
+
+`connect()` は通常利用向けの入口である。保存済み bond があれば `reconnect()` を優先し、bond がない場合は `allow_pairing=True` のときだけ `pair()` へ進む。
+
+`wait_connected()` は低水準の待機 helper であり、接続戦略を開始しない。`close()` は送信 loop と transport を停止する。
+
+接続 API の戻り値は `ConnectionResult` とする。文字列 `Literal` ではなく、接続経路を表す enum と、bond reuse / pairing fallback の有無を持つ小さな値オブジェクトにする。詳細な field は M6 の key store / reconnect 実装時に固定する。
 
 `close()` は冪等にする。複数回呼び出しても例外を出さず、後始末が未完了の箇所だけを処理する。
 
@@ -163,11 +195,11 @@ def status(self) -> GamepadStatus: ...
 
 ```python
 async with SwitchGamepad(adapter="usb:0") as pad:
-    await pad.wait_connected()
+    await pad.connect(timeout=30.0)
     await pad.tap(Button.A)
 ```
 
-`async with` は `open()` と `close(neutral=True)` を呼ぶ。
+`async with` は `open()` と `close(neutral=True)` を呼ぶ resource scope である。`__aenter__()` は HID advertising、pairing、reconnect を開始しない。
 
 ## 4. `InputState`
 

@@ -151,14 +151,15 @@ pairing 情報の保存、link key の扱い、active reconnect / incoming recon
 ### 8.2 影響
 
 - 初回 pairing は成功するが reconnect できない
-- reconnect 失敗後に再 pairing できない
+- reconnect 失敗後に明示 API で再 pairing できない
 - key store が壊れた場合に復旧手順が必要になる
 
 ### 8.3 対策
 
 - reconnect は M6 まで public guarantee にしない
 - `key_store_path` の存在と読み書きを diagnostics に記録する
-- reconnect 失敗時は advertising へ戻す
+- reconnect 失敗時は failure diagnostics を残して clean close する
+- 自動 advertising recovery と retry loop は、pre-host-connection timeout 再発リスクを別途監査するまで M6 に含めない
 - key store 削除による再 pairing 手順を文書化する
 
 ## 9. scope creep

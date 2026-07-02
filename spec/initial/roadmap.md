@@ -263,8 +263,9 @@ M7 packaging / examples / CLI
 
 - key store の保存先を設定できるようにする
 - pairing 情報が保存されたか diagnostics に記録する
-- reconnect 成功 / 失敗を区別して記録する
-- reconnect 失敗時に advertising へ戻る
+- bond reuse reconnect の成功 / 失敗を active / incoming に分けて記録する
+- reconnect 失敗時は failure diagnostics を残して clean close する
+- reconnect 失敗後の自動 advertising recovery と retry loop は M6 に含めない
 - hardware matrix を更新する
 - trace の schema を安定させる
 
@@ -272,7 +273,7 @@ M7 packaging / examples / CLI
 
 - key store ありの接続情報保存が確認できる
 - reconnect の成功 / 失敗が diagnostics で追える
-- reconnect 失敗後に再 pairing できる
+- reconnect 失敗後に明示 API で再 pairing できる
 - hardware run metadata が trace に含まれる
 
 ## 9. M7: 配布・サンプル・CLI
