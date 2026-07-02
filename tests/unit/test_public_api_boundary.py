@@ -1,9 +1,11 @@
+import asyncio
 import builtins
 import importlib
 import inspect
 import pkgutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -91,6 +93,83 @@ def test_switch_gamepad_signature_does_not_expose_bumble_types() -> None:
     )
 
     assert "bumble" not in annotation_text.lower()
+
+
+def test_switch_gamepad_key_store_path_is_passed_to_bumble_transport(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        bumble_module = importlib.import_module("swbt.transport.bumble")
+
+        captured_config: dict[str, object] = {}
+
+        class FakeBumbleTransport:
+            def __init__(
+                self,
+                *,
+                adapter: str,
+                device_name: str,
+                key_store_path: str | None,
+                diagnostics: object,
+            ) -> None:
+                captured_config.update(
+                    {
+                        "adapter": adapter,
+                        "device_name": device_name,
+                        "key_store_path": key_store_path,
+                        "diagnostics": diagnostics,
+                    }
+                )
+
+            async def open(self) -> None:
+                return None
+
+            async def start_advertising(self) -> None:
+                return None
+
+            async def close(self) -> None:
+                return None
+
+            async def request_disconnect(self) -> DisconnectRequestResult:
+                return DisconnectRequestResult(status="unavailable")
+
+            async def send_interrupt(self, payload: bytes) -> None:
+                _ = payload
+
+            async def send_control(self, payload: bytes) -> None:
+                _ = payload
+
+            def on_interrupt_data(self, callback: object) -> None:
+                _ = callback
+
+            def on_control_data(self, callback: object) -> None:
+                _ = callback
+
+            def on_connected(self, callback: object) -> None:
+                _ = callback
+
+            def on_disconnected(self, callback: object) -> None:
+                _ = callback
+
+        monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
+
+        key_store_path = tmp_path / "keys.json"
+        pad = SwitchGamepad(
+            adapter="usb:1",
+            device_name="Reference Pad",
+            key_store_path=str(key_store_path),
+        )
+
+        await pad.open()
+        await pad.close(neutral=True)
+
+        assert captured_config["adapter"] == "usb:1"
+        assert captured_config["device_name"] == "Reference Pad"
+        assert captured_config["key_store_path"] == str(key_store_path)
+        assert captured_config["diagnostics"] is not None
+
+    asyncio.run(run())
 
 
 def test_hid_transport_disconnect_request_boundary_uses_plain_types() -> None:

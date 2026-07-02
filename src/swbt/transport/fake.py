@@ -5,6 +5,7 @@ from typing import Literal
 
 from swbt.errors import ClosedError
 from swbt.transport.base import (
+    BondedPeer,
     ConnectedCallback,
     ControlDataCallback,
     DisconnectedCallback,
@@ -21,6 +22,9 @@ class FakeHidTransport:
         *,
         disconnect_request_auto_complete: bool = True,
         disconnect_request_error: Exception | None = None,
+        bonded_peer_addresses: tuple[str, ...] = (),
+        active_reconnect_auto_connect: bool = True,
+        active_reconnect_error: BaseException | None = None,
         close_wait: asyncio.Event | None = None,
     ) -> None:
         """Create a closed fake transport."""
@@ -29,6 +33,9 @@ class FakeHidTransport:
         self._close_count = 0
         self._disconnect_request_auto_complete = disconnect_request_auto_complete
         self._disconnect_request_error = disconnect_request_error
+        self._bonded_peer_addresses = tuple(bonded_peer_addresses)
+        self._active_reconnect_auto_connect = active_reconnect_auto_connect
+        self._active_reconnect_error = active_reconnect_error
         self._close_wait = close_wait
         self._events: list[str] = []
         self._control_channel_open = False
@@ -138,6 +145,29 @@ class FakeHidTransport:
             status="requested",
             channels=("control", "interrupt"),
         )
+
+    async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
+        """Return fake bonded peers configured by a test."""
+        self._require_open()
+        return tuple(BondedPeer(address=address) for address in self._bonded_peer_addresses)
+
+    async def connect_bonded_peer(
+        self,
+        peer_address: str,
+        *,
+        connect_timeout: float | None,
+    ) -> None:
+        """Record an active reconnect attempt to a fake bonded peer."""
+        _ = connect_timeout
+        self._require_open()
+        if peer_address not in self._bonded_peer_addresses:
+            msg = f"unknown bonded peer: {peer_address}"
+            raise ValueError(msg)
+        self._events.append("active_reconnect")
+        if self._active_reconnect_error is not None:
+            raise self._active_reconnect_error
+        if self._active_reconnect_auto_connect:
+            await self.connect()
 
     async def wait_for_disconnect_request(self, *, max_wait: float = 0.5) -> None:
         """Wait until a fake remote disconnect request has been recorded."""

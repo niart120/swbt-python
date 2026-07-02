@@ -4,6 +4,7 @@ import json
 import platform
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 from typing import TextIO
 
 
@@ -105,14 +106,25 @@ class DiagnosticsRecorder:
         """Record the latest raw rumble bytes."""
         self._raw_rumble = bytes(raw_rumble)
 
-    def record_run_metadata(self, *, adapter: str) -> DiagnosticsEvent:
+    def record_run_metadata(
+        self,
+        *,
+        adapter: str,
+        key_store_path: str | None = None,
+    ) -> DiagnosticsEvent:
         """Record environment metadata for one diagnostics run."""
+        fields: dict[str, object] = {
+            "adapter": adapter,
+            "os": platform.system(),
+            "package_version": self._package_version(),
+            "python_version": platform.python_version(),
+        }
+        if key_store_path is not None:
+            fields["key_store_path"] = key_store_path
+            fields["key_store_exists"] = Path(key_store_path).exists()
         return self.record_event(
             "run_metadata",
-            adapter=adapter,
-            os=platform.system(),
-            package_version=self._package_version(),
-            python_version=platform.python_version(),
+            **fields,
         )
 
     def record_state_transition(
@@ -130,7 +142,7 @@ class DiagnosticsRecorder:
             reason=reason,
         )
 
-    def record_error(self, error: Exception, *, recoverable: bool) -> DiagnosticsEvent:
+    def record_error(self, error: BaseException, *, recoverable: bool) -> DiagnosticsEvent:
         """Record an exception as an error event."""
         event = DiagnosticsEvent(
             event="error",

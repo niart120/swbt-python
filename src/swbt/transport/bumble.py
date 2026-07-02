@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profile import ProControllerProfile
-from swbt.transport.base import DisconnectRequestResult
+from swbt.transport.base import BondedPeer, DisconnectRequestResult
 
 if TYPE_CHECKING:
     from bumble.transport.common import TransportSink, TransportSource
@@ -86,9 +86,18 @@ class _BumbleHandle(Protocol):
 _OpenTransport = Callable[[str], Awaitable[_BumbleHandle]]
 
 
+class _BumbleConnectionRuntime(Protocol):
+    async def authenticate(self) -> None:
+        """Authenticate a Classic connection using stored link keys."""
+
+    async def encrypt(self, enable: bool = True) -> None:
+        """Enable or disable Classic connection encryption."""
+
+
 class _BumbleDeviceRuntime(Protocol):
     EVENT_CONNECTION: str
     EVENT_CONNECTION_FAILURE: str
+    keystore: _BumbleKeyStoreRuntime | None
     on_connection_request: Callable[[object, int, int], None]
     powered_on: bool
 
@@ -106,6 +115,20 @@ class _BumbleDeviceRuntime(Protocol):
 
     async def set_discoverable(self, discoverable: bool = True) -> None:
         """Set Classic discoverable state."""
+
+    async def connect(
+        self,
+        peer_address: str,
+        *,
+        transport: object,
+        timeout: float | None = None,  # noqa: ASYNC109
+    ) -> _BumbleConnectionRuntime:
+        """Connect to a Bluetooth peer."""
+
+
+class _BumbleKeyStoreRuntime(Protocol):
+    async def get_all(self) -> list[tuple[str, object]]:
+        """Return all key entries keyed by peer address."""
 
 
 class _BumbleHidRuntime(Protocol):
@@ -125,6 +148,12 @@ class _BumbleHidRuntime(Protocol):
     def send_control_data(self, report_type: int, data: bytes) -> None:
         """Send a control-channel HID data message."""
 
+    async def connect_control_channel(self) -> None:
+        """Request control-channel L2CAP connection."""
+
+    async def connect_interrupt_channel(self) -> None:
+        """Request interrupt-channel L2CAP connection."""
+
     async def disconnect_interrupt_channel(self) -> None:
         """Request interrupt-channel disconnection."""
 
@@ -142,6 +171,56 @@ class _BumbleRuntime:
     advertising_started: bool = False
 
 
+class _DiagnosticKeyStore:
+    """Key store wrapper that records write outcome without logging key material."""
+
+    def __init__(self, key_store: object, diagnostics: DiagnosticsRecorder) -> None:
+        self._key_store = key_store
+        self._diagnostics = diagnostics
+
+    async def update(self, name: str, keys: object) -> None:
+        """Record key-store write success or failure."""
+        try:
+            await cast("Any", self._key_store).update(name, keys)
+        except Exception as error:
+            self._diagnostics.record_event(
+                "key_store_update",
+                error_type=type(error).__name__,
+                message=str(error),
+                peer_address=name,
+                status="failed",
+            )
+            raise
+        self._diagnostics.record_event(
+            "key_store_update",
+            peer_address=name,
+            status="succeeded",
+        )
+
+    async def get(self, name: str) -> object | None:
+        """Delegate key lookup."""
+        return await cast("Any", self._key_store).get(name)
+
+    async def get_all(self) -> list[tuple[str, object]]:
+        """Delegate full key listing."""
+        return await cast("Any", self._key_store).get_all()
+
+    async def delete(self, name: str) -> None:
+        """Delegate key deletion."""
+        await cast("Any", self._key_store).delete(name)
+
+    async def delete_all(self) -> None:
+        """Delegate all-key deletion."""
+        await cast("Any", self._key_store).delete_all()
+
+    async def get_resolving_keys(self) -> object:
+        """Delegate LE resolving-key lookup for Bumble internals."""
+        return await cast("Any", self._key_store).get_resolving_keys()
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._key_store, name)
+
+
 _InitializeDevice = Callable[[_BumbleHandle], Awaitable[_BumbleRuntime]]
 _StartAdvertising = Callable[[_BumbleRuntime], Awaitable[None]]
 _CloseRuntime = Callable[[_BumbleRuntime], Awaitable[None]]
@@ -155,6 +234,7 @@ class BumbleHidTransport:
         *,
         adapter: str,
         device_name: str = _DEFAULT_DEVICE_NAME,
+        key_store_path: str | None = None,
         diagnostics: DiagnosticsRecorder | None = None,
         _open_transport: _OpenTransport | None = None,
         _initialize_device: _InitializeDevice | None = None,
@@ -164,12 +244,17 @@ class BumbleHidTransport:
         """Create a Bumble transport for an adapter string."""
         self._adapter = adapter
         self._device_name = device_name
+        self._key_store_path = key_store_path
         self._diagnostics = diagnostics
         self._open_transport = _open_transport or _default_open_transport
         if _initialize_device is None:
 
             async def initialize_device(handle: _BumbleHandle) -> _BumbleRuntime:
-                return await _default_initialize_device(handle, device_name=self._device_name)
+                return await _default_initialize_device(
+                    handle,
+                    device_name=self._device_name,
+                    key_store_path=self._key_store_path,
+                )
 
             self._initialize_device = initialize_device
         else:
@@ -184,6 +269,7 @@ class BumbleHidTransport:
         self._disconnected_callback: DisconnectedCallback | None = None
         self._l2cap_connected_emitted = False
         self._disconnected_callback_emitted = False
+        self._close_lock = asyncio.Lock()
 
     async def open(self) -> None:
         """Open the configured Bumble adapter."""
@@ -231,6 +317,7 @@ class BumbleHidTransport:
         if self._runtime.advertising_started:
             return
         await self._start_advertising(self._runtime)
+        self._install_key_store_diagnostics(self._runtime)
         self._runtime.advertising_started = True
         if self._runtime.classic_link_policy_settings is not None:
             self._record_event(
@@ -242,18 +329,19 @@ class BumbleHidTransport:
 
     async def close(self) -> None:
         """Close the Bumble adapter if it is open."""
-        if self._handle is None:
-            return
-        handle = self._handle
-        runtime = self._runtime
-        self._handle = None
-        self._runtime = None
-        self._l2cap_connected_emitted = False
-        self._disconnected_callback_emitted = False
-        if runtime is not None:
-            await self._close_runtime(runtime)
-        await handle.close()
-        self._record_event("transport_close_complete", adapter=self._adapter)
+        async with self._close_lock:
+            if self._handle is None:
+                return
+            handle = self._handle
+            runtime = self._runtime
+            self._handle = None
+            self._runtime = None
+            self._l2cap_connected_emitted = False
+            self._disconnected_callback_emitted = False
+            if runtime is not None:
+                await self._close_runtime(runtime)
+            await handle.close()
+            self._record_event("transport_close_complete", adapter=self._adapter)
 
     async def request_disconnect(self) -> DisconnectRequestResult:
         """Request HID channel disconnection through Bumble when channels exist."""
@@ -290,6 +378,53 @@ class BumbleHidTransport:
             status="requested",
             channels=tuple(requested_channels),
         )
+
+    async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
+        """Return bonded peer addresses from the Bumble key store."""
+        self._require_open()
+        if self._runtime is None:
+            return ()
+        await self._ensure_classic_runtime_ready(self._runtime)
+        key_store = self._runtime.device.keystore
+        if key_store is None:
+            return ()
+        entries = await key_store.get_all()
+        return tuple(BondedPeer(address=address) for address, _keys in entries)
+
+    async def connect_bonded_peer(
+        self,
+        peer_address: str,
+        *,
+        connect_timeout: float | None,
+    ) -> None:
+        """Start an active BR/EDR reconnect attempt with Bumble."""
+        self._require_open()
+        if self._runtime is None:
+            msg = "Bumble runtime is not initialized"
+            raise ClosedError(msg)
+        await self._ensure_classic_runtime_ready(self._runtime)
+        from bumble.core import PhysicalTransport  # noqa: PLC0415
+
+        connection = await self._runtime.device.connect(
+            peer_address,
+            transport=PhysicalTransport.BR_EDR,
+            timeout=connect_timeout,
+        )
+        await connection.authenticate()
+        await connection.encrypt(True)
+        await self._runtime.hid_device.connect_control_channel()
+        if self._runtime.hid_device.l2cap_ctrl_channel is not None:
+            self._record_l2cap_channel_event(
+                "l2cap_channel_open",
+                self._runtime.hid_device.l2cap_ctrl_channel,
+            )
+        await self._runtime.hid_device.connect_interrupt_channel()
+        if self._runtime.hid_device.l2cap_intr_channel is not None:
+            self._record_l2cap_channel_event(
+                "l2cap_channel_open",
+                self._runtime.hid_device.l2cap_intr_channel,
+            )
+        self._notify_connected_if_ready()
 
     async def send_interrupt(self, payload: bytes) -> None:
         """Send one interrupt report."""
@@ -679,6 +814,28 @@ class BumbleHidTransport:
         if self._diagnostics is not None:
             self._diagnostics.record_error(error, recoverable=False)
 
+    def _install_key_store_diagnostics(self, runtime: _BumbleRuntime) -> None:
+        if self._diagnostics is None:
+            return
+        key_store = runtime.device.keystore
+        if key_store is None or isinstance(key_store, _DiagnosticKeyStore):
+            return
+        runtime.device.keystore = _DiagnosticKeyStore(key_store, self._diagnostics)
+
+    async def _ensure_classic_runtime_ready(self, runtime: _BumbleRuntime) -> None:
+        if not runtime.device.powered_on:
+            await runtime.device.power_on()
+        if runtime.classic_link_policy_settings is None:
+            link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
+            if link_policy_settings is not None:
+                runtime.classic_link_policy_settings = link_policy_settings
+                self._record_event(
+                    "classic_link_policy_configured",
+                    adapter=self._adapter,
+                    settings=f"0x{link_policy_settings:04x}",
+                )
+        self._install_key_store_diagnostics(runtime)
+
     async def _cleanup_open_failure(self) -> None:
         handle = self._handle
         runtime = self._runtime
@@ -701,6 +858,7 @@ async def _default_initialize_device(
     handle: _BumbleHandle,
     *,
     device_name: str,
+    key_store_path: str | None = None,
 ) -> _BumbleRuntime:
     from bumble.device import Device, DeviceConfiguration  # noqa: PLC0415
     from bumble.hid import Device as HidDevice  # noqa: PLC0415
@@ -711,6 +869,7 @@ async def _default_initialize_device(
         class_of_device=_REFERENCE_CLASS_OF_DEVICE,
         le_enabled=False,
         classic_enabled=True,
+        keystore=_bumble_key_store_config(key_store_path),
         # Bumble applies these flags during power_on; keep them off until after
         # the Classic link policy command is sent.
         connectable=False,
@@ -733,6 +892,12 @@ async def _default_initialize_device(
         service_record_count=len(service_records),
         hid_descriptor_size=len(profile.hid_report_descriptor),
     )
+
+
+def _bumble_key_store_config(key_store_path: str | None) -> str | None:
+    if key_store_path is None:
+        return None
+    return f"JsonKeyStore:{key_store_path}"
 
 
 async def _default_start_advertising(runtime: _BumbleRuntime) -> None:

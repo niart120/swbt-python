@@ -3,8 +3,11 @@ import json
 import warnings
 from collections.abc import Callable
 from io import StringIO
+from pathlib import Path
 from typing import Any, cast
 
+import bumble.device as bumble_device_module
+import bumble.hid as bumble_hid_module
 import pytest
 
 from swbt.diagnostics import DiagnosticsRecorder
@@ -27,14 +30,35 @@ class FakeBumbleHandle:
         self.close_count += 1
 
 
+class FakeBumbleConnection:
+    """Fake Classic connection returned by Bumble device.connect()."""
+
+    def __init__(self, operations: list[str]) -> None:
+        """Create a fake connection with operation tracing."""
+        self.operations = operations
+        self.authenticate_count = 0
+        self.encrypt_calls: list[bool] = []
+
+    async def authenticate(self) -> None:
+        """Record Classic authentication."""
+        self.authenticate_count += 1
+        self.operations.append("authenticate")
+
+    async def encrypt(self, enable: bool = True) -> None:
+        """Record Classic encryption enablement."""
+        self.encrypt_calls.append(enable)
+        self.operations.append(f"encrypt:{enable}")
+
+
 class FakeBumbleDevice:
     """Fake Bumble device runtime."""
 
     EVENT_CONNECTION = "connection"
     EVENT_CONNECTION_FAILURE = "connection_failure"
 
-    def __init__(self) -> None:
+    def __init__(self, *, operations: list[str] | None = None) -> None:
         """Create a fake device with power state."""
+        self.operations = operations if operations is not None else []
         self.powered_on = False
         self.power_on_count = 0
         self.power_off_count = 0
@@ -42,6 +66,9 @@ class FakeBumbleDevice:
         self.discoverable_calls: list[bool] = []
         self.handlers: dict[str, list[Callable[..., None]]] = {}
         self.connection_requests: list[tuple[object, int, int]] = []
+        self.connect_calls: list[tuple[str, object, float | None]] = []
+        self.connection = FakeBumbleConnection(self.operations)
+        self.keystore: object | None = None
 
     async def power_on(self) -> None:
         """Record power-on calls."""
@@ -60,6 +87,18 @@ class FakeBumbleDevice:
     async def set_discoverable(self, discoverable: bool = True) -> None:
         """Record discoverable transitions."""
         self.discoverable_calls.append(discoverable)
+
+    async def connect(
+        self,
+        peer_address: str,
+        *,
+        transport: object,
+        timeout: float | None = None,  # noqa: ASYNC109
+    ) -> object:
+        """Record one active connection attempt."""
+        self.operations.append("connect")
+        self.connect_calls.append((peer_address, transport, timeout))
+        return self.connection
 
     def on(self, event: str, callback: Callable[..., None]) -> None:
         """Register one fake device event callback."""
@@ -188,14 +227,16 @@ class FakeHidDevice:
     EVENT_INTERRUPT_DATA = "interrupt_data"
     EVENT_CONTROL_DATA = "control_data"
 
-    def __init__(self) -> None:
+    def __init__(self, *, operations: list[str] | None = None) -> None:
         """Create a fake HID helper."""
+        self.operations = operations if operations is not None else []
         self.l2cap_intr_channel: object | None = None
         self.l2cap_ctrl_channel: object | None = None
         self.handlers: dict[str, Callable[[bytes], None]] = {}
         self.interrupt_payloads: list[bytes] = []
         self.control_payloads: list[tuple[int, bytes]] = []
         self.disconnect_calls: list[str] = []
+        self.connect_calls: list[str] = []
         self.disconnect_error: Exception | None = None
         self.set_report_callback: Callable[[int, int, int, bytes], object] | None = None
 
@@ -233,6 +274,18 @@ class FakeHidDevice:
             raise self.disconnect_error
         self.disconnect_calls.append("control")
         self.l2cap_ctrl_channel = None
+
+    async def connect_control_channel(self) -> None:
+        """Record a fake active control-channel connection."""
+        self.operations.append("connect_control_channel")
+        self.connect_calls.append("control")
+        self.l2cap_ctrl_channel = FakeL2capChannel(0x0011)
+
+    async def connect_interrupt_channel(self) -> None:
+        """Record a fake active interrupt-channel connection."""
+        self.operations.append("connect_interrupt_channel")
+        self.connect_calls.append("interrupt")
+        self.l2cap_intr_channel = FakeL2capChannel(0x0013)
 
     def emit_set_report(self, report_id: int, report_type: int, report_data: bytes) -> object:
         """Emit one fake SET_REPORT call."""
@@ -370,6 +423,20 @@ class FakePairingKeys:
         self.link_key = link_key
 
 
+class FakeFailingKeyStore:
+    """Fake key store that raises on update without exposing key material."""
+
+    async def update(self, name: str, keys: object) -> None:
+        """Fail one key update."""
+        _ = (name, keys)
+        msg = "write denied"
+        raise PermissionError(msg)
+
+    async def get_all(self) -> list[tuple[str, object]]:
+        """Return no keys."""
+        return []
+
+
 class FakeOpenError(Exception):
     """Fake exception raised by an injected opener."""
 
@@ -463,6 +530,91 @@ def test_bumble_transport_records_custom_device_name_in_diagnostics() -> None:
             "device_name": "Reference Pad",
             "class_of_device": "0x002508",
         } in events
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_initialize_device_configures_json_key_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        captured_config: dict[str, Any] = {}
+
+        class FakeDeviceFactory:
+            @staticmethod
+            def from_config_with_hci(config: object, source: object, sink: object) -> object:
+                captured_config["keystore"] = getattr(config, "keystore", None)
+                captured_config["source"] = source
+                captured_config["sink"] = sink
+                return FakeBumbleDevice()
+
+        def create_hid_device(device: object) -> FakeHidDevice:
+            assert isinstance(device, FakeBumbleDevice)
+            return FakeHidDevice()
+
+        monkeypatch.setattr(bumble_device_module, "Device", FakeDeviceFactory)
+        monkeypatch.setattr(bumble_hid_module, "Device", create_hid_device)
+
+        key_store_path = tmp_path / "keys.json"
+        handle = FakeBumbleHandle()
+
+        await bumble_module._default_initialize_device(
+            handle,
+            device_name="Pro Controller",
+            key_store_path=str(key_store_path),
+        )
+
+        assert captured_config == {
+            "keystore": f"JsonKeyStore:{key_store_path}",
+            "source": handle.source,
+            "sink": handle.sink,
+        }
+
+    asyncio.run(run())
+
+
+def test_bumble_key_store_update_failure_is_recorded_without_key_material() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+        device = FakeBumbleDevice()
+        device.keystore = FakeFailingKeyStore()
+        peer_address = "01:02:03:04:05:06"
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        await transport.start_advertising()
+
+        key_store = cast("Any", device.keystore)
+        with pytest.raises(PermissionError):
+            await key_store.update(peer_address, object())
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "key_store_update",
+            "error_type": "PermissionError",
+            "message": "write denied",
+            "peer_address": peer_address,
+            "status": "failed",
+        } in events
+        assert "link_key" not in trace.getvalue()
 
         await transport.close()
 
@@ -570,6 +722,62 @@ def test_bumble_close_is_idempotent() -> None:
         await transport.close()
         await transport.close()
 
+        assert handle.close_count == 1
+        assert device.power_off_count == 1
+
+    asyncio.run(run())
+
+
+def test_bumble_concurrent_close_waits_for_in_flight_close() -> None:
+    class BlockingHandle(FakeBumbleHandle):
+        def __init__(self) -> None:
+            super().__init__()
+            self.close_started = asyncio.Event()
+            self.close_release = asyncio.Event()
+
+        async def close(self) -> None:
+            self.close_started.set()
+            await self.close_release.wait()
+            await super().close()
+
+    async def run() -> None:
+        handle = BlockingHandle()
+        device = FakeBumbleDevice()
+        diagnostics = DiagnosticsRecorder()
+
+        async def open_transport(adapter: str) -> BlockingHandle:
+            _ = adapter
+            return handle
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert opened_handle is handle
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        await transport.start_advertising()
+        first_close = asyncio.create_task(transport.close())
+        await handle.close_started.wait()
+
+        second_close = asyncio.create_task(transport.close())
+        await asyncio.sleep(0)
+
+        assert second_close.done() is False
+
+        handle.close_release.set()
+        await asyncio.wait_for(first_close, timeout=0.1)
+        await asyncio.wait_for(second_close, timeout=0.1)
+
+        close_events = [
+            event for event in diagnostics.events if event.event == "transport_close_complete"
+        ]
+        assert len(close_events) == 1
         assert handle.close_count == 1
         assert device.power_off_count == 1
 
@@ -990,6 +1198,74 @@ def test_bumble_l2cap_channel_open_records_diagnostics_and_connects_after_both_c
 
         hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013))
         await asyncio.sleep(0)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "l2cap_channel_open",
+            "adapter": "usb:0",
+            "channel": "control",
+            "psm": "0x0011",
+        } in events
+        assert {
+            "event": "l2cap_channel_open",
+            "adapter": "usb:0",
+            "channel": "interrupt",
+            "psm": "0x0013",
+        } in events
+        assert {"event": "connected", "adapter": "usb:0"} in events
+        assert connected_count == 1
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_active_reconnect_opens_hid_l2cap_channels_after_acl_connection() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+        operations: list[str] = []
+        device = FakeBumbleDevice(operations=operations)
+        hid_device = FakeHidDevice(operations=operations)
+        connected_count = 0
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device, hid_device=hid_device)
+
+        async def on_connected() -> None:
+            nonlocal connected_count
+            connected_count += 1
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+        transport.on_connected(on_connected)
+
+        await transport.open()
+        await transport.connect_bonded_peer("01:02:03:04:05:06", connect_timeout=3.0)
+        await asyncio.sleep(0)
+
+        assert len(device.connect_calls) == 1
+        assert device.connect_calls[0][0] == "01:02:03:04:05:06"
+        assert device.connect_calls[0][2] == 3.0
+        assert device.connection.authenticate_count == 1
+        assert device.connection.encrypt_calls == [True]
+        assert hid_device.connect_calls == ["control", "interrupt"]
+        assert operations == [
+            "connect",
+            "authenticate",
+            "encrypt:True",
+            "connect_control_channel",
+            "connect_interrupt_channel",
+        ]
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
         assert {

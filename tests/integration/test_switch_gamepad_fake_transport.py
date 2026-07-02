@@ -1,6 +1,8 @@
 import asyncio
 import json
+import platform
 from io import StringIO
+from pathlib import Path
 
 import pytest
 
@@ -59,6 +61,35 @@ def test_pair_starts_advertising_and_waits_for_fake_connection() -> None:
     asyncio.run(run())
 
 
+def test_incoming_connection_trace_does_not_use_active_reconnect_events() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(bonded_peer_addresses=("01:02:03:04:05:06",))
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            pairing = asyncio.create_task(pad.pair(timeout=1.0))
+            await asyncio.sleep(0)
+            await transport.connect()
+            await asyncio.wait_for(pairing, timeout=0.1)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        event_names = [event["event"] for event in events]
+
+        assert {
+            "event": "incoming_connection",
+            "previous_state": "advertising",
+            "route": "incoming",
+        } in events
+        assert "active_reconnect_attempt" not in event_names
+        assert "active_reconnect_result" not in event_names
+        assert "active_reconnect" not in transport.events
+
+    asyncio.run(run())
+
+
 def test_open_only_does_not_start_advertising() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
@@ -71,6 +102,34 @@ def test_open_only_does_not_start_advertising() -> None:
         assert transport.events == ("open",)
 
         await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+
+def test_key_store_path_is_recorded_in_run_metadata(tmp_path: Path) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        key_store_path = tmp_path / "keys.json"
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            key_store_path=str(key_store_path),
+            transport=transport,
+        )
+
+        await pad.open()
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "run_metadata",
+            "adapter": "usb:0",
+            "key_store_exists": False,
+            "key_store_path": str(key_store_path),
+            "os": platform.system(),
+            "package_version": "0.1.0",
+            "python_version": platform.python_version(),
+        } in events
 
     asyncio.run(run())
 
@@ -571,6 +630,34 @@ def test_close_without_connection_records_disconnect_unavailable() -> None:
     asyncio.run(run())
 
 
+def test_close_when_transport_already_closed_records_disconnect_unavailable() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+
+        await pad.open()
+        await transport.close()
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "disconnect_request",
+            "status": "unavailable",
+            "reason": "transport_closed",
+            "error_type": "ClosedError",
+            "message": "fake transport is not open",
+        } in events
+        assert transport.close_count == 1
+        assert pad.status().connection_state == "closed"
+
+    asyncio.run(run())
+
+
 def test_close_request_failure_records_failure_and_closes_transport() -> None:
     async def run() -> None:
         trace = StringIO()
@@ -673,6 +760,34 @@ def test_disconnect_callback_neutralizes_state_and_stops_report_loop() -> None:
     asyncio.run(run())
 
 
+def test_disconnect_with_reconnect_disabled_records_closed_terminal_state() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(bonded_peer_addresses=("01:02:03:04:05:06",))
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=1000,
+        ) as pad:
+            await transport.connect()
+            await transport.disconnect(reason=0x13)
+
+            assert pad.status().connection_state == "closed"
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "reconnect_disabled",
+            "next_state": "closed",
+            "reason": 0x13,
+        } in events
+        assert "active_reconnect" not in transport.events
+        assert "start_advertising" not in transport.events
+
+    asyncio.run(run())
+
+
 def test_pair_timeout_records_advertising_failure_position_in_trace() -> None:
     async def run() -> None:
         trace = StringIO()
@@ -698,6 +813,225 @@ def test_pair_timeout_records_advertising_failure_position_in_trace() -> None:
             "request_disconnect_unavailable",
             "close",
         )
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("peer_addresses", "status", "selection"),
+    [
+        ((), "no_bond", "none"),
+        (("01:02:03:04:05:06",), "connected", "selected"),
+        (("01:02:03:04:05:06", "0a:0b:0c:0d:0e:0f"), "ambiguous_bond", "ambiguous"),
+    ],
+)
+def test_reconnect_records_bonded_peer_selection_without_advertising(
+    peer_addresses: tuple[str, ...],
+    status: str,
+    selection: str,
+) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(bonded_peer_addresses=peer_addresses)
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            result = await pad.reconnect(timeout=0.1)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert result.status == status
+        assert {
+            "event": "bonded_peers_discovered",
+            "peer_count": len(peer_addresses),
+            "selection": selection,
+        } in events
+        assert "start_advertising" not in transport.events
+
+        if peer_addresses:
+            if len(peer_addresses) == 1:
+                assert result.peer_address == peer_addresses[0]
+                assert {
+                    "event": "active_reconnect_attempt",
+                    "peer_address": peer_addresses[0],
+                    "route": "active_reconnect",
+                } in events
+                assert {
+                    "event": "active_reconnect_result",
+                    "peer_address": peer_addresses[0],
+                    "route": "active_reconnect",
+                    "status": "connected",
+                } in events
+                assert "active_reconnect" in transport.events
+            else:
+                assert result.peer_address is None
+                assert {
+                    "event": "active_reconnect_result",
+                    "peer_count": len(peer_addresses),
+                    "route": "active_reconnect",
+                    "status": "ambiguous_bond",
+                } in events
+                assert "active_reconnect" not in transport.events
+
+    asyncio.run(run())
+
+
+def test_connect_prefers_active_reconnect_when_one_bond_exists() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        peer_address = "01:02:03:04:05:06"
+        transport = FakeHidTransport(bonded_peer_addresses=(peer_address,))
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            result = await pad.connect(timeout=0.1)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert result.route == "active_reconnect"
+        assert result.status == "connected"
+        assert result.peer_address == peer_address
+        assert {
+            "event": "active_reconnect_result",
+            "peer_address": peer_address,
+            "route": "active_reconnect",
+            "status": "connected",
+        } in events
+        assert "active_reconnect" in transport.events
+        assert "start_advertising" not in transport.events
+
+    asyncio.run(run())
+
+
+def test_connect_allows_pairing_only_when_no_bond_and_allowed() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            connect_task = asyncio.create_task(pad.connect(timeout=1.0, allow_pairing=True))
+            await asyncio.sleep(0)
+
+            assert transport.events == ("open", "start_advertising")
+
+            await transport.connect()
+            result = await asyncio.wait_for(connect_task, timeout=0.1)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert result.route == "pairing"
+        assert result.status == "connected"
+        assert {
+            "event": "connect_pairing_fallback",
+            "reason": "no_bond",
+            "route": "pairing",
+        } in events
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    (
+        "active_reconnect_auto_connect",
+        "active_reconnect_error",
+        "status",
+        "failure_reason",
+        "extra_fields",
+    ),
+    [
+        (
+            True,
+            asyncio.CancelledError("abort: disconnection event occurred."),
+            "failed",
+            "transport_error",
+            {
+                "error_type": "CancelledError",
+                "message": "abort: disconnection event occurred.",
+            },
+        ),
+        (
+            True,
+            RuntimeError("connection refused"),
+            "failed",
+            "transport_error",
+            {"error_type": "RuntimeError", "message": "connection refused"},
+        ),
+        (
+            False,
+            None,
+            "timeout",
+            "connection_timeout",
+            {},
+        ),
+    ],
+)
+def test_active_reconnect_failure_records_reason_without_advertising(
+    active_reconnect_auto_connect: bool,
+    active_reconnect_error: BaseException | None,
+    status: str,
+    failure_reason: str,
+    extra_fields: dict[str, object],
+) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        peer_address = "01:02:03:04:05:06"
+        transport = FakeHidTransport(
+            bonded_peer_addresses=(peer_address,),
+            active_reconnect_auto_connect=active_reconnect_auto_connect,
+            active_reconnect_error=active_reconnect_error,
+        )
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            result = await pad.reconnect(timeout=0.001)
+            assert pad.status().connection_state == "closed"
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        expected_event = {
+            "event": "active_reconnect_result",
+            "failure_reason": failure_reason,
+            "peer_address": peer_address,
+            "route": "active_reconnect",
+            "status": status,
+        }
+        expected_event.update(extra_fields)
+
+        assert result.status == status
+        assert expected_event in events
+        assert "active_reconnect" in transport.events
+        assert "start_advertising" not in transport.events
+
+    asyncio.run(run())
+
+
+def test_active_reconnect_task_cancellation_propagates() -> None:
+    async def run() -> None:
+        peer_address = "01:02:03:04:05:06"
+        transport = FakeHidTransport(
+            bonded_peer_addresses=(peer_address,),
+            active_reconnect_auto_connect=False,
+        )
+
+        async with SwitchGamepad(transport=transport) as pad:
+            reconnect_task = asyncio.create_task(pad.reconnect(timeout=None))
+            for _ in range(5):
+                if "active_reconnect" in transport.events:
+                    break
+                await asyncio.sleep(0)
+            assert "active_reconnect" in transport.events
+
+            reconnect_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await reconnect_task
 
     asyncio.run(run())
 

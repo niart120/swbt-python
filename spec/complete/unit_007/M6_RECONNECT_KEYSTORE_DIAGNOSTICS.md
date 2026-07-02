@@ -1,0 +1,236 @@
+# M6 Bond Reuse Reconnect / Keystore / Diagnostics 仕様書
+
+## 1. 概要
+
+### 1.1 目的
+
+pairing 情報の保存、保存済み bond を使う reconnect、diagnostics 拡充、hardware run metadata を扱う。M6 の中心は、daemon restart 後の再接続要求と同じく、Switch 側の追加操作なしに保存済み link key を使って接続を戻せるかを確認することである。
+
+この仕様では reconnect を次の 3 種類に分ける。
+
+| 用語 | 意味 | M6 での扱い |
+|---|---|---|
+| active bond reuse reconnect | 保存済み peer address / link key を使い、swbt-python 側から Switch へ Classic 接続を開始する | 主対象 |
+| incoming bond reuse | swbt-python 側が connectable で待ち、Switch 側から既知 device として接続要求が来る | 補助観測 |
+| advertising recovery | 失敗後に自動で discoverable / connectable へ戻して待つ | 対象外 |
+
+M6 は全 dongle での reconnect 保証を目標にしない。観測条件を明確にし、release 時に保証できる範囲を分ける。
+
+### 1.2 起点 / source
+
+| source | 内容 | path |
+|---|---|---|
+| roadmap | M6 の対象範囲、非対象範囲、完了条件 | `spec/initial/roadmap.md` |
+| lifecycle | reconnect 方針、key_store_path、disconnect 処理。M6 で active / incoming / advertising recovery へ再分類する | `spec/initial/lifecycle.md` |
+| api | `key_store_path`、`status()` | `spec/initial/api.md` |
+| testing | hardware test の reconnect 項目 | `spec/initial/testing.md` |
+| risks | reconnect、dongle、OS / driver 差分。`active reconnect / incoming reconnect` は Bumble と OS / dongle に依存する | `spec/initial/risks.md` |
+| completed M5 | Button A / neutral は確認済み。pairing_complete / authentication event と reconnect は未確認 | `spec/complete/unit_006/M5_INPUT_OPERATION_API.md` |
+| daemon reconnect reference | link-key DB open、link key request response、no `pairing complete`、L2CAP open、Button A smoke は daemon 側で observed | `spec/complete/unit_006/M5_INPUT_OPERATION_API.md` |
+| hardware log | full handshake と Button A は observed-pass。Switch model / firmware、reconnect、key store は未記録 | `docs/hardware-test-log.md` |
+| close cleanup prerequisite | reconnect 前に connected close / disconnect cleanup contract を固定する。unit_014 は automated contract と hardware characterization まで完了済み | `spec/complete/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` |
+| context manager prerequisite | `async with` を resource scope に寄せ、HID advertising / pairing / reconnect を明示 API へ移す | `spec/complete/unit_015/CONTEXT_MANAGER_RESOURCE_SCOPE.md` |
+
+### 1.3 use case
+
+| actor / boundary | 入力または状態 | 期待する観測結果 | 制約 |
+|---|---|---|---|
+| library user | `SwitchGamepad(key_store_path=...)` | pairing 情報の保存先が設定される | 保存形式は Bumble と実装で確認 |
+| developer | 初回 pairing 後 | key store 書き込み有無が diagnostics に残る | secret 値はログに出さない |
+| library user | 保存済み bond があり、daemon restart 相当の再起動後に再接続する | Switch 側の追加操作なしで active bond reuse reconnect を試行し、結果を記録する | peer address の取得方法と複数 bond 時の扱いは実装で固定 |
+| developer | incoming bond reuse を観測する | Switch 側から既知 device への接続要求が来たか、active reconnect と区別して記録する | incoming 成功は「Switch 側操作なし」の証明にはしない |
+| developer | reconnect 失敗 | failure reason と cleanup を記録する | 自動 advertising recovery はしない |
+| lifecycle | reconnect 前の close cleanup | 前回 connected close が neutral、disconnect request terminal state、transport close まで説明できる | `unit_014` の完了済み仕様と hardware evidence を前提に M6 へ入る |
+
+## 2. 対象範囲
+
+- `key_store_path` の設定と diagnostics 記録。
+- pairing 情報保存の確認。
+- active bond reuse reconnect の成功 / 失敗の区別。
+- incoming bond reuse と active bond reuse reconnect の trace 上の区別。
+- reconnect 失敗時の clean close と failure diagnostics。
+- hardware run metadata の trace 追加。
+- trace schema の安定化。
+- hardware matrix の更新。
+- `unit_014` で固定した close / disconnect cleanup contract を reconnect 前提として参照する。
+
+## 3. 対象外
+
+- 全 dongle での reconnect 保証。
+- 複数 controller 同時 reconnect。
+- daemon mode。
+- link key の secret 値のログ出力。
+- OS 標準 Bluetooth stack との併用。
+- reconnect 失敗後の自動 advertising recovery。
+- reconnect 失敗後の自動 retry loop。
+- incoming bond reuse だけで「Switch 側操作なし reconnect」を満たしたと扱うこと。
+- connected close / remote close request / bounded disconnect wait の設計。これは `unit_014`。
+
+## 4. 関連 docs
+
+- `spec/initial/api.md`
+- `spec/initial/lifecycle.md`
+- `spec/initial/testing.md`
+- `spec/initial/risks.md`
+- `spec/complete/unit_010/DIAGNOSTICS_TRACE_SCHEMA.md`
+- `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
+
+## 5. 根拠監査
+
+| 項目 | 要否 | 状態 | 根拠 / 理由 |
+|---|---|---|---|
+| Switch HID / report bytes | required | done-for-active-and-incoming-route | HOME / 通常画面条件の active reconnect で HID control / interrupt L2CAP open、`connected`、subcommand sequence、`0x21` replies を観測した。controller search / change grip order screen からの incoming run でも HID L2CAP open と subcommand sequence を観測したが、`classic_pairing` と `key_store_update` も出たため pairing-free incoming bond reuse ではない |
+| Bumble / transport | required | done-for-M6 | Bumble 0.0.230 は `DeviceConfiguration.keystore` に `JsonKeyStore:<filename>` を渡すと `Device.power_on()` 時に `KeyStore.create_for_device()` 経由で `JsonKeyStore` を作る。`JsonKeyStore.get_all()` は peer address と key object の組を返す。active Classic connection は `Device.connect(..., transport=PhysicalTransport.BR_EDR, timeout=...)` / `connect_classic()` 経由で開始でき、返却された `Connection` は `authenticate()` と `encrypt(True)` を持つ。Classic authentication は `HCI_Authentication_Requested`、encryption は `HCI_Set_Connection_Encryption` を送って完了 event を待つ。source は Bumble 0.0.230 の `.venv/Lib/site-packages/bumble/device.py` `Device.connect` around line 4050、`Connection.authenticate` / `Connection.encrypt` around lines 1895-1899、`Device.authenticate` / `Device.encrypt` around lines 4877-4959。M6 では HID L2CAP 前に authentication / encryption を明示する |
+| OS / driver / adapter | required | done-for-active-and-incoming-route | 2026-07-03 の `usb:0` / CSR8510 A10 / WinUSB run は、起動条件を記録した active reconnect で `connection_authentication`、`connection_encryption_change`、HID L2CAP open、`active_reconnect_result status=connected` を記録した。incoming run は `incoming_connection route=incoming` と active reconnect event 不在を記録したが、pairing-free bond reuse は未確認 |
+
+## 6. 振る舞い仕様
+
+| 振る舞い | 入力・状態 | 期待結果 | 備考 |
+|---|---|---|---|
+| key store configured | `key_store_path` 指定 | path と存在確認結果を diagnostics に記録する | secret 内容は記録しない |
+| pairing saved | 初回 pairing 後 | 保存成功 / 失敗が trace に残る | Bumble API 確認が必要 |
+| saved bond discovered | key store に保存済み peer がある | peer address の候補数、選択結果、曖昧さを trace に残す | link key 値は出さない |
+| active reconnect attempt | 保存済み peer address / link key あり | active attempt start / result を記録する | Bumble の active Classic connection API を監査してから固定 |
+| active reconnect success | active attempt 後に HID channel ready | state が connected になる | 再 pairing event がないことを観測対象に含める |
+| active reconnect failure | timeout / error | failure reason を記録し clean close する | 自動 advertising recovery はしない |
+| incoming bond reuse | connectable 中に Switch から接続要求が来る | incoming として attempt / result を記録する | Switch 側操作なし reconnect の証明にはしない |
+| key store reset | user deletes key store | 再 pairing 手順を docs に残す | CLI 化は M7 |
+| trace metadata | hardware run | OS、driver、dongle、Bumble、Python、Switch model / firmware を含む | unit_010 と整合 |
+
+## 7. TDD Test List
+
+| status | item | type | layer | hardware | notes |
+|---|---|---|---|---|---|
+| green | `key_store_path` 指定が diagnostics metadata に残る | new | integration | no | `test_key_store_path_is_recorded_in_run_metadata` で path と存在有無を固定。secret は出さない |
+| green | `key_store_path` が Bumble `JsonKeyStore` の保存先として設定される | new | unit | no | `test_bumble_initialize_device_configures_json_key_store` で `DeviceConfiguration.keystore == JsonKeyStore:<path>` を固定。public API に Bumble 型を出さない |
+| green | key store 書き込み失敗が diagnostics に残り、例外の扱いが明確になる | edge | unit | no | `test_bumble_key_store_update_failure_is_recorded_without_key_material` で keystore `update()` failure を固定 |
+| green | key store に保存済み peer が 0 件、1 件、複数件ある場合の active reconnect 入口が trace で区別される | new | integration | no | `test_reconnect_records_bonded_peer_selection_without_advertising` で `no_bond`、`selected`、`ambiguous_bond` を固定。複数 peer の自動選択はしない |
+| green | disconnect 後に reconnect disabled なら closed / failed の定義通りに遷移する | regression | integration | no | `test_disconnect_with_reconnect_disabled_records_closed_terminal_state` で自動 reconnect / advertising なしと closed terminal trace を固定 |
+| green | active reconnect failure が failure reason を記録し、automatic advertising recovery を開始しない | new | integration | no | `test_active_reconnect_failure_records_reason_without_advertising` で transport error と timeout を固定 |
+| green | incoming bond reuse と active reconnect の trace event が混ざらない | new | integration | no | `test_incoming_connection_trace_does_not_use_active_reconnect_events` で incoming 接続と active reconnect event の分離を固定 |
+| green | `connect()` が bond 優先で active reconnect を試し、bond がない場合だけ明示許可付き pairing に進む | new | integration | no | `test_connect_prefers_active_reconnect_when_one_bond_exists` と `test_connect_allows_pairing_only_when_no_bond_and_allowed` で固定 |
+| green | trace event が schema に従い metadata を含む | regression | integration | no | active / incoming / pairing fallback の route metadata と key store metadata を integration tests で固定 |
+| green | active reconnect が ACL 接続後、HID L2CAP 前に Classic authentication / encryption を完了する | regression | unit | no | `test_bumble_active_reconnect_opens_hid_l2cap_channels_after_acl_connection` で `connect` -> `authenticate` -> `encrypt(True)` -> HID control / interrupt L2CAP の順序を固定 |
+| green | key store ありで active bond reuse reconnect 成功 / 失敗を実機で記録する | new | hardware | yes | HOME / 通常画面条件で `active_reconnect_result status=connected` を記録した。修正前は HID L2CAP を先に開いて reason 5 で切断されていた |
+| green | active reconnect run で新規 pairing event の有無、authentication、encryption、HID channel open を記録する | characterization | hardware | yes | final active trace は `connection_authentication authenticated=true`、`connection_encryption_change encryption=1`、HID control / interrupt `l2cap_channel_open`、`connected` を記録し、`classic_pairing` と `key_store_update` は記録しなかった |
+| observed-not-bond-reuse | incoming bond reuse を実機で観測する場合は Switch 側操作の有無を記録する | characterization | hardware | yes | 2026-07-03 incoming run は controller search / change grip order screen 条件で `incoming_connection route=incoming` と active reconnect event 不在を記録した。同じ trace に `classic_pairing`、`link_key_available`、`key_store_update status=succeeded` も出たため pairing-free incoming bond reuse とは扱わない |
+| green | hardware matrix に reconnect 結果が反映される | new | hardware | yes | `docs/hardware-test-log.md` の Windows row を active bond reuse reconnect observed-pass へ更新した |
+| green | public config の `key_store_path` が `SwitchGamepad` から Bumble transport 生成へ渡る | new | unit | no | `test_switch_gamepad_key_store_path_is_passed_to_bumble_transport` で `BumbleHidTransport` 生成引数を固定 |
+| observed-partial | `pairing_complete` / `connection_authentication` diagnostics が実機 trace に出るか確認する | characterization | hardware | yes | active reconnect final run は `connection_authentication` を記録した。initial pairing run では引き続き `pairing_complete` は記録されていない |
+| done | `unit_014` の close / disconnect cleanup contract が完了していることを M6 の前提として確認する | regression | docs | no | unit_014 は connected close ordering、Classic scan cleanup、full observed handshake 後の A exit / close path を hardware evidence 付きで完了済み |
+
+## 8. 設計メモ
+
+- reconnect は初期 release の保証対象に含めるか未決である。実装しても README では確認済み構成と未確認構成を分ける。
+- M6 では `reconnect` を裸の用語として扱わない。active bond reuse reconnect、incoming bond reuse、advertising recovery を分ける。
+- active bond reuse reconnect を主経路にする前に、`async with` / `open()` が暗黙に advertising へ入る現状を unit_015 で整理する。M6 は resource scope 化後の `connect()` / `reconnect()` を前提にする。
+- daemon restart 後に Switch 側の追加操作なしで戻る要件に近いのは active bond reuse reconnect である。incoming bond reuse は Switch 側が接続要求を出す必要があるため、主成功条件にはしない。
+- advertising recovery は以前の pre-host-connection timeout と同じ失敗面を再発させる可能性がある。M6 では failure diagnostics と clean close までに留め、自動復帰や retry は別 unit に送る。
+- key store の secret 値は diagnostics に出さない。path、存在、読み書き結果、例外型に留める。
+- active reconnect 失敗時は利用者が再 pairing へ戻れる状態を優先する。ただし自動で discoverable / connectable へ戻す挙動はここに含めない。
+- trace schema は M2 以降の実機 run で破綻しないよう、unit_010 で先に安定させる。
+- `unit_006` の post-handshake run は Button A と neutral を完了したが、Bumble の `pairing_complete` / `connection_authentication` event は実機 trace に出ていない。M6 では、Bumble callback が出ないのか、bonding / reconnect 条件でだけ出るのかを分ける。
+- `SwitchGamepadConfig.key_store_path` は public surface にある。M6 では、この値が Bumble の link key 保存へ接続されているかを最初に確認する。
+- active reconnect は `Device.connect(..., BR_EDR)` だけでは HID L2CAP 前の認証を保証しない。2026-07-03 run では HID control L2CAP request を先に送ると Switch が reason 5 `AUTHENTICATION_FAILURE_ERROR` で切断した。`Connection.authenticate()` と `Connection.encrypt(True)` を明示してから HID control / interrupt L2CAP を開くと HOME / 通常画面条件で `connected` へ到達した。
+- incoming run は controller search / change grip order screen から開始すると route 分離は確認できるが、Switch 側操作なし reconnect の証明にはならない。2026-07-03 run は `classic_pairing`、`link_key_available`、`key_store_update` を記録したため、既存 bond だけを使った pairing-free incoming bond reuse とは分類しない。
+- disconnect 競合時の trailing neutral、remote close request、closed event / timeout は `unit_014` で決める。M6 ではその terminal state を reconnect 前提として読み、reconnect failure と close cleanup failure を混ぜない。unit_014 は Switch 実機での close request ordering まで確認済みとして扱う。
+
+## 9. 対象ファイル
+
+| path | change | 内容 |
+|---|---|---|
+| `src/swbt/gamepad.py` | modify | active reconnect option、lifecycle |
+| `src/swbt/transport/base.py` | modify | active reconnect transport boundary |
+| `src/swbt/transport/fake.py` | modify | fake active / incoming reconnect events |
+| `src/swbt/transport/bumble.py` | modify | key store / active reconnect bridge |
+| `src/swbt/diagnostics.py` | modify | metadata と reconnect events |
+| `src/swbt/errors.py` | modify | reconnect / keystore error |
+| `tests/unit/` | modify | key store metadata tests |
+| `tests/integration/` | modify | fake active / incoming reconnect lifecycle tests |
+| `tests/hardware/test_reconnect_keystore.py` | new | key store 作成後の active reconnect と incoming bond reuse characterization tests |
+| `docs/hardware-test-log.md` | modify | reconnect 観測 |
+| `README.md` | modify | reconnect の保証範囲 |
+| `spec/wip/unit_007/M6_RECONNECT_KEYSTORE_DIAGNOSTICS.md` | modify | unit_006 から送った reconnect / diagnostics deferred item |
+| `spec/complete/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` | reference | reconnect 前提となる close / disconnect cleanup contract |
+
+## 10. 検証
+
+この表は M6 実装時に実行する gate を示す。仕様書作成時点の実行結果ではない。
+
+| command | result | notes |
+|---|---|---|
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_key_store_path_is_recorded_in_run_metadata -q` | pass | 1 passed。`SwitchGamepad(key_store_path=...)` の `run_metadata` に `key_store_path` と `key_store_exists` が残ることを確認した |
+| `uv run pytest tests\unit\test_diagnostics.py tests\integration\test_switch_gamepad_fake_transport.py::test_key_store_path_is_recorded_in_run_metadata -q` | pass | 4 passed。既存 run metadata schema と M6 key store metadata の局所 regression を確認した |
+| `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_initialize_device_configures_json_key_store -q` | pass | 1 passed。Bumble `DeviceConfiguration.keystore` に `JsonKeyStore:<path>` が設定されることを確認した |
+| `uv run pytest tests\unit\test_bumble_transport.py -q` | pass | 25 passed。Bumble transport の既存 unit regression を確認した |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_switch_gamepad_key_store_path_is_passed_to_bumble_transport -q` | pass | 1 passed。`SwitchGamepad` の public config が Bumble transport 生成へ渡ることを確認した |
+| `uv run pytest tests\unit\test_public_api_boundary.py -q` | pass | 6 passed。public API が Bumble 型を露出しない既存境界も確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_reconnect_records_bonded_peer_selection_without_advertising -q` | pass | 3 passed。保存済み peer 0/1/複数の active reconnect 入口 trace と、automatic advertising を開始しないことを確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_reconnect_records_bonded_peer_selection_without_advertising tests\unit\test_public_api_boundary.py tests\unit\test_bumble_transport.py -q` | pass | 34 passed。transport boundary 変更に関係する局所 regression を確認した |
+| `uv run ruff check src\swbt\__init__.py src\swbt\gamepad.py src\swbt\transport\base.py src\swbt\transport\fake.py src\swbt\transport\bumble.py tests\integration\test_switch_gamepad_fake_transport.py tests\unit\test_public_api_boundary.py tests\unit\test_bumble_transport.py` | pass | lint pass |
+| `uv run ty check --no-progress` | pass | type check pass |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_active_reconnect_failure_records_reason_without_advertising -q` | pass | 2 passed。transport error と timeout の `failure_reason`、clean close、automatic advertising なしを確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_reconnect_records_bonded_peer_selection_without_advertising tests\integration\test_switch_gamepad_fake_transport.py::test_active_reconnect_failure_records_reason_without_advertising -q` | pass | 5 passed。active reconnect の peer selection と failure diagnostics を合わせて確認した |
+| `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_key_store_update_failure_is_recorded_without_key_material -q` | pass | 1 passed。keystore 書き込み失敗が secret を含まず diagnostics に残ることを確認した |
+| `uv run pytest tests\unit\test_bumble_transport.py -q` | pass | 26 passed。Bumble transport の key store wrapper 追加後の unit regression を確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_disconnect_with_reconnect_disabled_records_closed_terminal_state -q` | pass | 1 passed。disconnect 後に自動 reconnect / advertising を開始せず closed へ落ちることを確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_disconnect_with_reconnect_disabled_records_closed_terminal_state tests\integration\test_switch_gamepad_fake_transport.py::test_disconnect_callback_neutralizes_state_and_stops_report_loop tests\integration\test_switch_gamepad_fake_transport.py::test_reconnect_records_bonded_peer_selection_without_advertising tests\integration\test_switch_gamepad_fake_transport.py::test_active_reconnect_failure_records_reason_without_advertising -q` | pass | 7 passed。disconnect と active reconnect fake lifecycle の局所 regression を確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_incoming_connection_trace_does_not_use_active_reconnect_events -q` | pass | 1 passed。incoming 接続で active reconnect event を出さないことを確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_incoming_connection_trace_does_not_use_active_reconnect_events tests\integration\test_switch_gamepad_fake_transport.py::test_reconnect_records_bonded_peer_selection_without_advertising tests\integration\test_switch_gamepad_fake_transport.py::test_active_reconnect_failure_records_reason_without_advertising -q` | pass | 6 passed。incoming と active reconnect の trace 分離を確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_connect_prefers_active_reconnect_when_one_bond_exists tests\integration\test_switch_gamepad_fake_transport.py::test_connect_allows_pairing_only_when_no_bond_and_allowed -q` | pass | 2 passed。`connect()` が bond 優先 active reconnect と明示許可付き pairing fallback を選ぶことを確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_connect_prefers_active_reconnect_when_one_bond_exists tests\integration\test_switch_gamepad_fake_transport.py::test_connect_allows_pairing_only_when_no_bond_and_allowed tests\integration\test_switch_gamepad_fake_transport.py::test_reconnect_records_bonded_peer_selection_without_advertising tests\unit\test_public_api_boundary.py -q` | pass | 11 passed。`connect()` 追加後の related integration と public API 境界を確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_reconnect_records_bonded_peer_selection_without_advertising tests\integration\test_switch_gamepad_fake_transport.py::test_connect_prefers_active_reconnect_when_one_bond_exists tests\integration\test_switch_gamepad_fake_transport.py::test_active_reconnect_failure_records_reason_without_advertising tests\integration\test_switch_gamepad_fake_transport.py::test_incoming_connection_trace_does_not_use_active_reconnect_events tests\integration\test_switch_gamepad_fake_transport.py::test_connect_allows_pairing_only_when_no_bond_and_allowed -q` | pass | 8 passed。active / incoming / pairing fallback の route metadata を確認した |
+| `uv run pytest --collect-only tests\hardware\test_reconnect_keystore.py -q` | pass | 2 tests collected。実機は使わず hardware test の収集だけ確認した |
+| `uv run ruff check tests\hardware\test_reconnect_keystore.py` | pass | lint pass |
+| `uv run ruff format --check tests\hardware\test_reconnect_keystore.py` | pass | operator instruction 追加後も 1 file already formatted |
+| `uv run ruff check tests\hardware\test_reconnect_keystore.py` | pass | operator instruction 追加後も lint pass |
+| `uv run pytest --collect-only tests\hardware\test_reconnect_keystore.py -q` | pass | operator instruction 追加後も 2 tests collected。実機は使っていない |
+| `uv sync --dev` | pass | Resolved 41 packages / Checked 41 packages |
+| `uv run ruff format --check .` | pass | 41 files already formatted |
+| `uv run ruff check .` | pass | lint pass |
+| `uv run ty check --no-progress` | pass | type check pass |
+| `uv run pytest tests\unit -q` | pass | 109 passed |
+| `uv run pytest tests\integration -q` | pass | 42 passed |
+| `uv run pytest tests\hardware\test_reconnect_keystore.py -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore --log-file .pytest_cache\hardware\unit_007\20260703-013043-reconnect-keystore\pytest-debug.log --log-file-level=DEBUG -q -s` | pass-inconclusive | 2 passed in 72.56s。初回 pairing の key store 書き込み、active attempt と timeout、incoming route 分離は記録した。ただし Switch UI 起動条件が未記録だったため、HOME / 通常画面条件の active reconnect 結果としては扱わない |
+| `uv run pytest tests\unit\test_bumble_transport.py::test_bumble_active_reconnect_opens_hid_l2cap_channels_after_acl_connection -q` | red then pass | red は `authenticate_count == 0`。実装後は 1 passed。ACL 後、HID L2CAP 前に `authenticate()` と `encrypt(True)` を呼ぶ順序を固定した |
+| `uv run pytest tests\unit\test_bumble_transport.py -q` | pass | 28 passed。Bumble transport unit regression を確認した |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | 45 passed。fake lifecycle regression を確認した |
+| `uv run pytest --collect-only tests\hardware\test_reconnect_keystore.py -q` | pass | 3 tests collected。実機は使っていない |
+| `uv run ruff format --check src\swbt\transport\bumble.py tests\unit\test_bumble_transport.py tests\hardware\test_reconnect_keystore.py` | pass | 3 files already formatted |
+| `uv run ruff check src\swbt\transport\bumble.py tests\unit\test_bumble_transport.py tests\hardware\test_reconnect_keystore.py` | pass | lint pass |
+| `uv run ty check --no-progress` | pass | type check pass |
+| `uv run pytest tests\hardware\test_reconnect_keystore.py::test_switch_active_reconnect_with_existing_key_store_records_result -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_007\20260703-operator-split-reconnect --log-file .pytest_cache\hardware\unit_007\20260703-operator-split-reconnect\active-reconnect-after-auth-encrypt-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | 1 passed in 8.85s。HOME / 通常画面条件で `connection_authentication`、`connection_encryption_change`、HID control / interrupt L2CAP open、`connected`、`active_reconnect_result status=connected` を記録した。`advertising_start`、`classic_pairing`、`key_store_update` は active reconnect trace に出ていない |
+| `uv run pytest tests\hardware\test_reconnect_keystore.py::test_switch_incoming_connection_trace_stays_separate_from_active_reconnect -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_007\20260703-operator-split-reconnect --log-file .pytest_cache\hardware\unit_007\20260703-operator-split-reconnect\incoming-after-setup-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | 1 passed in 8.95s。controller search / change grip order screen 条件で `incoming_connection route=incoming` を記録し、`active_reconnect_attempt` と `active_reconnect_result` は出なかった。同じ trace に `classic_pairing`、`link_key_available`、`key_store_update status=succeeded` が出たため、pairing-free incoming bond reuse とは扱わない |
+
+## 11. 実機実行条件
+
+| 項目 | 内容 |
+|---|---|
+| 実機要否 | required for reconnect observation |
+| 承認範囲 | adapter open、Classic HID Device initialization、discoverable / connectable / HID advertising、初回 pairing、key store 書き込み、disconnect、active reconnect request、HID control / interrupt channel open、Switch-facing output report / subcommand handling、periodic report loop、必要時の incoming bond reuse 観測、再 pairing、close |
+| adapter | 例: `usb:0`。専用 USB Bluetooth dongle であること |
+| 実行遮断 | 環境変数による遮断は採用しない。明示承認、対象 adapter、command、cleanup plan で管理する |
+| log / artifact | diagnostics trace、hardware test log、key store path metadata |
+| cleanup | neutral、report loop 停止、transport close、adapter release。必要なら key store 削除手順を記録 |
+
+## 12. 先送り事項
+
+- 複数 dongle / 複数 Switch firmware の網羅は初期 release 後の matrix 拡張に送る。
+- daemon mode の reconnect 制御は初期対象外。
+- reconnect 失敗後の automatic advertising recovery と retry loop は別 unit に送る。M6 では失敗理由と cleanup を記録する。
+- 複数 peer が key store にある場合の自動選択 UI / CLI は M7 以降に送る。M6 では曖昧さを diagnostics に出す。
+- CLI からの key store reset helper は M7 の `swbt-probe` で必要性を判断する。
+- L+R / stick の追加 semantic input reflection は `unit_013`。M6 では扱わない。
+- connected close / remote close request / bounded disconnect wait は `unit_014`。M6 では再設計しない。
+
+## 13. チェックリスト
+
+このチェックリストは M6 の作業完了状態を示す。仕様書の初期作成だけで完了扱いにしない。
+
+- [x] 対象範囲と対象外を初期設計から切り出した
+- [x] TDD Test List の初期案を作成した
+- [x] active bond reuse reconnect、incoming bond reuse、advertising recovery の意味を分けた
+- [x] reconnect / key store / diagnostics の根拠監査を実施し、状態を更新した
+- [x] M6 の local automated gate を実行し、検証欄を結果で更新した
+- [x] 実機 reconnect 観測は起動条件、承認、command、cleanup、結果を `docs/hardware-test-log.md` に記録した
+- [x] 完了条件を満たしたら `spec/complete` へ移動する
