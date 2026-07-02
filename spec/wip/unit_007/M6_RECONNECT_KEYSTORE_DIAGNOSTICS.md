@@ -15,6 +15,9 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 | api | `key_store_path`、`status()` | `spec/initial/api.md` |
 | testing | hardware test の reconnect 項目 | `spec/initial/testing.md` |
 | risks | reconnect、dongle、OS / driver 差分 | `spec/initial/risks.md` |
+| completed M5 | Button A / neutral は確認済み。pairing_complete / authentication event と reconnect は未確認 | `spec/complete/unit_006/M5_INPUT_OPERATION_API.md` |
+| hardware log | full handshake と Button A は observed-pass。Switch model / firmware、reconnect、key store は未記録 | `docs/hardware-test-log.md` |
+| close cleanup prerequisite | reconnect 前に connected close / disconnect cleanup contract を固定する | `spec/wip/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` |
 
 ### 1.3 use case
 
@@ -24,6 +27,7 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 | developer | 初回 pairing 後 | key store 書き込み有無が diagnostics に残る | secret 値はログに出さない |
 | developer | 再接続試行 | reconnect 成功 / 失敗を区別して記録する | dongle / firmware 条件付き |
 | lifecycle | reconnect 失敗 | advertising へ戻る、または再 pairing 可能な状態になる | cleanup を記録 |
+| lifecycle | reconnect 前の close cleanup | 前回 connected close が neutral、disconnect request terminal state、transport close まで説明できる | `unit_014` 完了後に M6 へ入る |
 
 ## 2. 対象範囲
 
@@ -34,6 +38,7 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 - hardware run metadata の trace 追加。
 - trace schema の安定化。
 - hardware matrix の更新。
+- `unit_014` で固定した close / disconnect cleanup contract を reconnect 前提として参照する。
 
 ## 3. 対象外
 
@@ -42,6 +47,7 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 - daemon mode。
 - link key の secret 値のログ出力。
 - OS 標準 Bluetooth stack との併用。
+- connected close / remote close request / bounded disconnect wait の設計。これは `unit_014`。
 
 ## 4. 関連 docs
 
@@ -84,6 +90,9 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 | todo | key store ありで reconnect 成功 / 失敗を実機で記録する | new | hardware | yes | 成功保証ではなく観測 |
 | todo | reconnect 失敗後に再 pairing できるかを記録する | characterization | hardware | yes | release 判断材料 |
 | todo | hardware matrix に reconnect 結果が反映される | new | hardware | yes | unit_011 |
+| todo | `key_store_path` が Bumble transport の保存機構へ接続されているか確認する | new | unit | no | 現状は public config に存在するが、transport bridge の実装状態を確認してから固定する |
+| todo | `pairing_complete` / `connection_authentication` diagnostics が実機 trace に出るか確認する | characterization | hardware | yes | unit_006 では `link_key_available` と `connection_encryption_change` は出たが、この 2 event は未記録 |
+| todo | `unit_014` の close / disconnect cleanup contract が完了していることを M6 の前提として確認する | regression | docs | no | reconnect failure と close cleanup failure を混同しない |
 
 ## 8. 設計メモ
 
@@ -91,6 +100,9 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 - key store の secret 値は diagnostics に出さない。path、存在、読み書き結果、例外型に留める。
 - reconnect 失敗時は利用者が再 pairing へ戻れる状態を優先する。
 - trace schema は M2 以降の実機 run で破綻しないよう、unit_010 で先に安定させる。
+- `unit_006` の post-handshake run は Button A と neutral を完了したが、Bumble の `pairing_complete` / `connection_authentication` event は実機 trace に出ていない。M6 では、Bumble callback が出ないのか、bonding / reconnect 条件でだけ出るのかを分ける。
+- `SwitchGamepadConfig.key_store_path` は public surface にある。M6 では、この値が Bumble の link key 保存へ接続されているかを最初に確認する。
+- disconnect 競合時の trailing neutral、remote close request、closed event / timeout は `unit_014` で決める。M6 ではその terminal state を reconnect 前提として読み、reconnect failure と close cleanup failure を混ぜない。
 
 ## 9. 対象ファイル
 
@@ -105,6 +117,8 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 | `tests/hardware/` | modify | reconnect characterization tests |
 | `docs/hardware-test-log.md` | modify | reconnect 観測 |
 | `README.md` | modify | reconnect の保証範囲 |
+| `spec/wip/unit_007/M6_RECONNECT_KEYSTORE_DIAGNOSTICS.md` | modify | unit_006 から送った reconnect / diagnostics deferred item |
+| `spec/wip/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` | reference | reconnect 前提となる close / disconnect cleanup contract |
 
 ## 10. 検証
 
@@ -131,6 +145,8 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 - 複数 dongle / 複数 Switch firmware の網羅は初期 release 後の matrix 拡張に送る。
 - daemon mode の reconnect 制御は初期対象外。
 - CLI からの key store reset helper は M7 の `swbt-probe` で必要性を判断する。
+- L+R / stick の追加 semantic input reflection は `unit_013`。M6 では扱わない。
+- connected close / remote close request / bounded disconnect wait は `unit_014`。M6 では再設計しない。
 
 ## 13. チェックリスト
 

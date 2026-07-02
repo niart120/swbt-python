@@ -15,6 +15,8 @@
 | api | public import と利用例 | `spec/initial/api.md` |
 | testing | examples fake transport test、hardware bring-up 手順 | `spec/initial/testing.md` |
 | risks | documentation drift、OS / driver 差分、scope creep | `spec/initial/risks.md` |
+| completed M5 | 実機で Button A / neutral が確認済み。examples はまだ未整備 | `spec/complete/unit_006/M5_INPUT_OPERATION_API.md` |
+| hardware log | Windows / CSR8510 A10 / WinUSB / `usb:0` の確認済み構成がある | `docs/hardware-test-log.md` |
 
 ### 1.3 use case
 
@@ -23,6 +25,7 @@
 | library user | `pip install swbt-python` | package が install できる | release 前は local build で確認 |
 | library user | `from swbt import SwitchGamepad, Button` | public API を import できる | Bumble 型を要求しない |
 | developer | `examples/tap_a.py` | 最小利用例が読める | 実行には実機承認が必要 |
+| developer | fake example | 実機なしで public API の最小例を CI で確認できる | Bumble 型を公開しない |
 | developer | `swbt-probe adapters` | adapter 候補と環境情報を確認できる | adapter open を伴う場合は承認条件を分ける |
 | developer | `swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pairing probe と trace 保存ができる | Switch-facing 動作の承認が必要 |
 
@@ -37,6 +40,7 @@
 - `swbt-probe pair --adapter usb:0 --trace trace.jsonl`。
 - README の Windows / Linux 注意点、確認済み構成、未確認構成、実機安全境界。
 - 開発者向け gate 手順。
+- `unit_006` の実機確認結果を README / examples / CLI 説明へ反映する。
 
 ## 3. 対象外
 
@@ -76,6 +80,7 @@
 | adapters CLI | `swbt-probe adapters` | adapter 候補と環境情報を出す | adapter open の有無を明示 |
 | pair CLI | `swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pairing probe を行い trace を保存する | 明示承認が必要 |
 | README | documentation | 確認済み構成と未確認構成が分かれている | documentation drift 対策 |
+| hardware usage example | approved `usb:0` run | 実行前に承認範囲、artifact、cleanup が分かる | 実行は自動化しない |
 
 ## 7. TDD Test List
 
@@ -88,6 +93,8 @@
 | todo | `swbt-probe pair --help` が承認境界を読める説明を持つ | new | unit | no | 実行はしない |
 | todo | README に Windows 専用 dongle / WinUSB 注意点がある | regression | unit | no | docs check でもよい |
 | todo | README に確認済み構成と未確認構成が分かれている | regression | unit | no | release gate |
+| todo | README が `unit_006` 後の Button A / neutral observed-pass を stale な「未記録」と矛盾なく説明する | regression | unit | no | 現 README はまだ「確認済み構成なし」と書いている |
+| todo | examples が `tap(Button.A)` / `neutral()` の最小手順と実機承認境界を分けている | new | integration | no | fake variant を CI で確認する |
 | todo | `swbt-probe adapters` が developer machine で adapter 情報を表示する | characterization | bumble | yes | adapter open を伴う場合は承認が必要 |
 | todo | `swbt-probe pair` が trace を保存する | characterization | hardware | yes | Switch-facing 動作の承認が必要 |
 
@@ -97,6 +104,8 @@
 - README では「対応済み構成」と「未確認構成」を分けて書く。未検証環境を暗黙に保証しない。
 - production publish、tag push、PyPI upload はこの仕様の実装完了だけでは実行しない。release gate とユーザの明示確認が必要。
 - examples は実機向けと fake transport 向けを分け、CI では fake transport 側を検証する。
+- README は `docs/hardware-test-log.md` から確認済み構成だけを採用する。現時点では Windows / CSR8510 A10 / WinUSB / `usb:0` の Button A / neutral が確認済みで、Linux / macOS、reconnect、stick semantic reflection は未確認として分ける。
+- `swbt-probe pair` は便利な wrapper に留め、実機承認を迂回する環境変数 gate は作らない。
 
 ## 9. 対象ファイル
 
@@ -111,6 +120,7 @@
 | `README.md` | modify | install、usage、hardware notes、matrix |
 | `tests/unit/` | modify | import / CLI help tests |
 | `tests/integration/` | modify | examples fake transport tests |
+| `docs/hardware-test-log.md` | reference | README に採用する確認済み構成の source |
 
 ## 10. 検証
 
@@ -139,6 +149,8 @@
 - production publish と tag push は release gate と明示確認後に扱う。
 - 常駐 daemon と IPC 互換 server は初期対象外のままにする。
 - GUI は対象外。
+- reconnect / key store は `unit_007`。
+- L+R / stick semantic characterization は `unit_013`。
 
 ## 13. チェックリスト
 
