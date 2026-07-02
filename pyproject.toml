@@ -35,6 +35,9 @@ dependencies = [
     "bumble>=0.0.230,<0.0.231",
 ]
 
+[project.scripts]
+swbt-probe = "swbt.probe:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
