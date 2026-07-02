@@ -90,6 +90,7 @@
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
 | todo | package build が成功する | new | unit | no | `uv build` |
+| refactor-skipped | source distribution metadata が examples を含む | regression | unit | no | `tests/unit/test_package_metadata.py` で `examples/**` を固定 |
 | todo | installed package から `SwitchGamepad`、`Button`、`InputState`、`Stick` を import できる | regression | unit | no | public API |
 | refactor-skipped | 公開 API docstring が Google-style で引数、返値、属性、例外境界を説明する | new | unit | no | `tests/unit/test_public_api_docstrings.py` で固定。動作変更なし |
 | refactor-skipped | `examples/tap_a.py` の fake variant が実機なしで test できる | new | integration | no | `tests/integration/test_examples.py` で fake transport 実行を固定 |
@@ -148,6 +149,8 @@
 | `uv run ruff check tests\unit\test_readme_docs.py` | pass | README docs test の lint を確認した |
 | `uv run pytest tests\integration\test_examples.py -q` | pass | 2 passed。`tap_a` fake transport 実行と、`pairing_probe.py` / `hardware_bringup.py --help` の承認境界説明を確認した |
 | `uv run ruff check examples\tap_a.py examples\pairing_probe.py examples\hardware_bringup.py tests\integration\test_examples.py` | pass | examples 3 件と integration test の lint を確認した |
+| `uv run pytest tests\unit\test_package_metadata.py -q` | pass | 1 passed。`source-include` に `examples/**` が含まれることを確認した |
+| `uv run ruff check pyproject.toml tests\unit\test_package_metadata.py` | pass | package metadata test の lint を確認した |
 | `uv run pytest tests/unit tests/integration` | pending | M7 実装後に local automated gate として実行する |
 | `uv run swbt-probe adapters` | pending-approval | adapter open を伴う場合は承認後に実行する |
 | `uv run swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pending-approval | Switch-facing 動作の明示承認後に実行する |

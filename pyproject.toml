@@ -58,6 +58,7 @@ cache-dir = ".uv-cache"
 module-name = "swbt"
 source-include = [
     "AGENTS.md",
+    "examples/**",
     "spec/**",
     "tests/**",
 ]
