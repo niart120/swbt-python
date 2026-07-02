@@ -13,6 +13,11 @@ def test_switch_input_operation_sequence_for_manual_reflection(
     swbt_bumble_adapter: str,
     swbt_hardware_artifact_dir: Path,
 ) -> None:
+    """Send input reports and leave trace checkpoints for manual UI observation.
+
+    A pytest pass from this test does not prove that the Switch UI reflected the
+    input. The human-visible UI result must be recorded in docs/hardware-test-log.md.
+    """
     trace_path = swbt_hardware_artifact_dir / "input-operation-sequence.jsonl"
 
     async def run() -> None:

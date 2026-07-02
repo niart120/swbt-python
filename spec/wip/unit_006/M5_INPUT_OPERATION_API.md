@@ -59,9 +59,9 @@
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | todo | Button / stick report bytes は M0 の監査済み layout を使う。実機反映は hardware observation として記録する |
-| Bumble / transport | required | todo | report loop timing と send failure が入力反映に影響する |
-| OS / driver / adapter | required | todo | 入力反映結果は adapter、driver、Switch firmware 条件付きで扱う |
+| Switch HID / report bytes | required | observed-fail | Button / stick report bytes は M0 の監査済み layout を使う。2026-07-02 M5 run の debug log で A `08 00 00`、L+R `40 00 40`、neutral `00 00 00` を含む `a1 30` 送信を確認したが、Switch UI は反映しなかった |
+| Bumble / transport | required | observed-fail | 2026-07-02 M5 run で L2CAP open、`0x01` output report、`0x21` reply、`0x30` input report 送信、clean close を確認したが、semantic input reflection は未達 |
+| OS / driver / adapter | required | observed-fail | `docs/hardware-test-log.md` に Windows / CSR8510 A10 / WinUSB / Bumble 0.0.230 / `usb:0` 条件の observed-fail として記録した |
 
 ## 6. 振る舞い仕様
 
@@ -85,9 +85,9 @@
 | green | `set_input()` で left / right stick が report に反映される | new | integration | no | `test_set_input_reflects_left_and_right_sticks_in_next_periodic_report` で normalized stick を固定 |
 | green | disconnect callback で内部 state が neutral へ戻る | regression | integration | no | `test_disconnect_callback_neutralizes_state_and_stops_report_loop` で固定 |
 | green | `status()` が report counter と last subcommand を返す | new | integration | no | `test_status_returns_report_counters_last_subcommand_and_raw_rumble` で raw rumble も固定 |
-| pending-approval | 実機で `await pad.tap(Button.A)` が Switch UI に反映される | new | hardware | yes | `test_switch_input_operation_sequence_for_manual_reflection` と手元 UI 観測を hardware log に記録する |
-| pending-approval | 実機で L+R が一定 tick 数以上送信される | new | hardware | yes | 同 hardware test の `hold_lr_reports_sent` checkpoint と画面反映を分けて記録する |
-| pending-approval | 実機で `neutral()` 後に入力が残らない | new | hardware | yes | 同 hardware test の `neutral_complete` checkpoint と画面残留なしを記録する |
+| observed-fail | 実機で `await pad.tap(Button.A)` が Switch UI に反映される | new | hardware | yes | 2026-07-02 M5 run で A report bytes は送信されたが、ユーザ画面観測ではデバイス登録画面が全く動かなかった |
+| observed-partial | 実機で L+R が一定 tick 数以上送信される | new | hardware | yes | 2026-07-02 M5 run で L+R bytes を含む `0x30` が 30 tick 以上送信された。UI 反映は観測されず |
+| observed-partial | 実機で `neutral()` 後に入力が残らない | new | hardware | yes | 2026-07-02 M5 run で neutral bytes と clean close は確認。入力反映自体が未達のため UI 残留なしの意味検証は未確定 |
 | todo | disconnect 時に内部 state が neutral へ戻る | edge | hardware | yes | wire 上の neutral 送信可否も記録 |
 
 ## 8. 設計メモ
@@ -131,7 +131,8 @@
 | `uv run pytest tests\unit -q` | pass | 97 passed |
 | `uv run pytest tests\integration -q` | pass | 23 passed |
 | `uv run pytest tests\unit tests\integration -q` | pass | 120 passed |
-| `uv run pytest -m hardware` | pending-approval | periodic input report loop と実機入力反映の明示承認後に実行する |
+| `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_operation_sequence_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-input-operation-sequence-observable --log-file .pytest_cache\hardware\unit_006\20260702-input-operation-sequence-observable\pytest-debug.log --log-file-level=DEBUG -q -s` | observed-fail | Pytest は 1 passed / 1 warning in 10.08s。trace は L2CAP open、`0x21` reply、A / L+R / neutral checkpoint、56 件の `0x30`、clean close を記録。debug log で A `08 00 00`、L+R `40 00 40`、neutral `00 00 00` の `a1 30` 送信を確認。ユーザ画面観測では Switch のデバイス登録画面が全く動かなかったため、M5 semantic input reflection は fail |
+| `uv run pytest -m hardware` | not run | M5 targeted hardware run が semantic input reflection fail のため、全 hardware marker の横展開は実施していない |
 
 ## 11. 実機実行条件
 
@@ -158,5 +159,6 @@
 - [x] TDD Test List の初期案を作成した
 - [x] input operation API と status の実装を完了した
 - [x] M5 の local automated gate を実行し、検証欄を結果で更新した
-- [ ] 実機入力反映は承認、command、cleanup、結果を `docs/hardware-test-log.md` に記録した
+- [x] 実機入力反映検証は承認、command、cleanup、失敗結果を `docs/hardware-test-log.md` に記録した
+- [ ] `tap(Button.A)` の Switch UI 反映と neutral 後の残留なしを確認した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する
