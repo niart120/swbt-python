@@ -147,7 +147,7 @@
 | `tests/unit/test_bumble_transport.py` | modify | Bumble disconnect helper tests、deprecated sync command warning regression |
 | `tests/hardware/test_close_disconnect.py` | add | close ordering characterization test |
 | `docs/hardware-test-log.md` | modify | 実機 close ordering observation |
-| `spec/wip/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` | modify | 実装結果、検証、checklist |
+| `spec/complete/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` | modify | 実装結果、検証、checklist |
 
 ## 10. 検証
 
@@ -208,4 +208,4 @@
 - [x] unit / integration gate を実行し、検証欄を結果で更新した
 - [x] 実機承認、command、artifact、cleanup、結果を記録した
 - [x] `unit_007` reconnect 着手前の前提条件として反映した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] 完了条件を満たしたら `spec/complete` へ移動する
