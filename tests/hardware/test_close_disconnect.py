@@ -5,7 +5,7 @@ from typing import Any, TextIO
 
 import pytest
 
-from swbt import Button, DiagnosticsConfig, SwitchGamepad
+from swbt import DiagnosticsConfig, SwitchGamepad
 
 
 @pytest.mark.hardware
@@ -29,7 +29,6 @@ def test_switch_close_requests_disconnect_after_neutral(
             await pad.open()
             try:
                 await pad.wait_connected(timeout=60.0)
-                await pad.press(Button.A)
                 _record_probe_event(trace, "manual_close_checkpoint", operation="close_start")
             finally:
                 await pad.close(neutral=True)
