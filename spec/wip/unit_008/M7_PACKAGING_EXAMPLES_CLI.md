@@ -17,6 +17,7 @@
 | risks | documentation drift、OS / driver 差分、scope creep | `spec/initial/risks.md` |
 | completed M5 | 実機で Button A / neutral が確認済み。examples はまだ未整備 | `spec/complete/unit_006/M5_INPUT_OPERATION_API.md` |
 | hardware log | Windows / CSR8510 A10 / WinUSB / `usb:0` の確認済み構成がある | `docs/hardware-test-log.md` |
+| user intent | packaging に際して、Google-style で公開 API の引数、返値、属性、例外境界の docstring を拡充する | active goal |
 
 ### 1.3 use case
 
@@ -41,6 +42,7 @@
 - README の Windows / Linux 注意点、確認済み構成、未確認構成、実機安全境界。
 - 開発者向け gate 手順。
 - `unit_006` の実機確認結果を README / examples / CLI 説明へ反映する。
+- `swbt.__all__` から公開される主要 API の Google-style docstring。
 
 ## 3. 対象外
 
@@ -81,6 +83,7 @@
 | pair CLI | `swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pairing probe を行い trace を保存する | 明示承認が必要 |
 | README | documentation | 確認済み構成と未確認構成が分かれている | documentation drift 対策 |
 | hardware usage example | approved `usb:0` run | 実行前に承認範囲、artifact、cleanup が分かる | 実行は自動化しない |
+| public API docstrings | `swbt.__all__` の主要型と `SwitchGamepad` の操作 | Google-style の `Attributes` / `Args` / `Returns` / `Raises` が公開契約を説明する | packaging 前の API surface 固定 |
 
 ## 7. TDD Test List
 
@@ -88,6 +91,7 @@
 |---|---|---|---|---|---|
 | todo | package build が成功する | new | unit | no | `uv build` |
 | todo | installed package から `SwitchGamepad`、`Button`、`InputState`、`Stick` を import できる | regression | unit | no | public API |
+| refactor-skipped | 公開 API docstring が Google-style で引数、返値、属性、例外境界を説明する | new | unit | no | `tests/unit/test_public_api_docstrings.py` で固定。動作変更なし |
 | todo | `examples/tap_a.py` の fake variant が実機なしで test できる | new | integration | no | examples drift 防止 |
 | todo | `swbt-probe adapters --help` が動く | new | unit | no | CLI entry point |
 | todo | `swbt-probe pair --help` が承認境界を読める説明を持つ | new | unit | no | 実行はしない |
@@ -113,6 +117,9 @@
 |---|---|---|
 | `pyproject.toml` | modify | CLI entry point、metadata 確認 |
 | `src/swbt/__init__.py` | modify | public export |
+| `src/swbt/gamepad.py` | modify | public API docstrings |
+| `src/swbt/input.py` | modify | public input value docstrings |
+| `src/swbt/diagnostics.py` | modify | public diagnostics value docstrings |
 | `src/swbt/probe.py` | new | `swbt-probe` CLI |
 | `examples/tap_a.py` | new | Button A example |
 | `examples/pairing_probe.py` | new | pairing probe example |
@@ -129,6 +136,8 @@
 | command | result | notes |
 |---|---|---|
 | `uv build` | pending | M7 実装後に package build gate として実行する |
+| `uv run pytest tests\unit\test_public_api_docstrings.py -q` | pass | 2 passed。公開 API docstring が Google-style section と公開契約 token を持つことを確認した |
+| `uv run ruff check src\swbt\gamepad.py src\swbt\input.py src\swbt\diagnostics.py tests\unit\test_public_api_docstrings.py` | pass | 今回追加した docstring と test の lint を確認した |
 | `uv run pytest tests/unit tests/integration` | pending | M7 実装後に local automated gate として実行する |
 | `uv run swbt-probe adapters` | pending-approval | adapter open を伴う場合は承認後に実行する |
 | `uv run swbt-probe pair --adapter usb:0 --trace trace.jsonl` | pending-approval | Switch-facing 動作の明示承認後に実行する |

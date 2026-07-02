@@ -22,7 +22,14 @@ ConnectionStatus = Literal["connected", "no_bond", "ambiguous_bond", "timeout", 
 
 @dataclass(frozen=True)
 class ConnectionResult:
-    """Result of an explicit connection strategy."""
+    """Result of an explicit connection strategy.
+
+    Attributes:
+        route: Connection path that produced the result.
+        status: Outcome of the connection attempt.
+        peer_address: Address of the bonded peer used for reconnect, when one was selected.
+        peer_count: Number of bonded peers observed while selecting a reconnect target.
+    """
 
     route: ConnectionRoute
     status: ConnectionStatus
@@ -32,7 +39,14 @@ class ConnectionResult:
 
 @dataclass(frozen=True)
 class SwitchGamepadConfig:
-    """Configuration used to construct a SwitchGamepad."""
+    """Configuration used to construct a SwitchGamepad.
+
+    Attributes:
+        adapter: Bumble adapter moniker, such as ``"usb:0"``.
+        report_period_us: Periodic input report interval in microseconds.
+        device_name: HID device name advertised to the host.
+        key_store_path: Path used by the transport to persist pairing keys.
+    """
 
     adapter: str = "usb:0"
     report_period_us: int = 8000
@@ -41,7 +55,12 @@ class SwitchGamepadConfig:
 
 
 class SwitchGamepad:
-    """NX-compatible virtual gamepad API."""
+    """NX-compatible virtual gamepad API.
+
+    The object owns the input state, report loop, diagnostics recorder, and HID
+    transport lifetime. Entering the async context opens resources only; callers
+    choose the connection strategy with ``connect()``, ``pair()``, or ``reconnect()``.
+    """
 
     def __init__(
         self,
@@ -53,7 +72,17 @@ class SwitchGamepad:
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
     ) -> None:
-        """Create a gamepad object."""
+        """Create a gamepad object.
+
+        Args:
+            adapter: Bumble adapter moniker used when the default transport is created.
+            report_period_us: Periodic input report interval in microseconds.
+            device_name: HID device name passed to the default transport.
+            key_store_path: Optional path used by the default transport to persist keys.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance. When supplied, no Bumble
+                transport is created by the constructor.
+        """
         self._config = SwitchGamepadConfig(
             adapter=adapter,
             report_period_us=report_period_us,
@@ -76,7 +105,11 @@ class SwitchGamepad:
         self._close_in_progress = False
 
     async def __aenter__(self) -> "SwitchGamepad":
-        """Open the gamepad for an async context manager."""
+        """Open the gamepad for an async context manager.
+
+        Returns:
+            SwitchGamepad: This gamepad after resources have been opened.
+        """
         await self.open()
         return self
 
@@ -86,12 +119,26 @@ class SwitchGamepad:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        """Close the gamepad when leaving an async context manager."""
+        """Close the gamepad when leaving an async context manager.
+
+        Args:
+            exc_type: Exception type from the managed block, if one was raised.
+            exc: Exception instance from the managed block, if one was raised.
+            traceback: Traceback from the managed block, if one was raised.
+        """
         _ = (exc_type, exc, traceback)
         await self.close(neutral=True)
 
     async def open(self) -> None:
-        """Open the configured transport."""
+        """Open the configured transport.
+
+        Opening prepares transport callbacks, diagnostics metadata, and the report
+        loop. It does not start HID advertising, pairing, or active reconnect.
+
+        Raises:
+            TransportOpenError: Raised by the transport when the adapter cannot be opened.
+            Exception: Propagates unexpected transport open failures after cleanup.
+        """
         async with self._lifecycle_lock:
             if self._is_open:
                 return
@@ -121,7 +168,16 @@ class SwitchGamepad:
                 raise
 
     async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
-        """Start initial-pairing advertising and wait for a host connection."""
+        """Start pairing advertising and wait for a host connection.
+
+        Args:
+            timeout: Maximum seconds to wait for a connection. ``None`` waits until
+                the host connects.
+
+        Raises:
+            ConnectionTimeoutError: The timeout elapsed before a connection completed.
+            ClosedError: The transport was unavailable after opening.
+        """
         if not self._is_open:
             await self.open()
         if self._transport is None:
@@ -147,7 +203,15 @@ class SwitchGamepad:
             raise connection_error from error
 
     async def reconnect(self, timeout: float | None = None) -> ConnectionResult:  # noqa: ASYNC109
-        """Try active reconnect with exactly one bonded peer."""
+        """Try active reconnect with exactly one bonded peer.
+
+        Args:
+            timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
+                the transport default.
+
+        Returns:
+            ConnectionResult: Reconnect route, status, selected peer, and peer count.
+        """
         if not self._is_open:
             await self.open()
         if self._transport is None:
@@ -246,7 +310,19 @@ class SwitchGamepad:
         timeout: float | None = None,  # noqa: ASYNC109
         allow_pairing: bool = False,
     ) -> ConnectionResult:
-        """Connect using bonded reconnect first, then optional pairing fallback."""
+        """Connect using bonded reconnect first, then optional pairing fallback.
+
+        Args:
+            timeout: Maximum seconds for each connection attempt. ``None`` uses the
+                lower layer default.
+            allow_pairing: If ``True``, run pairing when no bonded peer is available.
+
+        Returns:
+            ConnectionResult: Route and status chosen by reconnect or pairing fallback.
+
+        Raises:
+            ConnectionTimeoutError: Pairing fallback timed out.
+        """
         reconnect_result = await self.reconnect(timeout=timeout)
         if reconnect_result.status != "no_bond" or not allow_pairing:
             return reconnect_result
@@ -259,7 +335,12 @@ class SwitchGamepad:
         return ConnectionResult(route="pairing", status="connected")
 
     async def close(self, *, neutral: bool = True) -> None:
-        """Close the transport and leave the gamepad in a closed state."""
+        """Close the transport and leave the gamepad in a closed state.
+
+        Args:
+            neutral: If ``True``, send a trailing neutral report before disconnect
+                when a connection is active.
+        """
         async with self._lifecycle_lock:
             if not self._is_open or self._transport is None:
                 return
@@ -302,23 +383,43 @@ class SwitchGamepad:
                 self._close_in_progress = False
 
     async def press(self, *buttons: Button) -> None:
-        """Add buttons to the current input state."""
+        """Add buttons to the current input state.
+
+        Args:
+            buttons: Buttons to add to the current button set.
+        """
         await self._state_store.press(*buttons)
 
     async def set_input(self, state: InputState) -> None:
-        """Replace the current input state."""
+        """Replace the current input state.
+
+        Args:
+            state: Complete input state to commit.
+        """
         await self._state_store.set_input(state)
 
     async def release(self, *buttons: Button) -> None:
-        """Remove buttons from the current input state."""
+        """Remove buttons from the current input state.
+
+        Args:
+            buttons: Buttons to remove from the current button set.
+        """
         await self._state_store.release(*buttons)
 
     async def neutral(self) -> None:
-        """Return the current input state to neutral."""
+        """Return the current input state to ``InputState.neutral()``."""
         await self._state_store.neutral()
 
     async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
-        """Press buttons briefly and then release them."""
+        """Press buttons briefly and then release them.
+
+        Args:
+            buttons: Buttons to press for the tap.
+            duration: Seconds to keep the buttons pressed before release.
+
+        Raises:
+            ClosedError: The gamepad is not open and cannot send input reports.
+        """
         await self.press(*buttons)
         await self._send_current_input()
         if duration > 0:
@@ -327,7 +428,11 @@ class SwitchGamepad:
         await self._send_current_input()
 
     def status(self) -> GamepadStatus:
-        """Return the current gamepad status."""
+        """Return the current gamepad status.
+
+        Returns:
+            GamepadStatus: Connection state, report counters, rumble bytes, and last error.
+        """
         return GamepadStatus(
             connection_state=self._connection_state,
             report_counters=self._diagnostics.report_counters,
@@ -337,7 +442,11 @@ class SwitchGamepad:
         )
 
     def snapshot(self) -> InputState:
-        """Return the latest committed input state."""
+        """Return the latest committed input state.
+
+        Returns:
+            InputState: Immutable snapshot of the current input state.
+        """
         return self._state_store.current
 
     def _register_transport_callbacks(self) -> None:
