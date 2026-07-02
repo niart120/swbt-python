@@ -4,6 +4,7 @@ from io import StringIO
 
 import pytest
 
+import swbt.gamepad as gamepad_module
 from swbt import Button, DiagnosticsConfig, InputState, Stick, SwitchGamepad
 from swbt.errors import ConnectionTimeoutError
 from swbt.transport.fake import FakeHidTransport
@@ -384,6 +385,49 @@ def test_close_waits_for_disconnect_request_closed_event_once() -> None:
             "connected",
             "request_disconnect",
             "disconnect_request_closed",
+            "close",
+        )
+
+    asyncio.run(run())
+
+
+def test_close_request_timeout_records_terminal_state_and_closes_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(disconnect_request_auto_complete=False)
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=100_000,
+        )
+        monkeypatch.setattr(gamepad_module, "DISCONNECT_REQUEST_TIMEOUT_SECONDS", 0.001)
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "disconnect_request",
+            "status": "requested",
+            "channels": ["control", "interrupt"],
+        } in events
+        assert {
+            "event": "disconnect_request_terminal",
+            "status": "timeout",
+            "timeout": 0.001,
+        } in events
+        assert pad.status().connection_state == "closed"
+        assert transport.close_count == 1
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
             "close",
         )
 

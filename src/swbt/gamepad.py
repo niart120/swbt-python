@@ -11,7 +11,7 @@ from swbt.protocol.output_report import OutputReportParser
 from swbt.protocol.subcommand import SubcommandResponder, UnsupportedSubcommandError
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
-from swbt.transport.base import HidDeviceTransport
+from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
 
 DISCONNECT_REQUEST_TIMEOUT_SECONDS = 0.25
 
@@ -135,8 +135,20 @@ class SwitchGamepad:
             if self._connected_event.is_set():
                 self._disconnect_event.clear()
                 disconnect_result = await self._transport.request_disconnect()
+                self._record_disconnect_request_result(disconnect_result)
                 if disconnect_result.status == "requested":
-                    await self._wait_for_disconnect_request_closed()
+                    disconnect_closed = await self._wait_for_disconnect_request_closed()
+                    if disconnect_closed:
+                        self._diagnostics.record_event(
+                            "disconnect_request_terminal",
+                            status="closed",
+                        )
+                    else:
+                        self._diagnostics.record_event(
+                            "disconnect_request_terminal",
+                            status="timeout",
+                            timeout=DISCONNECT_REQUEST_TIMEOUT_SECONDS,
+                        )
             await self._transport.close()
             self._report_loop = None
             self._is_open = False
@@ -201,12 +213,25 @@ class SwitchGamepad:
             raise ClosedError(msg)
         await self._report_loop.send_current_input()
 
-    async def _wait_for_disconnect_request_closed(self) -> None:
+    async def _wait_for_disconnect_request_closed(self) -> bool:
         try:
             async with asyncio.timeout(DISCONNECT_REQUEST_TIMEOUT_SECONDS):
                 await self._disconnect_event.wait()
+                return True
         except TimeoutError:
-            return
+            return False
+
+    def _record_disconnect_request_result(self, result: DisconnectRequestResult) -> None:
+        fields: dict[str, object] = {"status": result.status}
+        if result.channels:
+            fields["channels"] = list(result.channels)
+        if result.reason is not None:
+            fields["reason"] = result.reason
+        if result.error_type is not None:
+            fields["error_type"] = result.error_type
+        if result.message is not None:
+            fields["message"] = result.message
+        self._diagnostics.record_event("disconnect_request", **fields)
 
     async def _handle_interrupt_data(self, payload: bytes) -> None:
         await self._handle_output_report_data(payload)
