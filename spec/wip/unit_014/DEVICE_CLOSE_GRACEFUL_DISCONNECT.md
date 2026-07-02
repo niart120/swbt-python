@@ -135,7 +135,7 @@
 | `src/swbt/diagnostics.py` | no change | 既存 `DiagnosticsRecorder.record_event()` で close request terminal state を記録 |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | close sequence tests |
 | `tests/unit/test_bumble_transport.py` | modify | Bumble disconnect helper tests |
-| `tests/hardware/` | pending-approval | close ordering characterization test |
+| `tests/hardware/test_close_disconnect.py` | add | close ordering characterization test。実行は pending-approval |
 | `docs/hardware-test-log.md` | pending-approval | 実機 close ordering observation |
 | `spec/wip/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` | modify | 実装結果、検証、checklist |
 
@@ -144,14 +144,14 @@
 | command | result | notes |
 |---|---|---|
 | `uv sync --dev` | pass | Resolved 41 packages、Checked 41 packages |
-| `uv run ruff format --check .` | pass | 38 files already formatted |
+| `uv run ruff format --check .` | pass | 39 files already formatted |
 | `uv run ruff check .` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/unit/test_bumble_transport.py -q` | pass | 22 passed in 0.25s |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 30 passed in 0.47s |
 | `uv run pytest tests/unit -q` | pass | 104 passed in 0.56s |
 | `uv run pytest tests/integration -q` | pass | 30 passed in 0.51s |
-| `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 ...` | pending-approval | 明示承認、adapter、command、cleanup plan が揃った場合だけ実行 |
+| `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\<run-id> --log-file .pytest_cache\hardware\unit_014\<run-id>\pytest-debug.log --log-file-level=DEBUG -q -s` | pending-approval | 明示承認、adapter、command、cleanup plan が揃った場合だけ実行 |
 
 ## 11. 実機実行条件
 
