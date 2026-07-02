@@ -17,7 +17,7 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 | risks | reconnect、dongle、OS / driver 差分 | `spec/initial/risks.md` |
 | completed M5 | Button A / neutral は確認済み。pairing_complete / authentication event と reconnect は未確認 | `spec/complete/unit_006/M5_INPUT_OPERATION_API.md` |
 | hardware log | full handshake と Button A は observed-pass。Switch model / firmware、reconnect、key store は未記録 | `docs/hardware-test-log.md` |
-| close cleanup prerequisite | reconnect 前に connected close / disconnect cleanup contract を固定する | `spec/wip/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` |
+| close cleanup prerequisite | reconnect 前に connected close / disconnect cleanup contract を固定する。unit_014 の automated contract は実装済み、hardware characterization は pending-approval | `spec/wip/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` |
 
 ### 1.3 use case
 
@@ -27,7 +27,7 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 | developer | 初回 pairing 後 | key store 書き込み有無が diagnostics に残る | secret 値はログに出さない |
 | developer | 再接続試行 | reconnect 成功 / 失敗を区別して記録する | dongle / firmware 条件付き |
 | lifecycle | reconnect 失敗 | advertising へ戻る、または再 pairing 可能な状態になる | cleanup を記録 |
-| lifecycle | reconnect 前の close cleanup | 前回 connected close が neutral、disconnect request terminal state、transport close まで説明できる | `unit_014` 完了後に M6 へ入る |
+| lifecycle | reconnect 前の close cleanup | 前回 connected close が neutral、disconnect request terminal state、transport close まで説明できる | `unit_014` の完了状態と hardware pending を確認してから M6 へ入る |
 
 ## 2. 対象範囲
 
@@ -92,7 +92,7 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 | todo | hardware matrix に reconnect 結果が反映される | new | hardware | yes | unit_011 |
 | todo | `key_store_path` が Bumble transport の保存機構へ接続されているか確認する | new | unit | no | 現状は public config に存在するが、transport bridge の実装状態を確認してから固定する |
 | todo | `pairing_complete` / `connection_authentication` diagnostics が実機 trace に出るか確認する | characterization | hardware | yes | unit_006 では `link_key_available` と `connection_encryption_change` は出たが、この 2 event は未記録 |
-| todo | `unit_014` の close / disconnect cleanup contract が完了していることを M6 の前提として確認する | regression | docs | no | reconnect failure と close cleanup failure を混同しない |
+| pending | `unit_014` の close / disconnect cleanup contract が完了していることを M6 の前提として確認する | regression | docs | no | automated contract は unit_014 で実装済み。hardware characterization が pending-approval の間は reconnect failure と close cleanup failure を混同しない |
 
 ## 8. 設計メモ
 
@@ -102,7 +102,7 @@ pairing 情報の保存、reconnect 成功 / 失敗の区別、失敗時の adve
 - trace schema は M2 以降の実機 run で破綻しないよう、unit_010 で先に安定させる。
 - `unit_006` の post-handshake run は Button A と neutral を完了したが、Bumble の `pairing_complete` / `connection_authentication` event は実機 trace に出ていない。M6 では、Bumble callback が出ないのか、bonding / reconnect 条件でだけ出るのかを分ける。
 - `SwitchGamepadConfig.key_store_path` は public surface にある。M6 では、この値が Bumble の link key 保存へ接続されているかを最初に確認する。
-- disconnect 競合時の trailing neutral、remote close request、closed event / timeout は `unit_014` で決める。M6 ではその terminal state を reconnect 前提として読み、reconnect failure と close cleanup failure を混ぜない。
+- disconnect 競合時の trailing neutral、remote close request、closed event / timeout は `unit_014` で決める。M6 ではその terminal state を reconnect 前提として読み、reconnect failure と close cleanup failure を混ぜない。unit_014 の automated gate は実装済みだが、Switch 実機での close request ordering は pending-approval として扱う。
 
 ## 9. 対象ファイル
 

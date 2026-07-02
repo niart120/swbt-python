@@ -14,7 +14,7 @@
 |---|---|---|
 | user request | `with` で開く device は後始末を明確にし、接続済みなら close 通知を入れて閉じる。reconnect の前に詰める | conversation 2026-07-02 |
 | lifecycle | `close(neutral=True)` は neutral report、report loop stop、transport close、callback 解除、closed 遷移を行う | `spec/initial/lifecycle.md` |
-| transport-bumble | `HidDeviceTransport` は open / advertising / close / send / callback を持つが、remote close request surface はまだない | `spec/initial/transport-bumble.md` |
+| transport-bumble | `HidDeviceTransport` は open / advertising / close / send / callback を持つ。unit_014 で内部 cleanup 用の `request_disconnect()` 境界を追加した | `spec/initial/transport-bumble.md`, `src/swbt/transport/base.py` |
 | completed M1 | fake transport で `async with`、`close(neutral=True)`、trailing neutral は確認済み。link 接続済みの remote close は対象外 | `spec/complete/unit_002/M1_SWITCH_GAMEPAD_FAKE_TRANSPORT.md` |
 | completed M3 | manual close で `transport_close_complete` は観測済み。reconnect と close request ordering は対象外 | `spec/complete/unit_004/M3_PAIRING_L2CAP.md` |
 | completed M5 | post-handshake input run の `finally` で `pad.close(neutral=True)` を実行し、final neutral と `transport_close_complete` を記録 | `docs/hardware-test-log.md` |
@@ -27,7 +27,7 @@
 |---|---|---|---|
 | library user | `async with SwitchGamepad(...)` を抜ける | `close(neutral=True)` と同じ後始末が走る | exception / cancellation でも実行する |
 | library user | connected 状態で `await pad.close(neutral=True)` | neutral、disconnect request、closed or timeout、transport close の順序が diagnostics に残る | close request は最善努力 |
-| library user | advertising 中または未接続で `close()` | disconnect request は投げず、transport resource を閉じる | trailing neutral は送れない |
+| library user | advertising 中または未接続で `close()` | disconnect request boundary は `unavailable` を返し、transport resource を閉じる | trailing neutral は送れない |
 | transport | Switch 側 disconnect callback | 内部 state を neutral にし、report loop と transport を一度だけ閉じる | wire 上 neutral は送れないことがある |
 | maintainer | reconnect 実装前 | 前回 close の終端状態と未完了 disconnect が残っていないことを説明できる | M6 の前提条件 |
 
@@ -69,22 +69,23 @@
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
 | Switch HID / report bytes | required | done for neutral bytes / no new bytes | trailing neutral は既存 `0x30` input report を使う。新しい report layout は追加しない |
-| Bumble / transport | required | pending | Bumble 0.0.230 には `disconnect_control_channel()`、`disconnect_interrupt_channel()`、`on_l2cap_channel_close()` がある。ただし swbt-python の transport contract と close ordering には未接続 |
+| Bumble / transport | required | done for source and unit tests / hardware pending | Bumble 0.0.230 の `disconnect_interrupt_channel()`、`disconnect_control_channel()`、`on_l2cap_channel_close()` を source fact として確認し、`BumbleHidTransport.request_disconnect()` と L2CAP close bridge を unit test で固定した。Switch 実機での remote close ordering は未検証 |
 | OS / driver / adapter | required | observed-partial | Windows / CSR8510 A10 / WinUSB / `usb:0` では `pad.close(neutral=True)` の `transport_close_complete` まで観測済み。remote close request と closed event ordering は未観測 |
 
 ### 5.1 監査済み事実 / 仮説
 
 | 項目 | 分類 | source | status |
 |---|---|---|---|
-| `SwitchGamepad.close()` は現状、connected なら trailing neutral を送り、report loop stop 後に `transport.close()` を呼ぶ | implementation fact | `src/swbt/gamepad.py` | current |
-| `HidDeviceTransport` は remote close request method を持たない | implementation fact | `src/swbt/transport/base.py` | current |
+| `SwitchGamepad.close()` は trailing neutral、report loop stop、`request_disconnect()`、closed event wait or 250 ms timeout、transport close の順で処理する | implementation fact | `src/swbt/gamepad.py`, `tests/integration/test_switch_gamepad_fake_transport.py` | current |
+| `HidDeviceTransport` は `request_disconnect()` を持ち、`requested` / `unavailable` / `failed` を `DisconnectRequestResult` で返す | implementation fact | `src/swbt/transport/base.py`, `tests/unit/test_public_api_boundary.py` | current |
 | `BumbleHidTransport.close()` は runtime close と handle close を行い、`transport_close_complete` を記録する | implementation fact | `src/swbt/transport/bumble.py` | current |
 | Bumble 0.0.230 `Device` は control / interrupt channel 別の disconnect helper を持つ | source fact | `.venv/Lib/site-packages/bumble/hid.py:257`, `.venv/Lib/site-packages/bumble/hid.py:264` | local package source |
 | Bumble 0.0.230 `Device` は L2CAP channel close callback で control / interrupt channel field を `None` にする | source fact | `.venv/Lib/site-packages/bumble/hid.py:298` | local package source |
 | swbt-daemon は shutdown graceful disconnect で neutral、HID disconnect request、closed event or 250 ms timeout、power-off を分けた | implementation fact / hardware observation | `E:/documents/VSCodeWorkspace/swbt-daemon/work-units/complete/local_100/SHUTDOWN_GRACEFUL_DISCONNECT.md` | reference |
 | swbt-daemon の 250 ms は正常 close の待機値ではなく、closed event 欠落時の shutdown 継続上限である | implementation fact | `E:/documents/VSCodeWorkspace/swbt-daemon/work-units/complete/local_100/SHUTDOWN_GRACEFUL_DISCONNECT.md:132` | reference |
-| swbt-python でも 250 ms を初期 default にできる | inference | swbt-daemon reference | implementation before contract required |
-| Bumble channel disconnect helper を両 channel に呼べば Switch 側 close と同等に扱える | unverified hypothesis | Bumble local source + daemon reference | hardware characterization required |
+| swbt-python の close request wait は 250 ms を初期 default とする | implementation fact / inference | `src/swbt/gamepad.py`, swbt-daemon reference | hardware characterization pending |
+| Bumble channel disconnect helper を interrupt、control の順で呼ぶ | implementation fact | `src/swbt/transport/bumble.py`, `tests/unit/test_bumble_transport.py` | unit tested |
+| Bumble channel disconnect helper を呼べば Switch 側 graceful close と同等に扱える | unverified hypothesis | Bumble local source + daemon reference | hardware characterization required |
 
 ## 6. 振る舞い仕様
 
@@ -92,7 +93,7 @@
 |---|---|---|---|
 | context exit | `async with` の正常終了、例外、cancel | `close(neutral=True)` を呼び、後始末を一度だけ実行する | `__aexit__` は例外を握りつぶさない |
 | connected close | `connected` で `close(neutral=True)` | state を `disconnecting` にし、trailing neutral を送ってから periodic report loop を止める | neutral 送信失敗は diagnostics に残し close 継続 |
-| close request | control / interrupt channel が connected | transport が remote close request を出し、request event を diagnostics に残す | Bumble では channel helper の呼び方を source audit 後に固定する |
+| close request | control / interrupt channel が connected | transport が remote close request を出し、request event を diagnostics に残す | Bumble では interrupt、control の順で channel helper を呼ぶ |
 | close confirmation | disconnected callback または channel close が来る | close request の terminal state を `closed` として記録し、transport close へ進む | event の重複は一度だけ扱う |
 | close timeout | close request 後に closed event が来ない | bounded timeout を記録し、transport close へ進む | timeout は shutdown を詰まらせない上限 |
 | close unavailable | 未接続、helper なし、channel なし | disconnect request は unavailable として記録し、transport close へ進む | failure ではなく分岐 |
@@ -103,25 +104,25 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | `HidDeviceTransport` に remote close request boundary を追加し、Bumble 型を public API に漏らさない | new | unit | no | method 名は実装時に固定 |
-| todo | connected `close(neutral=True)` が trailing neutral、report loop stop、disconnect request、transport close の順で進む | new | integration | no | fake transport に sequence を記録する |
-| todo | `async with` 退出時に close request path が走り、例外は再送出される | regression | integration | no | normal / exception / cancellation |
-| todo | close request closed event で timeout を cancel し、transport close が一度だけ呼ばれる | new | integration | no | duplicate callback も固定 |
-| todo | close request timeout でも transport close と final state `closed` へ進む | edge | integration | no | 初期候補は 250 ms。ただし実装前に明示 default とする |
-| todo | close request unavailable / failed でも close が完了し、diagnostics に terminal state が残る | edge | integration | no | request failure を close failure にしない |
-| todo | host disconnect callback と user close が競合しても state neutral、report loop stop、transport close が一度だけになる | edge | integration | no | current disconnect callback の regression |
-| todo | Bumble 0.0.230 source に基づき control / interrupt channel disconnect helper の呼び出しを unit test で固定する | new | unit | no | channel 片側欠落も扱う |
-| todo | diagnostics trace が requested / closed / timeout / unavailable / failed を分ける | new | integration | no | unit_010 schema と整合 |
-| todo | hardware run で connected close の neutral、disconnect request or unavailable、closed or timeout、transport close ordering を記録する | characterization | hardware | yes | Switch-facing 動作の明示承認後だけ実行 |
+| done | `HidDeviceTransport` に remote close request boundary を追加し、Bumble 型を public API に漏らさない | new | unit | no | `DisconnectRequestResult` と `request_disconnect()` を追加。`test_hid_transport_disconnect_request_boundary_uses_plain_types` |
+| done | connected `close(neutral=True)` が trailing neutral、report loop stop、disconnect request、transport close の順で進む | new | integration | no | `test_connected_close_requests_disconnect_after_trailing_neutral` |
+| done | `async with` 退出時に close request path が走り、例外は再送出される | regression | integration | no | `test_async_context_exception_requests_disconnect_and_reraises` |
+| done | close request closed event で timeout を cancel し、transport close が一度だけ呼ばれる | new | integration | no | `test_close_waits_for_disconnect_request_closed_event_once`。duplicate callback も固定 |
+| done | close request timeout でも transport close と final state `closed` へ進む | edge | integration | no | 250 ms default。test では monkeypatch で 1 ms に短縮 |
+| done | close request unavailable / failed でも close が完了し、diagnostics に terminal state が残る | edge | integration | no | `test_close_without_connection_records_disconnect_unavailable`, `test_close_request_failure_records_failure_and_closes_transport` |
+| done | host disconnect callback と user close が競合しても state neutral、report loop stop、transport close が一度だけになる | edge | integration | no | `test_host_disconnect_racing_user_close_closes_once_and_neutralizes_state` |
+| done | Bumble 0.0.230 source に基づき control / interrupt channel disconnect helper の呼び出しを unit test で固定する | new | unit | no | `test_bumble_request_disconnect_calls_interrupt_then_control_helpers`。片側 channel と helper failure も固定 |
+| done | diagnostics trace が requested / closed / timeout / unavailable / failed を分ける | new | integration | no | `disconnect_request` と `disconnect_request_terminal` を fake integration で確認 |
+| pending-approval | hardware run で connected close の neutral、disconnect request or unavailable、closed or timeout、transport close ordering を記録する | characterization | hardware | yes | Switch-facing 動作の明示承認後だけ実行 |
 
 ## 8. 設計メモ
 
 - close request は `SwitchGamepad` の public command ではなく、transport cleanup の内部境界として始める。
 - `close(neutral=True)` の主目的は入力安全と resource cleanup である。remote close request の確認は品質向上だが、失敗しても `close()` が戻れない設計にしない。
 - daemon reference は BTstack の `hid_device_disconnect(hid_cid)` 由来であり、Bumble では同一 API ではない。事実として再利用するのは「neutral と link close と adapter close を分ける設計」であって、関数名や event 名をそのまま移植しない。
-- Bumble の channel 別 disconnect helper は control / interrupt の両方を別々に切る surface である。どちらから先に呼ぶか、片方が既に `None` の場合の扱い、closed event の待ち条件は source audit と fake unit test で固定してから実機へ進む。
-- `disconnecting` 中の新規 input command は実装時に `ClosedError` または no-op のどちらかに固定する。現時点では `ClosedError` を候補にする。
-- callback 解除 surface がない場合、transport 側に明示 reset を足すか、close 後 callback が再発火しても state を壊さない idempotency で吸収するかを実装で決める。
+- Bumble の channel 別 disconnect helper は interrupt、control の順で呼ぶ。片側 channel だけ残っている場合は残存 channel だけ requested として扱う。
+- `disconnecting` 中の新規 input command は `ReportLoop` 停止後なら `ClosedError`、停止前なら既存の state update として扱う。public API として disconnecting 中の command ordering は保証しない。
+- callback 解除 surface は追加していない。close 後 callback が再発火しても `_disconnect_event` と transport close idempotency で吸収する。
 
 ## 9. 対象ファイル
 
@@ -131,22 +132,25 @@
 | `src/swbt/transport/fake.py` | modify | disconnect request / closed / timeout simulation |
 | `src/swbt/transport/bumble.py` | modify | Bumble channel disconnect helper bridge |
 | `src/swbt/gamepad.py` | modify | close ordering、競合、diagnostics |
-| `src/swbt/diagnostics.py` | modify | close request terminal state events |
+| `src/swbt/diagnostics.py` | no change | 既存 `DiagnosticsRecorder.record_event()` で close request terminal state を記録 |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | close sequence tests |
 | `tests/unit/test_bumble_transport.py` | modify | Bumble disconnect helper tests |
-| `tests/hardware/` | modify | close ordering characterization test |
-| `docs/hardware-test-log.md` | modify | 実機 close ordering observation |
+| `tests/hardware/` | pending-approval | close ordering characterization test |
+| `docs/hardware-test-log.md` | pending-approval | 実機 close ordering observation |
 | `spec/wip/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` | modify | 実装結果、検証、checklist |
 
 ## 10. 検証
 
-この表は unit_014 実装時に実行する gate を示す。仕様書作成時点の実行結果ではない。
-
 | command | result | notes |
 |---|---|---|
-| `uv run pytest tests/unit/test_bumble_transport.py -q` | pending | Bumble disconnect helper bridge 追加後 |
-| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | pending | fake close ordering 追加後 |
-| `uv run pytest tests/unit tests/integration -q` | pending | local automated regression |
+| `uv sync --dev` | pass | Resolved 41 packages、Checked 41 packages |
+| `uv run ruff format --check .` | pass | 38 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit/test_bumble_transport.py -q` | pass | 22 passed in 0.25s |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 30 passed in 0.47s |
+| `uv run pytest tests/unit -q` | pass | 104 passed in 0.56s |
+| `uv run pytest tests/integration -q` | pass | 30 passed in 0.51s |
 | `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 ...` | pending-approval | 明示承認、adapter、command、cleanup plan が揃った場合だけ実行 |
 
 ## 11. 実機実行条件
@@ -174,8 +178,8 @@
 - [x] reconnect 前に close / disconnect cleanup unit として切り出した
 - [x] swbt-daemon の shutdown graceful disconnect reference を source として分離した
 - [x] Bumble 0.0.230 の local source 事実と未検証仮説を分けた
-- [ ] TDD item を red / green / refactor で実装した
-- [ ] unit / integration gate を実行し、検証欄を結果で更新した
+- [x] TDD item を red / green / refactor で実装した
+- [x] unit / integration gate を実行し、検証欄を結果で更新した
 - [ ] 実機承認、command、artifact、cleanup、結果を記録した
-- [ ] `unit_007` reconnect 着手前の前提条件として反映した
+- [x] `unit_007` reconnect 着手前の前提条件として反映した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する
