@@ -94,15 +94,25 @@ class SwitchGamepad:
                     report_period_us=self._config.report_period_us,
                     diagnostics=self._diagnostics,
                 )
-                self._connection_state = "advertising"
+                self._connection_state = "opened"
                 self._is_open = True
-                await transport.start_advertising()
             except Exception:
                 self._connection_state = "failed"
                 await transport.close()
                 self._report_loop = None
                 self._is_open = False
                 raise
+
+    async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
+        """Start initial-pairing advertising and wait for a host connection."""
+        if not self._is_open:
+            await self.open()
+        if self._transport is None:
+            msg = "gamepad is not open"
+            raise ClosedError(msg)
+        self._connection_state = "advertising"
+        await self._transport.start_advertising()
+        await self.wait_connected(timeout=timeout)
 
     async def wait_connected(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
         """Wait until the transport reports a completed connection."""

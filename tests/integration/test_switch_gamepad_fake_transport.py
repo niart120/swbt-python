@@ -26,10 +26,51 @@ def test_async_context_opens_and_closes_fake_transport() -> None:
         assert transport.close_count == 1
         assert transport.events == (
             "open",
-            "start_advertising",
             "request_disconnect_unavailable",
             "close",
         )
+
+    asyncio.run(run())
+
+
+def test_pair_starts_advertising_and_waits_for_fake_connection() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport) as pad:
+            pairing = asyncio.create_task(pad.pair(timeout=1.0))
+            await asyncio.sleep(0)
+
+            assert pairing.done() is False
+            assert transport.events == ("open", "start_advertising")
+
+            await transport.connect()
+            await asyncio.wait_for(pairing, timeout=0.1)
+
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "connected",
+            "request_disconnect",
+            "disconnect_request_closed",
+            "close",
+        )
+
+    asyncio.run(run())
+
+
+def test_open_only_does_not_start_advertising() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = SwitchGamepad(transport=transport)
+
+        await pad.open()
+
+        assert transport.is_open is True
+        assert pad.status().connection_state == "opened"
+        assert transport.events == ("open",)
+
+        await pad.close(neutral=True)
 
     asyncio.run(run())
 
@@ -53,7 +94,6 @@ def test_async_context_exception_requests_disconnect_and_reraises() -> None:
         assert transport.close_count == 1
         assert transport.events == (
             "open",
-            "start_advertising",
             "connected",
             "request_disconnect",
             "disconnect_request_closed",
@@ -379,7 +419,6 @@ def test_connected_close_requests_disconnect_after_trailing_neutral() -> None:
 
         assert transport.events == (
             "open",
-            "start_advertising",
             "connected",
             "request_disconnect",
             "disconnect_request_closed",
@@ -428,7 +467,6 @@ def test_close_waits_for_disconnect_request_closed_event_once() -> None:
         assert transport.close_count == 1
         assert transport.events == (
             "open",
-            "start_advertising",
             "connected",
             "request_disconnect",
             "disconnect_request_closed",
@@ -463,7 +501,6 @@ def test_close_request_disconnected_callback_leaves_final_close_to_user_close() 
         assert transport.close_count == 0
         assert transport.events == (
             "open",
-            "start_advertising",
             "connected",
             "request_disconnect",
             "disconnect_request_closed",
@@ -476,7 +513,6 @@ def test_close_request_disconnected_callback_leaves_final_close_to_user_close() 
         assert transport.close_count == 1
         assert transport.events == (
             "open",
-            "start_advertising",
             "connected",
             "request_disconnect",
             "disconnect_request_closed",
@@ -520,7 +556,6 @@ def test_close_request_timeout_records_terminal_state_and_closes_transport(
         assert transport.close_count == 1
         assert transport.events == (
             "open",
-            "start_advertising",
             "connected",
             "request_disconnect",
             "close",
@@ -603,7 +638,6 @@ def test_host_disconnect_racing_user_close_closes_once_and_neutralizes_state() -
         assert transport.close_count == 1
         assert transport.events == (
             "open",
-            "start_advertising",
             "connected",
             "request_disconnect",
             "disconnected",
@@ -631,7 +665,6 @@ def test_fake_l2cap_channels_must_both_open_before_wait_connected_completes() ->
 
             assert transport.events == (
                 "open",
-                "start_advertising",
                 "l2cap_control_open",
                 "l2cap_interrupt_open",
                 "connected",
@@ -664,7 +697,7 @@ def test_disconnect_callback_neutralizes_state_and_stops_report_loop() -> None:
     asyncio.run(run())
 
 
-def test_wait_connected_timeout_records_failure_position_in_trace() -> None:
+def test_wait_connected_timeout_records_opened_failure_position_in_trace() -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
@@ -680,9 +713,38 @@ def test_wait_connected_timeout_records_failure_position_in_trace() -> None:
 
         assert {
             "event": "connection_timeout",
+            "state": "opened",
+            "timeout": 0.001,
+        } in events
+
+    asyncio.run(run())
+
+
+def test_pair_timeout_records_advertising_failure_position_in_trace() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            with pytest.raises(ConnectionTimeoutError):
+                await pad.pair(timeout=0.001)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "connection_timeout",
             "state": "advertising",
             "timeout": 0.001,
         } in events
+        assert transport.events == (
+            "open",
+            "start_advertising",
+            "request_disconnect_unavailable",
+            "close",
+        )
 
     asyncio.run(run())
 
@@ -813,7 +875,7 @@ def test_wait_connected_completes_after_fake_connected_callback() -> None:
             await transport.connect()
             await asyncio.wait_for(connected, timeout=0.1)
 
-            assert transport.events == ("open", "start_advertising", "connected")
+            assert transport.events == ("open", "connected")
 
     asyncio.run(run())
 
