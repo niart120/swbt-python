@@ -392,8 +392,13 @@ def test_connected_close_requests_disconnect_after_trailing_neutral() -> None:
 
 def test_close_waits_for_disconnect_request_closed_event_once() -> None:
     async def run() -> None:
+        trace = StringIO()
         transport = FakeHidTransport(disconnect_request_auto_complete=False)
-        pad = SwitchGamepad(transport=transport, report_period_us=100_000)
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=100_000,
+        )
 
         await pad.open()
         await transport.connect()
@@ -409,6 +414,14 @@ def test_close_waits_for_disconnect_request_closed_event_once() -> None:
         await transport.complete_disconnect_request(reason=0x13)
         await asyncio.wait_for(close_task, timeout=0.1)
 
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "disconnect_request",
+            "status": "requested",
+            "channels": ["control", "interrupt"],
+        } in events
+        assert {"event": "disconnect_request_terminal", "status": "closed"} in events
         assert transport.close_count == 1
         assert transport.events == (
             "open",
