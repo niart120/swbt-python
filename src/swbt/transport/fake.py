@@ -16,12 +16,18 @@ from swbt.transport.base import (
 class FakeHidTransport:
     """Record transport operations without opening Bluetooth resources."""
 
-    def __init__(self, *, disconnect_request_auto_complete: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        disconnect_request_auto_complete: bool = True,
+        disconnect_request_error: Exception | None = None,
+    ) -> None:
         """Create a closed fake transport."""
         self._is_open = False
         self._open_count = 0
         self._close_count = 0
         self._disconnect_request_auto_complete = disconnect_request_auto_complete
+        self._disconnect_request_error = disconnect_request_error
         self._events: list[str] = []
         self._control_channel_open = False
         self._interrupt_channel_open = False
@@ -100,6 +106,15 @@ class FakeHidTransport:
     async def request_disconnect(self) -> DisconnectRequestResult:
         """Record a best-effort remote disconnect request."""
         self._require_open()
+        if self._disconnect_request_error is not None:
+            error = self._disconnect_request_error
+            self._events.append("request_disconnect_failed")
+            self._disconnect_request_event.set()
+            return DisconnectRequestResult(
+                status="failed",
+                error_type=type(error).__name__,
+                message=str(error),
+            )
         if not self._control_channel_open and not self._interrupt_channel_open:
             self._events.append("request_disconnect_unavailable")
             self._disconnect_request_event.set()

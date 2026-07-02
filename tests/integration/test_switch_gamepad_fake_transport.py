@@ -464,6 +464,37 @@ def test_close_without_connection_records_disconnect_unavailable() -> None:
     asyncio.run(run())
 
 
+def test_close_request_failure_records_failure_and_closes_transport() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(disconnect_request_error=RuntimeError("request failed"))
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+
+        await pad.open()
+        await transport.connect()
+        await pad.wait_connected(timeout=1.0)
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "disconnect_request",
+            "status": "failed",
+            "error_type": "RuntimeError",
+            "message": "request failed",
+        } in events
+        assert not any(
+            event.get("event") == "disconnect_request_terminal" for event in events
+        )
+        assert transport.close_count == 1
+        assert pad.status().connection_state == "closed"
+
+    asyncio.run(run())
+
+
 def test_fake_l2cap_channels_must_both_open_before_wait_connected_completes() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
