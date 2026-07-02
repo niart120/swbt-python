@@ -140,6 +140,12 @@ class _BumbleHidRuntime(Protocol):
     def send_control_data(self, report_type: int, data: bytes) -> None:
         """Send a control-channel HID data message."""
 
+    async def connect_control_channel(self) -> None:
+        """Request control-channel L2CAP connection."""
+
+    async def connect_interrupt_channel(self) -> None:
+        """Request interrupt-channel L2CAP connection."""
+
     async def disconnect_interrupt_channel(self) -> None:
         """Request interrupt-channel disconnection."""
 
@@ -394,6 +400,19 @@ class BumbleHidTransport:
             transport=PhysicalTransport.BR_EDR,
             timeout=connect_timeout,
         )
+        await self._runtime.hid_device.connect_control_channel()
+        if self._runtime.hid_device.l2cap_ctrl_channel is not None:
+            self._record_l2cap_channel_event(
+                "l2cap_channel_open",
+                self._runtime.hid_device.l2cap_ctrl_channel,
+            )
+        await self._runtime.hid_device.connect_interrupt_channel()
+        if self._runtime.hid_device.l2cap_intr_channel is not None:
+            self._record_l2cap_channel_event(
+                "l2cap_channel_open",
+                self._runtime.hid_device.l2cap_intr_channel,
+            )
+        self._notify_connected_if_ready()
 
     async def send_interrupt(self, payload: bytes) -> None:
         """Send one interrupt report."""

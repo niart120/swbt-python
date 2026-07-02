@@ -45,6 +45,7 @@ class FakeBumbleDevice:
         self.discoverable_calls: list[bool] = []
         self.handlers: dict[str, list[Callable[..., None]]] = {}
         self.connection_requests: list[tuple[object, int, int]] = []
+        self.connect_calls: list[tuple[str, object, float | None]] = []
         self.keystore: object | None = None
 
     async def power_on(self) -> None:
@@ -64,6 +65,17 @@ class FakeBumbleDevice:
     async def set_discoverable(self, discoverable: bool = True) -> None:
         """Record discoverable transitions."""
         self.discoverable_calls.append(discoverable)
+
+    async def connect(
+        self,
+        peer_address: str,
+        *,
+        transport: object,
+        timeout: float | None = None,  # noqa: ASYNC109
+    ) -> object:
+        """Record one active connection attempt."""
+        self.connect_calls.append((peer_address, transport, timeout))
+        return object()
 
     def on(self, event: str, callback: Callable[..., None]) -> None:
         """Register one fake device event callback."""
@@ -200,6 +212,7 @@ class FakeHidDevice:
         self.interrupt_payloads: list[bytes] = []
         self.control_payloads: list[tuple[int, bytes]] = []
         self.disconnect_calls: list[str] = []
+        self.connect_calls: list[str] = []
         self.disconnect_error: Exception | None = None
         self.set_report_callback: Callable[[int, int, int, bytes], object] | None = None
 
@@ -237,6 +250,16 @@ class FakeHidDevice:
             raise self.disconnect_error
         self.disconnect_calls.append("control")
         self.l2cap_ctrl_channel = None
+
+    async def connect_control_channel(self) -> None:
+        """Record a fake active control-channel connection."""
+        self.connect_calls.append("control")
+        self.l2cap_ctrl_channel = FakeL2capChannel(0x0011)
+
+    async def connect_interrupt_channel(self) -> None:
+        """Record a fake active interrupt-channel connection."""
+        self.connect_calls.append("interrupt")
+        self.l2cap_intr_channel = FakeL2capChannel(0x0013)
 
     def emit_set_report(self, report_id: int, report_type: int, report_data: bytes) -> object:
         """Emit one fake SET_REPORT call."""
@@ -1093,6 +1116,64 @@ def test_bumble_l2cap_channel_open_records_diagnostics_and_connects_after_both_c
 
         hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013))
         await asyncio.sleep(0)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "l2cap_channel_open",
+            "adapter": "usb:0",
+            "channel": "control",
+            "psm": "0x0011",
+        } in events
+        assert {
+            "event": "l2cap_channel_open",
+            "adapter": "usb:0",
+            "channel": "interrupt",
+            "psm": "0x0013",
+        } in events
+        assert {"event": "connected", "adapter": "usb:0"} in events
+        assert connected_count == 1
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_active_reconnect_opens_hid_l2cap_channels_after_acl_connection() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+        device = FakeBumbleDevice()
+        hid_device = FakeHidDevice()
+        connected_count = 0
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device, hid_device=hid_device)
+
+        async def on_connected() -> None:
+            nonlocal connected_count
+            connected_count += 1
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+        transport.on_connected(on_connected)
+
+        await transport.open()
+        await transport.connect_bonded_peer("01:02:03:04:05:06", connect_timeout=3.0)
+        await asyncio.sleep(0)
+
+        assert len(device.connect_calls) == 1
+        assert device.connect_calls[0][0] == "01:02:03:04:05:06"
+        assert device.connect_calls[0][2] == 3.0
+        assert hid_device.connect_calls == ["control", "interrupt"]
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
         assert {
