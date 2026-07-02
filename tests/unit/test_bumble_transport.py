@@ -45,6 +45,7 @@ class FakeBumbleDevice:
         self.discoverable_calls: list[bool] = []
         self.handlers: dict[str, list[Callable[..., None]]] = {}
         self.connection_requests: list[tuple[object, int, int]] = []
+        self.keystore: object | None = None
 
     async def power_on(self) -> None:
         """Record power-on calls."""
@@ -373,6 +374,20 @@ class FakePairingKeys:
         self.link_key = link_key
 
 
+class FakeFailingKeyStore:
+    """Fake key store that raises on update without exposing key material."""
+
+    async def update(self, name: str, keys: object) -> None:
+        """Fail one key update."""
+        _ = (name, keys)
+        msg = "write denied"
+        raise PermissionError(msg)
+
+    async def get_all(self) -> list[tuple[str, object]]:
+        """Return no keys."""
+        return []
+
+
 class FakeOpenError(Exception):
     """Fake exception raised by an injected opener."""
 
@@ -508,6 +523,51 @@ def test_bumble_initialize_device_configures_json_key_store(
             "source": handle.source,
             "sink": handle.sink,
         }
+
+    asyncio.run(run())
+
+
+def test_bumble_key_store_update_failure_is_recorded_without_key_material() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+        device = FakeBumbleDevice()
+        device.keystore = FakeFailingKeyStore()
+        peer_address = "01:02:03:04:05:06"
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        await transport.start_advertising()
+
+        key_store = cast("Any", device.keystore)
+        with pytest.raises(PermissionError):
+            await key_store.update(peer_address, object())
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "key_store_update",
+            "error_type": "PermissionError",
+            "message": "write denied",
+            "peer_address": peer_address,
+            "status": "failed",
+        } in events
+        assert "link_key" not in trace.getvalue()
+
+        await transport.close()
 
     asyncio.run(run())
 

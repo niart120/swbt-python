@@ -157,6 +157,56 @@ class _BumbleRuntime:
     advertising_started: bool = False
 
 
+class _DiagnosticKeyStore:
+    """Key store wrapper that records write outcome without logging key material."""
+
+    def __init__(self, key_store: object, diagnostics: DiagnosticsRecorder) -> None:
+        self._key_store = key_store
+        self._diagnostics = diagnostics
+
+    async def update(self, name: str, keys: object) -> None:
+        """Record key-store write success or failure."""
+        try:
+            await cast("Any", self._key_store).update(name, keys)
+        except Exception as error:
+            self._diagnostics.record_event(
+                "key_store_update",
+                error_type=type(error).__name__,
+                message=str(error),
+                peer_address=name,
+                status="failed",
+            )
+            raise
+        self._diagnostics.record_event(
+            "key_store_update",
+            peer_address=name,
+            status="succeeded",
+        )
+
+    async def get(self, name: str) -> object | None:
+        """Delegate key lookup."""
+        return await cast("Any", self._key_store).get(name)
+
+    async def get_all(self) -> list[tuple[str, object]]:
+        """Delegate full key listing."""
+        return await cast("Any", self._key_store).get_all()
+
+    async def delete(self, name: str) -> None:
+        """Delegate key deletion."""
+        await cast("Any", self._key_store).delete(name)
+
+    async def delete_all(self) -> None:
+        """Delegate all-key deletion."""
+        await cast("Any", self._key_store).delete_all()
+
+    async def get_resolving_keys(self) -> object:
+        """Delegate LE resolving-key lookup for Bumble internals."""
+        return await cast("Any", self._key_store).get_resolving_keys()
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._key_store, name)
+
+
 _InitializeDevice = Callable[[_BumbleHandle], Awaitable[_BumbleRuntime]]
 _StartAdvertising = Callable[[_BumbleRuntime], Awaitable[None]]
 _CloseRuntime = Callable[[_BumbleRuntime], Awaitable[None]]
@@ -252,6 +302,7 @@ class BumbleHidTransport:
         if self._runtime.advertising_started:
             return
         await self._start_advertising(self._runtime)
+        self._install_key_store_diagnostics(self._runtime)
         self._runtime.advertising_started = True
         if self._runtime.classic_link_policy_settings is not None:
             self._record_event(
@@ -732,6 +783,14 @@ class BumbleHidTransport:
         if self._diagnostics is not None:
             self._diagnostics.record_error(error, recoverable=False)
 
+    def _install_key_store_diagnostics(self, runtime: _BumbleRuntime) -> None:
+        if self._diagnostics is None:
+            return
+        key_store = runtime.device.keystore
+        if key_store is None or isinstance(key_store, _DiagnosticKeyStore):
+            return
+        runtime.device.keystore = _DiagnosticKeyStore(key_store, self._diagnostics)
+
     async def _ensure_classic_runtime_ready(self, runtime: _BumbleRuntime) -> None:
         if not runtime.device.powered_on:
             await runtime.device.power_on()
@@ -744,6 +803,7 @@ class BumbleHidTransport:
                     adapter=self._adapter,
                     settings=f"0x{link_policy_settings:04x}",
                 )
+        self._install_key_store_diagnostics(runtime)
 
     async def _cleanup_open_failure(self) -> None:
         handle = self._handle
