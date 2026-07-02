@@ -330,6 +330,7 @@ class SwitchGamepad:
             self._transport = BumbleHidTransport(
                 adapter=self._config.adapter,
                 device_name=self._config.device_name,
+                key_store_path=self._config.key_store_path,
                 diagnostics=self._diagnostics,
             )
         return self._transport
