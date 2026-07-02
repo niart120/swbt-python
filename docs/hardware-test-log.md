@@ -10,7 +10,7 @@
 - Bumble adapter run: adapter open、Bumble Device 初期化、Classic HID 初期化、SDP / HID descriptor 登録、discoverable / connectable、close を記録済み
 - Pairing run: 2026-07-01 に `Pro Controller` / Class of Device `0x002508` で M3 pairing / L2CAP pass。`classic_pairing`、HID control / interrupt channel open、`connected` を記録済み
 - Subcommand run: 2026-07-02 に Classic default link policy `0x0005` のみを残した最小実装で M4 subcommand sequence が pass。続く observation window run では Bumble ACL queue drain 後、5 秒以上の実機観測で `0x02` 1 件と `0x08` 8 件を受信し、全件に `0x21` reply を送信した。trace は `classic_link_policy_configured`、Switch からの `0x01` output report、`subcommand_rx`、`subcommand_reply_tx`、`report_tx` reason `subcommand_reply` 9 件を記録し、`unsupported_subcommand` と `error` は 0 件だった。debug log は `packets in flight` backlog 行 0 件だった。link policy 反映前の試行では、HIDP DATA header 除去、SET_REPORT callback、control channel output report、HID SDP policy、service name / language base、daemon-aligned `0x8e` / `0x80` prefix、HID L2CAP local MTU `100` を反映しても `output_report_rx` 未観測のまま Switch 側 reason 19 で切断されていた
-- Input reflection run: 未記録
+- Input reflection run: 2026-07-02 に `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で M5 input operation sequence を実行した。pytest は `1 passed` だが、これは接続、subcommand reply、`0x30` report 送信、manual checkpoint、clean close を確認するだけで、Switch UI 反映を自動判定しない。初回ユーザ画面観測では Switch のデバイス登録画面が全く動かなかったため、M5 の semantic input reflection は observed-fail。debug log では A button bytes `08 00 00`、L+R button bytes `40 00 40`、neutral bytes `00 00 00` を含む `a1 30` HID interrupt send は確認済み。後続の pairing diagnostics run では `link_key_available` と `connection_encryption_change` は出たが、`pairing_complete` と `connection_authentication` は出ず、Switch は `0x02` と repeated `0x08` から進まなかった。daemon `local_037` の実機履歴では `0x21` reply timer 固定を shared input report timer に直すと repeated `0x08` から `0x10` / `0x03` へ進んだため、swbt-python でも shared timer / reply holdoff を実装した。2026-07-02 shared timer rerun では `0x02`、`0x08`、`0x10`、`0x03`、`0x04`、`0x40`、`0x30`、`0x48`、`0x21`、`0x30` まで進み、ユーザは Switch 側で pairing 完了を目視した。続く post-handshake input run では full observed handshake 後に `tap(Button.A)` を送信し、ユーザは Switch UI への A 反映と neutral 後の入力残りなしを目視した。
 
 ## Run Entry Template
 
@@ -38,11 +38,91 @@
 
 | OS | Bluetooth dongle | Driver | Adapter | Switch model | Firmware | Pairing | L2CAP | Subcommands | Input reflected | Result source | Last updated | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Windows | CSR8510 A10 | WinUSB / libwdi 6.1.7600.16385 | `usb:0` | 未記録 | 未記録 | pass | pass | pass for observed `0x02` / `0x08` sequence | 未検証 | 2026-07-02 M4 observation window run | 2026-07-02 | `Pro Controller` / Class of Device `0x002508` で L2CAP open 後、Classic default link policy `0x0005` と Bumble ACL queue drain を含む実装で Switch output report `a2 01`、`0x02` 1 件、`0x08` 8 件、`0x21` reply tx 9 件まで到達。`unsupported_subcommand` と `error` は 0 件。link policy 反映前は HIDP DATA header、SET_REPORT、control channel output、HID SDP policy、service name / language base、`0x8e` / `0x80` prefix、HID L2CAP local MTU `100` を反映しても `output_report_rx` は未観測だった |
+| Windows | CSR8510 A10 | WinUSB / libwdi 6.1.7600.16385 | `usb:0` | 未記録 | 未記録 | observed-pass | pass | pass for full observed M5 handshake sequence | observed-pass | 2026-07-02 M5 post-handshake input run | 2026-07-02 | `Pro Controller` / Class of Device `0x002508` で L2CAP open 後、shared timer / reply holdoff 実装の rerun で `0x02`、`0x08`、`0x10` x8、`0x03`、`0x04`、`0x40`、`0x30` x2、`0x48`、`0x21` を受信し、対応する `0x21` reply tx まで到達。続く post-handshake input run で full observed handshake 後の `tap(Button.A)` が Switch UI に反映され、neutral 後の入力残りなしをユーザが目視した |
 | Linux | 未検証 | libusb 想定 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期保証対象に含めるか未決 |
 | macOS | 未検証 | 未検証 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期検証対象外 |
 
 ## Run Entries
+
+### 2026-07-02: unit_006 post-handshake Button A input reflected on Switch UI
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-006-input-operation-api` branch at commit `6b5ed73` with clean worktree before and after the hardware run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Trace recorded 66 `report_tx` events, 21 `output_report_rx` events, 16 `subcommand_rx` events, and 16 `subcommand_reply_tx` events. Checkpoints recorded `handshake_complete`, `post_handshake_tap_a_start`, `post_handshake_tap_a_complete`, and `post_handshake_neutral_complete`
+- command / test: `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_after_full_handshake_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-post-handshake-input --log-file .pytest_cache\hardware\unit_006\20260702-post-handshake-input\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved this hardware test. Scope used `usb:0`: USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, periodic input report loop, wait for full observed handshake, `Button.A` tap, neutral input, and cleanup.
+- result: pass. Pytest reported `1 passed, 1 warning in 9.45s`. Trace recorded `classic_pairing`, `link_key_available`, `connection_encryption_change`, L2CAP control / interrupt open, `connected`, and the full observed M5 handshake subcommand sequence: `0x02`, `0x08`, `0x10` x8, `0x03`, `0x04`, `0x40`, `0x30` x2, `0x48`, `0x21`. `handshake_complete` was recorded at `0x30` report count 4; `post_handshake_tap_a_complete` at count 41; `post_handshake_neutral_complete` at count 49. Bumble debug log showed A button bytes `08 00 00` in `0x30` report counters 20-23 and neutral bytes `00 00 00` from counter 24 onward. The user visually confirmed that A was reflected on the Switch UI and that no residual input was visible after neutral.
+- artifact: `.pytest_cache\hardware\unit_006\20260702-post-handshake-input\post-handshake-input.jsonl`, `.pytest_cache\hardware\unit_006\20260702-post-handshake-input\pytest-debug.log`
+- cleanup: pytest executed `pad.close(neutral=True)` from `finally`; trace recorded final `0x30` input report, two public `disconnected reason=0` events, and `transport_close_complete`.
+- notes: This run completes the M5 Button A / neutral semantic input reflection condition for this hardware configuration. It does not cover stick semantic reflection, reconnect, or multiple controller behavior.
+
+### 2026-07-02: unit_006 shared timer rerun progressed through Switch handshake
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-006-input-operation-api` branch at commit `4e677f2` with clean worktree before the hardware run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Trace recorded 54 `report_tx` events, including 16 `0x21` subcommand replies and `0x30` periodic / input reports. Checkpoints recorded `tap_a_start`, `tap_a_complete`, `hold_lr_start`, `hold_lr_reports_sent`, and `neutral_complete`
+- command / test: `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_operation_sequence_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-shared-timer-rerun --log-file .pytest_cache\hardware\unit_006\20260702-shared-timer-rerun\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved this hardware test after shared timer / reply holdoff implementation. Scope used `usb:0`: USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, periodic input report loop, `Button.A` tap, L+R hold, neutral input, and cleanup.
+- result: handshake-progressed, pairing observed-pass, input reflection pending. Pytest reported `1 passed, 1 warning in 8.44s`. Trace recorded `classic_pairing`, `link_key_available`, `connection_encryption_change` with `authenticated=false`, `encryption=1`, `secure_connections=false`, L2CAP control / interrupt open, `connected`, and `classic_mode_change`. Observed subcommands progressed from previous `0x02` / repeated `0x08` to `0x02`, `0x08`, `0x10` x8, `0x03`, `0x04`, `0x40`, `0x30` x2, `0x48`, `0x21`. Each observed subcommand had a `subcommand_reply_tx`. The user visually confirmed that pairing completed on the Switch side. The run also recorded A tap, L+R hold, neutral, clean close. `tap(Button.A)` UI reflection and neutral residual state are not auto-detected by this pytest and remain pending separate user-visible confirmation.
+- artifact: `.pytest_cache\hardware\unit_006\20260702-shared-timer-rerun\input-operation-sequence.jsonl`, `.pytest_cache\hardware\unit_006\20260702-shared-timer-rerun\pytest-debug.log`
+- cleanup: pytest executed `pad.close(neutral=True)` from `finally`; trace recorded neutral input, `disconnected reason=0`, the public disconnection event, and `transport_close_complete`.
+- notes: This run supports the daemon-derived shared timer hypothesis for escaping repeated `0x08` and confirms Switch-side pairing completion under this hardware condition. It does not by itself complete M5 because `tap(Button.A)` UI reflection and neutral residual state require separate user-visible confirmation.
+
+### 2026-07-02: unit_006 pairing diagnostics still stopped at repeated 0x08
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-006-input-operation-api` branch at commit `228d669` with clean worktree before the diagnostic run
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by Bumble USB debug log
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Trace recorded periodic/input `0x30` reports, subcommand reply attempts, `tap_a_start`, `tap_a_complete`, `hold_lr_start`, `hold_lr_reports_sent`, and `neutral_complete`
+- command / test: `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_operation_sequence_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-pairing-diagnostics --log-file .pytest_cache\hardware\unit_006\20260702-pairing-diagnostics\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved this command after adapter, Switch-facing scope, and cleanup were stated. Scope used `usb:0`: USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, periodic input report loop, `Button.A` tap, L+R hold, neutral input, and cleanup.
+- result: observed-fail for semantic input reflection. Pytest reported `1 passed, 1 warning in 6.51s`, but the user confirmed that the Switch device registration / authentication screen did not move. Trace recorded `classic_pairing`, `link_key_available`, `connection_encryption_change` with `authenticated=false`, `encryption=1`, `secure_connections=false`, L2CAP control / interrupt open, `connected`, `classic_mode_change`, `0x02` once, and repeated `0x08`. It did not record `pairing_complete` or `connection_authentication`, and did not progress to daemon-success subcommands `0x10`, `0x03`, `0x04`, `0x40`, `0x48`, `0x21`, `0x30`.
+- artifact: `.pytest_cache\hardware\unit_006\20260702-pairing-diagnostics\input-operation-sequence.jsonl`, `.pytest_cache\hardware\unit_006\20260702-pairing-diagnostics\pytest-debug.log`
+- cleanup: pytest executed `pad.close(neutral=True)` from `finally`; trace recorded neutral input, `disconnected reason=0`, the public disconnection event, and `transport_close_complete`.
+- notes: This run confirms that link-key availability and encryption change alone are not sufficient evidence that Switch accepted the controller. Based on daemon `local_037`, swbt-python then changed software scheduling so `0x21` replies consume the shared input report timer and hold off following periodic `0x30` reports. That fix has not yet been run on hardware.
+
+### 2026-07-02: unit_006 input operation sequence sent reports but did not move Switch UI
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `feat/unit-006-input-operation-api` branch at commit `79ecbd1` with clean worktree before the observable rerun
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device, USB VID:PID `0a12:0001` observed by prior Bumble USB debug logs. Previous unit_003 inventory associated `usb:0` with `USB\VID_0A12&PID_0001\9&12127A34&0&1`, `Port_#0001.Hub_#0013`
+- driver: not re-recorded in this run. Previous unit_003 inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Trace recorded 56 `0x30` reports and 4 `0x21` replies. Checkpoints recorded `tap_a_start`, `tap_a_complete`, `hold_lr_start`, `hold_lr_reports_sent`, and `neutral_complete`
+- command / test: `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_operation_sequence_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-input-operation-sequence-observable --log-file .pytest_cache\hardware\unit_006\20260702-input-operation-sequence-observable\pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user explicitly approved unit_006 hardware verification and requested commit before hardware verification. Scope used `usb:0`: USB Bluetooth dongle open, Classic HID Device initialization, discoverable / connectable / HID advertising, Switch pairing or existing connection, HID control / interrupt L2CAP open, periodic input report loop, `Button.A` tap, L+R hold, neutral input, and cleanup. Scope excluded reconnect and broader firmware / adapter matrix claims.
+- result: observed-fail for semantic input reflection. Pytest reported `1 passed, 1 warning in 10.08s`, but that pass only proves the trace sequence and cleanup assertions. User observed that the Switch device registration screen did not move at all. Debug log confirmed outgoing HID interrupt input reports: A used button bytes `08 00 00` (`a1 30 ... 91 08 00 00 ...`), L+R used `40 00 40` (`a1 30 ... 91 40 00 40 ...`), and neutral used `00 00 00` (`a1 30 ... 91 00 00 00 ...`). Trace recorded no `error` event. The cause is not determined by this run. swbt-daemon `local_049` success observed `pairing complete, status 00`, `0x02` / `0x08` / `0x10` / `0x03` / `0x04` / `0x40` / `0x48` / `0x21` / `0x30` replies, then L+R and Button A UI reflection. swbt-daemon `local_073` pairing-free reconnect pass observed link-key DB use and no new `pairing complete`. This swbt-python run only recorded `classic_pairing`, L2CAP open, and observed `0x02` / `0x08`; it did not record authentication, encryption, link key, or full controller initialization sequence.
+- artifact: `.pytest_cache\hardware\unit_006\20260702-input-operation-sequence-observable\input-operation-sequence.jsonl`, `.pytest_cache\hardware\unit_006\20260702-input-operation-sequence-observable\pytest-debug.log`
+- cleanup: pytest executed `pad.close(neutral=True)` from `finally`; trace recorded final neutral `0x30` input, `disconnected reason=0`, the public disconnection event, and `transport_close_complete`.
+- notes: This run proves report transmission through Bumble/L2CAP under the listed conditions, but contradicts M5 completion because Switch UI input reflection was not observed. Next diagnosis should separate report acceptance / controller registration state from report byte correctness. The successful pytest assertion must not be treated as semantic input reflection. After comparison with swbt-daemon logs, the next diagnostic run should require trace evidence for `pairing_complete`, `connection_authentication`, `connection_encryption_change`, optional `link_key_available`, and whether Switch progresses beyond repeated `0x08` into the known daemon subcommand sequence. Raw link key values must not be logged.
 
 ### 2026-07-02: unit_005 observation window replied to all observed subcommands
 

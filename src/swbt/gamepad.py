@@ -163,6 +163,9 @@ class SwitchGamepad:
         """Return the current gamepad status."""
         return GamepadStatus(
             connection_state=self._connection_state,
+            report_counters=self._diagnostics.report_counters,
+            last_subcommand_id=self._diagnostics.last_subcommand_id,
+            raw_rumble=self._diagnostics.raw_rumble,
             last_error=self._diagnostics.last_error,
         )
 
@@ -204,6 +207,8 @@ class SwitchGamepad:
                 if output_report.subcommand_id is not None
                 else None
             )
+            if output_report.rumble is not None:
+                self._diagnostics.record_raw_rumble(output_report.rumble)
             self._diagnostics.record_event(
                 "output_report_rx",
                 length=len(payload),
@@ -213,10 +218,9 @@ class SwitchGamepad:
             )
             if output_report.subcommand_id is None:
                 return
-            self._diagnostics.record_event(
-                "subcommand_rx",
+            self._diagnostics.record_subcommand_rx(
                 packet_id=output_report.packet_id,
-                subcommand_id=subcommand_id,
+                subcommand_id=output_report.subcommand_id,
             )
             if self._report_loop is None:
                 msg = "gamepad is not open"
@@ -238,7 +242,7 @@ class SwitchGamepad:
                 report_id=f"0x{reply[0]:02x}",
                 subcommand_id=subcommand_id,
             )
-            self._report_loop.queue_reply(reply)
+            await self._report_loop.send_subcommand_reply(reply)
         except SwbtError as error:
             self._connection_state = "failed"
             self._diagnostics.record_error(error, recoverable=False)

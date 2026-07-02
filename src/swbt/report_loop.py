@@ -9,6 +9,8 @@ from swbt.protocol.input_report import InputReportBuilder
 from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
 
+REPLY_PERIODIC_HOLDOFF_SECONDS = 0.3
+
 
 class ReportLoop:
     """Send input reports from the current input state."""
@@ -28,9 +30,10 @@ class ReportLoop:
         self._report_period_seconds = report_period_us / 1_000_000
         self._input_report_builder = input_report_builder or InputReportBuilder()
         self._diagnostics = diagnostics
-        self._report_counters: dict[int, int] = {}
         self._reply_queue: deque[bytes] = deque()
         self._timer = 0
+        self._periodic_holdoff_until = 0.0
+        self._send_lock = asyncio.Lock()
         self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
@@ -51,10 +54,14 @@ class ReportLoop:
 
     async def send_current_input(self, *, reason: str = "input") -> None:
         """Send one 0x30 input report for the current state."""
-        state = await self._state_store.snapshot()
-        report = self._input_report_builder.build_0x30(state, timer=self._timer)
-        self._timer = (self._timer + 1) & 0xFF
-        await self._send_report(report, reason=reason)
+        async with self._send_lock:
+            await self._send_current_input_locked(reason=reason)
+
+    async def send_subcommand_reply(self, report: bytes) -> None:
+        """Send one 0x21 subcommand reply with the shared report timer."""
+        async with self._send_lock:
+            await self._send_subcommand_reply_locked(report)
+            self._holdoff_periodic_after_reply()
 
     def queue_reply(self, report: bytes) -> None:
         """Queue one subcommand reply for priority transmission."""
@@ -62,10 +69,28 @@ class ReportLoop:
 
     async def send_next_report(self) -> None:
         """Send the next queued reply or current input report."""
-        if self._reply_queue:
-            await self._send_report(self._reply_queue.popleft(), reason="subcommand_reply")
-            return
-        await self.send_current_input(reason="periodic")
+        async with self._send_lock:
+            if self._reply_queue:
+                await self._send_subcommand_reply_locked(self._reply_queue.popleft())
+                self._holdoff_periodic_after_reply()
+                return
+            if self._is_periodic_held_off():
+                return
+            await self._send_current_input_locked(reason="periodic")
+
+    async def _send_current_input_locked(self, *, reason: str) -> None:
+        state = await self._state_store.snapshot()
+        report = self._input_report_builder.build_0x30(state, timer=self._timer)
+        await self._send_report(report, reason=reason)
+        self._advance_timer()
+
+    async def _send_subcommand_reply_locked(self, report: bytes) -> None:
+        reply = bytearray(report)
+        if reply and reply[0] == 0x21:
+            reply[1] = self._timer
+        await self._send_report(bytes(reply), reason="subcommand_reply")
+        if reply and reply[0] == 0x21:
+            self._advance_timer()
 
     async def _run(self) -> None:
         while True:
@@ -75,12 +100,16 @@ class ReportLoop:
     async def _send_report(self, report: bytes, *, reason: str) -> None:
         await self._transport.send_interrupt(report)
         report_id = report[0]
-        counter = self._report_counters.get(report_id, 0) + 1
-        self._report_counters[report_id] = counter
         if self._diagnostics is not None:
-            self._diagnostics.record_event(
-                "report_tx",
-                counter=counter,
-                reason=reason,
-                report_id=f"0x{report_id:02x}",
-            )
+            self._diagnostics.record_report_tx(report_id=report_id, reason=reason)
+
+    def _advance_timer(self) -> None:
+        self._timer = (self._timer + 1) & 0xFF
+
+    def _holdoff_periodic_after_reply(self) -> None:
+        self._periodic_holdoff_until = (
+            asyncio.get_running_loop().time() + REPLY_PERIODIC_HOLDOFF_SECONDS
+        )
+
+    def _is_periodic_held_off(self) -> bool:
+        return asyncio.get_running_loop().time() < self._periodic_holdoff_until
