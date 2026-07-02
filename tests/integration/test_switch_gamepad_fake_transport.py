@@ -61,6 +61,34 @@ def test_pair_starts_advertising_and_waits_for_fake_connection() -> None:
     asyncio.run(run())
 
 
+def test_incoming_connection_trace_does_not_use_active_reconnect_events() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(bonded_peer_addresses=("01:02:03:04:05:06",))
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ) as pad:
+            pairing = asyncio.create_task(pad.pair(timeout=1.0))
+            await asyncio.sleep(0)
+            await transport.connect()
+            await asyncio.wait_for(pairing, timeout=0.1)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        event_names = [event["event"] for event in events]
+
+        assert {
+            "event": "incoming_connection",
+            "previous_state": "advertising",
+        } in events
+        assert "active_reconnect_attempt" not in event_names
+        assert "active_reconnect_result" not in event_names
+        assert "active_reconnect" not in transport.events
+
+    asyncio.run(run())
+
+
 def test_open_only_does_not_start_advertising() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

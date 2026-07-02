@@ -433,6 +433,12 @@ class SwitchGamepad:
             self._diagnostics.record_error(error, recoverable=False)
 
     async def _handle_connected(self) -> None:
+        previous_state = self._connection_state
+        if previous_state == "advertising":
+            self._diagnostics.record_event(
+                "incoming_connection",
+                previous_state=previous_state,
+            )
         self._connection_state = "connected"
         self._connected_event.set()
         if self._report_loop is not None:
