@@ -69,8 +69,8 @@
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
 | Switch HID / report bytes | required | done for neutral bytes / no new bytes | trailing neutral は既存 `0x30` input report を使う。新しい report layout は追加しない |
-| Bumble / transport | required | done for source and unit tests / hardware observed-partial | Bumble 0.0.230 の `disconnect_interrupt_channel()`、`disconnect_control_channel()`、`on_l2cap_channel_close()` を source fact として確認し、`BumbleHidTransport.request_disconnect()` と L2CAP close bridge を unit test で固定した。2026-07-02 の修正前 hardware run では Switch 実機で L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで観測したが、`transport_close_complete` が欠落した。race 修正後の connected close ordering は、post-fix rerun が pre-connection timeout のため未検証 |
-| OS / driver / adapter | required | observed-partial | Windows / CSR8510 A10 / WinUSB / `usb:0` では過去 unit で `pad.close(neutral=True)` の `transport_close_complete` まで観測済み。unit_014 修正前 run では close request / closed event ordering を観測した。修正後 run は `advertising_start` 後に `host_connection` へ進まず、connected close を再観測できていない |
+| Bumble / transport | required | done for source, unit tests, and hardware | Bumble 0.0.230 の `disconnect_interrupt_channel()`、`disconnect_control_channel()`、`on_l2cap_channel_close()` を source fact として確認し、`BumbleHidTransport.request_disconnect()` と L2CAP close bridge を unit test で固定した。2026-07-02 の修正前 hardware run では Switch 実機で L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで観測したが、`transport_close_complete` が欠落した。race 修正後の rerun では `connected`、neutral `0x30`、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete` を観測した |
+| OS / driver / adapter | required | observed | Windows / CSR8510 A10 / WinUSB / `usb:0` で、修正後の connected close ordering を観測した。artifact は `.pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity\close-disconnect.jsonl` |
 
 ### 5.1 監査済み事実 / 仮説
 
@@ -83,7 +83,7 @@
 | Bumble 0.0.230 `Device` は L2CAP channel close callback で control / interrupt channel field を `None` にする | source fact | `.venv/Lib/site-packages/bumble/hid.py:298` | local package source |
 | swbt-daemon は shutdown graceful disconnect で neutral、HID disconnect request、closed event or 250 ms timeout、power-off を分けた | implementation fact / hardware observation | `E:/documents/VSCodeWorkspace/swbt-daemon/work-units/complete/local_100/SHUTDOWN_GRACEFUL_DISCONNECT.md` | reference |
 | swbt-daemon の 250 ms は正常 close の待機値ではなく、closed event 欠落時の shutdown 継続上限である | implementation fact | `E:/documents/VSCodeWorkspace/swbt-daemon/work-units/complete/local_100/SHUTDOWN_GRACEFUL_DISCONNECT.md:132` | reference |
-| swbt-python の close request wait は 250 ms を初期 default とする | implementation fact / inference | `src/swbt/gamepad.py`, swbt-daemon reference | hardware characterization pending |
+| swbt-python の close request wait は 250 ms を初期 default とする | implementation fact / inference | `src/swbt/gamepad.py`, swbt-daemon reference | hardware characterization observed-pass |
 | Bumble channel disconnect helper を interrupt、control の順で呼ぶ | implementation fact | `src/swbt/transport/bumble.py`, `tests/unit/test_bumble_transport.py` | unit tested |
 | Bumble channel disconnect helper を呼べば Switch 側 graceful close と同等に扱える | unverified hypothesis | Bumble local source + daemon reference | hardware characterization required |
 | user close 中の disconnected callback が transport final close を先取りすると、`close()` 本体の terminal 記録と callback cleanup の順序が崩れる | implementation fact / hardware observation | `.pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a\close-disconnect.jsonl`, `tests/integration/test_switch_gamepad_fake_transport.py` | reproduced and fixed in `0979bd4` |
@@ -115,7 +115,7 @@
 | done | host disconnect callback と user close が競合しても state neutral、report loop stop、transport close が一度だけになる | edge | integration | no | `test_host_disconnect_racing_user_close_closes_once_and_neutralizes_state` |
 | done | Bumble 0.0.230 source に基づき control / interrupt channel disconnect helper の呼び出しを unit test で固定する | new | unit | no | `test_bumble_request_disconnect_calls_interrupt_then_control_helpers`。片側 channel と helper failure も固定 |
 | done | diagnostics trace が requested / closed / timeout / unavailable / failed を分ける | new | integration | no | `disconnect_request` と `disconnect_request_terminal` を fake integration で確認 |
-| observed-partial | hardware run で connected close の neutral、disconnect request or unavailable、closed or timeout、transport close ordering を記録する | characterization | hardware | yes | 明示承認後に実行。修正前 run は neutral、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで観測し、`transport_close_complete` 欠落で fail。修正後 rerun は 2 回とも pre-connection timeout のため connected close 未検証 |
+| done | hardware run で connected close の neutral、disconnect request or unavailable、closed or timeout、transport close ordering を記録する | characterization | hardware | yes | 明示承認後に実行。修正後 run は `connected`、neutral `0x30`、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete`、`manual_close_checkpoint close_complete` まで観測 |
 
 ## 8. 設計メモ
 
@@ -137,8 +137,8 @@
 | `src/swbt/diagnostics.py` | no change | 既存 `DiagnosticsRecorder.record_event()` で close request terminal state を記録 |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | close sequence tests |
 | `tests/unit/test_bumble_transport.py` | modify | Bumble disconnect helper tests |
-| `tests/hardware/test_close_disconnect.py` | add | close ordering characterization test。実行は pending-approval |
-| `docs/hardware-test-log.md` | pending-approval | 実機 close ordering observation |
+| `tests/hardware/test_close_disconnect.py` | add | close ordering characterization test |
+| `docs/hardware-test-log.md` | modify | 実機 close ordering observation |
 | `spec/wip/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` | modify | 実装結果、検証、checklist |
 
 ## 10. 検証
@@ -158,6 +158,7 @@
 | `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a --log-file .pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | 修正前 run。`connected`、trailing neutral、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで到達したが、`transport_close_complete` 欠落で fail |
 | `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix --log-file .pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | 修正後 run。`advertising_start` 後に `host_connection` が来ず、60 秒で `ConnectionTimeoutError` |
 | `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry --log-file .pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | 修正後 rerun。1 回目と同じ pre-connection timeout。connected close ordering は未検証 |
+| `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity --log-file .pytest_cache\hardware\unit_014\20260702-211502-close-disconnect-connectivity\pytest-debug.log --log-file-level=DEBUG -q -s` | pass | 1 passed, 1 warning in 6.80s。`connected`、neutral `0x30`、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete`、`manual_close_checkpoint close_complete` を観測 |
 
 ## 11. 実機実行条件
 
