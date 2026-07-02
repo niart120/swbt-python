@@ -215,7 +215,8 @@ M6 以降で扱う。
 
 - key store ありで再接続できるか
 - key store なしで再 pairing になるか
-- reconnect 失敗時に advertising へ戻るか
+- reconnect 失敗時に failure diagnostics を残して clean close するか
+- reconnect 失敗後に自動 advertising recovery / retry loop を開始しないか
 
 ## 6. 実機検証マトリクス
 

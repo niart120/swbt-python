@@ -26,9 +26,8 @@ def test_switch_close_requests_disconnect_after_neutral(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
-            await pad.open()
             try:
-                await pad.wait_connected(timeout=60.0)
+                await pad.pair(timeout=60.0)
                 _record_probe_event(trace, "manual_close_checkpoint", operation="close_start")
             finally:
                 await pad.close(neutral=True)
@@ -97,14 +96,13 @@ def test_switch_close_after_full_handshake_and_a_exit_for_manual_ui_confirmation
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
-            await pad.open()
             try:
                 _record_probe_event(
                     trace,
                     "manual_close_checkpoint",
                     operation="operator_expected_registration_screen",
                 )
-                await pad.wait_connected(timeout=60.0)
+                await pad.pair(timeout=60.0)
                 await _wait_for_full_handshake(trace_path, timeout_seconds=20.0)
                 _record_probe_event(
                     trace,
