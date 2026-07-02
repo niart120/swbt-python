@@ -38,14 +38,17 @@ def test_async_context_exception_requests_disconnect_and_reraises() -> None:
     class ExpectedError(Exception):
         """Exception raised inside the gamepad context."""
 
+    async def raise_inside_context(transport: FakeHidTransport) -> None:
+        async with SwitchGamepad(transport=transport) as pad:
+            await transport.connect()
+            await pad.wait_connected(timeout=1.0)
+            raise ExpectedError
+
     async def run() -> None:
         transport = FakeHidTransport()
 
         with pytest.raises(ExpectedError):
-            async with SwitchGamepad(transport=transport) as pad:
-                await transport.connect()
-                await pad.wait_connected(timeout=1.0)
-                raise ExpectedError
+            await raise_inside_context(transport)
 
         assert transport.close_count == 1
         assert transport.events == (
@@ -525,9 +528,7 @@ def test_close_request_failure_records_failure_and_closes_transport() -> None:
             "error_type": "RuntimeError",
             "message": "request failed",
         } in events
-        assert not any(
-            event.get("event") == "disconnect_request_terminal" for event in events
-        )
+        assert not any(event.get("event") == "disconnect_request_terminal" for event in events)
         assert transport.close_count == 1
         assert pad.status().connection_state == "closed"
 
