@@ -69,8 +69,8 @@
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
 | Switch HID / report bytes | required | done for neutral bytes / no new bytes | trailing neutral は既存 `0x30` input report を使う。新しい report layout は追加しない |
-| Bumble / transport | required | done for source and unit tests / hardware pending | Bumble 0.0.230 の `disconnect_interrupt_channel()`、`disconnect_control_channel()`、`on_l2cap_channel_close()` を source fact として確認し、`BumbleHidTransport.request_disconnect()` と L2CAP close bridge を unit test で固定した。Switch 実機での remote close ordering は未検証 |
-| OS / driver / adapter | required | observed-partial | Windows / CSR8510 A10 / WinUSB / `usb:0` では `pad.close(neutral=True)` の `transport_close_complete` まで観測済み。remote close request と closed event ordering は未観測 |
+| Bumble / transport | required | done for source and unit tests / hardware observed-partial | Bumble 0.0.230 の `disconnect_interrupt_channel()`、`disconnect_control_channel()`、`on_l2cap_channel_close()` を source fact として確認し、`BumbleHidTransport.request_disconnect()` と L2CAP close bridge を unit test で固定した。2026-07-02 の修正前 hardware run では Switch 実機で L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで観測したが、`transport_close_complete` が欠落した。race 修正後の connected close ordering は、post-fix rerun が pre-connection timeout のため未検証 |
+| OS / driver / adapter | required | observed-partial | Windows / CSR8510 A10 / WinUSB / `usb:0` では過去 unit で `pad.close(neutral=True)` の `transport_close_complete` まで観測済み。unit_014 修正前 run では close request / closed event ordering を観測した。修正後 run は `advertising_start` 後に `host_connection` へ進まず、connected close を再観測できていない |
 
 ### 5.1 監査済み事実 / 仮説
 
@@ -86,6 +86,7 @@
 | swbt-python の close request wait は 250 ms を初期 default とする | implementation fact / inference | `src/swbt/gamepad.py`, swbt-daemon reference | hardware characterization pending |
 | Bumble channel disconnect helper を interrupt、control の順で呼ぶ | implementation fact | `src/swbt/transport/bumble.py`, `tests/unit/test_bumble_transport.py` | unit tested |
 | Bumble channel disconnect helper を呼べば Switch 側 graceful close と同等に扱える | unverified hypothesis | Bumble local source + daemon reference | hardware characterization required |
+| user close 中の disconnected callback が transport final close を先取りすると、`close()` 本体の terminal 記録と callback cleanup の順序が崩れる | implementation fact / hardware observation | `.pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a\close-disconnect.jsonl`, `tests/integration/test_switch_gamepad_fake_transport.py` | reproduced and fixed in `0979bd4` |
 
 ## 6. 振る舞い仕様
 
@@ -108,12 +109,13 @@
 | done | connected `close(neutral=True)` が trailing neutral、report loop stop、disconnect request、transport close の順で進む | new | integration | no | `test_connected_close_requests_disconnect_after_trailing_neutral` |
 | done | `async with` 退出時に close request path が走り、例外は再送出される | regression | integration | no | `test_async_context_exception_requests_disconnect_and_reraises` |
 | done | close request closed event で timeout を cancel し、transport close が一度だけ呼ばれる | new | integration | no | `test_close_waits_for_disconnect_request_closed_event_once`。duplicate callback も固定 |
+| done | user close 中の disconnected callback は final transport close を横取りせず、`close()` 本体が terminal 記録後に close する | regression | integration | no | `test_close_request_disconnected_callback_leaves_final_close_to_user_close`。修正前 hardware run の `transport_close_complete` 欠落を fake で再現 |
 | done | close request timeout でも transport close と final state `closed` へ進む | edge | integration | no | 250 ms default。test では monkeypatch で 1 ms に短縮 |
 | done | close request unavailable / failed でも close が完了し、diagnostics に terminal state が残る | edge | integration | no | `test_close_without_connection_records_disconnect_unavailable`, `test_close_request_failure_records_failure_and_closes_transport` |
 | done | host disconnect callback と user close が競合しても state neutral、report loop stop、transport close が一度だけになる | edge | integration | no | `test_host_disconnect_racing_user_close_closes_once_and_neutralizes_state` |
 | done | Bumble 0.0.230 source に基づき control / interrupt channel disconnect helper の呼び出しを unit test で固定する | new | unit | no | `test_bumble_request_disconnect_calls_interrupt_then_control_helpers`。片側 channel と helper failure も固定 |
 | done | diagnostics trace が requested / closed / timeout / unavailable / failed を分ける | new | integration | no | `disconnect_request` と `disconnect_request_terminal` を fake integration で確認 |
-| pending-approval | hardware run で connected close の neutral、disconnect request or unavailable、closed or timeout、transport close ordering を記録する | characterization | hardware | yes | Switch-facing 動作の明示承認後だけ実行 |
+| observed-partial | hardware run で connected close の neutral、disconnect request or unavailable、closed or timeout、transport close ordering を記録する | characterization | hardware | yes | 明示承認後に実行。修正前 run は neutral、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで観測し、`transport_close_complete` 欠落で fail。修正後 rerun は 2 回とも pre-connection timeout のため connected close 未検証 |
 
 ## 8. 設計メモ
 
@@ -122,7 +124,7 @@
 - daemon reference は BTstack の `hid_device_disconnect(hid_cid)` 由来であり、Bumble では同一 API ではない。事実として再利用するのは「neutral と link close と adapter close を分ける設計」であって、関数名や event 名をそのまま移植しない。
 - Bumble の channel 別 disconnect helper は interrupt、control の順で呼ぶ。片側 channel だけ残っている場合は残存 channel だけ requested として扱う。
 - `disconnecting` 中の新規 input command は `ReportLoop` 停止後なら `ClosedError`、停止前なら既存の state update として扱う。public API として disconnecting 中の command ordering は保証しない。
-- callback 解除 surface は追加していない。close 後 callback が再発火しても `_disconnect_event` と transport close idempotency で吸収する。
+- callback 解除 surface は追加していない。host disconnect では callback 側が transport を閉じる。user close 中に disconnected callback が来た場合は、callback 側では neutral / report loop stop まで行い、final transport close は `close()` 本体に残す。
 
 ## 9. 対象ファイル
 
@@ -146,12 +148,16 @@
 | `uv sync --dev` | pass | Resolved 41 packages、Checked 41 packages |
 | `uv run ruff format --check .` | pass | 39 files already formatted |
 | `uv run ruff check .` | pass | All checks passed |
-| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed after race fix |
 | `uv run pytest tests/unit/test_bumble_transport.py -q` | pass | 22 passed in 0.25s |
-| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 30 passed in 0.47s |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_close_request_disconnected_callback_leaves_final_close_to_user_close -q` | red then pass | 修正前は disconnected callback が fake transport close で停止し timeout。`0979bd4` 後は 1 passed in 0.10s |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 31 passed in 0.51s |
+| `uv run pytest tests\unit\test_bumble_transport.py tests\unit\test_public_api_boundary.py -q` | pass | 27 passed in 0.43s |
 | `uv run pytest tests/unit -q` | pass | 104 passed in 0.56s |
-| `uv run pytest tests/integration -q` | pass | 30 passed in 0.51s |
-| `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\<run-id> --log-file .pytest_cache\hardware\unit_014\<run-id>\pytest-debug.log --log-file-level=DEBUG -q -s` | pending-approval | 明示承認、adapter、command、cleanup plan が揃った場合だけ実行 |
+| `uv run pytest tests/integration -q` | pass | 31 passed in 0.49s |
+| `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a --log-file .pytest_cache\hardware\unit_014\20260702-204228-close-disconnect-no-a\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | 修正前 run。`connected`、trailing neutral、L2CAP close、`disconnect_request status=requested`、`disconnect_request_terminal status=closed` まで到達したが、`transport_close_complete` 欠落で fail |
+| `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix --log-file .pytest_cache\hardware\unit_014\20260702-204804-close-disconnect-no-a-fix\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | 修正後 run。`advertising_start` 後に `host_connection` が来ず、60 秒で `ConnectionTimeoutError` |
+| `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_requests_disconnect_after_neutral -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry --log-file .pytest_cache\hardware\unit_014\20260702-205015-close-disconnect-no-a-retry\pytest-debug.log --log-file-level=DEBUG -q -s` | fail | 修正後 rerun。1 回目と同じ pre-connection timeout。connected close ordering は未検証 |
 
 ## 11. 実機実行条件
 
@@ -180,6 +186,6 @@
 - [x] Bumble 0.0.230 の local source 事実と未検証仮説を分けた
 - [x] TDD item を red / green / refactor で実装した
 - [x] unit / integration gate を実行し、検証欄を結果で更新した
-- [ ] 実機承認、command、artifact、cleanup、結果を記録した
+- [x] 実機承認、command、artifact、cleanup、結果を記録した
 - [x] `unit_007` reconnect 着手前の前提条件として反映した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する
