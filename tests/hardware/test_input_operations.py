@@ -27,8 +27,8 @@ def test_switch_input_operation_sequence_for_manual_reflection(
                 await _wait_for_event(trace_path, "subcommand_reply_tx", timeout_seconds=15.0)
 
                 _record_probe_event(trace, "manual_input_checkpoint", operation="tap_a_start")
-                await pad.tap(Button.A, duration=0.16)
-                await asyncio.sleep(0.25)
+                await pad.tap(Button.A, duration=0.25)
+                await asyncio.sleep(0.5)
                 _record_probe_event(
                     trace,
                     "manual_input_checkpoint",
@@ -47,7 +47,7 @@ def test_switch_input_operation_sequence_for_manual_reflection(
                 await _wait_for_report_counter(
                     pad,
                     report_id=0x30,
-                    minimum_count=hold_start_count + 3,
+                    minimum_count=hold_start_count + 30,
                     timeout_seconds=2.0,
                 )
                 _record_probe_event(
@@ -64,7 +64,7 @@ def test_switch_input_operation_sequence_for_manual_reflection(
                 await _wait_for_report_counter(
                     pad,
                     report_id=0x30,
-                    minimum_count=neutral_start_count + 1,
+                    minimum_count=neutral_start_count + 3,
                     timeout_seconds=2.0,
                 )
                 _record_probe_event(
