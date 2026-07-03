@@ -22,6 +22,13 @@
 - Reconnect key store run: 2026-07-03 に `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で unit_007 reconnect keystore characterization を実行した。起動条件記録なしの初回 run は active reconnect の条件としては inconclusive。起動条件を trace に残す split run では、初回 pairing を controller search / change grip order screen で行い、`key_store_update status=succeeded` を記録した。2本目の active reconnect は HOME / 通常画面条件で保存済み peer 1 件を選択した。修正前は `Device.connect(..., BR_EDR)` 後に HID control の `L2CAP_CONNECTION_REQUEST` PSM `0x0011` を先に送信し、Switch 側 reason 5 `AUTHENTICATION_FAILURE_ERROR` で切断された。`Connection.authenticate()` と `Connection.encrypt(True)` を HID L2CAP 前に明示した修正後は、`connection_authentication authenticated=true`、`connection_encryption_change encryption=1`、HID control / interrupt L2CAP open、`connected`、`active_reconnect_result status=connected` を記録した。この active reconnect trace では `advertising_start`、`classic_pairing`、`key_store_update` は出ていない。3本目の incoming run は controller search / change grip order screen で `incoming_connection route=incoming` を記録し、active reconnect event を出さなかった。ただし `classic_pairing`、`link_key_available`、`key_store_update status=succeeded` も出たため、pairing-free incoming bond reuse とは扱わない。
 - Packaging CLI pair probe: 2026-07-03 に unit_008 の `swbt-probe pair` を承認済み範囲で実行した。初回は `usb:0` を開き、Classic HID Device 初期化、SDP 登録、HID advertising、trace 保存まで到達したが、30 秒間 `host_connection` が来ず `ConnectionTimeoutError` で終了した。ユーザが Switch 側を接続待ちにして再実行した retry では、`connection_request`、`host_connection`、`classic_pairing`、HID control / interrupt L2CAP open、`connected`、key store write、close cleanup まで到達した。retry trace は one neutral `0x30` report と `transport_close_complete` を記録し、non-neutral input は送っていない。
 - Unit 019 follow-up smoke: 2026-07-03 に `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で `test_switch_pairing_l2cap_records_diagnostics` を実行した。Switch を接続待ち画面にした状態で、`connection_request`、`host_connection`、`classic_pairing`、`link_key_available`、`key_store_update status=succeeded`、HID control / interrupt L2CAP open、`connected`、one neutral `0x30`、disconnect request、`transport_close_complete` を記録した。non-neutral input は送っていない。
+- Unit 013 input semantics setup: 2026-07-04 に Switch 2 / firmware 22.1.0 / `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で fresh key store setup を実行した。Switch を controller search / change grip order screen に置き、`input-semantics-key-store.json` を作り直した。trace は `key_store_exists=false`、`active_reconnect_result status=no_bond`、`connect_pairing_fallback route=pairing`、`classic_pairing`、`link_key_available`、`key_store_update status=succeeded`、HID control / interrupt L2CAP open、`connected`、full observed subcommand handshake、`manual_input_checkpoint operation=handshake_complete`、close cleanup を記録した。non-neutral input は送っていない。これは unit_013 の後続 active reconnect 入力検証に使う前提 artifact であり、button / D-pad / stick の semantic reflection は後続 run で実行した。
+- Unit 013 button check trace: 2026-07-04 に同じ artifact dir の key store を使い、Switch を「ボタンの動作チェック」選択画面直前で待機させて active reconnect button check run を実行した。trace は `key_store_exists=true`、保存済み peer 1 件、`active_reconnect_attempt`、`connection_authentication authenticated=true`、`connection_encryption_change encryption=1`、HID control / interrupt L2CAP open、`active_reconnect_result status=connected`、full observed subcommand handshake、A entry checkpoint、L+R hold checkpoint、neutral checkpoint、`transport_close_complete` を記録した。active reconnect trace には `advertising_start`、`classic_pairing`、`key_store_update` は出ていない。初回のユーザ目視では L ボタンだけが押されているように見え、L+R 同時押し表示は確認できなかった。
+- Unit 013 button split diagnosis: 2026-07-04 に同じ button check screen 条件で R-only、L-only、L+R を別 checkpoint として送る再実験を実行した。pytest は pass。trace は active reconnect、full observed handshake、A entry、`hold_r_only`、`hold_l_only`、`hold_lr_together`、neutral、`transport_close_complete` を記録した。debug log から抽出した `0x30` input report の button bytes は R-only `400000` が 30 件、L-only `000040` が 29 件、L+R `400040` が 30 件だった。ユーザは、Switch のボタンチェック UI は同時押しに対応しておらず片方だけしか UI に反映しないらしい、ひとまず pass 扱いでよい、と判断した。unit_013 のボタン側は、この構成で hardware-pass とする。
+- Unit 013 D-pad button check: 2026-07-04 に同じ button check screen 条件で D-pad up、right、down、left を別 checkpoint として送る実験を実行した。pytest は pass。trace は active reconnect、full observed handshake、A entry、`hold_dpad_up`、`hold_dpad_right`、`hold_dpad_down`、`hold_dpad_left`、各方向後の neutral、`transport_close_complete` を記録した。trace 上の expected button bytes は up `000002`、right `000004`、down `000001`、left `000008` だった。`advertising_start`、`classic_pairing`、`key_store_update`、`error` は出ていない。ユーザは UI 側の反映も確認したため、D-pad 側は hardware-pass とする。
+- Unit 013 left stick trace: 2026-07-04 に同じ artifact dir の key store を使い、Switch を「スティックの補正」選択画面直前で待機させて active reconnect left stick run を実行した。pytest は pass。trace は active reconnect、full observed handshake、A entry、left stick hold、16-step circle、neutral、`transport_close_complete` を記録した。`advertising_start`、`classic_pairing`、`key_store_update`、`error` は出ていない。ユーザは left stick の目視確認ができたと報告した。ただし、回転が速すぎたか画面遷移を考慮できていなかったため、直ぐに終わってしまったようにも見える、という留保がある。
+- Unit 013 right stick trace: 2026-07-04 に同じ artifact dir の key store を使い、Switch を「スティックの補正」選択画面直前で待機させて active reconnect right stick run を実行した。pytest は pass。trace は active reconnect、full observed handshake、A entry、right stick hold、16-step circle、neutral、`transport_close_complete` を記録した。`advertising_start`、`classic_pairing`、`key_store_update`、`error` は出ていない。ユーザは目視完了と報告したが、回転が速すぎて見えなかったとも報告したため、right stick semantic reflection は inconclusive とする。後続再実験では A 後の settle、hold、circle を長くする。
+- Unit 013 right stick slow rerun: 2026-07-04 に同じ条件で right stick 再実験を実行した。pytest は pass。trace は active reconnect、full observed handshake、A entry 後 `settle_seconds=1.5`、right stick hold `hold_report_count=120`、32-step circle `step_seconds=0.15`、neutral、`transport_close_complete` を記録した。`advertising_start`、`classic_pairing`、`key_store_update`、`error` は出ていない。ユーザは right stick の目視確認ができたと報告した。unit_013 の stick 側は、left stick の目視確認と right stick slow rerun の目視確認により hardware-pass とする。
 
 ## Run Entry Template
 
@@ -54,6 +61,152 @@
 | macOS | 未検証 | 未検証 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期検証対象外 |
 
 ## Run Entries
+
+### 2026-07-04: unit_013 fresh key store setup for active reconnect input checks
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `work/unit-013-input-semantics-active-reconnect` at `5ed0e45` with uncommitted unit_013 test / spec updates
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device. Previous inventory associated `usb:0` with USB VID:PID `0a12:0001`
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: Switch 2
+- Switch firmware: 22.1.0
+- report period: default 8000 us. Trace recorded periodic neutral `0x30` reports, `0x21` subcommand replies, and a close-time neutral `0x30`. No non-neutral input operation was sent.
+- command / test: `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_semantics_pairing_writes_fresh_key_store -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect -q -s`
+- approval: user approved the first unit_013 hardware run with `OK。まずは1本目から行こう。`. Scope used here was adapter `usb:0`, USB Bluetooth dongle open, Classic HID Device initialization, HID advertising, fresh pairing from the controller search / change grip order screen, key store write, full observed handshake wait, trace save, neutral close cleanup, and adapter release. Scope excluded Button A, L+R, stick input, active reconnect input reflection, extra retry loops, and persistent advertising.
+- result: pass, `1 passed in 9.85s`. Trace recorded `key_store_exists=false`, `bonded_peers_discovered peer_count=0`, `active_reconnect_result status=no_bond`, `connect_pairing_fallback route=pairing`, `advertising_start`, `connection_request`, `host_connection`, `classic_pairing`, `link_key_available`, `key_store_update status=succeeded`, `connection_encryption_change encryption=1`, HID control / interrupt `l2cap_channel_open`, `connected`, `incoming_connection route=incoming`, `fresh_pairing_connect_result status=connected`, and full observed subcommand handshake through `manual_input_checkpoint operation=handshake_complete`.
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\input-semantics-fresh-pairing.jsonl`
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\input-semantics-key-store.json` exists. The file was not opened for logging because it contains link key material.
+- cleanup: trace recorded close-time neutral `0x30`, HID interrupt / control `l2cap_channel_close`, `disconnect_request status=requested`, `disconnect_request_terminal status=closed`, `disconnected`, and `transport_close_complete`.
+- notes: An earlier same-scope attempt created the key store but failed the pytest assertion because the test closed immediately after `key_store_update` while the first Switch subcommand reply was in flight. The test was adjusted to wait for the full observed handshake before closing, then rerun passed. This setup run is prerequisite evidence for unit_013 active reconnect input checks only; it does not exercise Button A, L+R, or stick semantic reflection.
+
+### 2026-07-04: unit_013 active reconnect button check trace pass
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `work/unit-013-input-semantics-active-reconnect` at `5ed0e45` with uncommitted unit_013 test / spec / hardware-log updates
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device. Previous inventory associated `usb:0` with USB VID:PID `0a12:0001`
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: Switch 2
+- Switch firmware: 22.1.0
+- report period: default 8000 us. Trace recorded periodic `0x30`, input `0x30`, subcommand reply `0x21`, and close-time input `0x30` reports. Button A, L+R, and neutral were sent by the test. The trace does not automatically prove Switch UI reflection.
+- command / test: `uv run pytest tests\hardware\test_input_operations.py::test_switch_button_check_after_active_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect -q -s`
+- approval: user approved the second unit_013 hardware run with `ボタンの動作チェック選択画面で待機させている。2本目行こうか`. Scope used here was adapter `usb:0`, USB Bluetooth dongle open, Classic HID Device initialization, active reconnect from the existing `input-semantics-key-store.json`, HID control / interrupt channel open, full observed handshake wait, Button A to enter the button check screen, L+R hold, neutral, trace save, close cleanup, and adapter release. Scope excluded stick input, new pairing, key store rewrite, extra retry loops, and persistent advertising.
+- result: superseded by split diagnosis, pytest `1 passed in 9.37s`. Trace recorded `key_store_exists=true`, `bonded_peers_discovered peer_count=1 selection=selected`, `active_reconnect_attempt`, `host_connection`, `connection_authentication authenticated=true`, `connection_encryption_change encryption=1`, HID control / interrupt `l2cap_channel_open`, `connected`, `active_reconnect_result status=connected`, full observed subcommand handshake, `button_check_enter_with_a_complete`, `hold_lr_reports_sent`, and `button_check_neutral_complete`. Trace did not record `advertising_start`, `classic_pairing`, `key_store_update`, or `error`. User observed that only L looked pressed on the Switch button check screen; L+R simultaneous reflection was not confirmed in this first button run.
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\active-reconnect-button-check.jsonl`
+- cleanup: trace recorded `disconnect_request status=requested`, `disconnect_request_terminal status=timeout`, later `disconnected reason=0`, and `transport_close_complete`. No cleanup error was recorded.
+- notes: This run proves the active reconnect route and on-wire input checkpoints. It did not by itself prove L+R semantic reflection. The later split diagnosis captured raw outgoing HID bytes for R-only, L-only, and L+R and supersedes this run for the button result.
+
+### 2026-07-04: unit_013 active reconnect button split diagnosis
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `work/unit-013-input-semantics-active-reconnect` at `5ed0e45` with uncommitted unit_013 test / spec / hardware-log updates
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device. Previous inventory associated `usb:0` with USB VID:PID `0a12:0001`
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: Switch 2
+- Switch firmware: 22.1.0
+- report period: default 8000 us. Trace recorded periodic `0x30`, input `0x30`, subcommand reply `0x21`, and close-time input `0x30` reports. Button A, R-only, L-only, L+R, and neutral were sent by the test. The trace does not automatically prove Switch UI reflection.
+- command / test: `uv run pytest tests\hardware\test_input_operations.py::test_switch_button_check_separate_l_r_after_active_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect --log-file .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\button-lr-split-pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved the repeat experiment with `再実験してみよう。待機済みなのでこのまま始めてくれ`. Scope used here was adapter `usb:0`, USB Bluetooth dongle open, Classic HID Device initialization, active reconnect from the existing `input-semantics-key-store.json`, HID control / interrupt channel open, full observed handshake wait, Button A to enter the button check screen, R-only hold, L-only hold, L+R hold, neutral between holds, trace save, debug log save, close cleanup, and adapter release. Scope excluded stick input, new pairing, key store rewrite, extra retry loops, and persistent advertising.
+- result: hardware-pass for unit_013 button check, pytest `1 passed in 10.96s`. Trace recorded `key_store_exists=true`, `bonded_peers_discovered peer_count=1 selection=selected`, `active_reconnect_attempt`, `host_connection`, `connection_authentication authenticated=true`, `connection_encryption_change encryption=1`, HID control / interrupt `l2cap_channel_open`, `connected`, `active_reconnect_result status=connected`, full observed subcommand handshake, `button_check_lr_split_enter_with_a_complete`, `hold_r_only_reports_sent expected_button_bytes=400000`, `hold_l_only_reports_sent expected_button_bytes=000040`, `hold_lr_together_reports_sent expected_button_bytes=400040`, and `button_check_lr_split_neutral_complete`. Trace did not record `advertising_start`, `classic_pairing`, `key_store_update`, or `error`. User judged that the Switch button check UI likely does not display simultaneous button presses and shows only one side, so this is accepted as pass for the button portion.
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\active-reconnect-button-check-lr-split.jsonl`
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\button-lr-split-pytest-debug.log`
+- cleanup: trace recorded `disconnect_request status=requested`, `disconnect_request_terminal status=timeout`, later `disconnected reason=0`, and `transport_close_complete`. No cleanup error was recorded.
+- notes: Debug log extraction of outgoing `0x30` input reports showed R-only button bytes `400000` 30 times, L-only `000040` 29 times, and L+R `400040` 30 times. This proves that the R bit was sent on-wire in this run. The remaining UI behavior is treated as a limitation of the Switch button check screen rather than a swbt-python input failure for this unit.
+
+### 2026-07-04: unit_013 active reconnect D-pad button check
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `work/unit-013-input-semantics-active-reconnect` at `5ed0e45` with uncommitted unit_013 test / spec / hardware-log updates
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device. Previous inventory associated `usb:0` with USB VID:PID `0a12:0001`
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: Switch 2
+- Switch firmware: 22.1.0
+- report period: default 8000 us. Trace recorded periodic `0x30`, input `0x30`, subcommand reply `0x21`, and close-time input `0x30` reports. Button A, D-pad up, D-pad right, D-pad down, D-pad left, and neutral were sent by the test.
+- command / test: `uv run pytest tests\hardware\test_input_operations.py::test_switch_button_check_dpad_after_active_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect --log-file .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\button-dpad-pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved the D-pad run with `待機中。実験を始めてくれ`. Scope used here was adapter `usb:0`, USB Bluetooth dongle open, Classic HID Device initialization, active reconnect from the existing `input-semantics-key-store.json`, HID control / interrupt channel open, full observed handshake wait, Button A to enter the button check screen, D-pad up / right / down / left holds, neutral between holds, trace save, debug log save, close cleanup, and adapter release. Scope excluded new pairing, key store rewrite, stick input, extra retry loops, and persistent advertising.
+- result: hardware-pass. Pytest reported `1 passed in 11.71s`. Trace recorded `key_store_exists=true`, `bonded_peers_discovered peer_count=1 selection=selected`, `active_reconnect_attempt`, `host_connection`, `connection_authentication authenticated=true`, `connection_encryption_change encryption=1`, HID control / interrupt `l2cap_channel_open`, `connected`, `active_reconnect_result status=connected`, full observed subcommand handshake, `button_check_dpad_enter_with_a_complete`, `hold_dpad_up_reports_sent expected_button_bytes=000002`, `hold_dpad_right_reports_sent expected_button_bytes=000004`, `hold_dpad_down_reports_sent expected_button_bytes=000001`, `hold_dpad_left_reports_sent expected_button_bytes=000008`, and `button_check_after_dpad_left_neutral_complete`. Trace did not record `advertising_start`, `classic_pairing`, `key_store_update`, or `error`. User reported that UI reflection was also confirmed.
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\active-reconnect-button-check-dpad.jsonl`
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\button-dpad-pytest-debug.log`
+- cleanup: trace recorded `disconnect_request status=requested`, `disconnect_request_terminal status=timeout`, later `disconnected reason=0`, and `transport_close_complete`. No cleanup error was recorded.
+- notes: This run proves the active reconnect route, D-pad direction checkpoints, and human-visible D-pad reflection on the Switch button check screen for this hardware condition.
+
+### 2026-07-04: unit_013 active reconnect left stick trace
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `work/unit-013-input-semantics-active-reconnect` at `5ed0e45` with uncommitted unit_013 test / spec / hardware-log updates
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device. Previous inventory associated `usb:0` with USB VID:PID `0a12:0001`
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: Switch 2
+- Switch firmware: 22.1.0
+- report period: default 8000 us. Trace recorded periodic `0x30`, input `0x30`, subcommand reply `0x21`, and close-time input `0x30` reports. Button A, left stick hold, 16-step left stick circle, and neutral were sent by the test. The trace does not automatically prove Switch UI reflection.
+- command / test: `uv run pytest 'tests\hardware\test_input_operations.py::test_switch_stick_calibration_after_active_reconnect_for_manual_reflection[left]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect --log-file .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\left-stick-pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved continuing verification with `OK。switchセットアップ済み。検証を進めてくれ`. Scope used here was adapter `usb:0`, USB Bluetooth dongle open, Classic HID Device initialization, active reconnect from the existing `input-semantics-key-store.json`, HID control / interrupt channel open, full observed handshake wait, Button A to enter the stick calibration screen, left stick hold, left stick circle, neutral, trace save, debug log save, close cleanup, and adapter release. Scope excluded right stick input, new pairing, key store rewrite, extra retry loops, and persistent advertising.
+- result: hardware-pass with observation caveat. Pytest reported `1 passed in 10.64s`. Trace recorded `key_store_exists=true`, `bonded_peers_discovered peer_count=1 selection=selected`, `active_reconnect_attempt`, `host_connection`, `connection_authentication authenticated=true`, `connection_encryption_change encryption=1`, HID control / interrupt `l2cap_channel_open`, `connected`, `active_reconnect_result status=connected`, full observed subcommand handshake, `left_stick_calibration_enter_with_a_complete`, `left_stick_hold_reports_sent`, `left_stick_circle_complete steps=16`, and `left_stick_neutral_complete`. Trace did not record `advertising_start`, `classic_pairing`, `key_store_update`, or `error`. User reported that visual confirmation was possible, with the caveat that the circle may have ended quickly because the rotation was fast or screen transition timing was not fully accounted for.
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\active-reconnect-left-stick.jsonl`
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\left-stick-pytest-debug.log`
+- cleanup: trace recorded `disconnect_request status=requested`, `disconnect_request_terminal status=timeout`, later `disconnected reason=0`, and `transport_close_complete`. No cleanup error was recorded.
+- notes: This run proves the active reconnect route and left stick input checkpoints. For a more inspectable operator experience, a later test could hold after entering the calibration screen for longer and slow down the circle input; this unit treats the left stick result as pass because user-visible reflection was observed.
+
+### 2026-07-04: unit_013 active reconnect right stick trace
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `work/unit-013-input-semantics-active-reconnect` at `5ed0e45` with uncommitted unit_013 test / spec / hardware-log updates
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device. Previous inventory associated `usb:0` with USB VID:PID `0a12:0001`
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: Switch 2
+- Switch firmware: 22.1.0
+- report period: default 8000 us. Trace recorded periodic `0x30`, input `0x30`, subcommand reply `0x21`, and close-time input `0x30` reports. Button A, right stick hold, 16-step right stick circle, and neutral were sent by the test. The trace does not automatically prove Switch UI reflection.
+- command / test: `uv run pytest 'tests\hardware\test_input_operations.py::test_switch_stick_calibration_after_active_reconnect_for_manual_reflection[right]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect --log-file .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\right-stick-pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user requested the right side run with `right側でも検証をやろう`. Scope used here was adapter `usb:0`, USB Bluetooth dongle open, Classic HID Device initialization, active reconnect from the existing `input-semantics-key-store.json`, HID control / interrupt channel open, full observed handshake wait, Button A to enter the stick calibration screen, right stick hold, right stick circle, neutral, trace save, debug log save, close cleanup, and adapter release. Scope excluded new pairing, key store rewrite, extra retry loops, and persistent advertising.
+- result: trace-pass, visual inconclusive. Pytest reported `1 passed in 10.62s`. Trace recorded `key_store_exists=true`, `bonded_peers_discovered peer_count=1 selection=selected`, `active_reconnect_attempt`, `host_connection`, `connection_authentication authenticated=true`, `connection_encryption_change encryption=1`, HID control / interrupt `l2cap_channel_open`, `connected`, `active_reconnect_result status=connected`, full observed subcommand handshake, `right_stick_calibration_enter_with_a_complete`, `right_stick_hold_reports_sent`, `right_stick_circle_complete steps=16`, and `right_stick_neutral_complete`. Trace did not record `advertising_start`, `classic_pairing`, `key_store_update`, or `error`. User reported that visual observation was completed, but the circle was too fast to see clearly.
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\active-reconnect-right-stick-fast.jsonl`
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\right-stick-pytest-debug.log`
+- cleanup: trace recorded `disconnect_request status=requested`, `disconnect_request_terminal status=timeout`, later `disconnected reason=0`, and `transport_close_complete`. No cleanup error was recorded.
+- notes: This run proves the active reconnect route and right stick input checkpoints. Because the human-visible right stick motion was not inspectable enough, this run is not a semantic pass. The follow-up test timing was changed to wait 1.5 seconds after A, hold for 120 reports, and send a 32-step circle at 0.15 seconds per step.
+
+### 2026-07-04: unit_013 active reconnect right stick slow rerun
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `work/unit-013-input-semantics-active-reconnect` at `5ed0e45` with uncommitted unit_013 test / spec / hardware-log updates
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device. Previous inventory associated `usb:0` with USB VID:PID `0a12:0001`
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: Switch 2
+- Switch firmware: 22.1.0
+- report period: default 8000 us. Trace recorded periodic `0x30`, input `0x30`, subcommand reply `0x21`, and close-time input `0x30` reports. Button A, right stick hold, 32-step right stick circle, and neutral were sent by the test. The trace does not automatically prove Switch UI reflection.
+- command / test: `uv run pytest 'tests\hardware\test_input_operations.py::test_switch_stick_calibration_after_active_reconnect_for_manual_reflection[right]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect --log-file .pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\right-stick-slow-pytest-debug.log --log-file-level=DEBUG -q -s`
+- approval: user approved the rerun with `再実験もやろう。準備済みなので片方のスティックで実施する形で確認しようか。`. Scope used here was adapter `usb:0`, USB Bluetooth dongle open, Classic HID Device initialization, active reconnect from the existing `input-semantics-key-store.json`, HID control / interrupt channel open, full observed handshake wait, Button A to enter the stick calibration screen, right stick hold, right stick circle, neutral, trace save, debug log save, close cleanup, and adapter release. Scope excluded new pairing, key store rewrite, extra retry loops, and persistent advertising.
+- result: hardware-pass. Pytest reported `1 passed in 16.77s`. Trace recorded `key_store_exists=true`, `bonded_peers_discovered peer_count=1 selection=selected`, `active_reconnect_attempt`, `host_connection`, `connection_authentication authenticated=true`, `connection_encryption_change encryption=1`, HID control / interrupt `l2cap_channel_open`, `connected`, `active_reconnect_result status=connected`, full observed subcommand handshake, `right_stick_calibration_enter_with_a_complete settle_seconds=1.5`, `right_stick_hold_reports_sent hold_report_count=120`, `right_stick_circle_complete steps=32 step_seconds=0.15`, and `right_stick_neutral_complete`. Trace did not record `advertising_start`, `classic_pairing`, `key_store_update`, or `error`. User reported that visual confirmation was possible.
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\active-reconnect-right-stick.jsonl`
+- artifact: `.pytest_cache\hardware\unit_013\20260704-input-semantics-active-reconnect\right-stick-slow-pytest-debug.log`
+- cleanup: trace recorded `disconnect_request status=requested`, `disconnect_request_terminal status=timeout`, later `disconnected reason=0`, and `transport_close_complete`. No cleanup error was recorded.
+- notes: This run proves the active reconnect route and slower right stick input checkpoints. The slower timing was sufficient for human-visible confirmation.
 
 ### 2026-07-03: unit_019 pairing L2CAP smoke after transport contract cleanup
 
