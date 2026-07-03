@@ -3,17 +3,30 @@
 from __future__ import annotations
 
 import asyncio
-import copy
-import pathlib
 import platform
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
+from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profile import ProControllerProfile
+from swbt.transport._bumble_acl import drain_bumble_acl_queue
+from swbt.transport._bumble_hidp import (
+    HID_GET_SET_SUCCESS,
+    HID_GET_SET_UNSUPPORTED_REQUEST,
+    HID_OUTPUT_REPORT_TYPE,
+    decode_hidp_output_report,
+    format_psm,
+    hid_channel_name,
+)
+from swbt.transport._bumble_key_store import _CurrentPreviousJsonKeyStore, _DiagnosticKeyStore
+from swbt.transport._bumble_lifecycle import (
+    register_connection_diagnostics,
+    register_connection_request_bridge,
+    register_l2cap_lifecycle_bridge,
+)
+from swbt.transport._bumble_sdp import build_hid_service_records
 from swbt.transport.base import BondedPeer, DisconnectRequestResult
 
 if TYPE_CHECKING:
@@ -27,43 +40,10 @@ if TYPE_CHECKING:
         InterruptDataCallback,
     )
 
-_HID_SERVICE_RECORD_HANDLE = 0x00010001
-_HID_REPORT_DESCRIPTOR_TYPE = 0x22
-_HID_OUTPUT_REPORT_TYPE = 0x02
-_HIDP_DATA_MESSAGE_TYPE = 0x0A
-_HID_GET_SET_SUCCESS = 0xFF
-_HID_GET_SET_UNSUPPORTED_REQUEST = 0x02
-_HID_CONTROL_PSM = 0x0011
-_HID_INTERRUPT_PSM = 0x0013
 _REFERENCE_LINK_POLICY_ENABLE_ROLE_SWITCH = 0x0001
 _REFERENCE_LINK_POLICY_ENABLE_SNIFF_MODE = 0x0004
 _DEFAULT_DEVICE_NAME = "Pro Controller"
 _REFERENCE_CLASS_OF_DEVICE = 0x002508
-
-_SDP_HID_PARSER_VERSION_ATTRIBUTE_ID = 0x0201
-_SDP_HID_DEVICE_SUBCLASS_ATTRIBUTE_ID = 0x0202
-_SDP_HID_COUNTRY_CODE_ATTRIBUTE_ID = 0x0203
-_SDP_HID_VIRTUAL_CABLE_ATTRIBUTE_ID = 0x0204
-_SDP_HID_RECONNECT_INITIATE_ATTRIBUTE_ID = 0x0205
-_SDP_HID_DESCRIPTOR_LIST_ATTRIBUTE_ID = 0x0206
-_SDP_HID_LANG_ID_BASE_LIST_ATTRIBUTE_ID = 0x0207
-_SDP_HID_REMOTE_WAKE_ATTRIBUTE_ID = 0x020A
-_SDP_HID_PROFILE_VERSION_ATTRIBUTE_ID = 0x020B
-_SDP_HID_SUPERVISION_TIMEOUT_ATTRIBUTE_ID = 0x020C
-_SDP_HID_NORMALLY_CONNECTABLE_ATTRIBUTE_ID = 0x020D
-_SDP_HID_BOOT_DEVICE_ATTRIBUTE_ID = 0x020E
-_SDP_HIDSSR_HOST_MAX_LATENCY_ATTRIBUTE_ID = 0x020F
-_SDP_HIDSSR_HOST_MIN_TIMEOUT_ATTRIBUTE_ID = 0x0210
-_SDP_PRIMARY_LANGUAGE_SERVICE_NAME_ATTRIBUTE_ID = 0x0100
-
-_LANGUAGE_BASE_EN_US = 0x0100
-_SDP_LANGUAGE_CODE_ENGLISH = 0x656E
-_SDP_CHARACTER_ENCODING_UTF8 = 0x006A
-_LANGUAGE_ID_EN_US = 0x0409
-_REFERENCE_HID_COUNTRY_CODE = 0x21
-_REFERENCE_HID_SUPERVISION_TIMEOUT = 0x0C80
-_REFERENCE_HIDSSR_HOST_MAX_LATENCY = 0xFFFF
-_REFERENCE_HIDSSR_HOST_MIN_TIMEOUT = 0xFFFF
 
 
 @dataclass(frozen=True)
@@ -133,33 +113,6 @@ class _BumbleKeyStoreRuntime(Protocol):
         """Return all key entries keyed by peer address."""
 
 
-class _BumbleJsonKeyStoreRuntime(Protocol):
-    namespace: str
-
-    async def load(
-        self,
-    ) -> tuple[dict[str, dict[str, dict[str, object]]], dict[str, dict[str, object]]]:
-        """Load the full JSON DB and this store's current key map."""
-
-    async def save(self, db: dict[str, dict[str, dict[str, object]]]) -> None:
-        """Save the full JSON DB."""
-
-    async def get(self, name: str) -> object | None:
-        """Return one key entry."""
-
-    async def get_all(self) -> list[tuple[str, object]]:
-        """Return all current key entries."""
-
-    async def delete(self, name: str) -> None:
-        """Delete one current key entry."""
-
-    async def delete_all(self) -> None:
-        """Delete all current key entries."""
-
-    async def get_resolving_keys(self) -> object:
-        """Return LE resolving keys for Bumble internals."""
-
-
 class _BumbleHidRuntime(Protocol):
     EVENT_INTERRUPT_DATA: str
     EVENT_CONTROL_DATA: str
@@ -198,160 +151,6 @@ class _BumbleRuntime:
     hid_descriptor_size: int
     classic_link_policy_settings: int | None = None
     advertising_started: bool = False
-
-
-class _CurrentPreviousJsonKeyStore:
-    """Bumble-compatible JSON key store with one previous generation."""
-
-    _PREVIOUS_NAMESPACE_PREFIX = "swbt.previous::"
-
-    def __init__(
-        self,
-        *,
-        filename: str | pathlib.Path,
-        namespace: str | None = None,
-        device: object | None = None,
-    ) -> None:
-        if namespace is None and device is None:
-            msg = "namespace or device is required"
-            raise ValueError(msg)
-        self._filename = pathlib.Path(filename)
-        self._namespace = namespace
-        self._device = device
-        self.last_update_previous_saved = False
-
-    @classmethod
-    def from_device(
-        cls,
-        device: object,
-        *,
-        filename: str | pathlib.Path,
-    ) -> _CurrentPreviousJsonKeyStore:
-        """Create a store whose namespace follows the Bumble device address."""
-        return cls(filename=filename, device=device)
-
-    async def update(self, name: str, keys: object) -> None:
-        """Write current keys and keep the overwritten current value as previous."""
-        current_store = self._current_store()
-        db, current_key_map = await current_store.load()
-        previous_namespace = self._previous_namespace(current_store)
-        previous_key_map = copy.deepcopy(current_key_map)
-        self.last_update_previous_saved = bool(previous_key_map)
-        if previous_key_map:
-            db[previous_namespace] = previous_key_map
-        else:
-            db.pop(previous_namespace, None)
-        current_key_map.clear()
-        current_key_map[name] = cast("Any", keys).to_dict()
-        await current_store.save(db)
-
-    async def get(self, name: str) -> object | None:
-        """Return one current key entry."""
-        for peer_address, peer_keys in await self.get_all():
-            if peer_address == name:
-                return peer_keys
-        return None
-
-    async def get_all(self) -> list[tuple[str, object]]:
-        """Return current key entries only."""
-        entries = await self._current_store().get_all()
-        if len(entries) > 1:
-            msg = "key store contains multiple current peers"
-            raise InvalidKeyStoreError(msg)
-        return entries
-
-    async def delete(self, name: str) -> None:
-        """Delete one current key entry."""
-        await self._current_store().delete(name)
-
-    async def delete_all(self) -> None:
-        """Delete all current key entries."""
-        await self._current_store().delete_all()
-
-    async def get_resolving_keys(self) -> object:
-        """Return current LE resolving keys for Bumble internals."""
-        return await self._current_store().get_resolving_keys()
-
-    def _current_store(self) -> _BumbleJsonKeyStoreRuntime:
-        from bumble.keys import JsonKeyStore  # noqa: PLC0415
-
-        if self._device is not None:
-            return cast(
-                "_BumbleJsonKeyStoreRuntime",
-                JsonKeyStore.from_device(
-                    cast("Any", self._device),
-                    filename=str(self._filename),
-                ),
-            )
-        return cast(
-            "_BumbleJsonKeyStoreRuntime",
-            JsonKeyStore(self._namespace, str(self._filename)),
-        )
-
-    def _previous_namespace(self, current_store: object) -> str:
-        return f"{self._PREVIOUS_NAMESPACE_PREFIX}{cast('Any', current_store).namespace}"
-
-
-class _DiagnosticKeyStore:
-    """Key store wrapper that records write outcome without logging key material."""
-
-    def __init__(self, key_store: object, diagnostics: DiagnosticsRecorder) -> None:
-        self._key_store = key_store
-        self._diagnostics = diagnostics
-
-    async def update(self, name: str, keys: object) -> None:
-        """Record key-store write success or failure."""
-        try:
-            await cast("Any", self._key_store).update(name, keys)
-        except Exception as error:
-            fields = self._generation_fields()
-            self._diagnostics.record_event(
-                "key_store_update",
-                **fields,
-                error_type=type(error).__name__,
-                message=str(error),
-                peer_address=name,
-                status="failed",
-            )
-            raise
-        fields = self._generation_fields()
-        self._diagnostics.record_event(
-            "key_store_update",
-            **fields,
-            peer_address=name,
-            status="succeeded",
-        )
-
-    async def get(self, name: str) -> object | None:
-        """Delegate key lookup."""
-        return await cast("Any", self._key_store).get(name)
-
-    async def get_all(self) -> list[tuple[str, object]]:
-        """Delegate full key listing."""
-        return await cast("Any", self._key_store).get_all()
-
-    async def delete(self, name: str) -> None:
-        """Delegate key deletion."""
-        await cast("Any", self._key_store).delete(name)
-
-    async def delete_all(self) -> None:
-        """Delegate all-key deletion."""
-        await cast("Any", self._key_store).delete_all()
-
-    async def get_resolving_keys(self) -> object:
-        """Delegate LE resolving-key lookup for Bumble internals."""
-        return await cast("Any", self._key_store).get_resolving_keys()
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._key_store, name)
-
-    def _generation_fields(self) -> dict[str, object]:
-        if not isinstance(self._key_store, _CurrentPreviousJsonKeyStore):
-            return {}
-        return {
-            "generation": "current",
-            "previous_saved": self._key_store.last_update_previous_saved,
-        }
 
 
 _InitializeDevice = Callable[[_BumbleHandle], Awaitable[_BumbleRuntime]]
@@ -566,7 +365,7 @@ class BumbleHidTransport:
             msg = "Bumble interrupt channel is not connected"
             raise ClosedError(msg)
         self._runtime.hid_device.send_data(payload)
-        await _drain_bumble_acl_queue(self._runtime.hid_device.l2cap_intr_channel)
+        await drain_bumble_acl_queue(self._runtime.hid_device.l2cap_intr_channel)
 
     async def send_control(self, payload: bytes) -> None:
         """Send one control report."""
@@ -574,7 +373,7 @@ class BumbleHidTransport:
         if self._runtime is None or self._runtime.hid_device.l2cap_ctrl_channel is None:
             msg = "Bumble control channel is not connected"
             raise ClosedError(msg)
-        self._runtime.hid_device.send_control_data(_HID_OUTPUT_REPORT_TYPE, payload)
+        self._runtime.hid_device.send_control_data(HID_OUTPUT_REPORT_TYPE, payload)
 
     def on_interrupt_data(self, callback: InterruptDataCallback) -> None:
         """Register an interrupt data callback."""
@@ -615,69 +414,34 @@ class BumbleHidTransport:
             report_data: bytes,
         ) -> _BumbleGetSetStatus:
             _ = report_size
-            if report_type != _HID_OUTPUT_REPORT_TYPE:
-                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+            if report_type != HID_OUTPUT_REPORT_TYPE:
+                return _BumbleGetSetStatus(status=HID_GET_SET_UNSUPPORTED_REQUEST)
             if not 0 <= report_id <= 0xFF:
-                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+                return _BumbleGetSetStatus(status=HID_GET_SET_UNSUPPORTED_REQUEST)
             report = bytes((report_id,)) + bytes(report_data)
             if not self._dispatch_control_report(report):
-                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
-            return _BumbleGetSetStatus(status=_HID_GET_SET_SUCCESS)
+                return _BumbleGetSetStatus(status=HID_GET_SET_UNSUPPORTED_REQUEST)
+            return _BumbleGetSetStatus(status=HID_GET_SET_SUCCESS)
 
         register_set_report(on_set_report)
 
     def _register_device_callbacks(self, device: _BumbleDeviceRuntime) -> None:
         device.on(device.EVENT_CONNECTION, self._handle_device_connection)
         device.on(device.EVENT_CONNECTION_FAILURE, self._handle_connection_failure)
-        self._register_connection_request_bridge(device)
-
-    def _register_connection_request_bridge(self, device: _BumbleDeviceRuntime) -> None:
-        original_connection_request = device.on_connection_request
-
-        def on_connection_request(
-            bd_addr: object,
-            class_of_device: int,
-            link_type: int,
-        ) -> None:
-            self._record_event(
-                "connection_request",
-                adapter=self._adapter,
-                class_of_device=f"0x{class_of_device:06x}",
-                link_type=link_type,
-                peer_address=str(bd_addr),
-            )
-            _call_connection_request_without_deprecated_sync_command(
-                device,
-                original_connection_request,
-                bd_addr,
-                class_of_device,
-                link_type,
-            )
-
-        device.on_connection_request = on_connection_request
-        _replace_host_connection_request_listener(
-            device,
-            original_connection_request,
-            on_connection_request,
+        register_connection_request_bridge(
+            adapter=self._adapter,
+            device=device,
+            record_event=self._record_event,
         )
 
     def _register_l2cap_lifecycle_bridge(self, hid_device: _BumbleHidRuntime) -> None:
-        original_open = hid_device.on_l2cap_channel_open
-        original_close = hid_device.on_l2cap_channel_close
-
-        def on_l2cap_channel_open(l2cap_channel: object) -> None:
-            original_open(l2cap_channel)
-            self._record_l2cap_channel_event("l2cap_channel_open", l2cap_channel)
-            self._notify_connected_if_ready()
-
-        def on_l2cap_channel_close(l2cap_channel: object) -> None:
-            original_close(l2cap_channel)
-            self._record_l2cap_channel_event("l2cap_channel_close", l2cap_channel)
-            self._l2cap_connected_emitted = False
-            self._notify_disconnected_if_channels_closed()
-
-        hid_device.on_l2cap_channel_open = on_l2cap_channel_open
-        hid_device.on_l2cap_channel_close = on_l2cap_channel_close
+        register_l2cap_lifecycle_bridge(
+            hid_device=hid_device,
+            notify_connected_if_ready=self._notify_connected_if_ready,
+            notify_disconnected_if_channels_closed=self._notify_disconnected_if_channels_closed,
+            record_l2cap_channel_event=self._record_l2cap_channel_event,
+            set_l2cap_connected_emitted=self._set_l2cap_connected_emitted,
+        )
 
     def _handle_device_connection(self, connection: object) -> None:
         self._l2cap_connected_emitted = False
@@ -690,147 +454,12 @@ class BumbleHidTransport:
         if peer_address is not None:
             fields["peer_address"] = str(peer_address)
         self._record_event("host_connection", **fields)
-        self._register_connection_callbacks(connection)
-
-    def _register_connection_callbacks(self, connection: object) -> None:
-        on_event = getattr(connection, "on", None)
-        if not callable(on_event):
-            return
-        on_event(
-            getattr(connection, "EVENT_DISCONNECTION", "disconnection"),
-            self._handle_device_disconnection,
-        )
-        on_event(
-            getattr(connection, "EVENT_CLASSIC_PAIRING", "classic_pairing"),
-            lambda *_args: self._record_event("classic_pairing", adapter=self._adapter),
-        )
-        on_event(
-            getattr(connection, "EVENT_CLASSIC_PAIRING_FAILURE", "classic_pairing_failure"),
-            lambda reason=None, *_args: self._record_event(
-                "classic_pairing_failure",
-                adapter=self._adapter,
-                reason=reason,
-            ),
-        )
-        on_event(
-            getattr(connection, "EVENT_PAIRING_START", "pairing_start"),
-            lambda *_args: self._record_event("pairing_start", adapter=self._adapter),
-        )
-        on_event(
-            getattr(connection, "EVENT_PAIRING", "pairing"),
-            lambda keys=None, *_args: self._record_pairing_complete(connection, keys),
-        )
-        on_event(
-            getattr(connection, "EVENT_PAIRING_FAILURE", "pairing_failure"),
-            lambda reason=None, *_args: self._record_event(
-                "pairing_failure",
-                adapter=self._adapter,
-                reason=reason,
-            ),
-        )
-        on_event(
-            getattr(connection, "EVENT_CONNECTION_AUTHENTICATION", "connection_authentication"),
-            lambda *_args: self._record_connection_authentication(connection),
-        )
-        on_event(
-            getattr(
-                connection,
-                "EVENT_CONNECTION_AUTHENTICATION_FAILURE",
-                "connection_authentication_failure",
-            ),
-            lambda error=None, *_args: self._record_event(
-                "connection_authentication_failure",
-                adapter=self._adapter,
-                error=_safe_event_value(error),
-            ),
-        )
-        on_event(
-            getattr(
-                connection,
-                "EVENT_CONNECTION_ENCRYPTION_CHANGE",
-                "connection_encryption_change",
-            ),
-            lambda *_args: self._record_connection_encryption_change(connection),
-        )
-        on_event(
-            getattr(
-                connection,
-                "EVENT_CONNECTION_ENCRYPTION_FAILURE",
-                "connection_encryption_failure",
-            ),
-            lambda error=None, *_args: self._record_event(
-                "connection_encryption_failure",
-                adapter=self._adapter,
-                error=_safe_event_value(error),
-            ),
-        )
-        on_event(
-            getattr(
-                connection,
-                "EVENT_CONNECTION_ENCRYPTION_KEY_REFRESH",
-                "connection_encryption_key_refresh",
-            ),
-            lambda *_args: self._record_connection_encryption_refresh(connection),
-        )
-        on_event(
-            getattr(connection, "EVENT_LINK_KEY", "link_key"),
-            lambda *_args: self._record_event("link_key_available", adapter=self._adapter),
-        )
-        on_event(
-            getattr(connection, "EVENT_MODE_CHANGE", "mode_change"),
-            lambda *_args: self._record_classic_mode_change(connection),
-        )
-        on_event(
-            getattr(connection, "EVENT_MODE_CHANGE_FAILURE", "mode_change_failure"),
-            lambda status=None, *_args: self._record_event(
-                "classic_mode_change_failure",
-                adapter=self._adapter,
-                status=status,
-            ),
-        )
-
-    def _record_pairing_complete(self, connection: object, keys: object | None) -> None:
-        fields = self._connection_security_fields(connection)
-        fields["has_link_key"] = _keys_include_link_key(keys)
-        self._record_event("pairing_complete", adapter=self._adapter, **fields)
-
-    def _record_connection_authentication(self, connection: object) -> None:
-        self._record_event(
-            "connection_authentication",
+        register_connection_diagnostics(
             adapter=self._adapter,
-            authenticated=getattr(connection, "authenticated", None),
+            connection=connection,
+            handle_disconnection=self._handle_device_disconnection,
+            record_event=self._record_event,
         )
-
-    def _record_connection_encryption_change(self, connection: object) -> None:
-        self._record_event(
-            "connection_encryption_change",
-            adapter=self._adapter,
-            **self._connection_security_fields(connection),
-        )
-
-    def _record_connection_encryption_refresh(self, connection: object) -> None:
-        self._record_event(
-            "connection_encryption_key_refresh",
-            adapter=self._adapter,
-            **self._connection_security_fields(connection),
-        )
-
-    def _record_classic_mode_change(self, connection: object) -> None:
-        self._record_event(
-            "classic_mode_change",
-            adapter=self._adapter,
-            mode=getattr(connection, "classic_mode", None),
-            interval=getattr(connection, "classic_interval", None),
-        )
-
-    @staticmethod
-    def _connection_security_fields(connection: object) -> dict[str, object]:
-        return {
-            "authenticated": getattr(connection, "authenticated", None),
-            "encryption": getattr(connection, "encryption", None),
-            "encryption_key_size": getattr(connection, "encryption_key_size", None),
-            "secure_connections": getattr(connection, "sc", None),
-        }
 
     def _handle_connection_failure(self, error: object) -> None:
         self._record_event(
@@ -846,13 +475,13 @@ class BumbleHidTransport:
         self._notify_disconnected_once(reason)
 
     def _dispatch_interrupt_data(self, payload: bytes) -> None:
-        report = _decode_hidp_output_report(payload)
+        report = decode_hidp_output_report(payload)
         if report is None:
             return
         self._dispatch_interrupt_report(report)
 
     def _dispatch_control_data(self, payload: bytes) -> None:
-        report = _decode_hidp_output_report(payload)
+        report = decode_hidp_output_report(payload)
         if report is None:
             return
         self._dispatch_control_report(report)
@@ -918,13 +547,16 @@ class BumbleHidTransport:
         if self._disconnected_callback is not None:
             self._dispatch_disconnected_callback(reason)
 
+    def _set_l2cap_connected_emitted(self, emitted: bool) -> None:
+        self._l2cap_connected_emitted = emitted
+
     def _record_l2cap_channel_event(self, event: str, l2cap_channel: object) -> None:
         psm = getattr(l2cap_channel, "psm", None)
         self._record_event(
             event,
             adapter=self._adapter,
-            channel=_hid_channel_name(psm),
-            psm=_format_psm(psm),
+            channel=hid_channel_name(psm),
+            psm=format_psm(psm),
         )
 
     def _record_callback_error(self, task: asyncio.Future[None]) -> None:
@@ -1018,7 +650,7 @@ async def _default_initialize_device(
             device,
             filename=key_store_path,
         )
-    service_records = _build_hid_service_records(
+    service_records = build_hid_service_records(
         profile.hid_report_descriptor,
         device_name=device_name,
     )
@@ -1049,96 +681,6 @@ async def _default_close_runtime(runtime: _BumbleRuntime) -> None:
         await runtime.device.power_off()
 
 
-def _hid_channel_name(psm: object) -> str:
-    if psm == _HID_CONTROL_PSM:
-        return "control"
-    if psm == _HID_INTERRUPT_PSM:
-        return "interrupt"
-    return "unknown"
-
-
-def _format_psm(psm: object) -> str:
-    if isinstance(psm, int):
-        return f"0x{psm:04x}"
-    return "unknown"
-
-
-def _keys_include_link_key(keys: object | None) -> bool | None:
-    if keys is None:
-        return None
-    return getattr(keys, "link_key", None) is not None
-
-
-def _safe_event_value(value: object) -> object:
-    if value is None or isinstance(value, int | str | bool | float):
-        return value
-    return str(value)
-
-
-def _call_connection_request_without_deprecated_sync_command(
-    device: object,
-    connection_request: Callable[[object, int, int], None],
-    bd_addr: object,
-    class_of_device: int,
-    link_type: int,
-) -> None:
-    """Run Bumble's connection request handler without its deprecated sync helper."""
-    host = getattr(device, "host", None)
-    send_async_command = getattr(host, "send_async_command", None)
-    if host is None or not callable(send_async_command):
-        connection_request(bd_addr, class_of_device, link_type)
-        return
-
-    from bumble import utils  # noqa: PLC0415
-
-    missing = object()
-    host_dict = getattr(host, "__dict__", None)
-    previous_instance_attr = (
-        host_dict.get("send_command_sync", missing) if isinstance(host_dict, dict) else missing
-    )
-
-    def send_command_sync(command: object) -> None:
-        utils.AsyncRunner.spawn(send_async_command(command))
-
-    host_with_attrs = cast("Any", host)
-    host_with_attrs.send_command_sync = send_command_sync
-    try:
-        connection_request(bd_addr, class_of_device, link_type)
-    finally:
-        if previous_instance_attr is missing:
-            del host_with_attrs.send_command_sync
-        else:
-            host_with_attrs.send_command_sync = previous_instance_attr
-
-
-def _replace_host_connection_request_listener(
-    device: object,
-    original_connection_request: Callable[[object, int, int], None],
-    replacement_connection_request: Callable[[object, int, int], None],
-) -> None:
-    host = getattr(device, "host", None)
-    remove_listener = getattr(host, "remove_listener", None)
-    on = getattr(host, "on", None)
-    if not callable(remove_listener) or not callable(on):
-        return
-
-    with suppress(KeyError, ValueError):
-        remove_listener("connection_request", original_connection_request)
-    on("connection_request", replacement_connection_request)
-
-
-def _decode_hidp_output_report(pdu: bytes) -> bytes | None:
-    if not pdu:
-        return None
-    message_type = pdu[0] >> 4
-    report_type = pdu[0] & 0x03
-    if message_type != _HIDP_DATA_MESSAGE_TYPE:
-        return None
-    if report_type != _HID_OUTPUT_REPORT_TYPE:
-        return None
-    return pdu[1:]
-
-
 async def _configure_reference_classic_link_policy(device: object) -> int | None:
     """Set the reference Classic default link policy when Bumble exposes HCI access."""
     from bumble import hci  # noqa: PLC0415
@@ -1160,208 +702,8 @@ async def _configure_reference_classic_link_policy(device: object) -> int | None
     return _REFERENCE_DEFAULT_LINK_POLICY_SETTINGS
 
 
-async def _drain_bumble_acl_queue(l2cap_channel: object) -> None:
-    """Wait until Bumble reports no pending ACL packets for the channel."""
-    connection = getattr(l2cap_channel, "connection", None)
-    connection_handle = getattr(connection, "handle", None)
-    acl_packet_queue = getattr(connection, "acl_packet_queue", None)
-    if acl_packet_queue is None and isinstance(connection_handle, int):
-        device = getattr(connection, "device", None)
-        host = getattr(device, "host", None)
-        get_data_packet_queue = getattr(host, "get_data_packet_queue", None)
-        if callable(get_data_packet_queue):
-            acl_packet_queue = get_data_packet_queue(connection_handle)
-    drain = getattr(acl_packet_queue, "drain", None)
-    if not isinstance(connection_handle, int) or not callable(drain):
-        return
-    try:
-        last_pending: int | None = None
-        while True:
-            pending = getattr(acl_packet_queue, "pending", 0)
-            if not isinstance(pending, int) or pending <= 0 or pending == last_pending:
-                return
-            last_pending = pending
-            drain_result = drain(connection_handle)
-            if isinstance(drain_result, Awaitable):
-                await drain_result
-                continue
-            return
-    except ValueError:
-        return
-
-
 def _package_version(package_name: str) -> str:
     try:
         return version(package_name)
     except PackageNotFoundError:
         return "unknown"
-
-
-def _build_hid_service_records(
-    hid_descriptor: bytes,
-    *,
-    device_name: str = _DEFAULT_DEVICE_NAME,
-) -> dict[int, list[object]]:
-    from bumble import core  # noqa: PLC0415
-    from bumble.sdp import (  # noqa: PLC0415
-        SDP_ADDITIONAL_PROTOCOL_DESCRIPTOR_LIST_ATTRIBUTE_ID,
-        SDP_BLUETOOTH_PROFILE_DESCRIPTOR_LIST_ATTRIBUTE_ID,
-        SDP_BROWSE_GROUP_LIST_ATTRIBUTE_ID,
-        SDP_LANGUAGE_BASE_ATTRIBUTE_ID_LIST_ATTRIBUTE_ID,
-        SDP_PROTOCOL_DESCRIPTOR_LIST_ATTRIBUTE_ID,
-        SDP_PUBLIC_BROWSE_ROOT,
-        SDP_SERVICE_CLASS_ID_LIST_ATTRIBUTE_ID,
-        SDP_SERVICE_RECORD_HANDLE_ATTRIBUTE_ID,
-        DataElement,
-        ServiceAttribute,
-    )
-
-    return {
-        _HID_SERVICE_RECORD_HANDLE: [
-            ServiceAttribute(
-                SDP_SERVICE_RECORD_HANDLE_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_32(_HID_SERVICE_RECORD_HANDLE),
-            ),
-            ServiceAttribute(
-                SDP_SERVICE_CLASS_ID_LIST_ATTRIBUTE_ID,
-                DataElement.sequence([DataElement.uuid(core.BT_HUMAN_INTERFACE_DEVICE_SERVICE)]),
-            ),
-            ServiceAttribute(
-                SDP_PROTOCOL_DESCRIPTOR_LIST_ATTRIBUTE_ID,
-                DataElement.sequence(
-                    [
-                        DataElement.sequence(
-                            [
-                                DataElement.uuid(core.BT_L2CAP_PROTOCOL_ID),
-                                DataElement.unsigned_integer_16(_HID_CONTROL_PSM),
-                            ]
-                        ),
-                        DataElement.sequence([DataElement.uuid(core.BT_HIDP_PROTOCOL_ID)]),
-                    ]
-                ),
-            ),
-            ServiceAttribute(
-                SDP_BROWSE_GROUP_LIST_ATTRIBUTE_ID,
-                DataElement.sequence([DataElement.uuid(SDP_PUBLIC_BROWSE_ROOT)]),
-            ),
-            ServiceAttribute(
-                SDP_LANGUAGE_BASE_ATTRIBUTE_ID_LIST_ATTRIBUTE_ID,
-                DataElement.sequence(
-                    [
-                        DataElement.unsigned_integer_16(_SDP_LANGUAGE_CODE_ENGLISH),
-                        DataElement.unsigned_integer_16(_SDP_CHARACTER_ENCODING_UTF8),
-                        DataElement.unsigned_integer_16(_LANGUAGE_BASE_EN_US),
-                    ]
-                ),
-            ),
-            ServiceAttribute(
-                _SDP_PRIMARY_LANGUAGE_SERVICE_NAME_ATTRIBUTE_ID,
-                DataElement.text_string(device_name.encode("utf-8")),
-            ),
-            ServiceAttribute(
-                SDP_BLUETOOTH_PROFILE_DESCRIPTOR_LIST_ATTRIBUTE_ID,
-                DataElement.sequence(
-                    [
-                        DataElement.sequence(
-                            [
-                                DataElement.uuid(core.BT_HUMAN_INTERFACE_DEVICE_SERVICE),
-                                DataElement.unsigned_integer_16(0x0101),
-                            ]
-                        )
-                    ]
-                ),
-            ),
-            ServiceAttribute(
-                SDP_ADDITIONAL_PROTOCOL_DESCRIPTOR_LIST_ATTRIBUTE_ID,
-                DataElement.sequence(
-                    [
-                        DataElement.sequence(
-                            [
-                                DataElement.sequence(
-                                    [
-                                        DataElement.uuid(core.BT_L2CAP_PROTOCOL_ID),
-                                        DataElement.unsigned_integer_16(_HID_INTERRUPT_PSM),
-                                    ]
-                                ),
-                                DataElement.sequence([DataElement.uuid(core.BT_HIDP_PROTOCOL_ID)]),
-                            ]
-                        )
-                    ]
-                ),
-            ),
-            ServiceAttribute(
-                _SDP_HID_PARSER_VERSION_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_16(0x0111),
-            ),
-            ServiceAttribute(
-                _SDP_HID_DEVICE_SUBCLASS_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_8(0x08),
-            ),
-            ServiceAttribute(
-                _SDP_HID_COUNTRY_CODE_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_8(_REFERENCE_HID_COUNTRY_CODE),
-            ),
-            ServiceAttribute(
-                _SDP_HID_VIRTUAL_CABLE_ATTRIBUTE_ID,
-                DataElement.boolean(True),
-            ),
-            ServiceAttribute(
-                _SDP_HID_RECONNECT_INITIATE_ATTRIBUTE_ID,
-                DataElement.boolean(True),
-            ),
-            ServiceAttribute(
-                _SDP_HID_DESCRIPTOR_LIST_ATTRIBUTE_ID,
-                DataElement.sequence(
-                    [
-                        DataElement.sequence(
-                            [
-                                DataElement.unsigned_integer_8(_HID_REPORT_DESCRIPTOR_TYPE),
-                                DataElement.text_string(hid_descriptor),
-                            ]
-                        )
-                    ]
-                ),
-            ),
-            ServiceAttribute(
-                _SDP_HID_LANG_ID_BASE_LIST_ATTRIBUTE_ID,
-                DataElement.sequence(
-                    [
-                        DataElement.sequence(
-                            [
-                                DataElement.unsigned_integer_16(_LANGUAGE_ID_EN_US),
-                                DataElement.unsigned_integer_16(_LANGUAGE_BASE_EN_US),
-                            ]
-                        )
-                    ]
-                ),
-            ),
-            ServiceAttribute(
-                _SDP_HID_REMOTE_WAKE_ATTRIBUTE_ID,
-                DataElement.boolean(True),
-            ),
-            ServiceAttribute(
-                _SDP_HID_PROFILE_VERSION_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_16(0x0101),
-            ),
-            ServiceAttribute(
-                _SDP_HID_SUPERVISION_TIMEOUT_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_16(_REFERENCE_HID_SUPERVISION_TIMEOUT),
-            ),
-            ServiceAttribute(
-                _SDP_HID_NORMALLY_CONNECTABLE_ATTRIBUTE_ID,
-                DataElement.boolean(True),
-            ),
-            ServiceAttribute(
-                _SDP_HID_BOOT_DEVICE_ATTRIBUTE_ID,
-                DataElement.boolean(False),
-            ),
-            ServiceAttribute(
-                _SDP_HIDSSR_HOST_MAX_LATENCY_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_16(_REFERENCE_HIDSSR_HOST_MAX_LATENCY),
-            ),
-            ServiceAttribute(
-                _SDP_HIDSSR_HOST_MIN_TIMEOUT_ATTRIBUTE_ID,
-                DataElement.unsigned_integer_16(_REFERENCE_HIDSSR_HOST_MIN_TIMEOUT),
-            ),
-        ]
-    }

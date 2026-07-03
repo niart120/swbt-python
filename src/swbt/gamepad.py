@@ -3,45 +3,28 @@
 import asyncio
 from dataclasses import dataclass
 from types import TracebackType
-from typing import Literal
 
+from swbt._gamepad_connection import (
+    ConnectionResult,
+    ConnectionStatus,  # noqa: F401
+    ConnectionWorkflow,
+    raise_if_connection_failed,
+)
+from swbt._gamepad_output import OutputReportDispatcher
+from swbt._gamepad_transport import create_default_transport
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
 from swbt.errors import (
     ClosedError,
-    ConnectionFailedError,
     ConnectionTimeoutError,
     InvalidInputError,
-    InvalidKeyStoreError,
     SwbtError,
 )
 from swbt.input import Button, InputState
-from swbt.protocol.output_report import OutputReportParser
-from swbt.protocol.subcommand import SubcommandResponder, UnsupportedSubcommandError
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
 
 DISCONNECT_REQUEST_TIMEOUT_SECONDS = 0.25
-
-ConnectionRoute = Literal["active_reconnect", "pairing"]
-ConnectionStatus = Literal["connected", "no_bond", "timeout", "failed"]
-
-
-@dataclass(frozen=True)
-class ConnectionResult:
-    """Result of an explicit connection strategy.
-
-    Attributes:
-        route: Connection path that produced the result.
-        status: Outcome of the connection attempt.
-        peer_address: Address of the bonded peer used for reconnect, when one was selected.
-        peer_count: Number of bonded peers observed while selecting a reconnect target.
-    """
-
-    route: ConnectionRoute
-    status: ConnectionStatus
-    peer_address: str | None = None
-    peer_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -116,8 +99,12 @@ class SwitchGamepad:
         self._diagnostics = DiagnosticsRecorder(
             trace_writer=diagnostics.trace_writer if diagnostics is not None else None
         )
-        self._output_report_parser = OutputReportParser()
-        self._subcommand_responder = SubcommandResponder()
+        self._output_report_dispatcher = OutputReportDispatcher(
+            diagnostics=self._diagnostics,
+            require_reply_sender=self._require_subcommand_reply_sender,
+            send_subcommand_reply=self._send_subcommand_reply,
+            state_store=self._state_store,
+        )
         self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
@@ -125,6 +112,18 @@ class SwitchGamepad:
         self._connection_state = "closed"
         self._is_open = False
         self._close_in_progress = False
+        self._connection_workflow = ConnectionWorkflow(
+            clear_connected=self._connected_event.clear,
+            close_neutral=self._close_neutral_for_connection_workflow,
+            diagnostics=self._diagnostics,
+            ensure_open=self.open,
+            get_transport=self._connection_transport,
+            key_store_path=self._config.key_store_path,
+            pair=self._pair_for_connection_workflow,
+            set_connection_state=self._set_connection_state,
+            transport_was_injected=self._transport_was_injected,
+            wait_for_connected=self._wait_for_reconnect_connected_for_workflow,
+        )
 
     @classmethod
     def from_config(
@@ -260,7 +259,7 @@ class SwitchGamepad:
             ConnectionTimeoutError: The active reconnect attempt timed out.
         """
         result = await self.try_reconnect(timeout=timeout)
-        self._raise_if_connection_failed(result)
+        raise_if_connection_failed(result)
 
     async def try_reconnect(
         self,
@@ -275,98 +274,7 @@ class SwitchGamepad:
         Returns:
             ConnectionResult: Reconnect route, status, selected peer, and peer count.
         """
-        if not self._is_open:
-            await self.open()
-        if self._transport is None:
-            msg = "gamepad is not open"
-            raise ClosedError(msg)
-        if self._config.key_store_path is None and not self._transport_was_injected:
-            self._diagnostics.record_event(
-                "reconnect_key_store_unavailable",
-                reason="key_store_path_none",
-                route="active_reconnect",
-            )
-        peers = await self._transport.list_bonded_peers()
-        if len(peers) > 1:
-            self._diagnostics.record_event(
-                "invalid_key_store",
-                peer_count=len(peers),
-                reason="multiple_current_peers",
-            )
-            msg = "key store contains multiple current peers"
-            raise InvalidKeyStoreError(msg)
-        selection = self._bonded_peer_selection(len(peers))
-        self._diagnostics.record_event(
-            "bonded_peers_discovered",
-            peer_count=len(peers),
-            selection=selection,
-        )
-        if not peers:
-            self._diagnostics.record_event(
-                "active_reconnect_result",
-                peer_count=0,
-                route="active_reconnect",
-                status="no_bond",
-            )
-            return ConnectionResult(
-                route="active_reconnect",
-                status="no_bond",
-                peer_count=0,
-            )
-        peer = peers[0]
-        self._connection_state = "reconnecting"
-        self._connected_event.clear()
-        self._diagnostics.record_event(
-            "active_reconnect_attempt",
-            peer_address=peer.address,
-            route="active_reconnect",
-        )
-        try:
-            await self._transport.connect_bonded_peer(
-                peer.address,
-                connect_timeout=timeout,
-            )
-            await self._wait_for_reconnect_connected(max_wait=timeout)
-        except TimeoutError:
-            self._diagnostics.record_event(
-                "active_reconnect_result",
-                failure_reason="connection_timeout",
-                peer_address=peer.address,
-                route="active_reconnect",
-                status="timeout",
-            )
-            await self.close(neutral=True)
-            return ConnectionResult(
-                route="active_reconnect",
-                status="timeout",
-                peer_address=peer.address,
-                peer_count=1,
-            )
-        except asyncio.CancelledError as error:
-            if self._current_task_is_cancelling():
-                raise
-            return await self._record_active_reconnect_transport_error(
-                error,
-                peer_address=peer.address,
-            )
-        except Exception as error:  # noqa: BLE001
-            return await self._record_active_reconnect_transport_error(
-                error,
-                peer_address=peer.address,
-            )
-
-        self._diagnostics.record_event(
-            "active_reconnect_result",
-            peer_address=peer.address,
-            route="active_reconnect",
-            status="connected",
-        )
-        return ConnectionResult(
-            route="active_reconnect",
-            status="connected",
-            peer_address=peer.address,
-            peer_count=1,
-        )
+        return await self._connection_workflow.try_reconnect(timeout=timeout)
 
     async def connect(
         self,
@@ -389,7 +297,7 @@ class SwitchGamepad:
             timeout=timeout,
             allow_pairing=allow_pairing,
         )
-        self._raise_if_connection_failed(result)
+        raise_if_connection_failed(result)
 
     async def try_connect(
         self,
@@ -407,19 +315,10 @@ class SwitchGamepad:
         Returns:
             ConnectionResult: Route and status chosen by reconnect or pairing fallback.
         """
-        reconnect_result = await self.try_reconnect(timeout=timeout)
-        if reconnect_result.status != "no_bond" or not allow_pairing:
-            return reconnect_result
-        self._diagnostics.record_event(
-            "connect_pairing_fallback",
-            reason="no_bond",
-            route="pairing",
+        return await self._connection_workflow.try_connect(
+            timeout=timeout,
+            allow_pairing=allow_pairing,
         )
-        try:
-            await self.pair(timeout=timeout)
-        except ConnectionTimeoutError:
-            return ConnectionResult(route="pairing", status="timeout")
-        return ConnectionResult(route="pairing", status="connected")
 
     async def close(self, *, neutral: bool = True) -> None:
         """Close the transport and leave the gamepad in a closed state.
@@ -575,15 +474,39 @@ class SwitchGamepad:
             raise ClosedError(msg)
         await self._report_loop.send_current_input()
 
+    def _require_subcommand_reply_sender(self) -> None:
+        _ = self._subcommand_reply_sender()
+
+    async def _send_subcommand_reply(self, reply: bytes) -> None:
+        await self._subcommand_reply_sender().send_subcommand_reply(reply)
+
+    def _subcommand_reply_sender(self) -> ReportLoop:
+        if self._report_loop is None:
+            msg = "gamepad is not open"
+            raise ClosedError(msg)
+        return self._report_loop
+
     def _require_connected_for_input(self) -> None:
         if self._report_loop is None or not self._connected_event.is_set():
             msg = "gamepad is not connected"
             raise ClosedError(msg)
 
     def _record_run_metadata(self) -> None:
+        key_store_exists: bool | None = None
+        key_store_previous_exists: bool | None = None
+        if self._config.key_store_path is not None:
+            from swbt.transport._bumble_key_store import (  # noqa: PLC0415
+                read_key_store_metadata,
+            )
+
+            key_store_metadata = read_key_store_metadata(self._config.key_store_path)
+            key_store_exists = key_store_metadata.exists
+            key_store_previous_exists = key_store_metadata.previous_exists
         self._diagnostics.record_run_metadata(
             adapter=self._metadata_adapter(),
+            key_store_exists=key_store_exists,
             key_store_path=self._config.key_store_path,
+            key_store_previous_exists=key_store_previous_exists,
         )
 
     def _metadata_adapter(self) -> str:
@@ -591,15 +514,23 @@ class SwitchGamepad:
             return self._config.adapter
         return "custom"
 
-    @staticmethod
-    def _raise_if_connection_failed(result: ConnectionResult) -> None:
-        if result.status == "connected":
-            return
-        if result.status == "timeout":
-            msg = "connection timed out"
-            raise ConnectionTimeoutError(msg)
-        msg = f"connection failed: {result.status}"
-        raise ConnectionFailedError(msg)
+    def _connection_transport(self) -> HidDeviceTransport | None:
+        return self._transport
+
+    async def _close_neutral_for_connection_workflow(self) -> None:
+        await self.close(neutral=True)
+
+    async def _pair_for_connection_workflow(self, timeout: float | None) -> None:  # noqa: ASYNC109
+        await self.pair(timeout=timeout)
+
+    def _set_connection_state(self, state: str) -> None:
+        self._connection_state = state
+
+    async def _wait_for_reconnect_connected_for_workflow(
+        self,
+        timeout: float | None,  # noqa: ASYNC109
+    ) -> None:
+        await self._wait_for_reconnect_connected(max_wait=timeout)
 
     async def _wait_for_disconnect_request_closed(self) -> bool:
         try:
@@ -625,41 +556,6 @@ class SwitchGamepad:
             )
             raise TimeoutError from error
 
-    @staticmethod
-    def _bonded_peer_selection(peer_count: int) -> str:
-        if peer_count == 0:
-            return "none"
-        return "selected"
-
-    @staticmethod
-    def _current_task_is_cancelling() -> bool:
-        task = asyncio.current_task()
-        return task is not None and task.cancelling() > 0
-
-    async def _record_active_reconnect_transport_error(
-        self,
-        error: BaseException,
-        *,
-        peer_address: str,
-    ) -> ConnectionResult:
-        self._diagnostics.record_event(
-            "active_reconnect_result",
-            error_type=type(error).__name__,
-            failure_reason="transport_error",
-            message=str(error),
-            peer_address=peer_address,
-            route="active_reconnect",
-            status="failed",
-        )
-        self._diagnostics.record_error(error, recoverable=True)
-        await self.close(neutral=True)
-        return ConnectionResult(
-            route="active_reconnect",
-            status="failed",
-            peer_address=peer_address,
-            peer_count=1,
-        )
-
     def _record_disconnect_request_result(self, result: DisconnectRequestResult) -> None:
         fields: dict[str, object] = {"status": result.status}
         if result.channels:
@@ -680,48 +576,7 @@ class SwitchGamepad:
 
     async def _handle_output_report_data(self, payload: bytes) -> None:
         try:
-            output_report = self._output_report_parser.parse(payload)
-            subcommand_id = (
-                f"0x{output_report.subcommand_id:02x}"
-                if output_report.subcommand_id is not None
-                else None
-            )
-            if output_report.rumble is not None:
-                self._diagnostics.record_raw_rumble(output_report.rumble)
-            self._diagnostics.record_event(
-                "output_report_rx",
-                length=len(payload),
-                packet_id=output_report.packet_id,
-                report_id=f"0x{output_report.report_id:02x}",
-                subcommand_id=subcommand_id,
-            )
-            if output_report.subcommand_id is None:
-                return
-            self._diagnostics.record_subcommand_rx(
-                packet_id=output_report.packet_id,
-                subcommand_id=output_report.subcommand_id,
-            )
-            if self._report_loop is None:
-                msg = "gamepad is not open"
-                raise ClosedError(msg)
-            state = await self._state_store.snapshot()
-            try:
-                reply = self._subcommand_responder.respond(output_report, state=state)
-            except UnsupportedSubcommandError:
-                self._diagnostics.record_event(
-                    "unsupported_subcommand",
-                    packet_id=output_report.packet_id,
-                    payload=output_report.subcommand_payload.hex(),
-                    subcommand_id=subcommand_id,
-                )
-                raise
-            self._diagnostics.record_event(
-                "subcommand_reply_tx",
-                packet_id=output_report.packet_id,
-                report_id=f"0x{reply[0]:02x}",
-                subcommand_id=subcommand_id,
-            )
-            await self._report_loop.send_subcommand_reply(reply)
+            await self._output_report_dispatcher.dispatch(payload)
         except SwbtError as error:
             self._connection_state = "failed"
             self._diagnostics.record_error(error, recoverable=False)
@@ -766,12 +621,10 @@ class SwitchGamepad:
             if self._config.adapter is None:
                 msg = "adapter is required when no custom transport is supplied"
                 raise InvalidInputError(msg)
-            from swbt.transport.bumble import BumbleHidTransport  # noqa: PLC0415
-
-            self._transport = BumbleHidTransport(
+            self._transport = create_default_transport(
                 adapter=self._config.adapter,
                 device_name=self._config.device_name,
-                key_store_path=self._config.key_store_path,
                 diagnostics=self._diagnostics,
+                key_store_path=self._config.key_store_path,
             )
         return self._transport
