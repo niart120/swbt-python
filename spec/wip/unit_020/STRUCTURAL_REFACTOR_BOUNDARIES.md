@@ -115,7 +115,7 @@
 | refactor-done | HIDP output report decode 分割後も interrupt / control / set report callback が従来通り output report payload を転送する | regression | unit | no | `_bumble_hidp.py` に移し、HID data / SET_REPORT callback tests を確認 |
 | refactor-done | ACL queue drain 分割後も connection queue、host fallback queue、no-progress stop が従来通り | regression | unit | no | `_bumble_acl.py` に移し、queue drain tests を確認 |
 | green | Bumble request disconnect、connection request bridge、ACL queue drain の既存 unit tests が通る | regression | unit | no | unit_014 / unit_005 contract を `tests/unit/test_bumble_transport.py` で再確認 |
-| todo | connection diagnostics registration 分割後も pairing / authentication / encryption / mode change events の field が変わらない | regression | unit | no | fake connection event tests を必要なら追加する |
+| refactor-done | connection diagnostics registration 分割後も pairing / authentication / encryption / mode change events の field が変わらない | regression | unit | no | `_bumble_lifecycle.py` に移し、connection diagnostics unit と Bumble transport unit で確認 |
 | refactor-done | output report dispatch 分割後も output report trace、subcommand reply、raw rumble status が変わらない | regression | unit / integration | no | `OutputReportDispatcher` に parse、diagnostics、reply enqueue を移し、fake transport integration で trace と status を確認 |
 | refactor-done | unsupported subcommand が分割後も復旧不能エラーとして記録され、`connection_state="failed"` になる | regression | integration | no | `OutputReportDispatcher` 化後も fake transport integration で確認 |
 | refactor-done | default transport 生成を分割後も public API import は Bumble を解決せず、`SwitchGamepad.from_config()` は既定 transport へ resource config を渡す | regression | unit | no | `_gamepad_transport.py` は Bumble import を factory 関数内部に閉じる |
@@ -150,7 +150,7 @@ Tidy decision:
 8. [ ] `transport/bumble.py` を `src/swbt/transport/bumble/` package へ変換するか判断する。package 化する場合は `__init__.py` を transport 本体の入口にし、内部 module は package private に寄せる。
 9. [x] SDP / HID service record builder を `swbt.transport.bumble.sdp` または `swbt.transport._bumble_sdp.py` 相当へ分ける。
 10. [x] HIDP output report decode と ACL queue drain を `swbt.transport.bumble.hidp` / `acl` または `_bumble_hidp.py` / `_bumble_acl.py` 相当へ分ける。
-11. [ ] connection request bridge、L2CAP lifecycle bridge、connection diagnostics registration を callback / lifecycle module へ分ける。callback state と diagnostics field が散る場合も、tests を更新して最終構造を優先する。
+11. [x] connection request bridge、L2CAP lifecycle bridge、connection diagnostics registration を callback / lifecycle module へ分ける。callback state と diagnostics field が散る場合も、tests を更新して最終構造を優先する。
 12. [ ] production 分割後に test fixture を責務別へ移す。fake runtime は `tests` 配下に置き、`src` 配下へ入れない。
 
 ### 8.3 `diagnostics.py` に key store 実装知識が漏れた原因
@@ -306,6 +306,7 @@ Tidy decision:
 | `src/swbt/transport/_bumble_sdp.py` | new | Classic HID SDP service record builder |
 | `src/swbt/transport/_bumble_hidp.py` | new | HIDP output report decode、SET_REPORT status constants、PSM display helper |
 | `src/swbt/transport/_bumble_acl.py` | new | Bumble ACL packet queue drain |
+| `src/swbt/transport/_bumble_lifecycle.py` | new | connection request bridge、L2CAP lifecycle bridge、connection diagnostics registration |
 | `src/swbt/diagnostics.py` | modify | key store storage format knowledge を外へ出し、plain metadata を記録するだけにする |
 | `tests/unit/test_bumble_key_store_metadata.py` | new | key store metadata reader の current / previous 判定を固定する |
 | `tests/unit/test_gamepad_output_dispatcher.py` | new | output report dispatcher の trace と reply enqueue を単体で固定する |
@@ -314,6 +315,7 @@ Tidy decision:
 | `tests/unit/test_bumble_sdp.py` | new | SDP builder の reference HID attributes を単体で固定する |
 | `tests/unit/test_bumble_hidp.py` | new | HIDP output report decode を単体で固定する |
 | `tests/unit/test_bumble_acl.py` | new | ACL queue drain の host fallback を単体で固定する |
+| `tests/unit/test_bumble_lifecycle.py` | new | connection diagnostics registration の主要 event field を単体で固定する |
 | `tests/unit/test_bumble_transport.py` | modify / split | fake runtime fixture と behavior tests を整理する |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify / split | connection / close / report / reconnect tests の grouping を整理する |
 | `spec/wip/unit_020/STRUCTURAL_REFACTOR_BOUNDARIES.md` | new / modify | 作業範囲、原因分析、検証結果を記録する |
@@ -350,10 +352,14 @@ Tidy decision:
 | `uv run pytest tests\unit\test_bumble_hidp.py tests\unit\test_bumble_acl.py tests\unit\test_bumble_transport.py tests\unit\test_bumble_sdp.py -q` | pass | 42 passed。HIDP decode、SET_REPORT、ACL drain behavior を確認 |
 | `uv run ruff format --check src\swbt\transport\_bumble_hidp.py src\swbt\transport\_bumble_acl.py src\swbt\transport\_bumble_sdp.py src\swbt\transport\bumble.py tests\unit\test_bumble_hidp.py tests\unit\test_bumble_acl.py tests\unit\test_bumble_transport.py` | pass | 対象変更の format 確認 |
 | `uv run ruff check src\swbt\transport\_bumble_hidp.py src\swbt\transport\_bumble_acl.py src\swbt\transport\_bumble_sdp.py src\swbt\transport\bumble.py tests\unit\test_bumble_hidp.py tests\unit\test_bumble_acl.py tests\unit\test_bumble_transport.py` | pass | 対象変更の lint 確認 |
-| `uv run ruff format --check .` | pass | 64 files already formatted |
+| `uv run pytest tests\unit\test_bumble_lifecycle.py -q` | expected fail | red: `swbt.transport._bumble_lifecycle` module がまだ存在しなかった |
+| `uv run pytest tests\unit\test_bumble_lifecycle.py tests\unit\test_bumble_transport.py -q` | pass | 39 passed。connection diagnostics registration と transport behavior を確認 |
+| `uv run ruff format --check src\swbt\transport\bumble.py src\swbt\transport\_bumble_lifecycle.py tests\unit\test_bumble_lifecycle.py` | pass | 対象変更の format 確認 |
+| `uv run ruff check src\swbt\transport\bumble.py src\swbt\transport\_bumble_lifecycle.py tests\unit\test_bumble_lifecycle.py` | pass | 対象変更の lint 確認 |
+| `uv run ruff format --check .` | pass | 66 files already formatted |
 | `uv run ruff check .` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
-| `uv run pytest tests\unit tests\integration -q` | pass | 214 passed |
+| `uv run pytest tests\unit tests\integration -q` | pass | 215 passed |
 | `uv run pytest -m bumble` | not run | 実行には USB Bluetooth dongle open の明示承認が必要 |
 | `uv run pytest -m hardware` | not run | 実行には Switch-facing 動作の明示承認が必要 |
 
