@@ -9,6 +9,7 @@ from typing import Any, cast
 import bumble.device as bumble_device_module
 import bumble.hid as bumble_hid_module
 import pytest
+from bumble.keys import PairingKeys
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import ClosedError, TransportOpenError
@@ -423,6 +424,13 @@ class FakePairingKeys:
         self.link_key = link_key
 
 
+def _fake_pairing_keys(marker: int) -> PairingKeys:
+    return PairingKeys(
+        link_key=PairingKeys.Key(bytes([marker]) * 16, authenticated=True),
+        link_key_type=4,
+    )
+
+
 class FakeFailingKeyStore:
     """Fake key store that raises on update without exposing key material."""
 
@@ -452,6 +460,195 @@ def _fake_runtime(
         service_record_count=1,
         hid_descriptor_size=203,
     )
+
+
+def test_swbt_json_key_store_initial_update_writes_current_without_previous(
+    tmp_path: Path,
+) -> None:
+    async def run() -> None:
+        key_store_path = tmp_path / "keys.json"
+        key_store = bumble_module._CurrentPreviousJsonKeyStore(
+            namespace="AA:BB:CC:DD:EE:FF",
+            filename=key_store_path,
+        )
+        peer_address = "01:02:03:04:05:06"
+
+        await key_store.update(peer_address, _fake_pairing_keys(1))
+
+        key_db = json.loads(key_store_path.read_text(encoding="utf-8"))
+        assert set(key_db) == {"AA:BB:CC:DD:EE:FF"}
+        assert key_db["AA:BB:CC:DD:EE:FF"][peer_address]["link_key"]["value"] == "01" * 16
+        assert await key_store.get_all() == [(peer_address, _fake_pairing_keys(1))]
+
+    asyncio.run(run())
+
+
+def test_swbt_json_key_store_overwrite_moves_old_current_to_previous(
+    tmp_path: Path,
+) -> None:
+    async def run() -> None:
+        key_store_path = tmp_path / "keys.json"
+        namespace = "AA:BB:CC:DD:EE:FF"
+        previous_namespace = f"swbt.previous::{namespace}"
+        key_store = bumble_module._CurrentPreviousJsonKeyStore(
+            namespace=namespace,
+            filename=key_store_path,
+        )
+        peer_address = "01:02:03:04:05:06"
+
+        await key_store.update(peer_address, _fake_pairing_keys(1))
+        await key_store.update(peer_address, _fake_pairing_keys(2))
+
+        key_db = json.loads(key_store_path.read_text(encoding="utf-8"))
+        assert key_db[namespace][peer_address]["link_key"]["value"] == "02" * 16
+        assert key_db[previous_namespace][peer_address]["link_key"]["value"] == "01" * 16
+        assert await key_store.get_all() == [(peer_address, _fake_pairing_keys(2))]
+
+    asyncio.run(run())
+
+
+def test_swbt_json_key_store_keeps_only_one_previous_generation(
+    tmp_path: Path,
+) -> None:
+    async def run() -> None:
+        key_store_path = tmp_path / "keys.json"
+        namespace = "AA:BB:CC:DD:EE:FF"
+        previous_namespace = f"swbt.previous::{namespace}"
+        key_store = bumble_module._CurrentPreviousJsonKeyStore(
+            namespace=namespace,
+            filename=key_store_path,
+        )
+        peer_address = "01:02:03:04:05:06"
+
+        await key_store.update(peer_address, _fake_pairing_keys(1))
+        await key_store.update(peer_address, _fake_pairing_keys(2))
+        await key_store.update(peer_address, _fake_pairing_keys(3))
+
+        key_db = json.loads(key_store_path.read_text(encoding="utf-8"))
+        assert set(key_db) == {namespace, previous_namespace}
+        assert key_db[namespace][peer_address]["link_key"]["value"] == "03" * 16
+        assert key_db[previous_namespace][peer_address]["link_key"]["value"] == "02" * 16
+
+    asyncio.run(run())
+
+
+def test_swbt_json_key_store_reads_legacy_bumble_json_as_current(
+    tmp_path: Path,
+) -> None:
+    async def run() -> None:
+        key_store_path = tmp_path / "keys.json"
+        namespace = "AA:BB:CC:DD:EE:FF"
+        peer_address = "01:02:03:04:05:06"
+        key_store_path.write_text(
+            json.dumps(
+                {
+                    namespace: {
+                        peer_address: _fake_pairing_keys(1).to_dict(),
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        key_store = bumble_module._CurrentPreviousJsonKeyStore(
+            namespace=namespace,
+            filename=key_store_path,
+        )
+
+        assert await key_store.get(peer_address) == _fake_pairing_keys(1)
+        assert await key_store.get_all() == [(peer_address, _fake_pairing_keys(1))]
+
+    asyncio.run(run())
+
+
+def test_bumble_list_bonded_peers_ignores_previous_key_store_generation(
+    tmp_path: Path,
+) -> None:
+    async def run() -> None:
+        key_store_path = tmp_path / "keys.json"
+        namespace = "AA:BB:CC:DD:EE:FF"
+        current_peer = "01:02:03:04:05:06"
+        previous_peer = "0A:0B:0C:0D:0E:0F"
+        key_store_path.write_text(
+            json.dumps(
+                {
+                    namespace: {
+                        current_peer: _fake_pairing_keys(1).to_dict(),
+                    },
+                    f"swbt.previous::{namespace}": {
+                        previous_peer: _fake_pairing_keys(2).to_dict(),
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        device = FakeBumbleDevice()
+        device.keystore = bumble_module._CurrentPreviousJsonKeyStore(
+            namespace=namespace,
+            filename=key_store_path,
+        )
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+
+        peers = await transport.list_bonded_peers()
+
+        assert [peer.address for peer in peers] == [current_peer]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_swbt_json_key_store_diagnostics_records_previous_generation_without_key_material(
+    tmp_path: Path,
+) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+        key_store = bumble_module._DiagnosticKeyStore(
+            bumble_module._CurrentPreviousJsonKeyStore(
+                namespace="AA:BB:CC:DD:EE:FF",
+                filename=tmp_path / "keys.json",
+            ),
+            diagnostics,
+        )
+        peer_address = "01:02:03:04:05:06"
+
+        await key_store.update(peer_address, _fake_pairing_keys(1))
+        await key_store.update(peer_address, _fake_pairing_keys(2))
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "key_store_update",
+            "generation": "current",
+            "peer_address": peer_address,
+            "previous_saved": False,
+            "status": "succeeded",
+        } in events
+        assert {
+            "event": "key_store_update",
+            "generation": "current",
+            "peer_address": peer_address,
+            "previous_saved": True,
+            "status": "succeeded",
+        } in events
+        assert "link_key" not in trace.getvalue()
+        assert "02" * 16 not in trace.getvalue()
+
+    asyncio.run(run())
 
 
 def test_bumble_transport_records_adapter_string_in_diagnostics() -> None:
@@ -542,6 +739,7 @@ def test_bumble_initialize_device_configures_json_key_store(
 ) -> None:
     async def run() -> None:
         captured_config: dict[str, Any] = {}
+        fake_device = FakeBumbleDevice()
 
         class FakeDeviceFactory:
             @staticmethod
@@ -549,7 +747,7 @@ def test_bumble_initialize_device_configures_json_key_store(
                 captured_config["keystore"] = getattr(config, "keystore", None)
                 captured_config["source"] = source
                 captured_config["sink"] = sink
-                return FakeBumbleDevice()
+                return fake_device
 
         def create_hid_device(device: object) -> FakeHidDevice:
             assert isinstance(device, FakeBumbleDevice)
@@ -568,10 +766,11 @@ def test_bumble_initialize_device_configures_json_key_store(
         )
 
         assert captured_config == {
-            "keystore": f"JsonKeyStore:{key_store_path}",
+            "keystore": None,
             "source": handle.source,
             "sink": handle.sink,
         }
+        assert isinstance(fake_device.keystore, bumble_module._CurrentPreviousJsonKeyStore)
 
     asyncio.run(run())
 

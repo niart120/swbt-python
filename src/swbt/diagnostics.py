@@ -140,8 +140,10 @@ class DiagnosticsRecorder:
             "python_version": platform.python_version(),
         }
         if key_store_path is not None:
+            key_store_file = Path(key_store_path)
             fields["key_store_path"] = key_store_path
-            fields["key_store_exists"] = Path(key_store_path).exists()
+            fields["key_store_exists"] = key_store_file.exists()
+            fields["key_store_previous_exists"] = _key_store_previous_exists(key_store_file)
         return self.record_event(
             "run_metadata",
             **fields,
@@ -196,3 +198,15 @@ class DiagnosticsRecorder:
             return version("swbt-python")
         except PackageNotFoundError:
             return "unknown"
+
+
+def _key_store_previous_exists(key_store_path: Path) -> bool:
+    if not key_store_path.exists():
+        return False
+    try:
+        key_store_data = json.loads(key_store_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(key_store_data, dict):
+        return False
+    return any(str(namespace).startswith("swbt.previous::") for namespace in key_store_data)
