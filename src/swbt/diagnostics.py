@@ -10,14 +10,26 @@ from typing import TextIO
 
 @dataclass(frozen=True)
 class DiagnosticsConfig:
-    """Diagnostics configuration accepted by SwitchGamepad."""
+    """Diagnostics configuration accepted by SwitchGamepad.
+
+    Attributes:
+        trace_writer: Text stream that receives one JSON Lines diagnostics event per line.
+    """
 
     trace_writer: TextIO | None = None
 
 
 @dataclass(frozen=True)
 class DiagnosticsEvent:
-    """One diagnostics event recorded by the gamepad."""
+    """One diagnostics event recorded by the gamepad.
+
+    Attributes:
+        event: Stable event name.
+        error_type: Exception type name for error events.
+        message: Human-readable error message for error events.
+        recoverable: Whether the error can be treated as recoverable.
+        fields: Event-specific structured fields.
+    """
 
     event: str
     error_type: str | None = None
@@ -28,7 +40,15 @@ class DiagnosticsEvent:
 
 @dataclass(frozen=True)
 class GamepadStatus:
-    """Snapshot of gamepad status exposed by SwitchGamepad.status()."""
+    """Snapshot of gamepad status exposed by SwitchGamepad.status().
+
+    Attributes:
+        connection_state: Current lifecycle state name.
+        report_counters: Sent report counts keyed by numeric report ID.
+        last_subcommand_id: Last observed subcommand ID, if any.
+        raw_rumble: Last raw rumble payload received from the host.
+        last_error: Latest diagnostics error event, if any.
+    """
 
     connection_state: str
     report_counters: dict[int, int]
