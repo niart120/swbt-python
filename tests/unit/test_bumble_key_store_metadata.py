@@ -1,7 +1,16 @@
 import json
 from pathlib import Path
 
-from swbt.transport._bumble_key_store import read_key_store_metadata
+from swbt.transport._bumble_key_store import (
+    _CurrentPreviousJsonKeyStore,
+    _DiagnosticKeyStore,
+    read_key_store_metadata,
+)
+
+
+def test_bumble_key_store_classes_live_in_key_store_module() -> None:
+    assert _CurrentPreviousJsonKeyStore.__module__ == "swbt.transport._bumble_key_store"
+    assert _DiagnosticKeyStore.__module__ == "swbt.transport._bumble_key_store"
 
 
 def test_bumble_key_store_metadata_reports_missing_file(tmp_path: Path) -> None:
