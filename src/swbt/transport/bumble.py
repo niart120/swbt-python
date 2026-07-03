@@ -466,6 +466,19 @@ class BumbleHidTransport:
             await handle.close()
             self._record_event("transport_close_complete", adapter=self._adapter)
 
+    def configure_key_store_path(self, key_store_path: str | None) -> None:
+        """Select the JSON key store used by future pairing and reconnect calls."""
+        self._key_store_path = key_store_path
+        if self._runtime is None:
+            return
+        if key_store_path is None:
+            cast("Any", self._runtime.device).keystore = None
+            return
+        cast("Any", self._runtime.device).keystore = _CurrentPreviousJsonKeyStore.from_device(
+            self._runtime.device,
+            filename=key_store_path,
+        )
+
     async def request_disconnect(self) -> DisconnectRequestResult:
         """Request HID channel disconnection through Bumble when channels exist."""
         self._require_open()

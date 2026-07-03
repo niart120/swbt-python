@@ -25,6 +25,7 @@ class FakeHidTransport:
         bonded_peer_addresses: tuple[str, ...] = (),
         active_reconnect_auto_connect: bool = True,
         active_reconnect_error: BaseException | None = None,
+        send_interrupt_error: Exception | None = None,
         close_wait: asyncio.Event | None = None,
     ) -> None:
         """Create a closed fake transport."""
@@ -36,7 +37,9 @@ class FakeHidTransport:
         self._bonded_peer_addresses = tuple(bonded_peer_addresses)
         self._active_reconnect_auto_connect = active_reconnect_auto_connect
         self._active_reconnect_error = active_reconnect_error
+        self._send_interrupt_error = send_interrupt_error
         self._close_wait = close_wait
+        self._key_store_path: str | None = None
         self._events: list[str] = []
         self._control_channel_open = False
         self._interrupt_channel_open = False
@@ -86,6 +89,11 @@ class FakeHidTransport:
     def disconnect_request_sent_interrupt_count(self) -> int | None:
         """Return how many interrupt reports existed when disconnect was requested."""
         return self._disconnect_request_sent_interrupt_count
+
+    @property
+    def key_store_path(self) -> str | None:
+        """Return the last configured key store path."""
+        return self._key_store_path
 
     async def open(self) -> None:
         """Open the fake transport."""
@@ -169,6 +177,10 @@ class FakeHidTransport:
         if self._active_reconnect_auto_connect:
             await self.connect()
 
+    def configure_key_store_path(self, key_store_path: str | None) -> None:
+        """Record the key store selected by a connection attempt."""
+        self._key_store_path = key_store_path
+
     async def wait_for_disconnect_request(self, *, max_wait: float = 0.5) -> None:
         """Wait until a fake remote disconnect request has been recorded."""
         async with asyncio.timeout(max_wait):
@@ -236,6 +248,8 @@ class FakeHidTransport:
     async def send_interrupt(self, payload: bytes) -> None:
         """Record an interrupt report."""
         self._require_open()
+        if self._send_interrupt_error is not None:
+            raise self._send_interrupt_error
         self._sent_interrupt_reports.append(bytes(payload))
         self._interrupt_report_event.set()
 

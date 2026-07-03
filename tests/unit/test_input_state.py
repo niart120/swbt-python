@@ -19,6 +19,12 @@ def test_stick_raw_rejects_values_outside_12_bit_range(x: int, y: int) -> None:
         Stick.raw(x=x, y=y)
 
 
+@pytest.mark.parametrize(("x", "y"), [(-1, 2048), (4096, 2048), (2048, -1), (2048, 4096)])
+def test_stick_constructor_rejects_values_outside_12_bit_range(x: int, y: int) -> None:
+    with pytest.raises(InvalidInputError):
+        Stick(x=x, y=y)
+
+
 @pytest.mark.parametrize(
     ("value", "expected_raw"),
     [
@@ -35,3 +41,16 @@ def test_stick_normalized_converts_endpoints_to_raw_values(value: float, expecte
 def test_stick_normalized_rejects_values_outside_unit_range(x: float, y: float) -> None:
     with pytest.raises(InvalidInputError):
         Stick.normalized(x=x, y=y)
+
+
+@pytest.mark.parametrize("value", [-32769, 32768])
+def test_imu_frame_constructor_rejects_values_outside_i16_range(value: int) -> None:
+    with pytest.raises(InvalidInputError):
+        IMUFrame(
+            accel_x=value,
+            accel_y=0,
+            accel_z=0,
+            gyro_x=0,
+            gyro_y=0,
+            gyro_z=0,
+        )

@@ -53,10 +53,13 @@ async def _bring_up_with_trace(
     diagnostics = DiagnosticsConfig(trace_writer=trace_writer)
     async with SwitchGamepad(
         adapter=adapter,
-        key_store_path=key_store_path,
         diagnostics=diagnostics,
     ) as pad:
-        await pad.connect(timeout=connect_timeout, allow_pairing=True)
+        await pad.connect(
+            timeout=connect_timeout,
+            allow_pairing=True,
+            key_store_path=key_store_path,
+        )
         await pad.tap(Button.A, duration=tap_duration)
         await pad.neutral()
 

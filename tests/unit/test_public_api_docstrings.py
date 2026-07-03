@@ -25,7 +25,7 @@ def _assert_doc_contains(obj: object, *tokens: str) -> None:
 def test_public_value_object_docstrings_describe_attributes_and_factory_returns() -> None:
     for cls, attributes in (
         (ConnectionResult, ("route", "status", "peer_address", "peer_count")),
-        (SwitchGamepadConfig, ("adapter", "report_period_us", "device_name", "key_store_path")),
+        (SwitchGamepadConfig, ("adapter", "report_period_us", "device_name")),
         (DiagnosticsConfig, ("trace_writer",)),
         (
             GamepadStatus,
@@ -60,7 +60,6 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         "adapter",
         "report_period_us",
         "device_name",
-        "key_store_path",
         "diagnostics",
         "transport",
     )
@@ -68,16 +67,25 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
     expected_method_tokens: tuple[tuple[object, tuple[str, ...]], ...] = (
         (SwitchGamepad.__aenter__, ("Returns:", "SwitchGamepad")),
         (SwitchGamepad.open, ("Raises:", "TransportOpenError")),
-        (SwitchGamepad.pair, ("Args:", "timeout", "Raises:", "ConnectionTimeoutError")),
-        (SwitchGamepad.reconnect, ("Args:", "timeout", "Returns:", "ConnectionResult")),
+        (SwitchGamepad.from_config, ("Args:", "config", "Returns:", "SwitchGamepad")),
+        (
+            SwitchGamepad.pair,
+            ("Args:", "timeout", "key_store_path", "Raises:", "ConnectionTimeoutError"),
+        ),
+        (SwitchGamepad.reconnect, ("Args:", "timeout", "Raises:", "ConnectionFailedError")),
+        (SwitchGamepad.try_reconnect, ("Args:", "timeout", "Returns:", "ConnectionResult")),
         (
             SwitchGamepad.connect,
+            ("Args:", "timeout", "allow_pairing", "Raises:", "ConnectionFailedError"),
+        ),
+        (
+            SwitchGamepad.try_connect,
             ("Args:", "timeout", "allow_pairing", "Returns:", "ConnectionResult"),
         ),
         (SwitchGamepad.close, ("Args:", "neutral")),
-        (SwitchGamepad.press, ("Args:", "buttons")),
+        (SwitchGamepad.press, ("Args:", "buttons", "does not send")),
         (SwitchGamepad.set_input, ("Args:", "state")),
-        (SwitchGamepad.release, ("Args:", "buttons")),
+        (SwitchGamepad.release, ("Args:", "buttons", "does not send")),
         (SwitchGamepad.neutral, ("InputState.neutral()",)),
         (SwitchGamepad.tap, ("Args:", "buttons", "duration", "Raises:", "ClosedError")),
         (SwitchGamepad.status, ("Returns:", "GamepadStatus")),

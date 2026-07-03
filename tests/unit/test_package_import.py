@@ -5,13 +5,22 @@ import swbt
 
 def test_package_exports_public_gamepad_surface() -> None:
     assert swbt.__all__ == (
+        "BondedPeer",
         "Button",
+        "ClosedError",
+        "ConnectionFailedError",
         "ConnectionResult",
+        "ConnectionTimeoutError",
         "DiagnosticsConfig",
+        "DisconnectRequestResult",
         "GamepadStatus",
+        "HidDeviceTransport",
         "IMUFrame",
         "InputState",
+        "InvalidInputError",
         "Stick",
+        "SwbtError",
         "SwitchGamepad",
         "SwitchGamepadConfig",
+        "TransportOpenError",
     )

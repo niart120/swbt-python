@@ -22,11 +22,12 @@ import asyncio
 from swbt import SwitchGamepad, Button
 
 async def main() -> None:
-    async with SwitchGamepad(
-        adapter="usb:0",
-        key_store_path="switch-bond.json",
-    ) as pad:
-        await pad.connect(timeout=30.0, allow_pairing=True)
+    async with SwitchGamepad(adapter="usb:0") as pad:
+        await pad.connect(
+            timeout=30.0,
+            allow_pairing=True,
+            key_store_path="switch-bond.json",
+        )
         await pad.tap(Button.A)
 
 asyncio.run(main())
@@ -41,11 +42,8 @@ import asyncio
 from swbt import SwitchGamepad, Button
 
 async def main() -> None:
-    async with SwitchGamepad(
-        adapter="usb:0",
-        key_store_path="switch-bond.json",
-    ) as pad:
-        await pad.connect(timeout=30.0)
+    async with SwitchGamepad(adapter="usb:0") as pad:
+        await pad.connect(timeout=30.0, key_store_path="switch-bond.json")
 
         await pad.press(Button.L, Button.R)
         await asyncio.sleep(0.5)
@@ -62,11 +60,8 @@ import asyncio
 from swbt import SwitchGamepad, InputState, Stick
 
 async def main() -> None:
-    async with SwitchGamepad(
-        adapter="usb:0",
-        key_store_path="switch-bond.json",
-    ) as pad:
-        await pad.connect(timeout=30.0)
+    async with SwitchGamepad(adapter="usb:0") as pad:
+        await pad.connect(timeout=30.0, key_store_path="switch-bond.json")
 
         await pad.set_input(
             InputState.neutral().with_sticks(
@@ -113,13 +108,21 @@ class SwitchGamepad:
     def __init__(
         self,
         *,
-        adapter: str = "usb:0",
+        adapter: str | None = None,
         report_period_us: int = 8000,
         device_name: str = "Pro Controller",
-        key_store_path: str | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
     ) -> None: ...
+
+    @classmethod
+    def from_config(
+        cls,
+        config: SwitchGamepadConfig,
+        *,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> "SwitchGamepad": ...
 ```
 
 引数の意味は次の通り。
@@ -129,23 +132,46 @@ class SwitchGamepad:
 | `adapter` | Bumble transport に渡す adapter moniker |
 | `report_period_us` | periodic input report の送信周期 |
 | `device_name` | HID Device として使う表示名 |
-| `key_store_path` | pairing / reconnect 情報の保存先 |
 | `diagnostics` | trace と counter の設定 |
 | `transport` | テストや別 transport 実装を注入するための引数 |
 
-`transport` が指定された場合、`adapter` はその transport 実装の責務に応じて無視される場合がある。
+default transport を使う場合、`adapter` は必須である。`transport` が指定された場合、`adapter` は省略できる。この場合、diagnostics の adapter metadata は `"custom"` とする。`key_store_path` は constructor ではなく接続メソッドに渡す。
 
 ### 3.2 接続操作
 
 ```python
 async def open(self) -> None: ...
-async def pair(self, timeout: float | None = None) -> None: ...
-async def reconnect(self, timeout: float | None = None) -> ConnectionResult: ...
+async def pair(
+    self,
+    timeout: float | None = None,
+    *,
+    key_store_path: str | None = None,
+) -> None: ...
+async def reconnect(
+    self,
+    timeout: float | None = None,
+    *,
+    key_store_path: str | None = None,
+) -> None: ...
+async def try_reconnect(
+    self,
+    timeout: float | None = None,
+    *,
+    key_store_path: str | None = None,
+) -> ConnectionResult: ...
 async def connect(
     self,
     *,
     timeout: float | None = None,
     allow_pairing: bool = False,
+    key_store_path: str | None = None,
+) -> None: ...
+async def try_connect(
+    self,
+    *,
+    timeout: float | None = None,
+    allow_pairing: bool = False,
+    key_store_path: str | None = None,
 ) -> ConnectionResult: ...
 async def close(self, *, neutral: bool = True) -> None: ...
 ```
@@ -160,7 +186,7 @@ async def close(self, *, neutral: bool = True) -> None: ...
 
 `close()` は送信 loop と transport を停止する。
 
-`connect()` / `reconnect()` の戻り値は `ConnectionResult` とする。文字列 `Literal` ではなく、接続経路を表す enum と、bond reuse / pairing fallback の有無を持つ小さな値オブジェクトにする。詳細な field は M6 の key store / reconnect 実装時に固定する。`pair()` は初回 pairing の明示入口であり、接続戦略の選択結果は返さない。
+`connect()` / `reconnect()` は成功した場合だけ戻る。接続できない場合は `ConnectionFailedError`、timeout は `ConnectionTimeoutError` を投げる。接続失敗の詳細 status が必要な場合は `try_connect()` / `try_reconnect()` を使い、`ConnectionResult` を読む。`pair()` は初回 pairing の明示入口であり、接続戦略の選択結果は返さない。
 
 `close()` は冪等にする。複数回呼び出しても例外を出さず、後始末が未完了の箇所だけを処理する。
 
@@ -175,7 +201,7 @@ async def release(self, *buttons: Button) -> None: ...
 async def tap(self, *buttons: Button, duration: float = 0.08) -> None: ...
 ```
 
-`set_input()` は現在入力全体を置き換える。`press()` と `release()` は現在入力のボタン集合だけを更新する。`tap()` は `press()`、sleep、`release()` を組み合わせた helper として実装する。
+`set_input()` は現在入力全体を置き換える。`press()` と `release()` は現在入力のボタン集合だけを更新し、即時送信はしない。接続中は次の periodic report で反映される。`tap()` は `press()`、即時送信、sleep、`release()`、即時送信を組み合わせた helper として実装する。
 
 `tap()` の `duration` は秒単位とする。packet protocol へ duration を埋め込まない。
 
@@ -194,7 +220,7 @@ def status(self) -> GamepadStatus: ...
 
 ```python
 async with SwitchGamepad(adapter="usb:0") as pad:
-    await pad.connect(timeout=30.0)
+    await pad.connect(timeout=30.0, key_store_path="switch-bond.json")
     await pad.tap(Button.A)
 ```
 
@@ -290,12 +316,13 @@ class Stick:
 class SwbtError(Exception): ...
 class TransportOpenError(SwbtError): ...
 class ConnectionTimeoutError(SwbtError): ...
+class ConnectionFailedError(SwbtError): ...
 class ProtocolError(SwbtError): ...
 class ClosedError(SwbtError): ...
 class InvalidInputError(SwbtError): ...
 ```
 
-利用者の入力不正は `InvalidInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError` として分ける。
+利用者の入力不正は `InvalidInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError`、timeout 以外の接続不成立は `ConnectionFailedError` として分ける。
 
 ## 8. 非同期 API の扱い
 

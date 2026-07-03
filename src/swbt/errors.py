@@ -13,6 +13,10 @@ class ConnectionTimeoutError(SwbtError):
     """Raised when waiting for a connection times out."""
 
 
+class ConnectionFailedError(SwbtError):
+    """Raised when a connection attempt finishes without a connection."""
+
+
 class ProtocolError(SwbtError):
     """Raised when protocol bytes cannot be parsed or produced."""
 
