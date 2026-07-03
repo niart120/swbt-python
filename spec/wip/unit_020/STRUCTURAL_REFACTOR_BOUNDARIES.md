@@ -116,7 +116,7 @@
 | todo | ACL queue drain 分割後も connection queue、host fallback queue、no-progress stop が従来通り | regression | unit | no | unit_005 queue drain contract |
 | todo | Bumble request disconnect、connection request bridge、ACL queue drain の既存 unit tests が通る | regression | unit | no | unit_014 / unit_005 contract |
 | todo | connection diagnostics registration 分割後も pairing / authentication / encryption / mode change events の field が変わらない | regression | unit | no | fake connection event tests を必要なら追加する |
-| todo | output report dispatch 分割後も output report trace、subcommand reply、raw rumble status が変わらない | regression | integration | no | fake transport。`_gamepad_output.py` などへ切り出す最初の安全網 |
+| refactor-done | output report dispatch 分割後も output report trace、subcommand reply、raw rumble status が変わらない | regression | unit / integration | no | `OutputReportDispatcher` に parse、diagnostics、reply enqueue を移し、fake transport integration で trace と status を確認 |
 | todo | unsupported subcommand が分割後も復旧不能エラーとして記録され、`connection_state="failed"` になる | regression | integration | no | output dispatch のエラー境界 |
 | todo | default transport 生成を分割後も public API import は Bumble を解決せず、`SwitchGamepad.from_config()` は既定 transport へ resource config を渡す | regression | unit | no | `_ensure_transport()` の外部化を守る |
 | todo | `SwitchGamepad.try_reconnect()` 分割後も no bond / connected / timeout / failed / invalid key store の結果が変わらない | regression | integration | no | fake transport。`_gamepad_connection.py` などへ切り出す安全網 |
@@ -142,7 +142,7 @@ Tidy decision:
 
 1. [x] `diagnostics.py` の key store knowledge leak を分析し、修正範囲をこの unit に含めるか判定する。
 2. [x] key store metadata reader を `src/swbt/transport/_bumble_key_store.py` に置き、`diagnostics.py` の previous namespace 直読みを外す。`_CurrentPreviousJsonKeyStore` と diagnostics wrapper の移動はまだ行わない。
-3. [ ] `gamepad.py` の output report dispatch を `_gamepad_output.py` 相当へ切り出す。parser、rumble 記録、subcommand diagnostics、reply enqueue を `OutputReportDispatcher` が扱い、`SwitchGamepad` は callback 入口だけを残す。
+3. [x] `gamepad.py` の output report dispatch を `_gamepad_output.py` 相当へ切り出す。parser、rumble 記録、subcommand diagnostics、reply enqueue を `OutputReportDispatcher` が扱い、`SwitchGamepad` は callback 入口だけを残す。
 4. [ ] `gamepad.py` の既定 transport 生成を `_gamepad_transport.py` 相当へ切り出す。Bumble import は関数内部に閉じ込め、public API import が Bumble を解決しない contract を維持する。
 5. [ ] `gamepad.py` の reconnect / connect workflow を `_gamepad_connection.py` 相当へ切り出す。`SwitchGamepad.reconnect()` / `connect()` は成功必須 API の薄い wrapper として残す。
 6. [ ] `SwitchGamepad.close()` は外部切り出し済み箇所が green になった後に再評価する。unit_014 の close ordering、disconnect request terminal、host disconnect race の回帰 test があるため、最初の整理では動かさない。
@@ -296,7 +296,7 @@ Tidy decision:
 | path | change | 内容 |
 |---|---|---|
 | `src/swbt/gamepad.py` | modify | reconnect strategy と output report dispatch を小さく分ける |
-| `src/swbt/_gamepad_output.py` | new / candidate | output report parse、diagnostics、subcommand reply enqueue の内部部品 |
+| `src/swbt/_gamepad_output.py` | new | output report parse、diagnostics、subcommand reply enqueue の内部部品 |
 | `src/swbt/_gamepad_connection.py` | new / candidate | reconnect / connect workflow の内部部品 |
 | `src/swbt/_gamepad_transport.py` | new / candidate | 既定 Bumble transport の遅延生成関数。public import 時に Bumble を解決しない |
 | `src/swbt/transport/bumble.py` | delete / move / split | package 化する場合は `src/swbt/transport/bumble/` へ移す。内部 import path 互換は不要 |
@@ -305,6 +305,7 @@ Tidy decision:
 | `src/swbt/transport/_bumble_key_store.py` | new | key store metadata reader と previous namespace prefix owner |
 | `src/swbt/diagnostics.py` | modify | key store storage format knowledge を外へ出し、plain metadata を記録するだけにする |
 | `tests/unit/test_bumble_key_store_metadata.py` | new | key store metadata reader の current / previous 判定を固定する |
+| `tests/unit/test_gamepad_output_dispatcher.py` | new | output report dispatcher の trace と reply enqueue を単体で固定する |
 | `tests/unit/test_bumble_transport.py` | modify / split | fake runtime fixture と behavior tests を整理する |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify / split | connection / close / report / reconnect tests の grouping を整理する |
 | `spec/wip/unit_020/STRUCTURAL_REFACTOR_BOUNDARIES.md` | new / modify | 作業範囲、原因分析、検証結果を記録する |
@@ -317,10 +318,14 @@ Tidy decision:
 | `uv run pytest tests/unit/test_diagnostics.py tests/unit/test_bumble_key_store_metadata.py tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 60 passed。`run_metadata` の key store fields と fake transport integration を確認 |
 | `uv run ruff format --check src\swbt\diagnostics.py src\swbt\gamepad.py src\swbt\transport\bumble.py src\swbt\transport\_bumble_key_store.py tests\unit\test_diagnostics.py tests\unit\test_bumble_key_store_metadata.py` | pass | 対象変更の format 確認 |
 | `uv run ruff check src\swbt\diagnostics.py src\swbt\gamepad.py src\swbt\transport\bumble.py src\swbt\transport\_bumble_key_store.py tests\unit\test_diagnostics.py tests\unit\test_bumble_key_store_metadata.py` | pass | 対象変更の lint 確認 |
-| `uv run ruff format --check .` | pass | 52 files already formatted |
+| `uv run pytest tests\unit\test_gamepad_output_dispatcher.py -q` | expected fail | red: `swbt._gamepad_output` module がまだ存在しなかった |
+| `uv run pytest tests\unit\test_gamepad_output_dispatcher.py tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | 54 passed。dispatcher 単体と fake transport の output report trace / status を確認 |
+| `uv run ruff format --check src\swbt\_gamepad_output.py src\swbt\gamepad.py tests\unit\test_gamepad_output_dispatcher.py` | pass | 対象変更の format 確認 |
+| `uv run ruff check src\swbt\_gamepad_output.py src\swbt\gamepad.py tests\unit\test_gamepad_output_dispatcher.py` | pass | 対象変更の lint 確認 |
+| `uv run ruff format --check .` | pass | 54 files already formatted |
 | `uv run ruff check .` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
-| `uv run pytest tests\unit tests\integration -q` | pass | 206 passed |
+| `uv run pytest tests\unit tests\integration -q` | pass | 207 passed |
 | `uv run pytest -m bumble` | not run | 実行には USB Bluetooth dongle open の明示承認が必要 |
 | `uv run pytest -m hardware` | not run | 実行には Switch-facing 動作の明示承認が必要 |
 

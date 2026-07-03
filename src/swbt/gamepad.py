@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import Literal
 
+from swbt._gamepad_output import OutputReportDispatcher
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
 from swbt.errors import (
     ClosedError,
@@ -15,8 +16,6 @@ from swbt.errors import (
     SwbtError,
 )
 from swbt.input import Button, InputState
-from swbt.protocol.output_report import OutputReportParser
-from swbt.protocol.subcommand import SubcommandResponder, UnsupportedSubcommandError
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
@@ -116,8 +115,12 @@ class SwitchGamepad:
         self._diagnostics = DiagnosticsRecorder(
             trace_writer=diagnostics.trace_writer if diagnostics is not None else None
         )
-        self._output_report_parser = OutputReportParser()
-        self._subcommand_responder = SubcommandResponder()
+        self._output_report_dispatcher = OutputReportDispatcher(
+            diagnostics=self._diagnostics,
+            require_reply_sender=self._require_subcommand_reply_sender,
+            send_subcommand_reply=self._send_subcommand_reply,
+            state_store=self._state_store,
+        )
         self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
@@ -575,6 +578,18 @@ class SwitchGamepad:
             raise ClosedError(msg)
         await self._report_loop.send_current_input()
 
+    def _require_subcommand_reply_sender(self) -> None:
+        _ = self._subcommand_reply_sender()
+
+    async def _send_subcommand_reply(self, reply: bytes) -> None:
+        await self._subcommand_reply_sender().send_subcommand_reply(reply)
+
+    def _subcommand_reply_sender(self) -> ReportLoop:
+        if self._report_loop is None:
+            msg = "gamepad is not open"
+            raise ClosedError(msg)
+        return self._report_loop
+
     def _require_connected_for_input(self) -> None:
         if self._report_loop is None or not self._connected_event.is_set():
             msg = "gamepad is not connected"
@@ -692,48 +707,7 @@ class SwitchGamepad:
 
     async def _handle_output_report_data(self, payload: bytes) -> None:
         try:
-            output_report = self._output_report_parser.parse(payload)
-            subcommand_id = (
-                f"0x{output_report.subcommand_id:02x}"
-                if output_report.subcommand_id is not None
-                else None
-            )
-            if output_report.rumble is not None:
-                self._diagnostics.record_raw_rumble(output_report.rumble)
-            self._diagnostics.record_event(
-                "output_report_rx",
-                length=len(payload),
-                packet_id=output_report.packet_id,
-                report_id=f"0x{output_report.report_id:02x}",
-                subcommand_id=subcommand_id,
-            )
-            if output_report.subcommand_id is None:
-                return
-            self._diagnostics.record_subcommand_rx(
-                packet_id=output_report.packet_id,
-                subcommand_id=output_report.subcommand_id,
-            )
-            if self._report_loop is None:
-                msg = "gamepad is not open"
-                raise ClosedError(msg)
-            state = await self._state_store.snapshot()
-            try:
-                reply = self._subcommand_responder.respond(output_report, state=state)
-            except UnsupportedSubcommandError:
-                self._diagnostics.record_event(
-                    "unsupported_subcommand",
-                    packet_id=output_report.packet_id,
-                    payload=output_report.subcommand_payload.hex(),
-                    subcommand_id=subcommand_id,
-                )
-                raise
-            self._diagnostics.record_event(
-                "subcommand_reply_tx",
-                packet_id=output_report.packet_id,
-                report_id=f"0x{reply[0]:02x}",
-                subcommand_id=subcommand_id,
-            )
-            await self._report_loop.send_subcommand_reply(reply)
+            await self._output_report_dispatcher.dispatch(payload)
         except SwbtError as error:
             self._connection_state = "failed"
             self._diagnostics.record_error(error, recoverable=False)
