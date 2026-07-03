@@ -82,13 +82,11 @@ def test_switch_active_reconnect_with_existing_key_store_records_result(
             )
             pad = SwitchGamepad(
                 adapter=swbt_bumble_adapter,
+                key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
             try:
-                result = await pad.try_reconnect(
-                    timeout=60.0,
-                    key_store_path=str(key_store_path),
-                )
+                result = await pad.try_reconnect(timeout=60.0)
                 _record_probe_event(
                     trace,
                     "manual_reconnect_checkpoint",
@@ -165,6 +163,7 @@ def test_switch_incoming_connection_trace_stays_separate_from_active_reconnect(
         with incoming_trace_path.open("w", encoding="utf-8") as trace:
             pad = SwitchGamepad(
                 adapter=swbt_bumble_adapter,
+                key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
             try:
@@ -174,7 +173,7 @@ def test_switch_incoming_connection_trace_stays_separate_from_active_reconnect(
                     expected_switch_screen="controller_search_or_change_grip_order",
                     wait_seconds=_INCOMING_OPERATOR_WAIT_SECONDS,
                 )
-                await pad.pair(timeout=60.0, key_store_path=str(key_store_path))
+                await pad.pair(timeout=60.0)
                 await asyncio.sleep(1.0)
             finally:
                 await pad.close(neutral=True)
@@ -212,13 +211,13 @@ async def _pair_with_key_store(
         )
         pad = SwitchGamepad(
             adapter=adapter,
+            key_store_path=str(key_store_path),
             diagnostics=DiagnosticsConfig(trace_writer=trace),
         )
         try:
             result = await pad.try_connect(
                 timeout=60.0,
                 allow_pairing=True,
-                key_store_path=str(key_store_path),
             )
             _record_probe_event(
                 trace,

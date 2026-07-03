@@ -6,11 +6,13 @@ import pkgutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 import swbt
 from swbt import InvalidInputError, SwitchGamepad, SwitchGamepadConfig
+from swbt.gamepad import ConnectionStatus
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 
 
@@ -95,6 +97,27 @@ def test_switch_gamepad_signature_does_not_expose_bumble_types() -> None:
     assert "bumble" not in annotation_text.lower()
 
 
+def test_switch_gamepad_constructor_accepts_key_store_path() -> None:
+    signature = inspect.signature(SwitchGamepad)
+
+    assert "key_store_path" in signature.parameters
+
+
+def test_connection_methods_do_not_accept_key_store_path() -> None:
+    for method in (
+        SwitchGamepad.pair,
+        SwitchGamepad.reconnect,
+        SwitchGamepad.try_reconnect,
+        SwitchGamepad.connect,
+        SwitchGamepad.try_connect,
+    ):
+        assert "key_store_path" not in inspect.signature(method).parameters
+
+
+def test_connection_status_does_not_include_ambiguous_bond() -> None:
+    assert "ambiguous_bond" not in get_args(ConnectionStatus)
+
+
 def test_default_transport_requires_explicit_adapter() -> None:
     with pytest.raises(InvalidInputError):
         SwitchGamepad()
@@ -156,9 +179,6 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
             ) -> None:
                 _ = (peer_address, connect_timeout)
 
-            def configure_key_store_path(self, key_store_path: str | None) -> None:
-                captured_config["configured_key_store_path"] = key_store_path
-
             async def send_interrupt(self, payload: bytes) -> None:
                 _ = payload
 
@@ -184,17 +204,17 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
             SwitchGamepadConfig(
                 adapter="usb:1",
                 device_name="Reference Pad",
+                key_store_path=str(key_store_path),
             )
         )
 
         await pad.open()
-        result = await pad.try_reconnect(key_store_path=str(key_store_path))
+        result = await pad.try_reconnect()
         await pad.close(neutral=True)
 
         assert captured_config["adapter"] == "usb:1"
         assert captured_config["device_name"] == "Reference Pad"
-        assert captured_config["key_store_path"] is None
-        assert captured_config["configured_key_store_path"] == str(key_store_path)
+        assert captured_config["key_store_path"] == str(key_store_path)
         assert captured_config["diagnostics"] is not None
         assert result.status == "no_bond"
 
@@ -211,3 +231,7 @@ def test_hid_transport_disconnect_request_boundary_uses_plain_types() -> None:
     assert "bumble" not in annotation_text
     assert result.status == "requested"
     assert result.channels == ("interrupt", "control")
+
+
+def test_hid_transport_has_no_key_store_mutation_hook() -> None:
+    assert not hasattr(HidDeviceTransport, "configure_key_store_path")

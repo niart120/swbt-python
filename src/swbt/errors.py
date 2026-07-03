@@ -17,6 +17,10 @@ class ConnectionFailedError(SwbtError):
     """Raised when a connection attempt finishes without a connection."""
 
 
+class InvalidKeyStoreError(SwbtError):
+    """Raised when a key store has an unsupported or invalid shape."""
+
+
 class ProtocolError(SwbtError):
     """Raised when protocol bytes cannot be parsed or produced."""
 

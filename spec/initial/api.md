@@ -22,11 +22,13 @@ import asyncio
 from swbt import SwitchGamepad, Button
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0") as pad:
+    async with SwitchGamepad(
+        adapter="usb:0",
+        key_store_path="switch-bond.json",
+    ) as pad:
         await pad.connect(
             timeout=30.0,
             allow_pairing=True,
-            key_store_path="switch-bond.json",
         )
         await pad.tap(Button.A)
 
@@ -42,8 +44,8 @@ import asyncio
 from swbt import SwitchGamepad, Button
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0") as pad:
-        await pad.connect(timeout=30.0, key_store_path="switch-bond.json")
+    async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+        await pad.connect(timeout=30.0)
 
         await pad.press(Button.L, Button.R)
         await asyncio.sleep(0.5)
@@ -60,8 +62,8 @@ import asyncio
 from swbt import SwitchGamepad, InputState, Stick
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0") as pad:
-        await pad.connect(timeout=30.0, key_store_path="switch-bond.json")
+    async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+        await pad.connect(timeout=30.0)
 
         await pad.set_input(
             InputState.neutral().with_sticks(
@@ -109,6 +111,7 @@ class SwitchGamepad:
         self,
         *,
         adapter: str | None = None,
+        key_store_path: str | None = None,
         report_period_us: int = 8000,
         device_name: str = "Pro Controller",
         diagnostics: DiagnosticsConfig | None = None,
@@ -130,48 +133,36 @@ class SwitchGamepad:
 | 引数 | 意味 |
 |---|---|
 | `adapter` | Bumble transport に渡す adapter moniker |
+| `key_store_path` | default Bumble transport が pairing key を保存する JSON key store path |
 | `report_period_us` | periodic input report の送信周期 |
 | `device_name` | HID Device として使う表示名 |
 | `diagnostics` | trace と counter の設定 |
 | `transport` | テストや別 transport 実装を注入するための引数 |
 
-default transport を使う場合、`adapter` は必須である。`transport` が指定された場合、`adapter` は省略できる。この場合、diagnostics の adapter metadata は `"custom"` とする。`key_store_path` は constructor ではなく接続メソッドに渡す。
+default transport を使う場合、`adapter` は必須である。`transport` が指定された場合、`adapter` は省略できる。この場合、diagnostics の adapter metadata は `"custom"` とする。
+
+`key_store_path` は 1 つの仮想 Pro Controller の pairing storage を定義する構成値である。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。pairing 自体は可能だが、プロセス終了後の reconnect は期待しない。
+
+`transport` 注入は public extension point として扱う。`SwitchGamepad` は injected transport を後から再設定しない。key store を必要とする custom transport は、その transport 自身の constructor で設定を受ける。`SwitchGamepadConfig.key_store_path` は default Bumble transport の構築と diagnostics metadata に使う。
 
 ### 3.2 接続操作
 
 ```python
 async def open(self) -> None: ...
-async def pair(
-    self,
-    timeout: float | None = None,
-    *,
-    key_store_path: str | None = None,
-) -> None: ...
-async def reconnect(
-    self,
-    timeout: float | None = None,
-    *,
-    key_store_path: str | None = None,
-) -> None: ...
-async def try_reconnect(
-    self,
-    timeout: float | None = None,
-    *,
-    key_store_path: str | None = None,
-) -> ConnectionResult: ...
+async def pair(self, timeout: float | None = None) -> None: ...
+async def reconnect(self, timeout: float | None = None) -> None: ...
+async def try_reconnect(self, timeout: float | None = None) -> ConnectionResult: ...
 async def connect(
     self,
     *,
     timeout: float | None = None,
     allow_pairing: bool = False,
-    key_store_path: str | None = None,
 ) -> None: ...
 async def try_connect(
     self,
     *,
     timeout: float | None = None,
     allow_pairing: bool = False,
-    key_store_path: str | None = None,
 ) -> ConnectionResult: ...
 async def close(self, *, neutral: bool = True) -> None: ...
 ```
@@ -187,6 +178,8 @@ async def close(self, *, neutral: bool = True) -> None: ...
 `close()` は送信 loop と transport を停止する。
 
 `connect()` / `reconnect()` は成功した場合だけ戻る。接続できない場合は `ConnectionFailedError`、timeout は `ConnectionTimeoutError` を投げる。接続失敗の詳細 status が必要な場合は `try_connect()` / `try_reconnect()` を使い、`ConnectionResult` を読む。`pair()` は初回 pairing の明示入口であり、接続戦略の選択結果は返さない。
+
+`ConnectionResult.status` は `"connected"`、`"no_bond"`、`"timeout"`、`"failed"` のいずれかである。current peer が複数ある key store は旧形式または不正形式として扱い、`InvalidKeyStoreError` を投げる。これは接続失敗ではなく永続状態の形式不一致であるため、`try_reconnect()` でも `ConnectionResult` へ畳み込まない。
 
 `close()` は冪等にする。複数回呼び出しても例外を出さず、後始末が未完了の箇所だけを処理する。
 
@@ -219,8 +212,8 @@ def status(self) -> GamepadStatus: ...
 ### 3.5 context manager
 
 ```python
-async with SwitchGamepad(adapter="usb:0") as pad:
-    await pad.connect(timeout=30.0, key_store_path="switch-bond.json")
+async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+    await pad.connect(timeout=30.0)
     await pad.tap(Button.A)
 ```
 
@@ -320,9 +313,10 @@ class ConnectionFailedError(SwbtError): ...
 class ProtocolError(SwbtError): ...
 class ClosedError(SwbtError): ...
 class InvalidInputError(SwbtError): ...
+class InvalidKeyStoreError(SwbtError): ...
 ```
 
-利用者の入力不正は `InvalidInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError`、timeout 以外の接続不成立は `ConnectionFailedError` として分ける。
+利用者の入力不正は `InvalidInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError`、timeout 以外の接続不成立は `ConnectionFailedError` として分ける。key store の unsupported shape や複数 current peer は `InvalidKeyStoreError` とする。
 
 ## 8. 非同期 API の扱い
 

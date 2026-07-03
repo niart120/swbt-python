@@ -11,6 +11,7 @@ from swbt.errors import (
     ConnectionFailedError,
     ConnectionTimeoutError,
     InvalidInputError,
+    InvalidKeyStoreError,
     SwbtError,
 )
 from swbt.input import Button, InputState
@@ -23,7 +24,7 @@ from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
 DISCONNECT_REQUEST_TIMEOUT_SECONDS = 0.25
 
 ConnectionRoute = Literal["active_reconnect", "pairing"]
-ConnectionStatus = Literal["connected", "no_bond", "ambiguous_bond", "timeout", "failed"]
+ConnectionStatus = Literal["connected", "no_bond", "timeout", "failed"]
 
 
 @dataclass(frozen=True)
@@ -49,11 +50,13 @@ class SwitchGamepadConfig:
 
     Attributes:
         adapter: Bumble adapter moniker, such as ``"usb:0"``.
+        key_store_path: Path used by the default transport to persist pairing keys.
         report_period_us: Periodic input report interval in microseconds.
         device_name: HID device name advertised to the host.
     """
 
     adapter: str | None = None
+    key_store_path: str | None = None
     report_period_us: int = 8000
     device_name: str = "Pro Controller"
 
@@ -76,6 +79,7 @@ class SwitchGamepad:
         self,
         *,
         adapter: str | None = None,
+        key_store_path: str | None = None,
         report_period_us: int = 8000,
         device_name: str = "Pro Controller",
         diagnostics: DiagnosticsConfig | None = None,
@@ -86,6 +90,7 @@ class SwitchGamepad:
         Args:
             adapter: Bumble adapter moniker used when the default transport is created.
                 Required unless a custom transport is supplied.
+            key_store_path: Optional path used by the default transport to persist keys.
             report_period_us: Periodic input report interval in microseconds.
             device_name: HID device name passed to the default transport.
             diagnostics: Optional diagnostics configuration for trace output.
@@ -101,11 +106,11 @@ class SwitchGamepad:
             raise InvalidInputError(msg)
         self._config = SwitchGamepadConfig(
             adapter=adapter,
+            key_store_path=key_store_path,
             report_period_us=report_period_us,
             device_name=device_name,
         )
         self._transport = transport
-        self._connection_key_store_path: str | None = None
         self._state_store = InputStateStore()
         self._diagnostics = DiagnosticsRecorder(
             trace_writer=diagnostics.trace_writer if diagnostics is not None else None
@@ -140,6 +145,7 @@ class SwitchGamepad:
         """
         return cls(
             adapter=config.adapter,
+            key_store_path=config.key_store_path,
             report_period_us=config.report_period_us,
             device_name=config.device_name,
             diagnostics=diagnostics,
@@ -206,24 +212,17 @@ class SwitchGamepad:
                 self._is_open = False
                 raise
 
-    async def pair(
-        self,
-        timeout: float | None = None,  # noqa: ASYNC109
-        *,
-        key_store_path: str | None = None,
-    ) -> None:
+    async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
         """Start pairing advertising and wait for a host connection.
 
         Args:
             timeout: Maximum seconds to wait for a connection. ``None`` waits until
                 the host connects.
-            key_store_path: Optional key store used by this pairing attempt.
 
         Raises:
             ConnectionTimeoutError: The timeout elapsed before a connection completed.
             ClosedError: The transport was unavailable after opening.
         """
-        self._configure_connection_key_store_path(key_store_path)
         if not self._is_open:
             await self.open()
         if self._transport is None:
@@ -248,55 +247,53 @@ class SwitchGamepad:
             self._diagnostics.record_error(connection_error, recoverable=True)
             raise connection_error from error
 
-    async def reconnect(
-        self,
-        timeout: float | None = None,  # noqa: ASYNC109
-        *,
-        key_store_path: str | None = None,
-    ) -> None:
+    async def reconnect(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
         """Reconnect with exactly one bonded peer and raise on failure.
 
         Args:
             timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
                 the transport default.
-            key_store_path: Optional key store used by this reconnect attempt.
 
         Raises:
             ConnectionFailedError: No single bonded peer was available or reconnect failed.
             ConnectionTimeoutError: The active reconnect attempt timed out.
         """
-        result = await self.try_reconnect(timeout=timeout, key_store_path=key_store_path)
+        result = await self.try_reconnect(timeout=timeout)
         self._raise_if_connection_failed(result)
 
     async def try_reconnect(
         self,
         timeout: float | None = None,  # noqa: ASYNC109
-        *,
-        key_store_path: str | None = None,
     ) -> ConnectionResult:
         """Try active reconnect with exactly one bonded peer.
 
         Args:
             timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
                 the transport default.
-            key_store_path: Optional key store used by this reconnect attempt.
 
         Returns:
             ConnectionResult: Reconnect route, status, selected peer, and peer count.
         """
-        self._configure_connection_key_store_path(key_store_path)
         if not self._is_open:
             await self.open()
         if self._transport is None:
             msg = "gamepad is not open"
             raise ClosedError(msg)
-        if key_store_path is None:
+        if self._config.key_store_path is None:
             self._diagnostics.record_event(
                 "reconnect_key_store_unavailable",
                 reason="key_store_path_none",
                 route="active_reconnect",
             )
         peers = await self._transport.list_bonded_peers()
+        if len(peers) > 1:
+            self._diagnostics.record_event(
+                "invalid_key_store",
+                peer_count=len(peers),
+                reason="multiple_current_peers",
+            )
+            msg = "key store contains multiple current peers"
+            raise InvalidKeyStoreError(msg)
         selection = self._bonded_peer_selection(len(peers))
         self._diagnostics.record_event(
             "bonded_peers_discovered",
@@ -315,19 +312,6 @@ class SwitchGamepad:
                 status="no_bond",
                 peer_count=0,
             )
-        if len(peers) > 1:
-            self._diagnostics.record_event(
-                "active_reconnect_result",
-                peer_count=len(peers),
-                route="active_reconnect",
-                status="ambiguous_bond",
-            )
-            return ConnectionResult(
-                route="active_reconnect",
-                status="ambiguous_bond",
-                peer_count=len(peers),
-            )
-
         peer = peers[0]
         self._connection_state = "reconnecting"
         self._connected_event.clear()
@@ -388,7 +372,6 @@ class SwitchGamepad:
         *,
         timeout: float | None = None,  # noqa: ASYNC109
         allow_pairing: bool = False,
-        key_store_path: str | None = None,
     ) -> None:
         """Connect using bonded reconnect first, then optional pairing fallback.
 
@@ -396,7 +379,6 @@ class SwitchGamepad:
             timeout: Maximum seconds for each connection attempt. ``None`` uses the
                 lower layer default.
             allow_pairing: If ``True``, run pairing when no bonded peer is available.
-            key_store_path: Optional key store used by this connection attempt.
 
         Raises:
             ConnectionFailedError: The connection attempt finished without connecting.
@@ -405,7 +387,6 @@ class SwitchGamepad:
         result = await self.try_connect(
             timeout=timeout,
             allow_pairing=allow_pairing,
-            key_store_path=key_store_path,
         )
         self._raise_if_connection_failed(result)
 
@@ -414,7 +395,6 @@ class SwitchGamepad:
         *,
         timeout: float | None = None,  # noqa: ASYNC109
         allow_pairing: bool = False,
-        key_store_path: str | None = None,
     ) -> ConnectionResult:
         """Try bonded reconnect first, then optional pairing fallback.
 
@@ -422,15 +402,11 @@ class SwitchGamepad:
             timeout: Maximum seconds for each connection attempt. ``None`` uses the
                 lower layer default.
             allow_pairing: If ``True``, run pairing when no bonded peer is available.
-            key_store_path: Optional key store used by this connection attempt.
 
         Returns:
             ConnectionResult: Route and status chosen by reconnect or pairing fallback.
         """
-        reconnect_result = await self.try_reconnect(
-            timeout=timeout,
-            key_store_path=key_store_path,
-        )
+        reconnect_result = await self.try_reconnect(timeout=timeout)
         if reconnect_result.status != "no_bond" or not allow_pairing:
             return reconnect_result
         self._diagnostics.record_event(
@@ -439,7 +415,7 @@ class SwitchGamepad:
             route="pairing",
         )
         try:
-            await self.pair(timeout=timeout, key_store_path=key_store_path)
+            await self.pair(timeout=timeout)
         except ConnectionTimeoutError:
             return ConnectionResult(route="pairing", status="timeout")
         return ConnectionResult(route="pairing", status="connected")
@@ -603,25 +579,10 @@ class SwitchGamepad:
             msg = "gamepad is not connected"
             raise ClosedError(msg)
 
-    def _configure_connection_key_store_path(self, key_store_path: str | None) -> None:
-        if (
-            self._is_open
-            and self._connection_key_store_path is not None
-            and key_store_path is not None
-            and key_store_path != self._connection_key_store_path
-        ):
-            msg = "key_store_path cannot be changed while the gamepad is open"
-            raise InvalidInputError(msg)
-        self._connection_key_store_path = key_store_path
-        if self._transport is not None:
-            self._transport.configure_key_store_path(key_store_path)
-        if self._is_open:
-            self._record_run_metadata()
-
     def _record_run_metadata(self) -> None:
         self._diagnostics.record_run_metadata(
             adapter=self._metadata_adapter(),
-            key_store_path=self._connection_key_store_path,
+            key_store_path=self._config.key_store_path,
         )
 
     def _metadata_adapter(self) -> str:
@@ -667,9 +628,7 @@ class SwitchGamepad:
     def _bonded_peer_selection(peer_count: int) -> str:
         if peer_count == 0:
             return "none"
-        if peer_count == 1:
-            return "selected"
-        return "ambiguous"
+        return "selected"
 
     @staticmethod
     def _current_task_is_cancelling() -> bool:
@@ -811,8 +770,7 @@ class SwitchGamepad:
             self._transport = BumbleHidTransport(
                 adapter=self._config.adapter,
                 device_name=self._config.device_name,
-                key_store_path=self._connection_key_store_path,
+                key_store_path=self._config.key_store_path,
                 diagnostics=self._diagnostics,
             )
-            self._transport.configure_key_store_path(self._connection_key_store_path)
         return self._transport

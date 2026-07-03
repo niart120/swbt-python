@@ -91,9 +91,11 @@ def test_swbt_probe_pair_writes_trace_with_injected_gamepad(
             self,
             *,
             adapter: str,
+            key_store_path: str | None,
             diagnostics: DiagnosticsLike,
         ) -> None:
             captured["adapter"] = adapter
+            captured["key_store_path"] = key_store_path
             self._trace_writer = diagnostics.trace_writer
 
         async def __aenter__(self) -> "FakeGamepad":
@@ -112,11 +114,8 @@ def test_swbt_probe_pair_writes_trace_with_injected_gamepad(
         async def pair(
             self,
             timeout: float | None,  # noqa: ASYNC109
-            *,
-            key_store_path: str | None,
         ) -> None:
             captured["timeout"] = timeout
-            captured["key_store_path"] = key_store_path
             self._write_event("fake_pair")
 
         def _write_event(self, event: str) -> None:

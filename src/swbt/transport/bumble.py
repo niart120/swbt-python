@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from swbt.errors import ClosedError, TransportOpenError
+from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
 from swbt.protocol.profile import ProControllerProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult
 
@@ -234,21 +234,31 @@ class _CurrentPreviousJsonKeyStore:
         """Write current keys and keep the overwritten current value as previous."""
         current_store = self._current_store()
         db, current_key_map = await current_store.load()
-        previous_keys = current_key_map.get(name)
-        self.last_update_previous_saved = previous_keys is not None
-        if previous_keys is not None:
-            previous_key_map = db.setdefault(self._previous_namespace(current_store), {})
-            previous_key_map[name] = copy.deepcopy(previous_keys)
-        current_key_map.setdefault(name, {}).update(cast("Any", keys).to_dict())
+        previous_namespace = self._previous_namespace(current_store)
+        previous_key_map = copy.deepcopy(current_key_map)
+        self.last_update_previous_saved = bool(previous_key_map)
+        if previous_key_map:
+            db[previous_namespace] = previous_key_map
+        else:
+            db.pop(previous_namespace, None)
+        current_key_map.clear()
+        current_key_map[name] = cast("Any", keys).to_dict()
         await current_store.save(db)
 
     async def get(self, name: str) -> object | None:
         """Return one current key entry."""
-        return await self._current_store().get(name)
+        for peer_address, peer_keys in await self.get_all():
+            if peer_address == name:
+                return peer_keys
+        return None
 
     async def get_all(self) -> list[tuple[str, object]]:
         """Return current key entries only."""
-        return await self._current_store().get_all()
+        entries = await self._current_store().get_all()
+        if len(entries) > 1:
+            msg = "key store contains multiple current peers"
+            raise InvalidKeyStoreError(msg)
+        return entries
 
     async def delete(self, name: str) -> None:
         """Delete one current key entry."""
@@ -465,19 +475,6 @@ class BumbleHidTransport:
                 await self._close_runtime(runtime)
             await handle.close()
             self._record_event("transport_close_complete", adapter=self._adapter)
-
-    def configure_key_store_path(self, key_store_path: str | None) -> None:
-        """Select the JSON key store used by future pairing and reconnect calls."""
-        self._key_store_path = key_store_path
-        if self._runtime is None:
-            return
-        if key_store_path is None:
-            cast("Any", self._runtime.device).keystore = None
-            return
-        cast("Any", self._runtime.device).keystore = _CurrentPreviousJsonKeyStore.from_device(
-            self._runtime.device,
-            filename=key_store_path,
-        )
 
     async def request_disconnect(self) -> DisconnectRequestResult:
         """Request HID channel disconnection through Bumble when channels exist."""

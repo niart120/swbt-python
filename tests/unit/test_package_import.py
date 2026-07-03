@@ -18,6 +18,7 @@ def test_package_exports_public_gamepad_surface() -> None:
         "IMUFrame",
         "InputState",
         "InvalidInputError",
+        "InvalidKeyStoreError",
         "Stick",
         "SwbtError",
         "SwitchGamepad",
