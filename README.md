@@ -22,7 +22,7 @@ pip install swbt-python
 uv sync --dev
 ```
 
-## 最小利用例
+## 利用例
 
 ```python
 import asyncio
@@ -44,9 +44,9 @@ asyncio.run(main())
 
 この例は adapter を開き、HID advertising、pairing または reconnect、periodic report loop、入力送信を行います。専用 USB Bluetooth dongle を指定し、実行したコマンドと trace 保存先を記録してください。終了時は neutral を送ってから接続を閉じます。
 
-## 実機検証の状態
+## 実機検証
 
-詳細な実機ログは `docs/hardware-test-log.md` にあります。ここでは、利用時に確認すべき構成と未検証の範囲を示します。
+詳細な実機ログは `docs/hardware-test-log.md` にあります。以下に動作確認済みの構成と未検証の範囲を示します。
 
 ### 確認済み構成
 
@@ -62,15 +62,15 @@ asyncio.run(main())
 | Bumble | Bumble 0.0.230 |
 | 入力反映 | 2026-07-02 に Button A が対象機器 UI に反映し、neutral 後の入力残りなしを目視確認 |
 
-この結果は上記構成での観測です。対象機器の model / firmware は未記録のため、別 firmware での保証には使いません。
+この結果は上記構成での観測です。対象機器の model / firmware は未記録のため、別 firmware での保証はされていないことに注意してください。
 
 ### 未確認構成
 
-- Linux / libusb permission と udev rule。
-- macOS。
-- CSR8510 A10 以外の Bluetooth dongle。
-- pairing-free incoming bond reuse。
-- 対象機器 model / firmware 差分。
+- Linux / libusb permission と udev rule
+- macOS
+- CSR8510 A10 以外の Bluetooth dongle
+- pairing-free incoming bond reuse
+- 対象機器 model / firmware 差分に対する動作検証
 
 ## Bluetooth adapter と driver
 
@@ -92,8 +92,8 @@ uv run pytest tests/integration
 
 ## ライセンス
 
-MIT です。詳細は `LICENSE` を参照してください。
+MIT ライセンス。詳細は `LICENSE` を参照してください。
 
-## 非提携
+## 注記
 
 このプロジェクトは、対象機器や関連商標の権利者から承認、後援、提携を受けたものではありません。
