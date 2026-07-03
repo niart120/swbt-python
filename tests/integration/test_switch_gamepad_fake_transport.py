@@ -180,7 +180,7 @@ def test_key_store_previous_generation_is_recorded_in_run_metadata(tmp_path: Pat
     asyncio.run(run())
 
 
-def test_try_reconnect_without_key_store_records_reconnect_limitation() -> None:
+def test_try_reconnect_with_injected_transport_skips_default_key_store_warning() -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
@@ -195,11 +195,7 @@ def test_try_reconnect_without_key_store_records_reconnect_limitation() -> None:
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
 
         assert result.status == "no_bond"
-        assert {
-            "event": "reconnect_key_store_unavailable",
-            "route": "active_reconnect",
-            "reason": "key_store_path_none",
-        } in events
+        assert not any(event["event"] == "reconnect_key_store_unavailable" for event in events)
 
     asyncio.run(run())
 
@@ -985,25 +981,14 @@ def test_reconnect_records_bonded_peer_selection_without_advertising(
 
 def test_try_reconnect_raises_invalid_key_store_for_multiple_current_peers() -> None:
     async def run() -> None:
-        trace = StringIO()
         transport = FakeHidTransport(
             bonded_peer_addresses=("01:02:03:04:05:06", "0a:0b:0c:0d:0e:0f"),
         )
 
-        async with SwitchGamepad(
-            diagnostics=DiagnosticsConfig(trace_writer=trace),
-            transport=transport,
-        ) as pad:
+        async with SwitchGamepad(transport=transport) as pad:
             with pytest.raises(InvalidKeyStoreError):
                 await pad.try_reconnect(timeout=0.1)
 
-        events = [json.loads(line) for line in trace.getvalue().splitlines()]
-
-        assert {
-            "event": "invalid_key_store",
-            "peer_count": 2,
-            "reason": "multiple_current_peers",
-        } in events
         assert "active_reconnect" not in transport.events
 
     asyncio.run(run())

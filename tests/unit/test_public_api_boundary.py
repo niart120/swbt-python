@@ -2,16 +2,18 @@ import asyncio
 import builtins
 import importlib
 import inspect
+import json
 import pkgutil
 import subprocess
 import sys
+from io import StringIO
 from pathlib import Path
 from typing import get_args
 
 import pytest
 
 import swbt
-from swbt import InvalidInputError, SwitchGamepad, SwitchGamepadConfig
+from swbt import DiagnosticsConfig, InvalidInputError, SwitchGamepad, SwitchGamepadConfig
 from swbt.gamepad import ConnectionStatus
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 
@@ -235,3 +237,93 @@ def test_hid_transport_disconnect_request_boundary_uses_plain_types() -> None:
 
 def test_hid_transport_has_no_key_store_mutation_hook() -> None:
     assert not hasattr(HidDeviceTransport, "configure_key_store_path")
+
+
+def test_hid_transport_bonded_peer_listing_documents_current_candidate_contract() -> None:
+    doc = inspect.getdoc(HidDeviceTransport.list_bonded_peers)
+
+    assert doc is not None
+    assert "current reconnect candidates" in doc
+    assert "zero or one peer" in doc
+    assert "InvalidKeyStoreError" in doc
+
+
+def test_default_transport_without_key_store_records_reconnect_limitation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        bumble_module = importlib.import_module("swbt.transport.bumble")
+        trace = StringIO()
+
+        class FakeBumbleTransport:
+            def __init__(
+                self,
+                *,
+                adapter: str,
+                device_name: str,
+                key_store_path: str | None,
+                diagnostics: object,
+            ) -> None:
+                _ = (adapter, device_name, key_store_path, diagnostics)
+
+            async def open(self) -> None:
+                return None
+
+            async def start_advertising(self) -> None:
+                return None
+
+            async def close(self) -> None:
+                return None
+
+            async def request_disconnect(self) -> DisconnectRequestResult:
+                return DisconnectRequestResult(status="unavailable")
+
+            async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
+                return ()
+
+            async def connect_bonded_peer(
+                self,
+                peer_address: str,
+                *,
+                connect_timeout: float | None,
+            ) -> None:
+                _ = (peer_address, connect_timeout)
+
+            async def send_interrupt(self, payload: bytes) -> None:
+                _ = payload
+
+            async def send_control(self, payload: bytes) -> None:
+                _ = payload
+
+            def on_interrupt_data(self, callback: object) -> None:
+                _ = callback
+
+            def on_control_data(self, callback: object) -> None:
+                _ = callback
+
+            def on_connected(self, callback: object) -> None:
+                _ = callback
+
+            def on_disconnected(self, callback: object) -> None:
+                _ = callback
+
+        monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
+
+        pad = SwitchGamepad(
+            adapter="usb:0",
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+        )
+
+        result = await pad.try_reconnect()
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert result.status == "no_bond"
+        assert {
+            "event": "reconnect_key_store_unavailable",
+            "reason": "key_store_path_none",
+            "route": "active_reconnect",
+        } in events
+
+    asyncio.run(run())
