@@ -55,9 +55,6 @@ class HidDeviceTransport(Protocol):
     ) -> None:
         """Start an active reconnect attempt to a bonded peer."""
 
-    def configure_key_store_path(self, key_store_path: str | None) -> None:
-        """Select the key store used by the next transport connection attempt."""
-
     async def send_interrupt(self, payload: bytes) -> None:
         """Send one HID interrupt report."""
 

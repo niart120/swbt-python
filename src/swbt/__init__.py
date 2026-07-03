@@ -6,6 +6,7 @@ from swbt.errors import (
     ConnectionFailedError,
     ConnectionTimeoutError,
     InvalidInputError,
+    InvalidKeyStoreError,
     SwbtError,
     TransportOpenError,
 )
@@ -27,6 +28,7 @@ __all__ = (
     "IMUFrame",
     "InputState",
     "InvalidInputError",
+    "InvalidKeyStoreError",
     "Stick",
     "SwbtError",
     "SwitchGamepad",

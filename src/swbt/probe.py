@@ -133,9 +133,10 @@ async def _run_pair_probe(
         diagnostics = DiagnosticsConfig(trace_writer=trace_writer)
         async with SwitchGamepad(
             adapter=adapter,
+            key_store_path=key_store_path,
             diagnostics=diagnostics,
         ) as pad:
-            await pad.pair(timeout=pair_timeout, key_store_path=key_store_path)
+            await pad.pair(timeout=pair_timeout)
 
 
 def _package_version(package_name: str) -> str:

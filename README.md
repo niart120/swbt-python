@@ -30,11 +30,13 @@ from swbt import Button, SwitchGamepad
 
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0") as pad:
+    async with SwitchGamepad(
+        adapter="usb:0",
+        key_store_path="switch-bond.json",
+    ) as pad:
         await pad.connect(
             timeout=30.0,
             allow_pairing=True,
-            key_store_path="switch-bond.json",
         )
         await pad.tap(Button.A)
         await pad.neutral()
@@ -44,6 +46,10 @@ asyncio.run(main())
 ```
 
 この例は adapter を開き、HID advertising、pairing または reconnect、periodic report loop、入力送信を行います。専用 USB Bluetooth dongle を指定し、実行したコマンドと trace 保存先を記録してください。終了時は neutral を送ってから接続を閉じます。
+
+`key_store_path` は 1 つの仮想 Pro Controller の pairing storage を表します。自動 reconnect 対象になる current peer は 1 件だけです。pairing に成功すると、その peer が current になり、旧 current peer は previous generation へ退避されます。previous peer は自動 reconnect 対象にしません。
+
+この版では key store 形式を変更しています。旧形式の key store は自動移行しません。接続できない場合は key store を削除し、再 pairing してください。複数の対象機器を使い分ける場合は、対象機器ごとに `key_store_path` を分けてください。
 
 ## 実機検証
 

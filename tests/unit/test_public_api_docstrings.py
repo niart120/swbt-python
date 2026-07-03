@@ -25,7 +25,7 @@ def _assert_doc_contains(obj: object, *tokens: str) -> None:
 def test_public_value_object_docstrings_describe_attributes_and_factory_returns() -> None:
     for cls, attributes in (
         (ConnectionResult, ("route", "status", "peer_address", "peer_count")),
-        (SwitchGamepadConfig, ("adapter", "report_period_us", "device_name")),
+        (SwitchGamepadConfig, ("adapter", "key_store_path", "report_period_us", "device_name")),
         (DiagnosticsConfig, ("trace_writer",)),
         (
             GamepadStatus,
@@ -58,6 +58,7 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         SwitchGamepad.__init__,
         "Args:",
         "adapter",
+        "key_store_path",
         "report_period_us",
         "device_name",
         "diagnostics",
@@ -70,7 +71,7 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         (SwitchGamepad.from_config, ("Args:", "config", "Returns:", "SwitchGamepad")),
         (
             SwitchGamepad.pair,
-            ("Args:", "timeout", "key_store_path", "Raises:", "ConnectionTimeoutError"),
+            ("Args:", "timeout", "Raises:", "ConnectionTimeoutError"),
         ),
         (SwitchGamepad.reconnect, ("Args:", "timeout", "Raises:", "ConnectionFailedError")),
         (SwitchGamepad.try_reconnect, ("Args:", "timeout", "Returns:", "ConnectionResult")),
