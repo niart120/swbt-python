@@ -12,12 +12,17 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profile import ProControllerProfile
-from swbt.transport._bumble_key_store import _CurrentPreviousJsonKeyStore, _DiagnosticKeyStore
-from swbt.transport._bumble_sdp import (
-    _HID_CONTROL_PSM,
-    _HID_INTERRUPT_PSM,
-    build_hid_service_records,
+from swbt.transport._bumble_acl import drain_bumble_acl_queue
+from swbt.transport._bumble_hidp import (
+    HID_GET_SET_SUCCESS,
+    HID_GET_SET_UNSUPPORTED_REQUEST,
+    HID_OUTPUT_REPORT_TYPE,
+    decode_hidp_output_report,
+    format_psm,
+    hid_channel_name,
 )
+from swbt.transport._bumble_key_store import _CurrentPreviousJsonKeyStore, _DiagnosticKeyStore
+from swbt.transport._bumble_sdp import build_hid_service_records
 from swbt.transport.base import BondedPeer, DisconnectRequestResult
 
 if TYPE_CHECKING:
@@ -31,10 +36,6 @@ if TYPE_CHECKING:
         InterruptDataCallback,
     )
 
-_HID_OUTPUT_REPORT_TYPE = 0x02
-_HIDP_DATA_MESSAGE_TYPE = 0x0A
-_HID_GET_SET_SUCCESS = 0xFF
-_HID_GET_SET_UNSUPPORTED_REQUEST = 0x02
 _REFERENCE_LINK_POLICY_ENABLE_ROLE_SWITCH = 0x0001
 _REFERENCE_LINK_POLICY_ENABLE_SNIFF_MODE = 0x0004
 _DEFAULT_DEVICE_NAME = "Pro Controller"
@@ -360,7 +361,7 @@ class BumbleHidTransport:
             msg = "Bumble interrupt channel is not connected"
             raise ClosedError(msg)
         self._runtime.hid_device.send_data(payload)
-        await _drain_bumble_acl_queue(self._runtime.hid_device.l2cap_intr_channel)
+        await drain_bumble_acl_queue(self._runtime.hid_device.l2cap_intr_channel)
 
     async def send_control(self, payload: bytes) -> None:
         """Send one control report."""
@@ -368,7 +369,7 @@ class BumbleHidTransport:
         if self._runtime is None or self._runtime.hid_device.l2cap_ctrl_channel is None:
             msg = "Bumble control channel is not connected"
             raise ClosedError(msg)
-        self._runtime.hid_device.send_control_data(_HID_OUTPUT_REPORT_TYPE, payload)
+        self._runtime.hid_device.send_control_data(HID_OUTPUT_REPORT_TYPE, payload)
 
     def on_interrupt_data(self, callback: InterruptDataCallback) -> None:
         """Register an interrupt data callback."""
@@ -409,14 +410,14 @@ class BumbleHidTransport:
             report_data: bytes,
         ) -> _BumbleGetSetStatus:
             _ = report_size
-            if report_type != _HID_OUTPUT_REPORT_TYPE:
-                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+            if report_type != HID_OUTPUT_REPORT_TYPE:
+                return _BumbleGetSetStatus(status=HID_GET_SET_UNSUPPORTED_REQUEST)
             if not 0 <= report_id <= 0xFF:
-                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
+                return _BumbleGetSetStatus(status=HID_GET_SET_UNSUPPORTED_REQUEST)
             report = bytes((report_id,)) + bytes(report_data)
             if not self._dispatch_control_report(report):
-                return _BumbleGetSetStatus(status=_HID_GET_SET_UNSUPPORTED_REQUEST)
-            return _BumbleGetSetStatus(status=_HID_GET_SET_SUCCESS)
+                return _BumbleGetSetStatus(status=HID_GET_SET_UNSUPPORTED_REQUEST)
+            return _BumbleGetSetStatus(status=HID_GET_SET_SUCCESS)
 
         register_set_report(on_set_report)
 
@@ -640,13 +641,13 @@ class BumbleHidTransport:
         self._notify_disconnected_once(reason)
 
     def _dispatch_interrupt_data(self, payload: bytes) -> None:
-        report = _decode_hidp_output_report(payload)
+        report = decode_hidp_output_report(payload)
         if report is None:
             return
         self._dispatch_interrupt_report(report)
 
     def _dispatch_control_data(self, payload: bytes) -> None:
-        report = _decode_hidp_output_report(payload)
+        report = decode_hidp_output_report(payload)
         if report is None:
             return
         self._dispatch_control_report(report)
@@ -717,8 +718,8 @@ class BumbleHidTransport:
         self._record_event(
             event,
             adapter=self._adapter,
-            channel=_hid_channel_name(psm),
-            psm=_format_psm(psm),
+            channel=hid_channel_name(psm),
+            psm=format_psm(psm),
         )
 
     def _record_callback_error(self, task: asyncio.Future[None]) -> None:
@@ -843,20 +844,6 @@ async def _default_close_runtime(runtime: _BumbleRuntime) -> None:
         await runtime.device.power_off()
 
 
-def _hid_channel_name(psm: object) -> str:
-    if psm == _HID_CONTROL_PSM:
-        return "control"
-    if psm == _HID_INTERRUPT_PSM:
-        return "interrupt"
-    return "unknown"
-
-
-def _format_psm(psm: object) -> str:
-    if isinstance(psm, int):
-        return f"0x{psm:04x}"
-    return "unknown"
-
-
 def _keys_include_link_key(keys: object | None) -> bool | None:
     if keys is None:
         return None
@@ -921,18 +908,6 @@ def _replace_host_connection_request_listener(
     on("connection_request", replacement_connection_request)
 
 
-def _decode_hidp_output_report(pdu: bytes) -> bytes | None:
-    if not pdu:
-        return None
-    message_type = pdu[0] >> 4
-    report_type = pdu[0] & 0x03
-    if message_type != _HIDP_DATA_MESSAGE_TYPE:
-        return None
-    if report_type != _HID_OUTPUT_REPORT_TYPE:
-        return None
-    return pdu[1:]
-
-
 async def _configure_reference_classic_link_policy(device: object) -> int | None:
     """Set the reference Classic default link policy when Bumble exposes HCI access."""
     from bumble import hci  # noqa: PLC0415
@@ -952,36 +927,6 @@ async def _configure_reference_classic_link_policy(device: object) -> int | None
         )
     )
     return _REFERENCE_DEFAULT_LINK_POLICY_SETTINGS
-
-
-async def _drain_bumble_acl_queue(l2cap_channel: object) -> None:
-    """Wait until Bumble reports no pending ACL packets for the channel."""
-    connection = getattr(l2cap_channel, "connection", None)
-    connection_handle = getattr(connection, "handle", None)
-    acl_packet_queue = getattr(connection, "acl_packet_queue", None)
-    if acl_packet_queue is None and isinstance(connection_handle, int):
-        device = getattr(connection, "device", None)
-        host = getattr(device, "host", None)
-        get_data_packet_queue = getattr(host, "get_data_packet_queue", None)
-        if callable(get_data_packet_queue):
-            acl_packet_queue = get_data_packet_queue(connection_handle)
-    drain = getattr(acl_packet_queue, "drain", None)
-    if not isinstance(connection_handle, int) or not callable(drain):
-        return
-    try:
-        last_pending: int | None = None
-        while True:
-            pending = getattr(acl_packet_queue, "pending", 0)
-            if not isinstance(pending, int) or pending <= 0 or pending == last_pending:
-                return
-            last_pending = pending
-            drain_result = drain(connection_handle)
-            if isinstance(drain_result, Awaitable):
-                await drain_result
-                continue
-            return
-    except ValueError:
-        return
 
 
 def _package_version(package_name: str) -> str:

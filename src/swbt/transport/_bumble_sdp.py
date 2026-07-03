@@ -1,9 +1,9 @@
 """SDP service record builder for Bumble HID transport."""
 
+from swbt.transport._bumble_hidp import HID_CONTROL_PSM, HID_INTERRUPT_PSM
+
 _HID_SERVICE_RECORD_HANDLE = 0x00010001
 _HID_REPORT_DESCRIPTOR_TYPE = 0x22
-_HID_CONTROL_PSM = 0x0011
-_HID_INTERRUPT_PSM = 0x0013
 _DEFAULT_DEVICE_NAME = "Pro Controller"
 
 _SDP_HID_PARSER_VERSION_ATTRIBUTE_ID = 0x0201
@@ -69,7 +69,7 @@ def build_hid_service_records(
                         DataElement.sequence(
                             [
                                 DataElement.uuid(core.BT_L2CAP_PROTOCOL_ID),
-                                DataElement.unsigned_integer_16(0x0011),
+                                DataElement.unsigned_integer_16(HID_CONTROL_PSM),
                             ]
                         ),
                         DataElement.sequence([DataElement.uuid(core.BT_HIDP_PROTOCOL_ID)]),
@@ -116,7 +116,7 @@ def build_hid_service_records(
                                 DataElement.sequence(
                                     [
                                         DataElement.uuid(core.BT_L2CAP_PROTOCOL_ID),
-                                        DataElement.unsigned_integer_16(0x0013),
+                                        DataElement.unsigned_integer_16(HID_INTERRUPT_PSM),
                                     ]
                                 ),
                                 DataElement.sequence([DataElement.uuid(core.BT_HIDP_PROTOCOL_ID)]),
