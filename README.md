@@ -45,11 +45,11 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-この例は adapter を開き、HID advertising、pairing または reconnect、periodic report loop、入力送信を行います。専用 USB Bluetooth dongle を指定し、実行したコマンドと trace 保存先を記録してください。終了時は neutral を送ってから接続を閉じます。
+この例は adapter を開き、HID advertising、pairing または reconnect、periodic report loop、入力送信を行います。専用 USB Bluetooth dongle と接続情報のファイルパスを指定し、終了時は neutral を送ってから接続を閉じます。
 
-`key_store_path` は 1 つの仮想 Pro Controller の pairing storage を表します。自動 reconnect 対象になる current peer は 1 件だけです。pairing に成功すると、その peer が current になり、旧 current peer は previous generation へ退避されます。previous peer は自動 reconnect 対象にしません。
+`key_store_path` は pairing 情報を保存する JSON ファイルです。自動 reconnect の対象になる接続先は 1 件だけです。別の対象機器と pairing すると、新しい接続先が次回の reconnect 対象になります。以前の接続先へ reconnect したい場合は、対象機器ごとに別の `key_store_path` を指定してください。
 
-この版では key store 形式を変更しています。旧形式の key store は自動移行しません。接続できない場合は key store を削除し、再 pairing してください。複数の対象機器を使い分ける場合は、対象機器ごとに `key_store_path` を分けてください。
+複数の接続先が含まれる key store では、どの接続先を使うかを推測しません。接続できない場合は key store を削除し、pairing をやり直してください。
 
 ## 実機検証
 
