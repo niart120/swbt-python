@@ -126,6 +126,45 @@ def test_key_store_path_is_recorded_in_run_metadata(tmp_path: Path) -> None:
             "adapter": "usb:0",
             "key_store_exists": False,
             "key_store_path": str(key_store_path),
+            "key_store_previous_exists": False,
+            "os": platform.system(),
+            "package_version": "0.1.0",
+            "python_version": platform.python_version(),
+        } in events
+
+    asyncio.run(run())
+
+
+def test_key_store_previous_generation_is_recorded_in_run_metadata(tmp_path: Path) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        key_store_path = tmp_path / "keys.json"
+        key_store_path.write_text(
+            json.dumps(
+                {
+                    "AA:BB:CC:DD:EE:FF": {},
+                    "swbt.previous::AA:BB:CC:DD:EE:FF": {"01:02:03:04:05:06": {"link_key_type": 4}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            key_store_path=str(key_store_path),
+            transport=transport,
+        )
+
+        await pad.open()
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "run_metadata",
+            "adapter": "usb:0",
+            "key_store_exists": True,
+            "key_store_path": str(key_store_path),
+            "key_store_previous_exists": True,
             "os": platform.system(),
             "package_version": "0.1.0",
             "python_version": platform.python_version(),
