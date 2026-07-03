@@ -45,7 +45,14 @@ class HidDeviceTransport(Protocol):
         """Request a remote HID/L2CAP disconnect when the transport supports it."""
 
     async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
-        """Return known bonded peers without exposing transport-specific key objects."""
+        """Return current reconnect candidates.
+
+        Implementations must return zero or one peer. A transport that stores
+        multiple historical peers must expose only the current reconnect target
+        here. Multiple current peers are an invalid transport or key-store state
+        and should raise InvalidKeyStoreError rather than returning multiple
+        BondedPeer values.
+        """
 
     async def connect_bonded_peer(
         self,

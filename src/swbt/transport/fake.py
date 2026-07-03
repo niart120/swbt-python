@@ -3,7 +3,7 @@
 import asyncio
 from typing import Literal
 
-from swbt.errors import ClosedError
+from swbt.errors import ClosedError, InvalidKeyStoreError
 from swbt.transport.base import (
     BondedPeer,
     ConnectedCallback,
@@ -149,8 +149,11 @@ class FakeHidTransport:
         )
 
     async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
-        """Return fake bonded peers configured by a test."""
+        """Return the fake current reconnect candidate configured by a test."""
         self._require_open()
+        if len(self._bonded_peer_addresses) > 1:
+            msg = "fake transport contains multiple current reconnect candidates"
+            raise InvalidKeyStoreError(msg)
         return tuple(BondedPeer(address=address) for address in self._bonded_peer_addresses)
 
     async def connect_bonded_peer(

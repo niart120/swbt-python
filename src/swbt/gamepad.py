@@ -111,6 +111,7 @@ class SwitchGamepad:
             device_name=device_name,
         )
         self._transport = transport
+        self._transport_was_injected = transport is not None
         self._state_store = InputStateStore()
         self._diagnostics = DiagnosticsRecorder(
             trace_writer=diagnostics.trace_writer if diagnostics is not None else None
@@ -279,7 +280,7 @@ class SwitchGamepad:
         if self._transport is None:
             msg = "gamepad is not open"
             raise ClosedError(msg)
-        if self._config.key_store_path is None:
+        if self._config.key_store_path is None and not self._transport_was_injected:
             self._diagnostics.record_event(
                 "reconnect_key_store_unavailable",
                 reason="key_store_path_none",
