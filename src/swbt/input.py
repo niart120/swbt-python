@@ -50,6 +50,11 @@ class Stick:
     CENTER = 2048
     MAX = 4095
 
+    def __post_init__(self) -> None:
+        """Validate direct dataclass construction."""
+        self._validate_axis("x", self.x)
+        self._validate_axis("y", self.y)
+
     @classmethod
     def center(cls) -> "Stick":
         """Return the neutral stick position.
@@ -132,6 +137,21 @@ class IMUFrame:
     gyro_y: int
     gyro_z: int
 
+    MIN = -32768
+    MAX = 32767
+
+    def __post_init__(self) -> None:
+        """Validate direct dataclass construction."""
+        for field_name in (
+            "accel_x",
+            "accel_y",
+            "accel_z",
+            "gyro_x",
+            "gyro_y",
+            "gyro_z",
+        ):
+            self._validate_i16(field_name, getattr(self, field_name))
+
     @classmethod
     def neutral(cls) -> "IMUFrame":
         """Return an IMU frame with no movement.
@@ -140,6 +160,12 @@ class IMUFrame:
             IMUFrame: Frame with all accelerometer and gyroscope values set to zero.
         """
         return cls(accel_x=0, accel_y=0, accel_z=0, gyro_x=0, gyro_y=0, gyro_z=0)
+
+    @classmethod
+    def _validate_i16(cls, field_name: str, value: int) -> None:
+        if not cls.MIN <= value <= cls.MAX:
+            msg = f"{field_name} must be between {cls.MIN} and {cls.MAX}: {value}"
+            raise InvalidInputError(msg)
 
 
 @dataclass(frozen=True)

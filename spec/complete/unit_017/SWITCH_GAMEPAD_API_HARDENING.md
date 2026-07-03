@@ -22,9 +22,9 @@
 | completed unit | context manager は resource scope であり、`open()` は advertising / pairing / reconnect を開始しない | `spec/complete/unit_015/CONTEXT_MANAGER_RESOURCE_SCOPE.md` |
 | completed unit | close / disconnect cleanup contract。trailing neutral、disconnect request、transport close の順序を固定済み | `spec/complete/unit_014/DEVICE_CLOSE_GRACEFUL_DISCONNECT.md` |
 | completed unit | reconnect / key store / diagnostics。`ConnectionResult` と active reconnect status の現状 | `spec/complete/unit_007/M6_RECONNECT_KEYSTORE_DIAGNOSTICS.md` |
-| implementation | 現在の `SwitchGamepad` は constructor に `adapter="usb:0"` と `key_store_path` を持ち、`connect()` / `reconnect()` は `ConnectionResult` を返す | `src/swbt/gamepad.py` |
-| implementation | `Stick.raw()` / `normalized()` は validation するが dataclass 直接生成では validation が走らない。`IMUFrame` も範囲 validation がない | `src/swbt/input.py` |
-| implementation | `swbt.__all__` は主要例外と `HidDeviceTransport` を top-level export していない | `src/swbt/__init__.py` |
+| implementation-before | 実装前の `SwitchGamepad` は constructor に `adapter="usb:0"` と `key_store_path` を持ち、`connect()` / `reconnect()` は `ConnectionResult` を返していた | `src/swbt/gamepad.py` |
+| implementation-before | 実装前は `Stick.raw()` / `normalized()` は validation するが dataclass 直接生成では validation が走らなかった。`IMUFrame` も範囲 validation がなかった | `src/swbt/input.py` |
+| implementation-before | 実装前の `swbt.__all__` は主要例外と `HidDeviceTransport` を top-level export していなかった | `src/swbt/__init__.py` |
 
 ### 1.3 use case
 
@@ -47,7 +47,7 @@
 - `SwitchGamepad.from_config()` を追加する。
 - `adapter="usb:0"` の暗黙 default を廃止し、default transport では adapter 指定を必須にする。
 - custom transport 指定時の run metadata が `usb:0` と誤記録されないようにする。
-- `ClosedError`、`ConnectionTimeoutError`、`TransportOpenError`、`InvalidInputError`、`SwbtError`、`HidDeviceTransport`、`DisconnectRequestResult`、`BondedPeer` を top-level export する。
+- `ClosedError`、`ConnectionFailedError`、`ConnectionTimeoutError`、`TransportOpenError`、`InvalidInputError`、`SwbtError`、`HidDeviceTransport`、`DisconnectRequestResult`、`BondedPeer` を top-level export する。
 - `press()` / `release()` docstring に即時送信ではないことを明記する。
 - `tap()` は接続済み確認を先に行い、送信失敗時も内部 state を戻す。
 - `close(neutral=True)` の neutral 送信を best-effort にし、後続 cleanup を継続する。
@@ -101,28 +101,29 @@
 | stick validation | `Stick(...)` 直接生成 | raw range 外なら `InvalidInputError` | factory と直接 constructor の差をなくす |
 | IMU validation | `IMUFrame(...)` 直接生成 | 16-bit signed range 外なら `InvalidInputError` | report loop の `OverflowError` を防ぐ |
 | report period validation | `report_period_us <= 0` | `InvalidInputError` | 下限値は設けない |
-| top-level export | `from swbt import ConnectionTimeoutError, HidDeviceTransport` | import できる | public constructor に現れる型と例外を取得可能にする |
+| top-level export | `from swbt import ConnectionFailedError, ConnectionTimeoutError, HidDeviceTransport` | import できる | public constructor に現れる型と例外を取得可能にする |
 | custom transport metadata | `SwitchGamepad(transport=fake)` | diagnostics は custom transport と分かる内容を記録し、未指定 adapter を `usb:0` と記録しない | test / extension 用 escape hatch |
 
 ## 7. TDD Test List
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | default transport で adapter 未指定なら `InvalidInputError` になる | new | unit | no | `SwitchGamepad()` を fail-closed にする |
-| todo | custom transport 指定時は adapter 未指定でも使え、run metadata が `usb:0` と誤記録されない | regression | integration | no | fake transport で trace metadata を確認する |
-| todo | `SwitchGamepad.from_config()` が config 値を default transport 生成へ渡す | new | unit | no | `adapter`、`device_name`、`report_period_us` を固定 |
-| todo | `connect()` は `try_reconnect()` の `no_bond` / `ambiguous_bond` / `timeout` / `failed` を成功扱いしない | new | integration | no | 利用者向け API は接続失敗を例外に寄せる |
-| todo | `try_connect()` / `try_reconnect()` は現行 `ConnectionResult` 相当の詳細 status を返す | new | integration | no | diagnostic use case を残す |
-| todo | `connect(key_store_path=...)` / `pair(key_store_path=...)` が接続時 key store として記録される | new | integration | no | constructor 固定値ではなく接続時入力を使う |
-| todo | `key_store_path=None` で reconnect 不可能な場合に diagnostics event が出る | new | integration | no | warning ではなく trace event で固定する |
-| todo | `tap()` は未接続時に state を変更せず `ClosedError` を投げる | edge | integration | no | snapshot に Button が残らないことを確認 |
-| todo | `tap()` の press 側送信失敗でも内部 state が neutral または release 済みになる | edge | integration | no | fake transport の send failure で固定 |
-| todo | `close(neutral=True)` の trailing neutral 送信が失敗しても transport close まで進む | edge | integration | no | diagnostics は recoverable error を記録する |
-| todo | `press()` / `release()` docstring が即時送信ではないことを説明する | regression | unit | no | public API docstring test |
-| todo | `Stick(...)` 直接生成が raw range 外を拒否する | edge | unit | no | factory と同じ `InvalidInputError` |
-| todo | `IMUFrame(...)` 直接生成が 16-bit signed range 外を拒否する | edge | unit | no | report build 時の `OverflowError` を前倒しする |
-| todo | `report_period_us <= 0` は constructor / `from_config()` で拒否される | edge | unit | no | 下限値は設けない |
-| todo | 主要例外と `HidDeviceTransport` 関連型が top-level import できる | regression | unit | no | `swbt.__all__` と import surface を固定 |
+| green | default transport で adapter 未指定なら `InvalidInputError` になる | new | unit | no | `tests/unit/test_public_api_boundary.py` |
+| green | custom transport 指定時は adapter 未指定でも使え、run metadata が `usb:0` と誤記録されない | regression | integration | no | fake transport で `adapter="custom"` を確認 |
+| green | `SwitchGamepad.from_config()` が config 値を default transport 生成へ渡す | new | unit | no | `adapter`、`device_name`、`report_period_us` を固定 |
+| green | `connect()` は `try_reconnect()` の `no_bond` / `ambiguous_bond` / `timeout` / `failed` を成功扱いしない | new | integration | no | `connect()` / `reconnect()` は失敗時に例外 |
+| green | `try_connect()` / `try_reconnect()` は現行 `ConnectionResult` 相当の詳細 status を返す | new | integration | no | diagnostic use case を残した |
+| green | `connect(key_store_path=...)` / `pair(key_store_path=...)` が接続時 key store として記録される | new | integration | no | constructor 固定値ではなく接続時入力を使う |
+| green | `key_store_path=None` で reconnect 不可能な場合に diagnostics event が出る | new | integration | no | `reconnect_key_store_unavailable` |
+| green | open 済み gamepad で別 `key_store_path` へ差し替えようとすると `InvalidInputError` になる | edge | integration | no | Bumble runtime の曖昧な差し替えを避ける |
+| green | `tap()` は未接続時に state を変更せず `ClosedError` を投げる | edge | integration | no | snapshot に Button が残らないことを確認 |
+| green | `tap()` の press 側送信失敗でも内部 state が neutral または release 済みになる | edge | integration | no | fake transport の send failure で固定 |
+| green | `close(neutral=True)` の trailing neutral 送信が失敗しても transport close まで進む | edge | integration | no | diagnostics は recoverable error を記録する |
+| green | `press()` / `release()` docstring が即時送信ではないことを説明する | regression | unit | no | public API docstring test |
+| green | `Stick(...)` 直接生成が raw range 外を拒否する | edge | unit | no | factory と同じ `InvalidInputError` |
+| green | `IMUFrame(...)` 直接生成が 16-bit signed range 外を拒否する | edge | unit | no | report build 時の `OverflowError` を前倒しする |
+| green | `report_period_us <= 0` は constructor / `from_config()` で拒否される | edge | unit | no | 下限値は設けない |
+| green | 主要例外と `HidDeviceTransport` 関連型が top-level import できる | regression | unit | no | `swbt.__all__` と import surface を固定 |
 | deferred | `status().last_error` 以外の非同期エラー通知 API を設計する | deferred | docs | no | この unit では実装しない |
 
 status は `todo`、`red`、`green`、`refactor-done`、`refactor-skipped`、`deferred` を使う。
@@ -154,22 +155,29 @@ status は `todo`、`red`、`green`、`refactor-done`、`refactor-skipped`、`de
 | `src/swbt/transport/base.py` | modify | top-level export 対象として docstring / public surface を確認 |
 | `tests/unit/test_public_api_boundary.py` | modify | top-level export、Bumble 非露出、adapter validation、from_config |
 | `tests/unit/test_public_api_docstrings.py` | modify | `press()` / `release()` の非即時送信説明、try API docstring |
-| `tests/unit/test_input.py` | modify | direct constructor validation |
+| `tests/unit/test_input_state.py` | modify | direct constructor validation |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | try API、connect exception、tap fail-safe、close best-effort、metadata |
+| `tests/unit/test_probe_cli.py` | modify | `swbt-probe pair` が接続時 key store を渡すことを固定 |
+| `tests/hardware/test_reconnect_keystore.py` | modify | 実機 characterize test を新 API に追従。実行はしない |
+| `src/swbt/probe.py` | modify | `pair(key_store_path=...)` を使う |
+| `examples/*.py` | modify | constructor 固定 key store を廃止 |
 | `README.md` | modify | adapter 明示、connection-time key store、try API の使い分け |
 | `spec/initial/api.md` | modify | 公開 API 正本の更新 |
 | `spec/initial/lifecycle.md` | modify | 接続失敗と close best-effort の整理 |
-| `spec/wip/unit_017/SWITCH_GAMEPAD_API_HARDENING.md` | modify | TDD 状態、検証、先送り事項を更新 |
+| `spec/initial/transport-bumble.md` | modify | transport Protocol 例を現行境界へ更新 |
+| `spec/complete/unit_017/SWITCH_GAMEPAD_API_HARDENING.md` | move / modify | TDD 状態、検証、先送り事項を更新 |
 
 ## 10. 検証
 
 | command | result | notes |
 |---|---|---|
-| `uv run ruff format --check .` | not run | 仕様作成時点では未実行。実装後の標準 gate |
-| `uv run ruff check .` | not run | 仕様作成時点では未実行。実装後の標準 gate |
-| `uv run ty check --no-progress` | not run | 仕様作成時点では未実行。実装後の標準 gate |
-| `uv run pytest tests\unit -q` | not run | 仕様作成時点では未実行。public API / validation tests を追加後に実行 |
-| `uv run pytest tests\integration -q` | not run | 仕様作成時点では未実行。fake transport lifecycle の regression に使う |
+| `uv sync --dev` | pass | Resolved / Checked 41 packages |
+| `uv run ruff format --check .` | pass | 50 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\unit -q` | pass | 137 passed |
+| `uv run pytest tests\integration -q` | pass | 56 passed |
+| `uv run pytest --collect-only tests\hardware -q` | pass | 12 tests collected。実機は未実行 |
 
 ## 11. 実機実行条件
 

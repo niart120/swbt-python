@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 import swbt
-from swbt import SwitchGamepad
-from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
+from swbt import InvalidInputError, SwitchGamepad, SwitchGamepadConfig
+from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 
 
 def test_public_api_import_does_not_import_bumble() -> None:
@@ -95,7 +95,18 @@ def test_switch_gamepad_signature_does_not_expose_bumble_types() -> None:
     assert "bumble" not in annotation_text.lower()
 
 
-def test_switch_gamepad_key_store_path_is_passed_to_bumble_transport(
+def test_default_transport_requires_explicit_adapter() -> None:
+    with pytest.raises(InvalidInputError):
+        SwitchGamepad()
+
+
+@pytest.mark.parametrize("report_period_us", [0, -1])
+def test_switch_gamepad_rejects_non_positive_report_period(report_period_us: int) -> None:
+    with pytest.raises(InvalidInputError):
+        SwitchGamepad(adapter="usb:0", report_period_us=report_period_us)
+
+
+def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -134,6 +145,20 @@ def test_switch_gamepad_key_store_path_is_passed_to_bumble_transport(
             async def request_disconnect(self) -> DisconnectRequestResult:
                 return DisconnectRequestResult(status="unavailable")
 
+            async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
+                return ()
+
+            async def connect_bonded_peer(
+                self,
+                peer_address: str,
+                *,
+                connect_timeout: float | None,
+            ) -> None:
+                _ = (peer_address, connect_timeout)
+
+            def configure_key_store_path(self, key_store_path: str | None) -> None:
+                captured_config["configured_key_store_path"] = key_store_path
+
             async def send_interrupt(self, payload: bytes) -> None:
                 _ = payload
 
@@ -155,19 +180,23 @@ def test_switch_gamepad_key_store_path_is_passed_to_bumble_transport(
         monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
 
         key_store_path = tmp_path / "keys.json"
-        pad = SwitchGamepad(
-            adapter="usb:1",
-            device_name="Reference Pad",
-            key_store_path=str(key_store_path),
+        pad = SwitchGamepad.from_config(
+            SwitchGamepadConfig(
+                adapter="usb:1",
+                device_name="Reference Pad",
+            )
         )
 
         await pad.open()
+        result = await pad.try_reconnect(key_store_path=str(key_store_path))
         await pad.close(neutral=True)
 
         assert captured_config["adapter"] == "usb:1"
         assert captured_config["device_name"] == "Reference Pad"
-        assert captured_config["key_store_path"] == str(key_store_path)
+        assert captured_config["key_store_path"] is None
+        assert captured_config["configured_key_store_path"] == str(key_store_path)
         assert captured_config["diagnostics"] is not None
+        assert result.status == "no_bond"
 
     asyncio.run(run())
 

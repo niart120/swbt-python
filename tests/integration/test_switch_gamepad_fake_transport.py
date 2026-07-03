@@ -8,7 +8,12 @@ import pytest
 
 import swbt.gamepad as gamepad_module
 from swbt import Button, DiagnosticsConfig, InputState, Stick, SwitchGamepad
-from swbt.errors import ConnectionTimeoutError
+from swbt.errors import (
+    ClosedError,
+    ConnectionFailedError,
+    ConnectionTimeoutError,
+    InvalidInputError,
+)
 from swbt.transport.fake import FakeHidTransport
 
 
@@ -113,17 +118,17 @@ def test_key_store_path_is_recorded_in_run_metadata(tmp_path: Path) -> None:
         key_store_path = tmp_path / "keys.json"
         pad = SwitchGamepad(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
-            key_store_path=str(key_store_path),
             transport=transport,
         )
 
-        await pad.open()
+        result = await pad.try_reconnect(key_store_path=str(key_store_path))
         await pad.close(neutral=True)
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert result.status == "no_bond"
         assert {
             "event": "run_metadata",
-            "adapter": "usb:0",
+            "adapter": "custom",
             "key_store_exists": False,
             "key_store_path": str(key_store_path),
             "key_store_previous_exists": False,
@@ -151,17 +156,17 @@ def test_key_store_previous_generation_is_recorded_in_run_metadata(tmp_path: Pat
         )
         pad = SwitchGamepad(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
-            key_store_path=str(key_store_path),
             transport=transport,
         )
 
-        await pad.open()
+        result = await pad.try_reconnect(key_store_path=str(key_store_path))
         await pad.close(neutral=True)
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert result.status == "no_bond"
         assert {
             "event": "run_metadata",
-            "adapter": "usb:0",
+            "adapter": "custom",
             "key_store_exists": True,
             "key_store_path": str(key_store_path),
             "key_store_previous_exists": True,
@@ -169,6 +174,44 @@ def test_key_store_previous_generation_is_recorded_in_run_metadata(tmp_path: Pat
             "package_version": "0.1.0",
             "python_version": platform.python_version(),
         } in events
+
+    asyncio.run(run())
+
+
+def test_try_reconnect_without_key_store_records_reconnect_limitation() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+
+        result = await pad.try_reconnect(timeout=0.1)
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert result.status == "no_bond"
+        assert {
+            "event": "reconnect_key_store_unavailable",
+            "route": "active_reconnect",
+            "reason": "key_store_path_none",
+        } in events
+
+    asyncio.run(run())
+
+
+def test_open_gamepad_rejects_changing_key_store_path() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport) as pad:
+            result = await pad.try_reconnect(key_store_path="first-keys.json")
+
+            assert result.status == "no_bond"
+            with pytest.raises(InvalidInputError):
+                await pad.try_reconnect(key_store_path="second-keys.json")
 
     asyncio.run(run())
 
@@ -725,6 +768,36 @@ def test_close_request_failure_records_failure_and_closes_transport() -> None:
     asyncio.run(run())
 
 
+def test_close_treats_trailing_neutral_send_failure_as_best_effort() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport(send_interrupt_error=RuntimeError("neutral failed"))
+        pad = SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=100_000,
+        )
+
+        await pad.open()
+        await transport.connect()
+        await pad.press(Button.A)
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert pad.snapshot() == InputState.neutral()
+        assert pad.status().connection_state == "closed"
+        assert transport.close_count == 1
+        assert {
+            "event": "error",
+            "error_type": "RuntimeError",
+            "message": "neutral failed",
+            "recoverable": True,
+        } in events
+
+    asyncio.run(run())
+
+
 def test_host_disconnect_racing_user_close_closes_once_and_neutralizes_state() -> None:
     async def run() -> None:
         transport = FakeHidTransport(disconnect_request_auto_complete=False)
@@ -877,7 +950,7 @@ def test_reconnect_records_bonded_peer_selection_without_advertising(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
-            result = await pad.reconnect(timeout=0.1)
+            result = await pad.try_reconnect(timeout=0.1, key_store_path="fake-keys.json")
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
 
@@ -927,13 +1000,10 @@ def test_connect_prefers_active_reconnect_when_one_bond_exists() -> None:
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
-            result = await pad.connect(timeout=0.1)
+            await pad.connect(timeout=0.1, key_store_path="fake-keys.json")
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
 
-        assert result.route == "active_reconnect"
-        assert result.status == "connected"
-        assert result.peer_address == peer_address
         assert {
             "event": "active_reconnect_result",
             "peer_address": peer_address,
@@ -946,7 +1016,7 @@ def test_connect_prefers_active_reconnect_when_one_bond_exists() -> None:
     asyncio.run(run())
 
 
-def test_connect_allows_pairing_only_when_no_bond_and_allowed() -> None:
+def test_try_connect_returns_pairing_result_when_no_bond_and_allowed() -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
@@ -955,7 +1025,13 @@ def test_connect_allows_pairing_only_when_no_bond_and_allowed() -> None:
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
-            connect_task = asyncio.create_task(pad.connect(timeout=1.0, allow_pairing=True))
+            connect_task = asyncio.create_task(
+                pad.try_connect(
+                    timeout=1.0,
+                    allow_pairing=True,
+                    key_store_path="fake-keys.json",
+                )
+            )
             await asyncio.sleep(0)
 
             assert transport.events == ("open", "start_advertising")
@@ -972,6 +1048,39 @@ def test_connect_allows_pairing_only_when_no_bond_and_allowed() -> None:
             "reason": "no_bond",
             "route": "pairing",
         } in events
+
+    asyncio.run(run())
+
+
+def test_connect_raises_when_no_bond_and_pairing_not_allowed() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport) as pad:
+            with pytest.raises(ConnectionFailedError):
+                await pad.connect(timeout=0.1, key_store_path="fake-keys.json")
+
+        assert "start_advertising" not in transport.events
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "peer_addresses",
+    [
+        (),
+        ("01:02:03:04:05:06", "0a:0b:0c:0d:0e:0f"),
+    ],
+)
+def test_reconnect_raises_when_reconnect_does_not_connect(
+    peer_addresses: tuple[str, ...],
+) -> None:
+    async def run() -> None:
+        transport = FakeHidTransport(bonded_peer_addresses=peer_addresses)
+
+        async with SwitchGamepad(transport=transport) as pad:
+            with pytest.raises(ConnectionFailedError):
+                await pad.reconnect(timeout=0.1, key_store_path="fake-keys.json")
 
     asyncio.run(run())
 
@@ -1031,7 +1140,7 @@ def test_active_reconnect_failure_records_reason_without_advertising(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
-            result = await pad.reconnect(timeout=0.001)
+            result = await pad.try_reconnect(timeout=0.001, key_store_path="fake-keys.json")
             assert pad.status().connection_state == "closed"
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
@@ -1061,7 +1170,9 @@ def test_active_reconnect_task_cancellation_propagates() -> None:
         )
 
         async with SwitchGamepad(transport=transport) as pad:
-            reconnect_task = asyncio.create_task(pad.reconnect(timeout=None))
+            reconnect_task = asyncio.create_task(
+                pad.try_reconnect(timeout=None, key_store_path="fake-keys.json")
+            )
             for _ in range(5):
                 if "active_reconnect" in transport.events:
                     break
@@ -1180,6 +1291,34 @@ def test_tap_button_a_records_press_and_release_reports() -> None:
             assert pressed[3:6] == bytes.fromhex("08 00 00")
             assert released[0] == 0x30
             assert released[3:6] == bytes.fromhex("00 00 00")
+
+    asyncio.run(run())
+
+
+def test_tap_before_connection_does_not_leave_pressed_state() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport) as pad:
+            with pytest.raises(ClosedError):
+                await pad.tap(Button.A, duration=0)
+
+            assert pad.snapshot() == InputState.neutral()
+
+    asyncio.run(run())
+
+
+def test_tap_send_failure_releases_pressed_state() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport(send_interrupt_error=RuntimeError("send failed"))
+
+        async with SwitchGamepad(transport=transport) as pad:
+            await transport.connect()
+
+            with pytest.raises(RuntimeError, match="send failed"):
+                await pad.tap(Button.A, duration=0)
+
+            assert pad.snapshot() == InputState.neutral()
 
     asyncio.run(run())
 

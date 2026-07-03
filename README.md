@@ -30,11 +30,12 @@ from swbt import Button, SwitchGamepad
 
 
 async def main() -> None:
-    async with SwitchGamepad(
-        adapter="usb:0",
-        key_store_path="switch-bond.json",
-    ) as pad:
-        await pad.connect(timeout=30.0, allow_pairing=True)
+    async with SwitchGamepad(adapter="usb:0") as pad:
+        await pad.connect(
+            timeout=30.0,
+            allow_pairing=True,
+            key_store_path="switch-bond.json",
+        )
         await pad.tap(Button.A)
         await pad.neutral()
 
