@@ -6,6 +6,7 @@ from types import TracebackType
 from typing import Literal
 
 from swbt._gamepad_output import OutputReportDispatcher
+from swbt._gamepad_transport import create_default_transport
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
 from swbt.errors import (
     ClosedError,
@@ -752,12 +753,10 @@ class SwitchGamepad:
             if self._config.adapter is None:
                 msg = "adapter is required when no custom transport is supplied"
                 raise InvalidInputError(msg)
-            from swbt.transport.bumble import BumbleHidTransport  # noqa: PLC0415
-
-            self._transport = BumbleHidTransport(
+            self._transport = create_default_transport(
                 adapter=self._config.adapter,
                 device_name=self._config.device_name,
-                key_store_path=self._config.key_store_path,
                 diagnostics=self._diagnostics,
+                key_store_path=self._config.key_store_path,
             )
         return self._transport
