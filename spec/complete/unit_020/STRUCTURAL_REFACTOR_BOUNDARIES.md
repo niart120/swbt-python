@@ -122,8 +122,8 @@
 | refactor-done | `SwitchGamepad.try_reconnect()` 分割後も no bond / connected / timeout / failed / invalid key store の結果が変わらない | regression | unit / integration | no | `ConnectionWorkflow` に移し、fake transport integration で reconnect 結果を確認 |
 | refactor-done | `try_connect(allow_pairing=True)` 分割後も no bond のときだけ pairing fallback を行い、bond がある場合は advertising しない | regression | integration | no | `ConnectionWorkflow.try_connect()` に移し、fake transport integration で pairing fallback を確認 |
 | refactor-done | active reconnect の `CancelledError` は分割後も外側へ伝播し、transport error として畳み込まない | regression | integration | no | cancellation handling を workflow に移し、既存 cancellation test を確認 |
-| todo | close / host disconnect race tests が分割後も通る | regression | integration | no | close ordering を触らない確認 |
-| todo | test fixture 分割後に `tests/unit` と `tests/integration` の全件が通る | regression | unit / integration | no | fixture 移動の安全確認 |
+| green | close / host disconnect race tests が分割後も通る | regression | integration | no | close workflow は切り出さず、fake transport integration と full gate で回帰なしを確認 |
+| deferred | test fixture 分割後に `tests/unit` と `tests/integration` の全件が通る | regression | unit / integration | no | production split 後も fixture churn が大きいため別 unit へ送る。full gate は 215 passed |
 | green | `diagnostics.py` の key store knowledge leak について、原因分析と修正方針が仕様内に記録されている | characterization | docs | no | unit_020 の最初に完了した分析項目 |
 
 status は `todo`、`red`、`green`、`refactor-done`、`refactor-skipped`、`deferred` を使う。
@@ -145,13 +145,13 @@ Tidy decision:
 3. [x] `gamepad.py` の output report dispatch を `_gamepad_output.py` 相当へ切り出す。parser、rumble 記録、subcommand diagnostics、reply enqueue を `OutputReportDispatcher` が扱い、`SwitchGamepad` は callback 入口だけを残す。
 4. [x] `gamepad.py` の既定 transport 生成を `_gamepad_transport.py` 相当へ切り出す。Bumble import は関数内部に閉じ込め、public API import が Bumble を解決しない contract を維持する。
 5. [x] `gamepad.py` の reconnect / connect workflow を `_gamepad_connection.py` 相当へ切り出す。`SwitchGamepad.reconnect()` / `connect()` は成功必須 API の薄い wrapper として残す。
-6. [ ] `SwitchGamepad.close()` は外部切り出し済み箇所が green になった後に再評価する。unit_014 の close ordering、disconnect request terminal、host disconnect race の回帰 test があるため、最初の整理では動かさない。
+6. [x] `SwitchGamepad.close()` は再評価したうえで、この unit では切り出さない。unit_014 の close ordering、disconnect request terminal、host disconnect race の回帰 test があるため、今回の整理対象から外す。
 7. [x] `transport/bumble.py` から key store と diagnostics wrapper を key store module へ分ける。package 化する場合は `swbt.transport.bumble.key_store`、しない場合は `swbt.transport._bumble_key_store` とする。
-8. [ ] `transport/bumble.py` を `src/swbt/transport/bumble/` package へ変換するか判断する。package 化する場合は `__init__.py` を transport 本体の入口にし、内部 module は package private に寄せる。
+8. [x] `transport/bumble.py` を `src/swbt/transport/bumble/` package へ変換するか判断する。今回は fallback の `src/swbt/transport/_bumble_*.py` 分割で十分に責務を分けられたため、package 化は別 unit へ送る。
 9. [x] SDP / HID service record builder を `swbt.transport.bumble.sdp` または `swbt.transport._bumble_sdp.py` 相当へ分ける。
 10. [x] HIDP output report decode と ACL queue drain を `swbt.transport.bumble.hidp` / `acl` または `_bumble_hidp.py` / `_bumble_acl.py` 相当へ分ける。
 11. [x] connection request bridge、L2CAP lifecycle bridge、connection diagnostics registration を callback / lifecycle module へ分ける。callback state と diagnostics field が散る場合も、tests を更新して最終構造を優先する。
-12. [ ] production 分割後に test fixture を責務別へ移す。fake runtime は `tests` 配下に置き、`src` 配下へ入れない。
+12. [x] production 分割後の test fixture 移動は別 unit へ送る。fake runtime は `tests` 配下に置く方針だけ維持する。
 
 ### 8.3 `diagnostics.py` に key store 実装知識が漏れた原因
 
@@ -291,6 +291,12 @@ Tidy decision:
    - 現在の `pyproject.toml` は `--strict-config --strict-markers` を使うが、`--import-mode=importlib` は採用していない。
    - import mode 変更は test collection 全体の挙動を変えるため、この unit では扱わない。
 
+最終判断:
+
+- `transport/bumble.py` の package 化は、この unit では行わない。`_bumble_key_store.py`、`_bumble_sdp.py`、`_bumble_hidp.py`、`_bumble_acl.py`、`_bumble_lifecycle.py` へ責務を分けたことで、package 化なしでも production の読み分けは改善した。file-to-package 変換は import path と git move の差分が大きく、今の残リスクに見合わない。
+- test fixture 分割は deferred とする。production behavior の安全網として、責務別 unit test は追加済みで、full gate は通っている。`tests/unit/test_bumble_transport.py` の fake class 移動は test-only churn が大きいため、別 unit で file split だけに絞って行う。
+- `SwitchGamepad.close()` はこの unit では切り出さない。unit_014 の close ordering と host disconnect race contract に近く、今回の `SwitchGamepad` 分割では `OutputReportDispatcher`、default transport factory、`ConnectionWorkflow` までで止める。
+
 ## 9. 対象ファイル
 
 | path | change | 内容 |
@@ -378,6 +384,8 @@ Tidy decision:
 
 - previous peer を使う reconnect fallback は扱わない。必要になった場合は、authentication failure 後の再試行可否を実機観測と分けて別 unit にする。
 - key store 自動移行、復旧 CLI、secret store 対応は扱わない。
+- `transport/bumble.py` の package 化は別 unit に送る。この unit では `_bumble_*.py` への責務分割で読みやすさと import timing の検証を満たしたため、file-to-package 変換まで同時に行わない。
+- `tests/unit/test_bumble_transport.py` の fake class 共通化と fixture 再配置は別 unit に送る。この unit では production 分割ごとに focused unit test を追加し、既存 fixture の大規模移動による差分拡大を避ける。
 - `SwitchGamepad` の public API 再設計は扱わない。必要なら別 unit で利用者向け contract と一緒に設計する。
 - `ConnectionResult` / `SwitchGamepadConfig` / `ConnectionStatus` の配置変更は、循環 import を避けるために必要になった場合だけ扱う。行数削減だけを理由に先に動かさない。
 
