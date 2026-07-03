@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
 from swbt.protocol.profile import ProControllerProfile
+from swbt.transport._bumble_key_store import PREVIOUS_NAMESPACE_PREFIX
 from swbt.transport.base import BondedPeer, DisconnectRequestResult
 
 if TYPE_CHECKING:
@@ -203,8 +204,6 @@ class _BumbleRuntime:
 class _CurrentPreviousJsonKeyStore:
     """Bumble-compatible JSON key store with one previous generation."""
 
-    _PREVIOUS_NAMESPACE_PREFIX = "swbt.previous::"
-
     def __init__(
         self,
         *,
@@ -289,7 +288,7 @@ class _CurrentPreviousJsonKeyStore:
         )
 
     def _previous_namespace(self, current_store: object) -> str:
-        return f"{self._PREVIOUS_NAMESPACE_PREFIX}{cast('Any', current_store).namespace}"
+        return f"{PREVIOUS_NAMESPACE_PREFIX}{cast('Any', current_store).namespace}"
 
 
 class _DiagnosticKeyStore:

@@ -581,9 +581,21 @@ class SwitchGamepad:
             raise ClosedError(msg)
 
     def _record_run_metadata(self) -> None:
+        key_store_exists: bool | None = None
+        key_store_previous_exists: bool | None = None
+        if self._config.key_store_path is not None:
+            from swbt.transport._bumble_key_store import (  # noqa: PLC0415
+                read_key_store_metadata,
+            )
+
+            key_store_metadata = read_key_store_metadata(self._config.key_store_path)
+            key_store_exists = key_store_metadata.exists
+            key_store_previous_exists = key_store_metadata.previous_exists
         self._diagnostics.record_run_metadata(
             adapter=self._metadata_adapter(),
+            key_store_exists=key_store_exists,
             key_store_path=self._config.key_store_path,
+            key_store_previous_exists=key_store_previous_exists,
         )
 
     def _metadata_adapter(self) -> str:

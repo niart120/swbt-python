@@ -110,7 +110,7 @@
 | todo | default Bumble transport の module 再配置後も `SwitchGamepad(adapter=...)` と `from_config()` の default transport 生成結果が変わらない | regression | unit | no | internal import path は変更可 |
 | todo | public API import が Bumble を解決しない | regression | unit | no | `tests/unit/test_public_api_boundary.py` |
 | todo | Bumble key store current / previous tests が分割後も current のみを reconnect candidate にする | regression | unit | no | unit_016 / unit_018 contract |
-| todo | `run_metadata` の key store fields は metadata owner 経由へ移しても `key_store_exists` / `key_store_previous_exists` が変わらない | regression | unit / integration | no | diagnostics が `swbt.previous::` を直接読まない確認を追加する |
+| refactor-done | `run_metadata` の key store fields は metadata owner 経由へ移しても `key_store_exists` / `key_store_previous_exists` が変わらない | regression | unit / integration | no | `src/swbt/transport/_bumble_key_store.py` が storage format を読み、`diagnostics.py` は plain bool を記録する |
 | todo | SDP builder 分割後も service record bytes / attributes が既存 reference と一致する | regression | unit | no | source fact の再解釈はしない |
 | todo | HIDP output report decode 分割後も interrupt / control / set report callback が従来通り output report payload を転送する | regression | unit | no | `_decode_hidp_output_report` と callback registration |
 | todo | ACL queue drain 分割後も connection queue、host fallback queue、no-progress stop が従来通り | regression | unit | no | unit_005 queue drain contract |
@@ -141,16 +141,17 @@ Tidy decision:
 ### 8.2 推奨する着手順
 
 1. [x] `diagnostics.py` の key store knowledge leak を分析し、修正範囲をこの unit に含めるか判定する。
-2. [ ] `gamepad.py` の output report dispatch を `_gamepad_output.py` 相当へ切り出す。parser、rumble 記録、subcommand diagnostics、reply enqueue を `OutputReportDispatcher` が扱い、`SwitchGamepad` は callback 入口だけを残す。
-3. [ ] `gamepad.py` の既定 transport 生成を `_gamepad_transport.py` 相当へ切り出す。Bumble import は関数内部に閉じ込め、public API import が Bumble を解決しない contract を維持する。
-4. [ ] `gamepad.py` の reconnect / connect workflow を `_gamepad_connection.py` 相当へ切り出す。`SwitchGamepad.reconnect()` / `connect()` は成功必須 API の薄い wrapper として残す。
-5. [ ] `SwitchGamepad.close()` は外部切り出し済み箇所が green になった後に再評価する。unit_014 の close ordering、disconnect request terminal、host disconnect race の回帰 test があるため、最初の整理では動かさない。
-6. [ ] `transport/bumble.py` から key store と diagnostics wrapper を key store module へ分ける。package 化する場合は `swbt.transport.bumble.key_store`、しない場合は `swbt.transport._bumble_key_store` とする。`diagnostics.py` の previous namespace 直読みも同じ段階で owner API へ寄せる。
-7. [ ] `transport/bumble.py` を `src/swbt/transport/bumble/` package へ変換するか判断する。package 化する場合は `__init__.py` を transport 本体の入口にし、内部 module は package private に寄せる。
-8. [ ] SDP / HID service record builder を `swbt.transport.bumble.sdp` または `swbt.transport._bumble_sdp.py` 相当へ分ける。
-9. [ ] HIDP output report decode と ACL queue drain を `swbt.transport.bumble.hidp` / `acl` または `_bumble_hidp.py` / `_bumble_acl.py` 相当へ分ける。
-10. [ ] connection request bridge、L2CAP lifecycle bridge、connection diagnostics registration を callback / lifecycle module へ分ける。callback state と diagnostics field が散る場合も、tests を更新して最終構造を優先する。
-11. [ ] production 分割後に test fixture を責務別へ移す。fake runtime は `tests` 配下に置き、`src` 配下へ入れない。
+2. [x] key store metadata reader を `src/swbt/transport/_bumble_key_store.py` に置き、`diagnostics.py` の previous namespace 直読みを外す。`_CurrentPreviousJsonKeyStore` と diagnostics wrapper の移動はまだ行わない。
+3. [ ] `gamepad.py` の output report dispatch を `_gamepad_output.py` 相当へ切り出す。parser、rumble 記録、subcommand diagnostics、reply enqueue を `OutputReportDispatcher` が扱い、`SwitchGamepad` は callback 入口だけを残す。
+4. [ ] `gamepad.py` の既定 transport 生成を `_gamepad_transport.py` 相当へ切り出す。Bumble import は関数内部に閉じ込め、public API import が Bumble を解決しない contract を維持する。
+5. [ ] `gamepad.py` の reconnect / connect workflow を `_gamepad_connection.py` 相当へ切り出す。`SwitchGamepad.reconnect()` / `connect()` は成功必須 API の薄い wrapper として残す。
+6. [ ] `SwitchGamepad.close()` は外部切り出し済み箇所が green になった後に再評価する。unit_014 の close ordering、disconnect request terminal、host disconnect race の回帰 test があるため、最初の整理では動かさない。
+7. [ ] `transport/bumble.py` から key store と diagnostics wrapper を key store module へ分ける。package 化する場合は `swbt.transport.bumble.key_store`、しない場合は `swbt.transport._bumble_key_store` とする。
+8. [ ] `transport/bumble.py` を `src/swbt/transport/bumble/` package へ変換するか判断する。package 化する場合は `__init__.py` を transport 本体の入口にし、内部 module は package private に寄せる。
+9. [ ] SDP / HID service record builder を `swbt.transport.bumble.sdp` または `swbt.transport._bumble_sdp.py` 相当へ分ける。
+10. [ ] HIDP output report decode と ACL queue drain を `swbt.transport.bumble.hidp` / `acl` または `_bumble_hidp.py` / `_bumble_acl.py` 相当へ分ける。
+11. [ ] connection request bridge、L2CAP lifecycle bridge、connection diagnostics registration を callback / lifecycle module へ分ける。callback state と diagnostics field が散る場合も、tests を更新して最終構造を優先する。
+12. [ ] production 分割後に test fixture を責務別へ移す。fake runtime は `tests` 配下に置き、`src` 配下へ入れない。
 
 ### 8.3 `diagnostics.py` に key store 実装知識が漏れた原因
 
@@ -301,7 +302,9 @@ Tidy decision:
 | `src/swbt/transport/bumble.py` | delete / move / split | package 化する場合は `src/swbt/transport/bumble/` へ移す。内部 import path 互換は不要 |
 | `src/swbt/transport/bumble/` | new / candidate | package 化した場合の transport 本体、key store、callback bridge、SDP / helper の置き場 |
 | `src/swbt/transport/_bumble_*.py` | new / fallback | package 化しない場合の内部 helper 置き場 |
+| `src/swbt/transport/_bumble_key_store.py` | new | key store metadata reader と previous namespace prefix owner |
 | `src/swbt/diagnostics.py` | modify | key store storage format knowledge を外へ出し、plain metadata を記録するだけにする |
+| `tests/unit/test_bumble_key_store_metadata.py` | new | key store metadata reader の current / previous 判定を固定する |
 | `tests/unit/test_bumble_transport.py` | modify / split | fake runtime fixture と behavior tests を整理する |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify / split | connection / close / report / reconnect tests の grouping を整理する |
 | `spec/wip/unit_020/STRUCTURAL_REFACTOR_BOUNDARIES.md` | new / modify | 作業範囲、原因分析、検証結果を記録する |
@@ -310,10 +313,14 @@ Tidy decision:
 
 | command | result | notes |
 |---|---|---|
-| `uv run ruff format --check .` | not run | 実装変更前の仕様作成段階 |
-| `uv run ruff check .` | not run | 実装変更前の仕様作成段階 |
-| `uv run ty check --no-progress` | not run | 実装変更前の仕様作成段階 |
-| `uv run pytest tests\unit tests\integration -q` | not run | 実装変更前の仕様作成段階 |
+| `uv run pytest tests/unit/test_diagnostics.py -q` | expected fail | red: `record_run_metadata()` が caller supplied key store metadata をまだ受け取れなかった |
+| `uv run pytest tests/unit/test_diagnostics.py tests/unit/test_bumble_key_store_metadata.py tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 60 passed。`run_metadata` の key store fields と fake transport integration を確認 |
+| `uv run ruff format --check src\swbt\diagnostics.py src\swbt\gamepad.py src\swbt\transport\bumble.py src\swbt\transport\_bumble_key_store.py tests\unit\test_diagnostics.py tests\unit\test_bumble_key_store_metadata.py` | pass | 対象変更の format 確認 |
+| `uv run ruff check src\swbt\diagnostics.py src\swbt\gamepad.py src\swbt\transport\bumble.py src\swbt\transport\_bumble_key_store.py tests\unit\test_diagnostics.py tests\unit\test_bumble_key_store_metadata.py` | pass | 対象変更の lint 確認 |
+| `uv run ruff format --check .` | pass | 52 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\unit tests\integration -q` | pass | 206 passed |
 | `uv run pytest -m bumble` | not run | 実行には USB Bluetooth dongle open の明示承認が必要 |
 | `uv run pytest -m hardware` | not run | 実行には Switch-facing 動作の明示承認が必要 |
 

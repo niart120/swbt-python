@@ -35,6 +35,24 @@ def test_run_metadata_records_environment_and_adapter() -> None:
     assert payload["package_version"] == "0.1.0"
 
 
+def test_run_metadata_records_key_store_metadata_from_caller() -> None:
+    trace = StringIO()
+    recorder = DiagnosticsRecorder(trace_writer=trace)
+
+    recorder.record_run_metadata(
+        adapter="usb:0",
+        key_store_exists=True,
+        key_store_path="missing-but-reported.json",
+        key_store_previous_exists=True,
+    )
+
+    payload = json.loads(trace.getvalue())
+
+    assert payload["key_store_exists"] is True
+    assert payload["key_store_path"] == "missing-but-reported.json"
+    assert payload["key_store_previous_exists"] is True
+
+
 def test_state_transition_records_previous_next_and_reason() -> None:
     trace = StringIO()
     recorder = DiagnosticsRecorder(trace_writer=trace)
