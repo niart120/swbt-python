@@ -20,6 +20,7 @@
 - Close cleanup scan disable: 2026-07-02 に close cleanup を修正後、`usb:0` を 5 秒間だけ `Pro Controller` として advertise し、close で Classic scan を停止する診断を実行した。trace は `host_connection` を記録し、debug log は close path の `HCI_WRITE_SCAN_ENABLE_COMMAND scan_enable: 0` が `SUCCESS` で完了したことを記録した。ユーザは iPhone 側で `Pro Controller` 表示が消えたことを目視した。
 - Context manager resource scope run: 2026-07-03 に `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で unit_015 smoke を実行した。`open()` only smoke は `transport_open_complete` と `transport_close_complete` を記録し、`advertising_start` と `host_connection` を記録しなかった。`pair()` close smoke は `advertising_start`、`connection_request`、`host_connection`、`classic_pairing`、HID control / interrupt L2CAP open、`connected`、trailing neutral `0x30`、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete` を記録した。Button A path は full observed handshake 後に `tap(Button.A)`、neutral、close まで到達し、`manual_input_checkpoint post_handshake_tap_a_complete` と `post_handshake_neutral_complete` を記録した。この pytest は on-wire sequence と checkpoint を確認するが、Switch UI 反映は自動判定しない。
 - Reconnect key store run: 2026-07-03 に `usb:0` / CSR8510 A10 / WinUSB / Bumble 0.0.230 で unit_007 reconnect keystore characterization を実行した。起動条件記録なしの初回 run は active reconnect の条件としては inconclusive。起動条件を trace に残す split run では、初回 pairing を controller search / change grip order screen で行い、`key_store_update status=succeeded` を記録した。2本目の active reconnect は HOME / 通常画面条件で保存済み peer 1 件を選択した。修正前は `Device.connect(..., BR_EDR)` 後に HID control の `L2CAP_CONNECTION_REQUEST` PSM `0x0011` を先に送信し、Switch 側 reason 5 `AUTHENTICATION_FAILURE_ERROR` で切断された。`Connection.authenticate()` と `Connection.encrypt(True)` を HID L2CAP 前に明示した修正後は、`connection_authentication authenticated=true`、`connection_encryption_change encryption=1`、HID control / interrupt L2CAP open、`connected`、`active_reconnect_result status=connected` を記録した。この active reconnect trace では `advertising_start`、`classic_pairing`、`key_store_update` は出ていない。3本目の incoming run は controller search / change grip order screen で `incoming_connection route=incoming` を記録し、active reconnect event を出さなかった。ただし `classic_pairing`、`link_key_available`、`key_store_update status=succeeded` も出たため、pairing-free incoming bond reuse とは扱わない。
+- Packaging CLI pair probe: 2026-07-03 に unit_008 の `swbt-probe pair` を承認済み範囲で実行した。初回は `usb:0` を開き、Classic HID Device 初期化、SDP 登録、HID advertising、trace 保存まで到達したが、30 秒間 `host_connection` が来ず `ConnectionTimeoutError` で終了した。ユーザが Switch 側を接続待ちにして再実行した retry では、`connection_request`、`host_connection`、`classic_pairing`、HID control / interrupt L2CAP open、`connected`、key store write、close cleanup まで到達した。retry trace は one neutral `0x30` report と `transport_close_complete` を記録し、non-neutral input は送っていない。
 
 ## Run Entry Template
 
@@ -52,6 +53,48 @@
 | macOS | 未検証 | 未検証 | 未記録 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | 未検証 | template only | 2026-06-30 | 初期検証対象外 |
 
 ## Run Entries
+
+### 2026-07-03: unit_008 swbt-probe pair passed after Switch connection wait
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `work/unit-008-packaging-examples-cli` with uncommitted hardware-log update after `66fd860`
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device. Previous inventory associated `usb:0` with USB VID:PID `0a12:0001`
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: default 8000 us. Trace recorded one neutral `0x30` input report after `connected`.
+- command / test: `uv run swbt-probe pair --adapter usb:0 --key-store .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair-retry\keys.json --trace .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair-retry\pair-trace.jsonl --timeout 30`
+- approval: user explicitly requested retry after the timeout with `接続待ちにしてないのが原因かも。もっかい頼めるか?`. Scope matched the previous approved hardware test: USB Bluetooth dongle open, Classic HID Device initialization, HID advertising, Switch-facing pairing / HID control and interrupt connection wait, trace save, and close cleanup. Scope excluded Button A or other non-neutral input, extra retry loops, and persistent advertising.
+- result: pass, exit 0. The trace recorded `transport_open_start`, `bumble_device_initialized` with `device_name="Pro Controller"` and `class_of_device="0x002508"`, `sdp_record_registered`, `transport_open_complete`, `classic_link_policy_configured settings="0x0005"`, `advertising_start`, `connection_request`, `host_connection`, `classic_pairing`, `link_key_available`, `key_store_update status=succeeded`, `connection_encryption_change encryption=1`, HID control / interrupt `l2cap_channel_open`, `connected`, and `incoming_connection route=incoming`.
+- artifact: `.pytest_cache\hardware\unit_008\20260703-swbt-probe-pair-retry\pair-trace.jsonl`
+- artifact: `.pytest_cache\hardware\unit_008\20260703-swbt-probe-pair-retry\keys.json`
+- cleanup: trace recorded one neutral `0x30` `report_tx`, HID interrupt / control `l2cap_channel_close`, `disconnect_request status=requested`, `disconnect_request_terminal status=closed`, and `transport_close_complete`. No non-neutral input operation was sent. The key store file exists, but link key material is not logged here.
+- notes: The preceding timeout is consistent with the Switch not being in connection-wait state, but this is an inference from the successful retry and the user's operator note, not a controlled A/B proof.
+
+### 2026-07-03: unit_008 swbt-probe pair timed out before host connection
+
+- OS: Windows, `Windows-11-10.0.26200-SP0`
+- environment: Windows PowerShell, `work/unit-008-packaging-examples-cli` at `66fd860`
+- adapter: `usb:0`
+- dongle: CSR8510 A10 class device. Previous inventory associated `usb:0` with USB VID:PID `0a12:0001`
+- driver: not re-recorded in this run. Previous inventory recorded WinUSB service, libwdi provider, driver version `6.1.7600.16385`, `oem75.inf`
+- Python: 3.13.5
+- Bumble: 0.0.230
+- swbt-python: diagnostics package version `0.1.0`
+- Switch model: not recorded
+- Switch firmware: not recorded
+- report period: not used. Report loop did not start because `connected` was not reached
+- command / test: `uv run swbt-probe adapters --json`
+- command / test: `uv run swbt-probe pair --adapter usb:0 --key-store .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair\keys.json --trace .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair\pair-trace.jsonl --timeout 30`
+- approval: user explicitly approved this hardware test with `実機テストやろうか。承認。`. Scope included USB Bluetooth dongle open, Classic HID Device initialization, HID advertising, Switch-facing pairing / HID control and interrupt connection wait, trace save, and close cleanup. Scope excluded Button A or other non-neutral input, extra retry loops, and persistent advertising.
+- result: fail, `ConnectionTimeoutError` after 30 seconds. The no-open adapter command reported candidate `usb:0`, platform `Windows-11-10.0.26200-SP0`, Python 3.13.5, Bumble 0.0.230, and `opens_adapter=false`. The pair trace recorded `transport_open_start`, `bumble_device_initialized` with `device_name="Pro Controller"` and `class_of_device="0x002508"`, `sdp_record_registered`, `transport_open_complete`, `classic_link_policy_configured settings="0x0005"`, `advertising_start`, then `connection_timeout state=advertising`. The trace did not record `connection_request`, `host_connection`, `classic_pairing`, `l2cap_channel_open`, or `connected`.
+- artifact: `.pytest_cache\hardware\unit_008\20260703-swbt-probe-pair\pair-trace.jsonl`
+- cleanup: trace recorded recoverable `error`, `disconnect_request status=unavailable` because channels were not connected, and `transport_close_complete`. No key store file was written and no non-neutral input operation was sent.
+- notes: This run confirms that `swbt-probe pair --trace` leaves a diagnostic artifact and closes the transport on timeout. It does not prove Switch pairing or HID channel open for the CLI path.
 
 ### 2026-07-03: unit_007 active reconnect passed after Classic authentication and encryption
 

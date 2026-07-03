@@ -18,6 +18,7 @@
 | completed M5 | 実機で Button A / neutral が確認済み。examples はまだ未整備 | `spec/complete/unit_006/M5_INPUT_OPERATION_API.md` |
 | hardware log | Windows / CSR8510 A10 / WinUSB / `usb:0` の確認済み構成がある | `docs/hardware-test-log.md` |
 | user intent | packaging に際して、Google-style で公開 API の引数、返値、属性、例外境界の docstring を拡充する | active goal |
+| user follow-up | README の開発者向け文言や作業メモ由来のメタ表現を利用者向け文言へ直す | active conversation |
 
 ### 1.3 use case
 
@@ -101,9 +102,10 @@
 | refactor-skipped | README に Windows 専用 dongle / WinUSB 注意点がある | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
 | refactor-skipped | README に確認済み構成と未確認構成が分かれている | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
 | refactor-skipped | README が `unit_006` 後の Button A / neutral observed-pass を stale な「未記録」と矛盾なく説明する | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
+| refactor-skipped | README が agent / spec 作業メモ由来のメタ表現を避ける | follow-up | docs | no | 公開 README の地の文を利用者向けの前提、制限、操作に寄せる。動作変更なし |
 | refactor-skipped | examples が `tap(Button.A)` / `neutral()` の最小手順と実機承認境界を分けている | new | integration | no | `examples/tap_a.py`、`examples/pairing_probe.py`、`examples/hardware_bringup.py` を `tests/integration/test_examples.py` で固定 |
 | green | `swbt-probe adapters` が developer machine で adapter 情報を表示する | characterization | unit | no | `uv run swbt-probe adapters --json` で adapter open なしの候補 / 環境情報を確認 |
-| todo | `swbt-probe pair` が trace を保存する | characterization | hardware | yes | Switch-facing 動作の承認が必要 |
+| observed-pass | `swbt-probe pair` が trace を保存する | characterization | hardware | yes | 初回は Switch 側が接続待ちではなかった可能性があり `host_connection` 前に timeout。接続待ち後の retry で `connected`、key store write、trace 保存、close cleanup まで到達 |
 
 ## 8. 設計メモ
 
@@ -166,7 +168,9 @@
 | `uv run pytest tests/unit tests/integration -q` | pass | 169 passed |
 | `uv run swbt-probe adapters --json` | pass | adapter を開かず、candidate `usb:0`、platform、Python 3.13.5、Bumble 0.0.230、`opens_adapter=false` を表示した |
 | `uv run swbt-probe pair --help` | pass | adapter、key store、trace、timeout と explicit approval 境界を表示した |
-| `uv run swbt-probe pair --adapter usb:0 --key-store .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair\keys.json --trace .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair\pair-trace.jsonl --timeout 30` | pending-approval | Switch-facing 動作の明示承認後に実行する。現時点では承認未取得のため未実行 |
+| `uv run swbt-probe pair --adapter usb:0 --key-store .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair\keys.json --trace .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair\pair-trace.jsonl --timeout 30` | observed-fail | ユーザが `実機テストやろうか。承認。` と明示承認した後に実行。`transport_open_complete` と `advertising_start` まで到達したが、30 秒間 `host_connection` が来ず `ConnectionTimeoutError`。trace は `connection_timeout`、recoverable `error`、`disconnect_request status=unavailable`、`transport_close_complete` を記録した |
+| `uv run swbt-probe pair --adapter usb:0 --key-store .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair-retry\keys.json --trace .pytest_cache\hardware\unit_008\20260703-swbt-probe-pair-retry\pair-trace.jsonl --timeout 30` | observed-pass | ユーザが Switch 側の接続待ち漏れを疑い、`接続待ちにしてないのが原因かも。もっかい頼めるか?` と retry を依頼した後に実行。exit 0。trace は `connection_request`、`host_connection`、`classic_pairing`、HID control / interrupt `l2cap_channel_open`、`connected`、`key_store_update status=succeeded`、one neutral `0x30` report、`transport_close_complete` を記録した |
+| `uv run pytest tests\unit\test_readme_docs.py -q` | pass | 3 passed。README の確認済み構成、未確認構成、専用 dongle / driver 注意点、Button A / neutral 観測の固定テストを文言整理後に再実行した |
 
 ## 11. 実機実行条件
 
@@ -195,5 +199,5 @@
 - [x] TDD Test List の初期案を作成した
 - [x] package metadata、examples、CLI、README の実装を完了した
 - [x] M7 の build と local automated gate を実行し、検証欄を結果で更新した
-- [ ] adapter / Switch-facing CLI 検証は承認、command、cleanup、結果を記録した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] adapter / Switch-facing CLI 検証は承認、command、cleanup、結果を記録した
+- [x] 完了条件を満たしたら `spec/complete` へ移動する

@@ -2,7 +2,7 @@
 
 NX 向けの仮想 Bluetooth HID 入力デバイスを Python から扱うためのライブラリです。
 
-このリポジトリは pre-alpha です。実機挙動は Bluetooth adapter、driver、対象機器の firmware に依存します。
+pre-alpha 版です。実機での動作は Bluetooth adapter、driver、対象機器の firmware に依存します。
 
 ## 必要なもの
 
@@ -16,7 +16,7 @@ NX 向けの仮想 Bluetooth HID 入力デバイスを Python から扱うため
 pip install swbt-python
 ```
 
-開発中の checkout では次を使います。
+ソースから動かす場合は次を使います。
 
 ```powershell
 uv sync --dev
@@ -42,11 +42,11 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-この例は adapter open、HID advertising、pairing または reconnect、periodic report loop、入力送信を行います。実行前に、使う adapter、command、trace 保存先、cleanup 手順を確認してください。
+この例は adapter を開き、HID advertising、pairing または reconnect、periodic report loop、入力送信を行います。専用 USB Bluetooth dongle を指定し、実行したコマンドと trace 保存先を記録してください。終了時は neutral を送ってから接続を閉じます。
 
 ## 実機検証の状態
 
-実機観測の正本は `docs/hardware-test-log.md` です。README には release 前に必要な利用者向け要約だけを書きます。
+詳細な実機ログは `docs/hardware-test-log.md` にあります。ここでは、利用時に確認すべき構成と未検証の範囲を示します。
 
 ### 確認済み構成
 
@@ -76,8 +76,8 @@ asyncio.run(main())
 
 - Bumble から開く adapter は専用 USB Bluetooth dongle にしてください。OS 標準 Bluetooth stack が使っている adapter を共有しないでください。
 - Windows では確認済み構成が WinUSB / libwdi です。標準 driver のままでは Bumble から開けない場合があります。
-- Linux は libusb 権限設定が必要になる想定ですが、この repo ではまだ未検証です。
-- `swbt-probe adapters --help` と `swbt-probe pair --help` は、adapter と実機操作の確認用 CLI surface です。adapter open や Switch-facing 動作を実行する前に、会話上の明示承認、対象 adapter、command、cleanup plan を揃えてください。
+- Linux は libusb 権限設定が必要になる想定ですが、まだ未検証です。
+- `swbt-probe adapters --help` と `swbt-probe pair --help` で、adapter、key store、trace 保存先、timeout を確認できます。`pair` は adapter を開き、対象機器からの接続を待ちます。実行前に専用 dongle を使っていることを確認してください。
 
 ## 開発
 
