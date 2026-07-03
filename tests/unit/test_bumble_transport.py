@@ -14,6 +14,7 @@ from bumble.keys import PairingKeys
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
 from swbt.transport import bumble as bumble_module
+from swbt.transport._bumble_sdp import build_hid_service_records
 from swbt.transport.bumble import BumbleHidTransport
 
 
@@ -950,7 +951,7 @@ def test_bumble_key_store_update_failure_is_recorded_without_key_material() -> N
 
 
 def test_bumble_hid_service_record_matches_reference_sdp_policy() -> None:
-    service_records = bumble_module._build_hid_service_records(b"\x00")
+    service_records = build_hid_service_records(b"\x00")
     attributes: dict[int, Any] = {}
     for attribute in service_records[0x00010001]:
         typed_attribute = cast("Any", attribute)
