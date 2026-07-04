@@ -58,8 +58,8 @@ def test_docs_workflow_deploys_pages_only_from_main_push() -> None:
     ]
 
     assert "actions/configure-pages@v5" in build_uses
-    assert "actions/upload-pages-artifact@v4" in build_uses
-    assert "actions/deploy-pages@v4" in deploy_uses
+    assert "actions/upload-pages-artifact@v5" in build_uses
+    assert "actions/deploy-pages@v5" in deploy_uses
 
 
 def test_python_ci_keeps_read_only_permissions() -> None:
