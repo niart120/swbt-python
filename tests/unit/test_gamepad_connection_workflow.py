@@ -2,8 +2,8 @@ import asyncio
 import json
 from io import StringIO
 
-from swbt._gamepad_connection import ConnectionWorkflow
 from swbt.diagnostics import DiagnosticsRecorder
+from swbt.gamepad.connection import ConnectionWorkflow
 from swbt.transport.fake import FakeHidTransport
 
 

@@ -4,14 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from types import TracebackType
 
-from swbt._gamepad_connection import (
-    ConnectionResult,
-    ConnectionStatus,  # noqa: F401
-    ConnectionWorkflow,
-    raise_if_connection_failed,
-)
-from swbt._gamepad_output import OutputReportDispatcher
-from swbt._gamepad_transport import create_default_transport
+import swbt.gamepad as gamepad_module
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
 from swbt.errors import (
     ClosedError,
@@ -19,12 +12,18 @@ from swbt.errors import (
     InvalidInputError,
     SwbtError,
 )
+from swbt.gamepad.connection import (
+    ConnectionResult,
+    ConnectionStatus,  # noqa: F401
+    ConnectionWorkflow,
+    raise_if_connection_failed,
+)
+from swbt.gamepad.output import OutputReportDispatcher
+from swbt.gamepad.transport_factory import create_default_transport
 from swbt.input import Button, InputState
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
-
-DISCONNECT_REQUEST_TIMEOUT_SECONDS = 0.25
 
 
 @dataclass(frozen=True)
@@ -362,7 +361,7 @@ class SwitchGamepad:
                         self._diagnostics.record_event(
                             "disconnect_request_terminal",
                             status="timeout",
-                            timeout=DISCONNECT_REQUEST_TIMEOUT_SECONDS,
+                            timeout=gamepad_module.DISCONNECT_REQUEST_TIMEOUT_SECONDS,
                         )
                 await self._transport.close()
                 self._report_loop = None
@@ -534,7 +533,7 @@ class SwitchGamepad:
 
     async def _wait_for_disconnect_request_closed(self) -> bool:
         try:
-            async with asyncio.timeout(DISCONNECT_REQUEST_TIMEOUT_SECONDS):
+            async with asyncio.timeout(gamepad_module.DISCONNECT_REQUEST_TIMEOUT_SECONDS):
                 await self._disconnect_event.wait()
                 return True
         except TimeoutError:

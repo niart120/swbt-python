@@ -2,8 +2,8 @@ import asyncio
 import json
 from io import StringIO
 
-from swbt._gamepad_output import OutputReportDispatcher
 from swbt.diagnostics import DiagnosticsRecorder
+from swbt.gamepad.output import OutputReportDispatcher
 from swbt.state_store import InputStateStore
 
 
