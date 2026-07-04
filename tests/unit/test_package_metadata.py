@@ -15,6 +15,15 @@ def test_source_distribution_includes_examples() -> None:
     assert "examples/**" in source_include
 
 
+def test_internal_publishing_runbook_is_excluded_from_source_distribution() -> None:
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+
+    build_backend = pyproject["tool"]["uv"]["build-backend"]
+
+    assert "spec/**" in build_backend["source-include"]
+    assert "spec/publishing.md" in build_backend["source-exclude"]
+
+
 def test_docs_dependency_group_uses_mkdocs_without_runtime_dependency() -> None:
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 

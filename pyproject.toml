@@ -65,6 +65,9 @@ source-include = [
     "spec/**",
     "tests/**",
 ]
+source-exclude = [
+    "spec/publishing.md",
+]
 
 [tool.ruff]
 line-length = 100
