@@ -53,7 +53,15 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         Stick.left,
         Stick.right,
         IMUFrame.neutral,
+        IMUFrame.raw,
+        IMUFrame.gyro,
+        IMUFrame.accel,
+        IMUFrame.with_gyro,
+        IMUFrame.with_accel,
         InputState.neutral,
+        InputState.with_imu,
+        InputState.with_gyro,
+        InputState.with_accel,
     ):
         _assert_doc_contains(factory, "Returns:")
 
@@ -94,6 +102,7 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         (SwitchGamepad.sticks, ("Args:", "left", "right", "does not send")),
         (SwitchGamepad.lstick, ("Args:", "stick", "left stick", "does not send")),
         (SwitchGamepad.rstick, ("Args:", "stick", "right stick", "does not send")),
+        (SwitchGamepad.imu, ("Args:", "frames", "IMU", "does not send")),
         (SwitchGamepad.release, ("Args:", "buttons", "does not send")),
         (SwitchGamepad.neutral, ("InputState.neutral()", "without immediate transmission")),
         (

@@ -43,6 +43,7 @@ def test_api_doc_covers_top_level_public_exports_and_methods() -> None:
         "`sticks(left=None, right=None)`",
         "`lstick(stick)`",
         "`rstick(stick)`",
+        "`imu(*frames)`",
         "`snapshot()`",
         "`status()`",
         "`Stick.tilt(x, y)`",
@@ -50,6 +51,14 @@ def test_api_doc_covers_top_level_public_exports_and_methods() -> None:
         "`Stick.down(amount=1.0)`",
         "`Stick.left(amount=1.0)`",
         "`Stick.right(amount=1.0)`",
+        "`IMUFrame.raw(accel=None, gyro=None)`",
+        "`IMUFrame.gyro(x=0, y=0, z=0)`",
+        "`IMUFrame.accel(x=0, y=0, z=0)`",
+        "`IMUFrame.with_gyro(x=0, y=0, z=0)`",
+        "`IMUFrame.with_accel(x=0, y=0, z=0)`",
+        "`InputState.with_imu(...)`",
+        "`InputState.with_gyro(...)`",
+        "`InputState.with_accel(...)`",
         "state update API",
         "action API",
         "complete state",
@@ -82,6 +91,10 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
         "await pad.lstick(Stick.up(0.5))",
         "await pad.rstick(Stick.right())",
         "await pad.sticks(left=Stick.tilt(",
+        "await pad.imu(IMUFrame.gyro(100, 0, 0))",
+        "IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)",
+        ".with_accel((0, 0, 4096))",
+        ".with_gyro((100, 0, 0))",
         "InputState.neutral().with_buttons",
         "await pad.apply(state)",
         "await pad.neutral()",
@@ -97,6 +110,8 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
     assert "hold(" not in text
     assert "sequence(" not in text
     assert "send_current_input" not in text
+    assert "await pad.gyro(" not in text
+    assert "await pad.accel(" not in text
 
 
 def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> None:
@@ -151,10 +166,18 @@ def test_agent_brief_keeps_generation_on_implemented_public_api() -> None:
         "`sticks()`",
         "`lstick()`",
         "`rstick()`",
+        "`imu()`",
         "`Stick.tilt()`",
         "`Stick.up()`",
+        "`IMUFrame.gyro()`",
+        "`IMUFrame.accel()`",
+        "`IMUFrame.raw()`",
+        "`IMUFrame.with_gyro()`",
+        "`IMUFrame.with_accel()`",
         "`InputState` + `apply()`",
         "Do not pass tuples",
+        "Do not invent `pad.gyro()`",
+        "`pad.accel()`",
         "Do not invent `hold()`",
         "`sequence()`",
         "`send_current_input()`",

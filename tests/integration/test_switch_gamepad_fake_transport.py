@@ -8,7 +8,7 @@ from typing import cast
 import pytest
 
 import swbt.gamepad as gamepad_module
-from swbt import Button, DiagnosticsConfig, InputState, Stick, SwitchGamepad
+from swbt import Button, DiagnosticsConfig, IMUFrame, InputState, Stick, SwitchGamepad
 from swbt.errors import (
     ClosedError,
     ConnectionFailedError,
@@ -17,6 +17,20 @@ from swbt.errors import (
     InvalidKeyStoreError,
 )
 from swbt.transport.fake import FakeHidTransport
+
+
+def _imu_frame_bytes(frame: IMUFrame) -> bytes:
+    return b"".join(
+        int(value).to_bytes(2, "little", signed=True)
+        for value in (
+            frame.accel_x,
+            frame.accel_y,
+            frame.accel_z,
+            frame.gyro_x,
+            frame.gyro_y,
+            frame.gyro_z,
+        )
+    )
 
 
 def test_async_context_opens_and_closes_fake_transport() -> None:
@@ -505,6 +519,84 @@ def test_lstick_and_rstick_reject_tuple_inputs() -> None:
     asyncio.run(run())
 
 
+def test_imu_updates_repeat_frame_and_preserves_buttons_and_sticks() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        left_stick = Stick.up()
+        right_stick = Stick.right()
+        initial = (
+            InputState.neutral()
+            .with_buttons([Button.A])
+            .with_sticks(
+                left_stick=left_stick,
+                right_stick=right_stick,
+            )
+        )
+        frame = IMUFrame.raw(accel=(1, -2, 4096), gyro=(100, -100, 0))
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.apply(initial)
+
+            await pad.imu(frame)
+
+            assert pad.snapshot() == initial.with_imu(frame)
+
+            start_count = len(transport.sent_interrupt_reports)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 1)
+            report = reports[-1]
+
+            assert report[3:6] == bytes.fromhex("08 00 00")
+            assert report[6:9] == bytes.fromhex("00 f8 ff")
+            assert report[9:12] == bytes.fromhex("ff 0f 80")
+            assert report[13:49] == _imu_frame_bytes(frame) * 3
+
+    asyncio.run(run())
+
+
+def test_imu_updates_three_frames_in_order() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        frames = (
+            IMUFrame.gyro(100, 0, 0),
+            IMUFrame.gyro(120, 0, 0),
+            IMUFrame.gyro(140, 0, 0),
+        )
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+
+            await pad.imu(*frames)
+
+            assert pad.snapshot() == InputState.neutral().with_imu(*frames)
+
+            start_count = len(transport.sent_interrupt_reports)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 1)
+            assert reports[-1][13:49] == b"".join(_imu_frame_bytes(frame) for frame in frames)
+
+    asyncio.run(run())
+
+
+def test_imu_rejects_invalid_frame_counts_and_types() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport) as pad:
+            with pytest.raises(InvalidInputError):
+                await pad.imu()
+
+            with pytest.raises(InvalidInputError):
+                await pad.imu(IMUFrame.neutral(), IMUFrame.neutral())
+
+            with pytest.raises(InvalidInputError):
+                await pad.imu(*(IMUFrame.neutral(),) * 4)
+
+            with pytest.raises(InvalidInputError):
+                await pad.imu(cast("IMUFrame", Stick.center()))
+
+    asyncio.run(run())
+
+
 def test_state_update_apis_do_not_require_connection() -> None:
     async def run() -> None:
         pad = SwitchGamepad(transport=FakeHidTransport())
@@ -517,6 +609,7 @@ def test_state_update_apis_do_not_require_connection() -> None:
         await pad.sticks(left=left_stick)
         await pad.lstick(left_stick)
         await pad.rstick(right_stick)
+        await pad.imu(IMUFrame.gyro(100, 0, 0))
         await pad.apply(state)
         await pad.neutral()
 
@@ -538,6 +631,7 @@ def test_state_update_apis_do_not_send_immediate_interrupt_reports() -> None:
             await pad.sticks(left=Stick.normalized(x=0.0, y=1.0))
             await pad.lstick(Stick.up())
             await pad.rstick(Stick.right())
+            await pad.imu(IMUFrame.gyro(100, 0, 0))
             await pad.apply(InputState.neutral().with_buttons([Button.X]))
             await pad.neutral()
 

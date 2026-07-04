@@ -33,7 +33,10 @@ Unit tests は `tests/unit/` に置く。
 - `Stick.normalized()` が `-1.0` から `1.0` の値を raw 値へ変換する
 - `Stick.tilt()` が `Stick.normalized()` と同じ正規化座標を扱う
 - `Stick.up()` / `down()` / `left()` / `right()` が方向 preset と `amount` 範囲を固定する
+- `IMUFrame.raw()` / `gyro()` / `accel()` が raw int16 軸値から frame を作る
+- `IMUFrame.with_gyro()` / `with_accel()` が反対側の sensor 値を維持する
 - `InputState.neutral()` が空の button 集合と center stick を持つ
+- `InputState.with_imu()` / `with_gyro()` / `with_accel()` が 1 個を 3 frame に複製し、3 個は順に設定する
 - `InputState` が immutable に扱える
 
 ### 2.2 input report 生成
@@ -135,6 +138,7 @@ Fake transport integration tests は `tests/integration/` に置く。
 - `close(neutral=True)` で trailing neutral report が送られる
 - disconnect callback で `InputStateStore` が neutral へ戻る
 - 例外発生時にも内部 state が neutral へ戻る
+- `SwitchGamepad.imu()` が IMU だけを更新し、接続不要かつ即時送信しない state update API として振る舞う
 
 ### 3.5 callback 例外
 

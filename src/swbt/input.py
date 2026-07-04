@@ -248,10 +248,136 @@ class IMUFrame:
         return cls(accel_x=0, accel_y=0, accel_z=0, gyro_x=0, gyro_y=0, gyro_z=0)
 
     @classmethod
-    def _validate_i16(cls, field_name: str, value: int) -> None:
-        if not cls.MIN <= value <= cls.MAX:
-            msg = f"{field_name} must be between {cls.MIN} and {cls.MAX}: {value}"
+    def raw(
+        cls,
+        *,
+        accel: tuple[int, int, int] | None = None,
+        gyro: tuple[int, int, int] | None = None,
+    ) -> "IMUFrame":
+        """Return an IMU frame from raw accelerometer and gyroscope axes.
+
+        Args:
+            accel: Optional accelerometer ``(x, y, z)`` raw values.
+            gyro: Optional gyroscope ``(x, y, z)`` raw values.
+
+        Returns:
+            IMUFrame: Frame with omitted sensor axes set to zero.
+
+        Raises:
+            InvalidInputError: A supplied axis tuple does not contain three values
+                or any value is outside the supported signed 16-bit range.
+        """
+        accel_x, accel_y, accel_z = cls._defaulted_axes("accel", accel)
+        gyro_x, gyro_y, gyro_z = cls._defaulted_axes("gyro", gyro)
+        return cls(
+            accel_x=accel_x,
+            accel_y=accel_y,
+            accel_z=accel_z,
+            gyro_x=gyro_x,
+            gyro_y=gyro_y,
+            gyro_z=gyro_z,
+        )
+
+    @classmethod
+    def gyro(cls, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":
+        """Return an IMU frame with only gyroscope axes set.
+
+        Args:
+            x: Gyroscope X-axis raw value.
+            y: Gyroscope Y-axis raw value.
+            z: Gyroscope Z-axis raw value.
+
+        Returns:
+            IMUFrame: Frame with gyroscope values set and accelerometer values zeroed.
+
+        Raises:
+            InvalidInputError: Any value is outside the supported signed 16-bit range.
+        """
+        return cls.raw(gyro=(x, y, z))
+
+    @classmethod
+    def accel(cls, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":
+        """Return an IMU frame with only accelerometer axes set.
+
+        Args:
+            x: Accelerometer X-axis raw value.
+            y: Accelerometer Y-axis raw value.
+            z: Accelerometer Z-axis raw value.
+
+        Returns:
+            IMUFrame: Frame with accelerometer values set and gyroscope values zeroed.
+
+        Raises:
+            InvalidInputError: Any value is outside the supported signed 16-bit range.
+        """
+        return cls.raw(accel=(x, y, z))
+
+    def with_gyro(self, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":
+        """Return a frame with replaced gyroscope axes.
+
+        Args:
+            x: Replacement gyroscope X-axis raw value.
+            y: Replacement gyroscope Y-axis raw value.
+            z: Replacement gyroscope Z-axis raw value.
+
+        Returns:
+            IMUFrame: Copy of this frame with accelerometer axes preserved.
+
+        Raises:
+            InvalidInputError: Any value is outside the supported signed 16-bit range.
+        """
+        return IMUFrame.raw(
+            accel=(self.accel_x, self.accel_y, self.accel_z),
+            gyro=(x, y, z),
+        )
+
+    def with_accel(self, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":
+        """Return a frame with replaced accelerometer axes.
+
+        Args:
+            x: Replacement accelerometer X-axis raw value.
+            y: Replacement accelerometer Y-axis raw value.
+            z: Replacement accelerometer Z-axis raw value.
+
+        Returns:
+            IMUFrame: Copy of this frame with gyroscope axes preserved.
+
+        Raises:
+            InvalidInputError: Any value is outside the supported signed 16-bit range.
+        """
+        return IMUFrame.raw(
+            accel=(x, y, z),
+            gyro=(self.gyro_x, self.gyro_y, self.gyro_z),
+        )
+
+    @classmethod
+    def _validate_i16(cls, field_name: str, value: object) -> int:
+        if not isinstance(value, int) or not cls.MIN <= value <= cls.MAX:
+            msg = f"{field_name} must be an int between {cls.MIN} and {cls.MAX}: {value}"
             raise InvalidInputError(msg)
+        return value
+
+    @classmethod
+    def _defaulted_axes(
+        cls,
+        name: str,
+        values: tuple[int, int, int] | None,
+    ) -> tuple[int, int, int]:
+        if values is None:
+            return (0, 0, 0)
+        return cls._validate_axes(name, values)
+
+    @classmethod
+    def _validate_axes(cls, name: str, values: object) -> tuple[int, int, int]:
+        if not isinstance(values, tuple) or len(values) != 3:
+            msg = f"{name} must be a tuple of three raw values"
+            raise InvalidInputError(msg)
+        x, y, z = values
+        return (
+            cls._validate_i16(f"{name}_x", x),
+            cls._validate_i16(f"{name}_y", y),
+            cls._validate_i16(f"{name}_z", z),
+        )
 
 
 @dataclass(frozen=True)
@@ -322,3 +448,103 @@ class InputState:
             right_stick=right_stick if right_stick is not None else self.right_stick,
             imu_frames=self.imu_frames,
         )
+
+    def with_imu(self, *frames: IMUFrame) -> "InputState":
+        """Return a state with replaced IMU frames.
+
+        Args:
+            frames: One frame to repeat across all three IMU slots, or exactly three
+                frames to store in order.
+
+        Returns:
+            InputState: Copy of this state with supplied IMU frames.
+
+        Raises:
+            InvalidInputError: The frame count is not one or three, or any value is
+                not an ``IMUFrame``.
+        """
+        return InputState(
+            buttons=self.buttons,
+            left_stick=self.left_stick,
+            right_stick=self.right_stick,
+            imu_frames=self._normalize_imu_frames(frames),
+        )
+
+    def with_gyro(self, *samples: tuple[int, int, int]) -> "InputState":
+        """Return a state with replaced gyroscope axes.
+
+        Args:
+            samples: One ``(x, y, z)`` sample to repeat across all frames, or exactly
+                three samples to apply in order.
+
+        Returns:
+            InputState: Copy of this state with accelerometer axes preserved.
+
+        Raises:
+            InvalidInputError: The sample count is not one or three, a sample is not a
+                three-value tuple, or any value is outside the signed 16-bit range.
+        """
+        normalized = self._normalize_imu_samples("gyro", samples)
+        return self.with_imu(
+            *(
+                frame.with_gyro(*sample)
+                for frame, sample in zip(self.imu_frames, normalized, strict=True)
+            )
+        )
+
+    def with_accel(self, *samples: tuple[int, int, int]) -> "InputState":
+        """Return a state with replaced accelerometer axes.
+
+        Args:
+            samples: One ``(x, y, z)`` sample to repeat across all frames, or exactly
+                three samples to apply in order.
+
+        Returns:
+            InputState: Copy of this state with gyroscope axes preserved.
+
+        Raises:
+            InvalidInputError: The sample count is not one or three, a sample is not a
+                three-value tuple, or any value is outside the signed 16-bit range.
+        """
+        normalized = self._normalize_imu_samples("accel", samples)
+        return self.with_imu(
+            *(
+                frame.with_accel(*sample)
+                for frame, sample in zip(self.imu_frames, normalized, strict=True)
+            )
+        )
+
+    @staticmethod
+    def _normalize_imu_frames(
+        frames: tuple[IMUFrame, ...],
+    ) -> tuple[IMUFrame, IMUFrame, IMUFrame]:
+        if len(frames) == 1:
+            frame = frames[0]
+            if not isinstance(frame, IMUFrame):
+                msg = "frames must contain IMUFrame values"
+                raise InvalidInputError(msg)
+            return (frame, frame, frame)
+        if len(frames) == 3:
+            frame1, frame2, frame3 = frames
+            if not all(isinstance(frame, IMUFrame) for frame in frames):
+                msg = "frames must contain IMUFrame values"
+                raise InvalidInputError(msg)
+            return (frame1, frame2, frame3)
+        msg = f"expected 1 or 3 IMU frames, got {len(frames)}"
+        raise InvalidInputError(msg)
+
+    @staticmethod
+    def _normalize_imu_samples(
+        name: str,
+        samples: tuple[tuple[int, int, int], ...],
+    ) -> tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]]:
+        if len(samples) == 1:
+            sample = IMUFrame._validate_axes(name, samples[0])
+            return (sample, sample, sample)
+        if len(samples) == 3:
+            sample1, sample2, sample3 = (
+                IMUFrame._validate_axes(name, sample) for sample in samples
+            )
+            return (sample1, sample2, sample3)
+        msg = f"expected 1 or 3 IMU {name} samples, got {len(samples)}"
+        raise InvalidInputError(msg)

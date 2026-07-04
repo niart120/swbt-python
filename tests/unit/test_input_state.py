@@ -1,9 +1,10 @@
 from collections.abc import Callable
+from typing import cast
 
 import pytest
 
 from swbt.errors import InvalidInputError
-from swbt.input import IMUFrame, InputState, Stick
+from swbt.input import Button, IMUFrame, InputState, Stick
 
 
 def test_neutral_input_state_has_no_buttons_center_sticks_and_neutral_imu() -> None:
@@ -99,3 +100,200 @@ def test_imu_frame_constructor_rejects_values_outside_i16_range(value: int) -> N
             gyro_y=0,
             gyro_z=0,
         )
+
+
+def test_imu_frame_raw_defaults_to_neutral_and_sets_accel_and_gyro_axes() -> None:
+    assert IMUFrame.raw() == IMUFrame.neutral()
+    assert IMUFrame.raw(accel=(0, 0, 4096)) == IMUFrame(
+        accel_x=0,
+        accel_y=0,
+        accel_z=4096,
+        gyro_x=0,
+        gyro_y=0,
+        gyro_z=0,
+    )
+    assert IMUFrame.raw(gyro=(100, 0, -100)) == IMUFrame(
+        accel_x=0,
+        accel_y=0,
+        accel_z=0,
+        gyro_x=100,
+        gyro_y=0,
+        gyro_z=-100,
+    )
+    assert IMUFrame.raw(accel=(1, 2, 3), gyro=(4, 5, 6)) == IMUFrame(
+        accel_x=1,
+        accel_y=2,
+        accel_z=3,
+        gyro_x=4,
+        gyro_y=5,
+        gyro_z=6,
+    )
+
+
+@pytest.mark.parametrize(
+    ("accel", "gyro"),
+    [
+        ((1, 2), None),
+        ((1, 2, 3, 4), None),
+        (None, (1, 2)),
+        (None, (1, 2, 3, 4)),
+    ],
+)
+def test_imu_frame_raw_rejects_axis_tuples_that_are_not_three_values(
+    accel: tuple[int, ...] | None,
+    gyro: tuple[int, ...] | None,
+) -> None:
+    with pytest.raises(InvalidInputError):
+        IMUFrame.raw(
+            accel=cast("tuple[int, int, int] | None", accel),
+            gyro=cast("tuple[int, int, int] | None", gyro),
+        )
+
+
+@pytest.mark.parametrize("value", [-32769, 32768])
+def test_imu_frame_raw_rejects_values_outside_i16_range(value: int) -> None:
+    with pytest.raises(InvalidInputError):
+        IMUFrame.raw(accel=(0, 0, value))
+    with pytest.raises(InvalidInputError):
+        IMUFrame.raw(gyro=(value, 0, 0))
+
+
+def test_imu_frame_gyro_and_accel_shorthands_match_raw_construction() -> None:
+    assert IMUFrame.gyro(100, 0, -100) == IMUFrame.raw(gyro=(100, 0, -100))
+    assert IMUFrame.gyro(x=100) == IMUFrame.raw(gyro=(100, 0, 0))
+    assert IMUFrame.accel(0, 0, 4096) == IMUFrame.raw(accel=(0, 0, 4096))
+    assert IMUFrame.accel(z=4096) == IMUFrame.raw(accel=(0, 0, 4096))
+
+
+def test_imu_frame_update_helpers_preserve_the_opposite_sensor_axes() -> None:
+    frame = IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, -100)
+
+    assert frame == IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, -100))
+    assert frame.with_accel(1, 2, 3) == IMUFrame.raw(accel=(1, 2, 3), gyro=(100, 0, -100))
+
+
+def test_input_state_with_imu_repeats_one_frame_and_preserves_buttons_and_sticks() -> None:
+    left_stick = Stick.up()
+    right_stick = Stick.right()
+    initial = (
+        InputState.neutral()
+        .with_buttons([Button.A])
+        .with_sticks(
+            left_stick=left_stick,
+            right_stick=right_stick,
+        )
+    )
+    frame = IMUFrame.gyro(100, 0, 0)
+
+    state = initial.with_imu(frame)
+
+    assert state.buttons == frozenset({Button.A})
+    assert state.left_stick == left_stick
+    assert state.right_stick == right_stick
+    assert state.imu_frames == (frame, frame, frame)
+
+
+def test_input_state_with_imu_sets_three_frames_in_order() -> None:
+    frames = (
+        IMUFrame.gyro(100, 0, 0),
+        IMUFrame.gyro(120, 0, 0),
+        IMUFrame.gyro(140, 0, 0),
+    )
+
+    assert InputState.neutral().with_imu(*frames).imu_frames == frames
+
+
+@pytest.mark.parametrize(
+    "frames", [(), (IMUFrame.neutral(), IMUFrame.neutral()), (IMUFrame.neutral(),) * 4]
+)
+def test_input_state_with_imu_rejects_invalid_frame_counts(frames: tuple[IMUFrame, ...]) -> None:
+    with pytest.raises(InvalidInputError):
+        InputState.neutral().with_imu(*frames)
+
+
+def test_input_state_with_imu_rejects_non_imu_frame_values() -> None:
+    with pytest.raises(InvalidInputError):
+        InputState.neutral().with_imu(cast("IMUFrame", Stick.center()))
+
+
+def test_input_state_with_gyro_repeats_one_sample_and_preserves_accel_axes() -> None:
+    initial = InputState.neutral().with_accel((0, 0, 4096))
+
+    state = initial.with_gyro((100, 0, 0))
+
+    assert state.imu_frames == (IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, 0)),) * 3
+
+
+def test_input_state_with_gyro_sets_three_samples_in_order_and_preserves_accel_axes() -> None:
+    initial = InputState.neutral().with_accel(
+        (0, 0, 4096),
+        (0, 0, 4090),
+        (0, 0, 4080),
+    )
+
+    state = initial.with_gyro((100, 0, 0), (120, 0, 0), (140, 0, 0))
+
+    assert state.imu_frames == (
+        IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, 0)),
+        IMUFrame.raw(accel=(0, 0, 4090), gyro=(120, 0, 0)),
+        IMUFrame.raw(accel=(0, 0, 4080), gyro=(140, 0, 0)),
+    )
+
+
+def test_input_state_with_accel_repeats_one_sample_and_preserves_gyro_axes() -> None:
+    initial = InputState.neutral().with_gyro((100, 0, -100))
+
+    state = initial.with_accel((0, 0, 4096))
+
+    assert state.imu_frames == (IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, -100)),) * 3
+
+
+def test_input_state_with_accel_sets_three_samples_in_order_and_preserves_gyro_axes() -> None:
+    initial = InputState.neutral().with_gyro((100, 0, 0), (120, 0, 0), (140, 0, 0))
+
+    state = initial.with_accel(
+        (0, 0, 4096),
+        (0, 0, 4090),
+        (0, 0, 4080),
+    )
+
+    assert state.imu_frames == (
+        IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, 0)),
+        IMUFrame.raw(accel=(0, 0, 4090), gyro=(120, 0, 0)),
+        IMUFrame.raw(accel=(0, 0, 4080), gyro=(140, 0, 0)),
+    )
+
+
+@pytest.mark.parametrize(
+    "samples",
+    [
+        (),
+        ((100, 0, 0), (120, 0, 0)),
+        ((100, 0, 0),) * 4,
+    ],
+)
+def test_input_state_with_gyro_and_accel_reject_invalid_sample_counts(
+    samples: tuple[tuple[int, int, int], ...],
+) -> None:
+    with pytest.raises(InvalidInputError):
+        InputState.neutral().with_gyro(*samples)
+    with pytest.raises(InvalidInputError):
+        InputState.neutral().with_accel(*samples)
+
+
+@pytest.mark.parametrize("sample", [(100, 0), (100, 0, 0, 0)])
+def test_input_state_with_gyro_and_accel_reject_invalid_sample_shapes(
+    sample: tuple[int, ...],
+) -> None:
+    with pytest.raises(InvalidInputError):
+        InputState.neutral().with_gyro(cast("tuple[int, int, int]", sample))
+    with pytest.raises(InvalidInputError):
+        InputState.neutral().with_accel(cast("tuple[int, int, int]", sample))
+
+
+@pytest.mark.parametrize("value", [-32769, 32768])
+def test_input_state_with_gyro_and_accel_reject_values_outside_i16_range(value: int) -> None:
+    with pytest.raises(InvalidInputError):
+        InputState.neutral().with_gyro((value, 0, 0))
+    with pytest.raises(InvalidInputError):
+        InputState.neutral().with_accel((0, 0, value))

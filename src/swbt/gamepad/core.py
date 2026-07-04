@@ -20,7 +20,7 @@ from swbt.gamepad.connection import (
 )
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.transport_factory import create_default_transport
-from swbt.input import Button, InputState, Stick
+from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
@@ -431,6 +431,21 @@ class SwitchGamepad:
         This updates local state only and does not send an immediate input report.
         """
         await self.sticks(right=stick)
+
+    async def imu(self, *frames: IMUFrame) -> None:
+        """Replace IMU frames without immediate transmission.
+
+        Args:
+            frames: One ``IMUFrame`` to repeat across all three IMU slots, or exactly
+                three frames to store in order.
+
+        Raises:
+            InvalidInputError: The frame count is not one or three, or any value is
+                not an ``IMUFrame``.
+
+        This updates local IMU state only and does not send an immediate input report.
+        """
+        await self._state_store.imu(*frames)
 
     async def release(self, *buttons: Button) -> None:
         """Remove buttons from the current input state.

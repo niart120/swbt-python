@@ -75,17 +75,17 @@ input
 
 ### 2.1 `SwitchGamepad`
 
-利用者が直接扱う公開 API の中心。resource scope の `open()` / `close()`、明示接続 API の `pair()` / `connect()` / `reconnect()`、入力操作の `tap()`、`press()`、`release()`、`lstick()`、`rstick()`、`sticks()`、`apply()`、`neutral()` を提供する。
+利用者が直接扱う公開 API の中心。resource scope の `open()` / `close()`、明示接続 API の `pair()` / `connect()` / `reconnect()`、入力操作の `tap()`、`press()`、`release()`、`lstick()`、`rstick()`、`sticks()`、`imu()`、`apply()`、`neutral()` を提供する。
 
 `SwitchGamepad` は内部に `InputStateStore`、`ReportLoop`、`SwitchHidProtocol`、`HidDeviceTransport` を保持する。ただし、利用者にそれらの内部状態を直接操作させない。
 
 ### 2.2 `InputState`
 
-ボタン、左右スティック、IMU frame を表す値オブジェクト。外部から渡された後に内容が変わらないよう、immutable な設計に寄せる。
+ボタン、左右スティック、IMU frame を表す値オブジェクト。外部から渡された後に内容が変わらないよう、immutable な設計に寄せる。`InputState` は button、stick、IMU それぞれの builder を持ち、complete state を組み立てて `SwitchGamepad.apply()` に渡せるようにする。
 
 ### 2.3 `InputStateStore`
 
-現在の入力状態を保持する内部コンポーネント。`press()` や `release()` はこの store を更新し、`ReportLoop` は送信前に snapshot を取得する。
+現在の入力状態を保持する内部コンポーネント。`press()`、`release()`、`sticks()`、`imu()` はこの store を更新し、`ReportLoop` は送信前に snapshot を取得する。
 
 複数の asyncio task から同時に入力更新される可能性があるため、更新処理は lock で保護する。
 

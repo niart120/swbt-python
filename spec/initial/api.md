@@ -215,6 +215,7 @@ async def sticks(
 ) -> None: ...
 async def lstick(self, stick: Stick) -> None: ...
 async def rstick(self, stick: Stick) -> None: ...
+async def imu(self, *frames: IMUFrame) -> None: ...
 async def neutral(self) -> None: ...
 
 async def press(self, *buttons: Button) -> None: ...
@@ -222,9 +223,9 @@ async def release(self, *buttons: Button) -> None: ...
 async def tap(self, *buttons: Button, duration: float = 0.08) -> None: ...
 ```
 
-`press()`、`release()`、`lstick()`、`rstick()`、`sticks()`、`neutral()`、`apply()` は state update API である。接続は要求せず、即時送信もしない。接続中は次の periodic report で反映される。
+`press()`、`release()`、`lstick()`、`rstick()`、`sticks()`、`imu()`、`neutral()`、`apply()` は state update API である。接続は要求せず、即時送信もしない。接続中は次の periodic report で反映される。
 
-`apply()` は完成済みの `InputState` で現在入力全体を置き換える。差分適用ではない。`lstick()` は left stick だけを置き換え、`rstick()` は right stick だけを置き換える。`sticks()` は左右どちらか、または両方の stick だけを置き換える。stick API は `Stick` だけを受け、tuple や raw int tuple は受けない。
+`apply()` は完成済みの `InputState` で現在入力全体を置き換える。差分適用ではない。`lstick()` は left stick だけを置き換え、`rstick()` は right stick だけを置き換える。`sticks()` は左右どちらか、または両方の stick だけを置き換える。stick API は `Stick` だけを受け、tuple や raw int tuple は受けない。`imu()` は IMU 3 frame だけを置き換える。1 frame を渡した場合は 3 frame すべてに複製し、3 frame を渡した場合は順に設定する。0 個、2 個、4 個以上、`IMUFrame` 以外は `InvalidInputError` とする。
 
 `tap()` は action API である。接続済みを要求し、押下 report と release report を即時送信する。release 対象は `tap()` に渡した button だけであり、既に押されていた他の button は維持する。
 
@@ -273,11 +274,16 @@ class InputState:
         left_stick: Stick | None = None,
         right_stick: Stick | None = None,
     ) -> "InputState": ...
+    def with_imu(self, *frames: IMUFrame) -> "InputState": ...
+    def with_gyro(self, *samples: tuple[int, int, int]) -> "InputState": ...
+    def with_accel(self, *samples: tuple[int, int, int]) -> "InputState": ...
 ```
 
 ### 4.1 immutable にする理由
 
 `ReportLoop` は周期的に状態を読み取る。mutable な状態を直接共有すると、report 生成中に入力状態が変更される可能性がある。`InputState` を immutable に寄せることで、snapshot の意味を明確にする。
+
+`with_imu(frame)` は 1 frame を 3 frame すべてに複製する。`with_imu(frame1, frame2, frame3)` は 3 frame を順に設定する。`with_gyro((x, y, z))` と `with_accel((x, y, z))` は 1 sample を 3 frame に複製し、3 sample を渡した場合は各 frame の gyro または accel を順に置き換える。sample 数が 0 個、2 個、4 個以上、tuple 長が 3 でない値、範囲外値は `InvalidInputError` とする。
 
 ## 5. `Button`
 
@@ -350,7 +356,45 @@ class Stick:
 
 `tilt(x, y)` は `normalized(x=x, y=y)` と同じ正規化座標を使う短い生成 API である。`up()`、`down()`、`left()`、`right()` は単一方向の倒し込み量を `amount=0.0..1.0` で受ける。`Stick.tilt(1.0, 1.0)` は x/y を個別に検証する既存の矩形座標モデルとして許可する。
 
-## 7. 例外設計
+## 7. `IMUFrame`
+
+`IMUFrame` は accelerometer 3 軸と gyroscope 3 軸の raw int16 値を保持する。
+
+```python
+@dataclass(frozen=True)
+class IMUFrame:
+    accel_x: int
+    accel_y: int
+    accel_z: int
+    gyro_x: int
+    gyro_y: int
+    gyro_z: int
+
+    @classmethod
+    def neutral(cls) -> "IMUFrame": ...
+
+    @classmethod
+    def raw(
+        cls,
+        *,
+        accel: tuple[int, int, int] | None = None,
+        gyro: tuple[int, int, int] | None = None,
+    ) -> "IMUFrame": ...
+
+    @classmethod
+    def gyro(cls, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame": ...
+
+    @classmethod
+    def accel(cls, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame": ...
+
+    def with_gyro(self, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame": ...
+
+    def with_accel(self, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame": ...
+```
+
+`IMUFrame.neutral()` は全軸ゼロの frame を返す。`IMUFrame.raw()` は accel / gyro を 3 軸 tuple で指定し、未指定側はゼロにする。`IMUFrame.gyro()` と `IMUFrame.accel()` は片側 sensor だけを指定する short form である。`with_gyro()` と `with_accel()` は既存 frame の反対側 sensor を維持して片側だけを置き換える。
+
+## 8. 例外設計
 
 例外型は `swbt.errors` に置く。
 
@@ -367,7 +411,7 @@ class InvalidKeyStoreError(SwbtError): ...
 
 利用者の入力不正は `InvalidInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError`、timeout 以外の接続不成立は `ConnectionFailedError` として分ける。key store の unsupported shape や複数 current peer は `InvalidKeyStoreError` とする。
 
-## 8. 非同期 API の扱い
+## 9. 非同期 API の扱い
 
 すべての I/O と時間待ちは `asyncio` coroutine とする。
 
@@ -376,7 +420,7 @@ class InvalidKeyStoreError(SwbtError): ...
 - `close()` は `ReportLoop` task を停止し、transport を閉じる
 - callback 例外は diagnostics に記録し、必要に応じて接続を failed 状態へ遷移させる
 
-## 9. 初期 API で公開しないもの
+## 10. 初期 API で公開しないもの
 
 初期実装では次を public API に含めない。
 

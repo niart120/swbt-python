@@ -3,7 +3,7 @@
 この文書は `swbt-python` の公開 API 仕様です。通常利用では `swbt` module root から import します。
 
 ```python
-from swbt import Button, InputState, Stick, SwitchGamepad
+from swbt import Button, IMUFrame, InputState, Stick, SwitchGamepad
 ```
 
 `swbt.gamepad.*` や `swbt.transport.*` の deep import は、テスト、移行作業、custom transport 実装時だけに限定してください。`HidDeviceTransport` は custom transport 用の public extension point です。Bumble 型を public API に露出しません。
@@ -107,6 +107,7 @@ async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as 
 | `sticks(left=None, right=None)` | state update API | 指定された stick だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
 | `lstick(stick)` | state update API | left stick だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
 | `rstick(stick)` | state update API | right stick だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
+| `imu(*frames)` | state update API | IMU 3 frame を置き換える。1 frame は 3 frame に複製し、3 frame は順に設定する。即時送信を保証しない。 |
 | `neutral()` | state update API | `InputState.neutral()` 相当に戻す。即時送信を保証しない。 |
 | `apply(state)` | complete state | 完成済み `InputState` で現在入力全体を置き換える。差分適用ではない。 |
 | `tap(*buttons, duration=0.08)` | action API | 接続済みを要求し、押下 report と release report を即時送信する。 |
@@ -115,11 +116,15 @@ async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 `lstick(stick)` は `sticks(left=stick)`、`rstick(stick)` は `sticks(right=stick)` と同じ state update API です。左右を同じ状態更新で置き換える場合は `sticks(left=..., right=...)` を使います。
 
-`press()` の直後に `lstick()`、`rstick()`、`sticks()` を呼んでも、同一 HID report に入る保証はありません。button と stick を完全な同時入力として扱う場合は complete state を作り、`apply(state)` に渡してください。
+`imu(*frames)` は現在入力の IMU 部分だけを置き換える state update API です。`imu(frame)` は 3 frame すべてへ同じ値を設定し、`imu(frame1, frame2, frame3)` は順に設定します。0 個、2 個、4 個以上、`IMUFrame` 以外は `InvalidInputError` です。
+
+`press()` の直後に `lstick()`、`rstick()`、`sticks()`、`imu()` を呼んでも、同一 HID report に入る保証はありません。button、stick、IMU を完全な同時入力として扱う場合は complete state を作り、`apply(state)` に渡してください。
 
 ```python
 state = InputState.neutral().with_buttons([Button.B]).with_sticks(
     left_stick=Stick.up(),
+).with_imu(
+    IMUFrame.gyro(100, 0, 0),
 )
 await pad.apply(state)
 ```
@@ -138,7 +143,9 @@ await pad.apply(state)
 
 `Stick.tilt(x, y)` は `Stick.normalized(x=x, y=y)` と同じ正規化座標を使う短い生成 API です。`Stick.up(amount=1.0)`、`Stick.down(amount=1.0)`、`Stick.left(amount=1.0)`、`Stick.right(amount=1.0)` は単一方向の倒し込み量を `0.0..1.0` で受けます。`amount=0.0` は中央、`amount=1.0` は全倒しです。`Stick.tilt(1.0, 1.0)` は x/y を個別に検証する既存の矩形座標モデルとして許可します。
 
-`IMUFrame.neutral()` は移動なしの IMU frame を返します。`InputState.neutral()` は button なし、左右 stick 中央、neutral IMU frame の状態を返します。`InputState.with_buttons(...)` と `InputState.with_sticks(...)` は新しい immutable state を返します。
+`IMUFrame.neutral()` は移動なしの IMU frame を返します。`IMUFrame.raw(accel=None, gyro=None)` は accelerometer / gyroscope の raw 3 軸 tuple から frame を作ります。未指定側はゼロです。`IMUFrame.gyro(x=0, y=0, z=0)` は gyro だけ、`IMUFrame.accel(x=0, y=0, z=0)` は accel だけを指定します。`IMUFrame.with_gyro(x=0, y=0, z=0)` は既存 accel を維持して gyro を置き換え、`IMUFrame.with_accel(x=0, y=0, z=0)` は既存 gyro を維持して accel を置き換えます。
+
+`InputState.neutral()` は button なし、左右 stick 中央、neutral IMU frame の状態を返します。`InputState.with_buttons(...)`、`InputState.with_sticks(...)`、`InputState.with_imu(...)`、`InputState.with_gyro(...)`、`InputState.with_accel(...)` は新しい immutable state を返します。`with_imu(frame)` は 1 frame を 3 frame に複製し、`with_imu(frame1, frame2, frame3)` は順に設定します。`with_gyro((x, y, z))` と `with_accel((x, y, z))` も 1 sample を 3 frame に複製し、3 sample では順に片側の sensor だけを置き換えます。
 
 ## Errors And Diagnostics
 
