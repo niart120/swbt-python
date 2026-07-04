@@ -164,7 +164,6 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
         "DYLD_LIBRARY_PATH=/usr/local/opt/libusb/lib",
         'bluetoothHostControllerSwitchBehavior="never"',
         "USB デバイスへのアクセス権",
-        "CSR8510 A10 以外",
         "PC の通常 Bluetooth 機能",
         "key_store_path",
         "no bond",

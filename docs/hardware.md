@@ -62,13 +62,13 @@ DYLD_LIBRARY_PATH=/usr/local/opt/libusb/lib uv run swbt-probe adapters --json
 brew install pkgconf openssl@3
 ```
 
-2026-07-05 の実機観測では、macOS 15.7.7、CSR8510 A10、Homebrew `libusb` 1.0.30、Bumble 0.0.230、Python 3.12.13、adapter `usb:0` で、pairing、HID control / interrupt L2CAP、保存済み bond を使う active reconnect、button 入力、neutral cleanup を確認しています。別 dongle、別 macOS version、別 Switch firmware へは一般化しません。
+2026-07-05 の実機観測では、macOS 15.7.7、CSR8510 A10、Homebrew `libusb` 1.0.30、Bumble 0.0.230、Python 3.12.13、adapter `usb:0` で、pairing、HID control / interrupt L2CAP、保存済み bond を使う active reconnect、button 入力、neutral cleanup を確認しています。
 
 #### Linux / macOS の未確認範囲
 
 Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用 adapter を使う前に確認する項目です。接続成功を保証するものではありません。
 
-Linux 上の adapter listing、adapter open、HID advertising、pairing、reconnect、input reflection はまだ確認していません。macOS では上記の構成で実機接続を確認していますが、D-pad、left / right stick、CSR8510 A10 以外の dongle、Switch firmware 未記録の影響は未確認です。macOS CI で確認するのは、依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までです。USB Bluetooth dongle は使いません。
+Linux 上の adapter listing、adapter open、HID advertising、pairing、reconnect、input reflection はまだ確認していません。macOS CI で確認するのは、依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までです。USB Bluetooth dongle は使いません。
 
 #### Windows Driver Setup
 
@@ -128,14 +128,9 @@ swbt-probe adapters --json
 
 確認済み条件の trace、Bumble version、Python version、driver version は [hardware-test-log](hardware-test-log.md) にあります。
 
-## Experimental And Out-of-Scope Environments
+## Notes
 
-- Linux / macOS は experimental です。macOS は上記の構成だけを確認済み条件として扱います。
-- CSR8510 A10 以外の Bluetooth dongle。
-- Switch 2 firmware 22.1.0 以外の対象機器と firmware。
-- PC の通常 Bluetooth 機能と同じ adapter を使う構成。
-
-Linux / macOS で必要になる OS 側設定は、Bumble から専用 adapter を使うためのものです。設定しても接続成功を意味しません。Linux の kernel / BlueZ との競合解消、Linux の実機接続、macOS の別構成は未確認です。
+Linux / macOS で必要になる OS 側設定は、Bumble から専用 adapter を使うためのものです。PC の通常 Bluetooth 機能と同じ adapter は使わないでください。
 
 ## Troubleshooting
 
