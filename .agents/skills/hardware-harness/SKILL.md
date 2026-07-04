@@ -43,7 +43,7 @@ Nintendo Switch または専用 USB Bluetooth dongle と通信し得る作業の
 
 ## 記録先
 
-実機観測は `docs/hardware-test-log.md` に記録する。ファイルがなければ作る。
+実機観測は `spec/hardware-test-log.md` に記録する。ファイルがなければ作る。
 
 ```markdown
 ## YYYY-MM-DD: <短い題名>

@@ -14,7 +14,7 @@ description: "swbt-python の PyPI release を計画・実行する workflow ski
 3. 必要な場合だけ追加文書を読む。
    - `spec/complete/unit_012/INITIAL_RELEASE_GATE.md`: release gate の範囲。
    - `spec/initial/naming.md`: package / import / CLI 名。
-   - `docs/hardware-test-log.md`: hardware evidence または smoke 判断。
+   - `spec/hardware-test-log.md`: hardware evidence または smoke 判断。
 4. release PR 作成、merge、default branch 同期、branch cleanup は `pr-merge-cleanup` に委譲する。
 
 ## 停止条件

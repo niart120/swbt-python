@@ -27,7 +27,7 @@ def test_switch_input_operation_sequence_for_manual_reflection(
     """Send input reports and leave trace checkpoints for manual UI observation.
 
     A pytest pass from this test does not prove that the Switch UI reflected the
-    input. The human-visible UI result must be recorded in docs/hardware-test-log.md.
+    input. The human-visible UI result must be recorded in spec/hardware-test-log.md.
     """
     trace_path = swbt_hardware_artifact_dir / "input-operation-sequence.jsonl"
 
@@ -113,7 +113,7 @@ def test_switch_input_after_full_handshake_for_manual_reflection(
 
     A pytest pass from this test proves the handshake sequence and report
     transmission checkpoints only. The human-visible UI result must be recorded
-    in docs/hardware-test-log.md.
+    in spec/hardware-test-log.md.
     """
     trace_path = swbt_hardware_artifact_dir / "post-handshake-input.jsonl"
 
@@ -266,7 +266,7 @@ def test_switch_button_check_after_active_reconnect_for_manual_reflection(
 
     A pytest pass proves active reconnect, report transmission checkpoints, and
     cleanup only. The human-visible UI result must be recorded in
-    docs/hardware-test-log.md.
+    spec/hardware-test-log.md.
     """
     key_store_path = _input_semantics_key_store_path(swbt_hardware_artifact_dir)
     trace_path = swbt_hardware_artifact_dir / "active-reconnect-button-check.jsonl"
@@ -615,7 +615,7 @@ def test_switch_stick_calibration_after_active_reconnect_for_manual_reflection(
 
     A pytest pass proves active reconnect, report transmission checkpoints, and
     cleanup only. The human-visible UI result must be recorded in
-    docs/hardware-test-log.md.
+    spec/hardware-test-log.md.
     """
     key_store_path = _input_semantics_key_store_path(swbt_hardware_artifact_dir)
     trace_path = swbt_hardware_artifact_dir / f"active-reconnect-{stick_name}-stick.jsonl"

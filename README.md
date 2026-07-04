@@ -64,7 +64,7 @@ asyncio.run(main())
 
 実機接続には、PC の通常 Bluetooth 機能と共有しない専用 USB Bluetooth dongle と、OS ごとの driver 準備が必要です。Windows では、[Zadig](https://zadig.akeo.ie/) などで専用 dongle に WinUSB / libwdi driver を入れてから adapter 名を確認します。
 
-driver 準備、adapter 名の確認、troubleshooting は [Hardware Guide](https://niart120.github.io/swbt-python/hardware/) にあります。実機ログの正本は [hardware-test-log](https://niart120.github.io/swbt-python/hardware-test-log/) です。
+driver 準備、adapter 名の確認、troubleshooting は [Hardware Guide](https://niart120.github.io/swbt-python/hardware/) にあります。実機ログの正本は repository 内の `spec/hardware-test-log.md` です。
 
 ### 確認済み構成
 

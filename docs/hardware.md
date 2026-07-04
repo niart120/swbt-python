@@ -22,29 +22,15 @@ Bumble の `usb:` adapter は USB HCI transport を libusb 経由で使用しま
 |---|---|---|
 | Windows | supported | Zadig などで専用 dongle に WinUSB / libwdi driver を導入する |
 | Linux | experimental | `libusb-1.0` が使えること、USB デバイスにアクセスできること、kernel / BlueZ が対象 dongle を使用中でないことを確認する |
-| macOS | experimental | `libusb-1.0` が使えることと、macOS Bluetooth stack が外付け HCI を使用しない設定になっていることを確認する |
+| macOS | experimental | `libusb-1.0` が使えること、macOS Bluetooth stack が外付け HCI を使用しない設定になっていること、必要に応じて libusb の library path を指定する |
 
-#### Bumble USB transport で必要なこと
+#### Bumble USB Transport Requirements
 
 Bumble の `usb:` adapter は USB HCI transport を libusb 経由で扱います。Bumble の USB transport documentation では、`usb:` moniker、`libusb-1.0`、`usb_probe` / `lsusb` による列挙確認が示されています。
 
 `swbt-python` の lock file では Bumble 0.0.230 と `libusb1` / `libusb-package` dependency を固定しています。
 
-#### Linux / macOS の手順
-
-Linux / macOS の手順はこの Hardware Guide に整備されていますが、動作検証されていないことに留意してください。
-
-Linux では、Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合、OS 側で `apt install libusb-1.0-0` が必要になることがあります。USB デバイスへのアクセス権を付け、kernel / BlueZ が dongle を使用中の場合は `hciconfig hciX down` などで解放する必要があります。
-
-macOS では、macOS Bluetooth stack が外付け HCI を使用しないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` の設定が必要になる場合があります。Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合は、OS 側で `brew install libusb` が必要になることがあります。
-
-#### Linux / macOS の未確認範囲
-
-Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用 adapter を使う前に確認する項目です。接続成功を保証するものではありません。
-
-このリポジトリでは、Linux / macOS 上の adapter listing、adapter open、HID advertising、pairing、reconnect、input reflection をまだ確認していません。macOS CI で確認するのは、依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までです。USB Bluetooth dongle は使いません。
-
-#### Windows Driver Setup
+#### Windows USB & Driver Setup
 
 Windows では、Zadig などで専用 USB Bluetooth dongle に WinUSB / libwdi driver を導入する必要があります。
 
@@ -60,6 +46,47 @@ Zadig では次の順に進めます。
 - `Install Driver` を実行する。
 
 Zadig の操作画面と詳細: [Zadig 2.x User Guide](https://github.com/pbatard/libwdi/wiki/Zadig)。
+
+#### Linux USB & Driver Setup
+
+Linux の手順はこの Hardware Guide に整備されていますが、動作検証されていないことに留意してください。
+
+Linux では、Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合、OS 側で `apt install libusb-1.0-0` が必要になることがあります。USB デバイスへのアクセス権を付け、kernel / BlueZ が dongle を使用中の場合は `hciconfig hciX down` などで解放する必要があります。
+
+#### macOS USB & Driver Setup
+
+macOS では、macOS Bluetooth stack が外付け HCI を使用しないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` の設定が必要になる場合があります。実行前に現在の値を確認します。
+
+```console
+nvram bluetoothHostControllerSwitchBehavior
+```
+
+`libusb-1.0.dylib` が見つからない場合は、Homebrew で `libusb` を入れます。
+
+```console
+brew install libusb
+```
+
+Intel Mac の Homebrew 環境では、`libusb1` が `/usr/local/opt/libusb/lib` を自動探索しない場合があります。その場合は、実行時に `DYLD_LIBRARY_PATH` を指定します。
+
+```console
+export DYLD_LIBRARY_PATH=/usr/local/opt/libusb/lib
+uv run swbt-probe adapters --json
+```
+
+`swbt-python` を source checkout から動かす場合、依存 package の build で `pkgconf` と `openssl@3` が必要になることがあります。
+
+```console
+brew install pkgconf openssl@3
+```
+
+2026-07-05 の実機観測では、macOS 15.7.7、CSR8510 A10、Homebrew `libusb` 1.0.30、Bumble 0.0.230、Python 3.12.13、adapter `usb:0` で、pairing、HID control / interrupt L2CAP、保存済み bond を使う active reconnect、button 入力、neutral cleanup を確認しています。
+
+#### Linux / macOS Verification Scope
+
+Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用 adapter を使う前に確認する項目です。接続成功を保証するものではありません。
+
+Linux 上の adapter listing、adapter open、HID advertising、pairing、reconnect、input reflection はまだ確認していません。macOS CI で確認するのは、依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までです。USB Bluetooth dongle は使いません。
 
 ### Adapter Name
 
@@ -92,16 +119,19 @@ swbt-probe adapters --json
 - Button A、D-pad、left / right stick の入力反映。
 - neutral 後に入力が残らないこと。
 
-確認済み条件の trace、Bumble version、Python version、driver version は [hardware-test-log](hardware-test-log.md) にあります。
+2026-07-05 時点では、macOS 15.7.7、CSR8510 A10、Homebrew `libusb`、Switch 2、adapter `usb:0` の組み合わせで次を確認済みです。
 
-## Experimental And Out-of-Scope Environments
+- 初回 pairing。
+- 保存済み pairing 情報を使う active reconnect。
+- 主要 subcommand への応答を含む初期化 sequence。
+- Button 入力の反映。
+- neutral 後に入力が残らないこと。
 
-- Linux / macOS は experimental です。対応確認済みではありません。
-- CSR8510 A10 以外の Bluetooth dongle。
-- Switch 2 firmware 22.1.0 以外の対象機器と firmware。
-- PC の通常 Bluetooth 機能と同じ adapter を使う構成。
+確認済み条件の trace、Bumble version、Python version、driver version は repository 内の `spec/hardware-test-log.md` にあります。
 
-Linux / macOS で必要になる OS 側設定は、Bumble から専用 adapter を使うためのものです。設定しても接続成功を意味しません。Linux の kernel / BlueZ との競合解消、macOS の NVRAM 設定、実機 pairing、入力反映は未確認です。
+## Notes
+
+Linux / macOS で必要になる OS 側設定は、Bumble から専用 adapter を使うためのものです。PC の通常 Bluetooth 機能と同じ adapter は使わないでください。
 
 ## Troubleshooting
 

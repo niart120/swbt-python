@@ -67,7 +67,6 @@ def test_readme_links_public_docs_with_https_urls() -> None:
         "https://niart120.github.io/swbt-python/api/",
         "https://niart120.github.io/swbt-python/usage/",
         "https://niart120.github.io/swbt-python/hardware/",
-        "https://niart120.github.io/swbt-python/hardware-test-log/",
         "https://niart120.github.io/swbt-python/agent-brief/",
     ):
         assert docs_url in text
@@ -81,7 +80,6 @@ def test_readme_avoids_relative_markdown_links_for_pypi_rendering() -> None:
         "docs/api.md",
         "docs/usage.md",
         "docs/hardware.md",
-        "docs/hardware-test-log.md",
         "docs/agent-brief.md",
     ):
         assert f"]({docs_path})" not in text

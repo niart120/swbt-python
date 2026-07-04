@@ -9,7 +9,7 @@
 
 ## Log
 
-実行した場合は、結果を `docs/hardware-test-log.md` に記録する。記録には少なくとも command、approval、adapter、dongle、driver、result、artifact、cleanup を含める。
+実行した場合は、結果を `spec/hardware-test-log.md` に記録する。記録には少なくとも command、approval、adapter、dongle、driver、result、artifact、cleanup を含める。
 
 未実行の marker test を成功扱いにしない。承認がない場合は、実行せず `not run` として扱う。
 

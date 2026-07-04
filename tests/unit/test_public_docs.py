@@ -10,9 +10,8 @@ DOC_INDEX = DOCS / "index.md"
 API_DOC = DOCS / "api.md"
 USAGE_DOC = DOCS / "usage.md"
 HARDWARE_DOC = DOCS / "hardware.md"
-HARDWARE_LOG = DOCS / "hardware-test-log.md"
 AGENT_BRIEF = DOCS / "agent-brief.md"
-PUBLIC_DOCS = (DOC_INDEX, API_DOC, USAGE_DOC, HARDWARE_DOC, HARDWARE_LOG, AGENT_BRIEF)
+PUBLIC_DOCS = (DOC_INDEX, API_DOC, USAGE_DOC, HARDWARE_DOC, AGENT_BRIEF)
 
 
 def _read(path: Path) -> str:
@@ -123,7 +122,7 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
     for token in (
         "Python 3.12",
         "専用 USB Bluetooth dongle",
-        "Windows Driver Setup",
+        "Windows USB & Driver Setup",
         "Zadig",
         "https://zadig.akeo.ie/",
         "Zadig 2.x User Guide",
@@ -151,17 +150,20 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
         "Linux",
         "macOS",
         "experimental",
-        "Linux / macOS の手順",
+        "Linux USB & Driver Setup",
+        "macOS USB & Driver Setup",
         "動作検証されていないことに留意してください",
-        "未確認",
-        "Bumble USB transport で必要なこと",
+        "Linux / macOS Verification Scope",
+        "確認していません",
+        "Bumble USB Transport Requirements",
         "libusb_package",
         "apt install libusb-1.0-0",
         "hciconfig hciX down",
         "brew install libusb",
+        "brew install pkgconf openssl@3",
+        "DYLD_LIBRARY_PATH=/usr/local/opt/libusb/lib",
         'bluetoothHostControllerSwitchBehavior="never"',
         "USB デバイスへのアクセス権",
-        "CSR8510 A10 以外",
         "PC の通常 Bluetooth 機能",
         "key_store_path",
         "no bond",
@@ -174,6 +176,8 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
     assert "| macOS | experimental |" in text
     assert "| Linux | supported |" not in text
     assert "| macOS | supported |" not in text
+    assert "macOS 15.7.7" in text
+    assert "Button 入力の反映" in text
     assert "unsupported / untrusted" not in text
     assert "experimental" + " target" not in text
     assert "準備" + "候補" not in text

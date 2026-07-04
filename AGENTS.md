@@ -74,7 +74,7 @@
 | 着手中の作業仕様 | `spec/wip/unit_XXX/FEATURE_NAME.md` |
 | 完了した作業仕様 | `spec/complete/unit_XXX/FEATURE_NAME.md` |
 | 小さな観測と先送り判断 | `spec/dev-journal.md` |
-| 実機観測 | `docs/hardware-test-log.md` |
+| 実機観測 | `spec/hardware-test-log.md` |
 | 初期設計 | `spec/initial/` |
 
 作業仕様には、対象範囲、対象外、関連 docs、根拠監査、TDD Test List、検証、実機実行条件、先送り事項、チェックリストを含める。
