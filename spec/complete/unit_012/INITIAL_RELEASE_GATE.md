@@ -16,6 +16,7 @@
 | naming | package / import / CLI 名の確認 | `spec/initial/naming.md` |
 | AGENTS | 標準 gate と実機安全境界 | `AGENTS.md` |
 | completed M5 | Windows / CSR8510 A10 / WinUSB / `usb:0` で pairing、full handshake、Button A、neutral を確認済み | `spec/complete/unit_006/M5_INPUT_OPERATION_API.md` |
+| completed post-M5 | Windows / CSR8510 A10 / WinUSB / `usb:0`、Switch 2 / firmware 22.1.0 で D-pad と left / right stick の反映を確認済み | `spec/complete/unit_013/POST_M5_INPUT_SEMANTIC_CHARACTERIZATION.md` |
 | hardware log | release hardware evidence の正本 | `docs/hardware-test-log.md` |
 
 ### 1.3 use case
@@ -56,16 +57,16 @@
 - `spec/initial/testing.md`
 - `spec/initial/risks.md`
 - `spec/initial/naming.md`
-- `spec/wip/unit_008/M7_PACKAGING_EXAMPLES_CLI.md`
+- `spec/complete/unit_008/M7_PACKAGING_EXAMPLES_CLI.md`
 - `spec/complete/unit_011/HARDWARE_TEST_LOG_MATRIX.md`
 
 ## 5. 根拠監査
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | observed-pass for Button A / neutral | `unit_006` post-handshake run で A `08 00 00` と neutral `00 00 00` の `0x30` report が Switch UI 反映まで確認済み。stick semantic は `unit_013` |
-| Bumble / transport | required | observed-pass for release minimum | adapter open、HID advertising、pairing / L2CAP、full observed handshake、Button A reflection は `docs/hardware-test-log.md` に記録済み。reconnect は `unit_007` |
-| OS / driver / adapter | required | observed-pass for Windows `usb:0` | README に出せる確認済み構成は Windows / CSR8510 A10 / WinUSB / Bumble 0.0.230 / `usb:0`。Switch model / firmware は未記録として扱う |
+| Switch HID / report bytes | required | observed-pass for release minimum | `unit_006` post-handshake run で A `08 00 00` と neutral `00 00 00` の `0x30` report が Switch UI 反映まで確認済み。`unit_013` で D-pad と left / right stick の意味反映も確認済み |
+| Bumble / transport | required | observed-pass for release minimum | adapter open、HID advertising、pairing / L2CAP、full observed handshake、Button A reflection は `docs/hardware-test-log.md` に記録済み。active bond reuse reconnect は `unit_007` |
+| OS / driver / adapter | required | observed-pass for Windows `usb:0` | README に出せる確認済み構成は Windows / CSR8510 A10 / WinUSB / Bumble 0.0.230 / `usb:0` / Switch 2 / firmware 22.1.0 |
 
 ## 6. 振る舞い仕様
 
@@ -85,19 +86,19 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| done | `uv run ruff format --check .` が通る | regression | unit | no | 2026-07-01 に local pass |
-| done | `uv run ruff check .` が通る | regression | unit | no | 2026-07-01 に local pass |
-| done | `uv run ty check --no-progress` が通る | regression | unit | no | 2026-07-01 に local pass |
-| done | `uv run pytest tests/unit` が通る | regression | unit | no | 2026-07-01 に 82 passed |
-| done | `uv run pytest tests/integration` が通る | regression | integration | no | 2026-07-01 に 16 passed |
-| done | package build が通る | regression | unit | no | 2026-07-01 に sdist / wheel build pass |
+| done | `uv run ruff format --check .` が通る | regression | unit | no | 2026-07-04 に 68 files already formatted |
+| done | `uv run ruff check .` が通る | regression | unit | no | 2026-07-04 に pass |
+| done | `uv run ty check --no-progress` が通る | regression | unit | no | 2026-07-04 に pass |
+| done | `uv run pytest tests/unit` が通る | regression | unit | no | 2026-07-04 に 163 passed |
+| done | `uv run pytest tests/integration` が通る | regression | integration | no | 2026-07-04 に 55 passed |
+| done | package build が通る | regression | unit | no | 2026-07-04 に sdist / wheel build pass |
 | done | GitHub Actions CI が pull request / `main` push で local gate 相当を実行する | regression | integration | no | `.github/workflows/ci.yml` で追加。PR check の通過は merge 前に確認する |
 | observed-pass | Windows + 専用 USB dongle で adapter open が hardware log に記録されている | regression | bumble | yes | `docs/hardware-test-log.md` の unit_003 / unit_006 entries に `usb:0`、CSR8510 A10、WinUSB、Bumble 0.0.230 を記録済み |
 | observed-pass | 1 つ以上の Switch 実機構成で pairing と Button A 反映が記録されている | regression | hardware | yes | 2026-07-02 post-handshake input run で full observed handshake、Button A UI 反映、neutral 後の残留なしを確認 |
-| todo | README に対応済み構成と未確認構成が分かれている | regression | unit | no | docs gate |
-| todo | `spec/initial/risks.md` に release 時点の既知リスクが反映されている | regression | unit | no | docs gate |
-| todo | README の「確認済み構成はまだありません」を unit_006 後の hardware log と整合させる | regression | unit | no | 現 README は stale |
-| todo | Switch model / firmware が未記録であることを README / risks / matrix で隠さない | regression | docs | no | release guarantee の範囲を限定する |
+| green | README に対応済み構成と未確認構成が分かれている | regression | unit | no | `tests/unit/test_readme_docs.py` で固定 |
+| green | `spec/initial/risks.md` に release 時点の既知リスクが反映されている | regression | unit | no | `tests/unit/test_release_gate_docs.py` で固定 |
+| green | README の「確認済み構成はまだありません」を unit_006 後の hardware log と整合させる | regression | unit | no | README は確認済み構成を記載し、stale phrase が残っていないことを test で固定 |
+| green | Switch model / firmware の記録有無を README / risks / matrix で隠さない | regression | docs | no | 現在の release gate 証拠は Switch 2 / firmware 22.1.0。別構成は未確認として分ける |
 
 ## 8. 設計メモ
 
@@ -105,8 +106,8 @@
 - publish、tag push、PyPI upload はこの spec の作業範囲に含めない。実行前に明示確認で停止する。
 - README の確認済み構成は `docs/hardware-test-log.md` の具体的 run からのみ書く。
 - `pypi-release` skill は現段階では作らない。packaging と publish 方針が固まった後に別途判断する。
-- `unit_006` により release minimum の Switch hardware evidence は揃った。ただし README はまだ更新されていないため、この unit は未完了のままにする。
-- Switch model / firmware は hardware log の template 項目だが、unit_006 run では未記録である。release text では確認済み構成の一部として書かず、未記録と明示する。
+- `unit_006` により release minimum の Button A / neutral evidence は揃った。`unit_013` により Switch 2 / firmware 22.1.0 の追加入力意味検証も揃った。
+- release text では確認済み構成を Windows / CSR8510 A10 / WinUSB / `usb:0` / Bumble 0.0.230 / Switch 2 / firmware 22.1.0 に限定し、別 firmware と別 dongle は未確認として扱う。
 
 ## 9. 対象ファイル
 
@@ -126,25 +127,26 @@
 
 | command | result | notes |
 |---|---|---|
-| `uv sync --dev` | pass | 2026-07-01、Windows、Python 3.13.5。41 packages resolved / checked |
-| `uv run ruff format --check .` | pass | 2026-07-01。35 files already formatted |
-| `uv run ruff check .` | pass | 2026-07-01。All checks passed |
-| `uv run ty check --no-progress` | pass | 2026-07-01。All checks passed |
-| `uv run pytest tests/unit` | pass | 2026-07-01。82 passed |
-| `uv run pytest tests/integration` | pass | 2026-07-01。16 passed |
-| `uv build` | pass | 2026-07-01。sandbox では PyPI access 制限で失敗後、network 許可付きで sdist / wheel build pass |
+| `uv sync --dev` | pass | 2026-07-04、Windows、Python 3.13.5。41 packages resolved / checked |
+| `uv run ruff format --check .` | pass | 2026-07-04。68 files already formatted |
+| `uv run ruff check .` | pass | 2026-07-04。All checks passed |
+| `uv run ty check --no-progress` | pass | 2026-07-04。All checks passed |
+| `uv run pytest tests/unit` | pass | 2026-07-04。163 passed |
+| `uv run pytest tests/integration` | pass | 2026-07-04。55 passed |
+| `uv build` | pass | 2026-07-04。sandbox では PyPI access 制限で失敗後、network 許可付きで sdist / wheel build pass |
 | GitHub Actions `CI` | pending-remote | pull request の required check として merge 前に確認する |
-| `uv run pytest -m bumble` | pending-approval | adapter 承認後に release hardware evidence として実行する |
-| `uv run pytest -m hardware` | pending-approval | Switch 実機承認後に release hardware evidence として実行する |
+| `uv run pytest -m bumble` | not run | 新規 adapter run はこの unit の最終 docs gate では不要。既存の承認済み adapter / hardware log を release evidence として参照 |
+| `uv run pytest -m hardware` | not run | 新規 Switch-facing run はこの unit の最終 docs gate では不要。`unit_006` と `unit_013` の承認済み実機観測を release evidence として参照 |
 | GitHub Actions `CI` for PR #13 | pass | Python 3.12 / 3.13 pass。unit_006 merge 前に確認済み |
 | `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_after_full_handshake_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_006\20260702-post-handshake-input --log-file .pytest_cache\hardware\unit_006\20260702-post-handshake-input\pytest-debug.log --log-file-level=DEBUG -q -s` | observed-pass | 1 passed / 1 warning in 9.45s。full observed handshake、Button A UI 反映、neutral 後の入力残りなしを記録 |
+| `uv run pytest tests\unit\test_readme_docs.py tests\unit\test_hardware_test_log_docs.py tests\unit\test_release_gate_docs.py -q` | pass | 2026-07-04。8 passed。README、hardware matrix、risks の release gate 境界を確認 |
 
 ## 11. 実機実行条件
 
 | 項目 | 内容 |
 |---|---|
-| 実機要否 | required for release hardware evidence |
-| 承認範囲 | adapter open、HID advertising、pairing、subcommand handling、periodic report loop、Button A、neutral、close |
+| 実機要否 | required for release hardware evidence。この unit の最終 docs gate では新規実機 command を実行せず、完了済み log を照合する |
+| 承認範囲 | 新規実行なし。根拠として参照する既存 run は adapter open、HID advertising、pairing、subcommand handling、periodic report loop、Button A、neutral、close を含む |
 | adapter | 例: `usb:0`。専用 USB Bluetooth dongle であること |
 | 実行遮断 | 環境変数による遮断は採用しない。明示承認、対象 adapter、command、cleanup plan で管理する |
 | log / artifact | hardware test log、diagnostics trace、test output |
@@ -156,9 +158,8 @@
 - PyPI trusted publishing 設定。
 - release automation。
 - Linux / macOS の release guarantee。
-- reconnect / key store は `unit_007`。
-- examples / CLI は `unit_008`。
-- L+R / stick semantic reflection は `unit_013`。
+- CSR8510 A10 以外の dongle と Switch 2 / firmware 22.1.0 以外の firmware matrix 拡張。
+- pairing-free incoming bond reuse。
 
 ## 13. チェックリスト
 
@@ -169,5 +170,5 @@
 - [x] GitHub Actions CI で static / unit / fake integration / build gate を自動化した
 - [x] release 判定に必要な local / static / build gate を実行し、検証欄を結果で更新した
 - [x] adapter open と Switch 実機の release evidence を `docs/hardware-test-log.md` から確認した
-- [ ] README と `spec/initial/risks.md` を release 時点の確認済み / 未確認状態に更新した
-- [ ] publish / tag push 前にユーザの明示確認で停止した
+- [x] README と `spec/initial/risks.md` を release 時点の確認済み / 未確認状態に更新した
+- [x] publish / tag push はこの unit で実行せず、別途ユーザの明示確認が必要な先送り事項として記録した

@@ -57,7 +57,7 @@ asyncio.run(main())
 
 ### 確認済み構成
 
-2026-07-03 時点で、次の構成は pairing、L2CAP、subcommand 応答、Button A 入力、neutral 後の入力残りなしを確認済みです。
+2026-07-04 時点で、次の構成は pairing、L2CAP、subcommand 応答、Button A 入力、neutral 後の入力残りなしを確認済みです。D-pad と left / right stick の入力反映も同じ構成で確認済みです。
 
 | 項目 | 値 |
 |---|---|
@@ -67,9 +67,11 @@ asyncio.run(main())
 | adapter | `usb:0` |
 | Python | 3.13.5 |
 | Bumble | Bumble 0.0.230 |
+| 対象機器 | Switch 2 |
+| firmware | 22.1.0 |
 | 入力反映 | 2026-07-02 に Button A が対象機器 UI に反映し、neutral 後の入力残りなしを目視確認 |
 
-この結果は上記構成での観測です。対象機器の model / firmware は未記録のため、別 firmware での保証はされていないことに注意してください。
+この結果は上記構成での観測です。別 firmware や別 dongle で同じ挙動になることは確認していません。
 
 ### 未確認構成
 
@@ -77,7 +79,7 @@ asyncio.run(main())
 - macOS
 - CSR8510 A10 以外の Bluetooth dongle
 - pairing-free incoming bond reuse
-- 対象機器 model / firmware 差分に対する動作検証
+- Switch 2 / firmware 22.1.0 以外の対象機器と firmware
 
 ## Bluetooth adapter と driver
 

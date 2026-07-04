@@ -60,3 +60,14 @@ def test_hardware_test_log_has_support_matrix_columns() -> None:
     )
     for column in expected_columns:
         assert f"| {column} " in matrix_header
+
+
+def test_hardware_test_log_matrix_records_current_switch_model_and_firmware() -> None:
+    text = HARDWARE_LOG.read_text(encoding="utf-8")
+
+    windows_row = next(
+        line for line in text.splitlines() if line.startswith("| Windows | CSR8510 A10 |")
+    )
+
+    assert "| Switch 2 |" in windows_row
+    assert "| 22.1.0 |" in windows_row

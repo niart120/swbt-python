@@ -38,3 +38,11 @@ def test_readme_reflects_button_a_and_neutral_observation() -> None:
     assert "対象機器 UI" in text
     assert "入力残りなし" in text
     assert "2026-07-02" in text
+
+
+def test_readme_records_current_switch_model_and_firmware_evidence() -> None:
+    text = README.read_text(encoding="utf-8")
+
+    assert "Switch 2" in text
+    assert "22.1.0" in text
+    assert "model / firmware は未記録" not in text
