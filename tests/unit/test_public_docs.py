@@ -10,9 +10,8 @@ DOC_INDEX = DOCS / "index.md"
 API_DOC = DOCS / "api.md"
 USAGE_DOC = DOCS / "usage.md"
 HARDWARE_DOC = DOCS / "hardware.md"
-HARDWARE_LOG = DOCS / "hardware-test-log.md"
 AGENT_BRIEF = DOCS / "agent-brief.md"
-PUBLIC_DOCS = (DOC_INDEX, API_DOC, USAGE_DOC, HARDWARE_DOC, HARDWARE_LOG, AGENT_BRIEF)
+PUBLIC_DOCS = (DOC_INDEX, API_DOC, USAGE_DOC, HARDWARE_DOC, AGENT_BRIEF)
 
 
 def _read(path: Path) -> str:

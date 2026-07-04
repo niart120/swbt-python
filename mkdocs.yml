@@ -8,5 +8,3 @@ nav:
   - Usage Guide: usage.md
   - Hardware Guide: hardware.md
   - Agent Brief: agent-brief.md
-not_in_nav: |
-  hardware-test-log.md

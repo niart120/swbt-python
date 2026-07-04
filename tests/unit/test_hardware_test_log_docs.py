@@ -3,7 +3,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-HARDWARE_LOG = ROOT / "docs" / "hardware-test-log.md"
+HARDWARE_LOG = ROOT / "spec" / "hardware-test-log.md"
 
 
 def test_hardware_test_log_has_run_entry_template_fields() -> None:

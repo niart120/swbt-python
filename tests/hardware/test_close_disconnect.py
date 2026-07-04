@@ -86,7 +86,7 @@ def test_switch_close_after_full_handshake_and_a_exit_for_manual_ui_confirmation
 
     A pytest pass proves the on-wire sequence and cleanup only. The human-visible
     Switch UI state after Button A and after disconnect must be recorded in
-    docs/hardware-test-log.md.
+    spec/hardware-test-log.md.
     """
     trace_path = swbt_hardware_artifact_dir / "post-handshake-a-close.jsonl"
 

@@ -126,7 +126,7 @@ swbt-probe adapters --json
 - Button 入力の反映。
 - neutral 後に入力が残らないこと。
 
-確認済み条件の trace、Bumble version、Python version、driver version は [hardware-test-log](hardware-test-log.md) にあります。
+確認済み条件の trace、Bumble version、Python version、driver version は repository 内の `spec/hardware-test-log.md` にあります。
 
 ## Notes
 
