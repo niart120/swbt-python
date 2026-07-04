@@ -53,7 +53,8 @@ brew install libusb
 Intel Mac の Homebrew 環境では、`libusb1` が `/usr/local/opt/libusb/lib` を自動探索しない場合があります。その場合は、実行時に `DYLD_LIBRARY_PATH` を指定します。
 
 ```console
-DYLD_LIBRARY_PATH=/usr/local/opt/libusb/lib uv run swbt-probe adapters --json
+export DYLD_LIBRARY_PATH=/usr/local/opt/libusb/lib
+uv run swbt-probe adapters --json
 ```
 
 `swbt-python` を source checkout から動かす場合、依存 package の build で `pkgconf` と `openssl@3` が必要になることがあります。
