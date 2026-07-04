@@ -133,7 +133,7 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 | `pyproject.toml` | modify | docs dependency group |
 | `uv.lock` | modify | MkDocs 依存の lock 更新 |
 | `README.md` | modify | docs への導線とローカル閲覧手順 |
-| `.github/workflows/docs.yml` | new | docs strict build と GitHub Pages deploy |
+| `.github/workflows/docs.yml` | new / modify | docs strict build と GitHub Pages deploy。`deploy-pages@v4` は deployment 作成後に `deployment_failed` で落ちたため v5 へ更新 |
 | `.github/PULL_REQUEST_TEMPLATE.md` | modify / optional | docs gate を標準 Testing 例へ追加する場合だけ変更 |
 | `.gitignore` | modify | MkDocs build output `site/` を commit 対象から外す |
 | `tests/unit/test_readme_docs.py` | modify | README docs 手順と link の確認 |
@@ -161,8 +161,13 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 | `git diff --check` | pass | whitespace error なし |
 | `uv sync --group docs` | pass | dev gate 後に docs dependency group を再同期 |
 | `uv run mkdocs build --strict` | pass | Documentation built。標準 gate 後にも strict build が通ることを確認 |
-| GitHub Actions docs workflow on pull request | not run | PR 上で strict build を確認する |
-| GitHub Pages deployment after merge to `main` | not run | 完了条件。deployment 成功と公開 URL 応答を確認する |
+| GitHub Actions docs workflow on pull request for PR #35 | pass | `Build MkDocs site` success。`Deploy GitHub Pages` は pull request では skipped |
+| GitHub Actions CI for PR #35 | pass | Python 3.12 / 3.13 success |
+| GitHub Pages deployment after merge commit `930fd70346bf28de091b344a5a6ac1bf07cbe794` | fail | `actions/deploy-pages@v4` が artifact を検出し deployment を作成した後、status `deployment_failed`。公開 URL は GitHub Pages 404 |
+| `uv run pytest tests\unit\test_docs_workflow.py tests\unit\test_mkdocs_site.py -q` after v5 update | pass | 5 passed。Pages upload / deploy action version を v5 に更新した workflow を確認 |
+| `uv run mkdocs build --strict` after v5 update | pass | Documentation built |
+| `git diff --check` after v5 update | pass | whitespace error なし |
+| GitHub Pages deployment after `deploy-pages@v5` update | not run | 完了条件。follow-up PR merge 後に deployment 成功と公開 URL 応答を確認する |
 
 ## 11. 実機実行条件
 
@@ -195,7 +200,7 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 - [x] docs dependency group と lockfile を更新した
 - [x] README に docs のローカル閲覧手順を追加した
 - [x] GitHub Pages 用の docs workflow を追加した
-- [ ] pull request で docs strict build が通ることを確認した
+- [x] pull request で docs strict build が通ることを確認した
 - [ ] `main` 反映後に Pages deployment 成功を確認した
 - [ ] 公開 URL で docs site を確認した
 - [x] `uv run mkdocs build --strict` の結果を記録した
