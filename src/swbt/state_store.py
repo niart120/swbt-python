@@ -2,7 +2,7 @@
 
 import asyncio
 
-from swbt.input import Button, InputState, Stick
+from swbt.input import Button, IMUFrame, InputState, Stick
 
 
 class InputStateStore:
@@ -33,6 +33,12 @@ class InputStateStore:
         """Replace one or both stick positions."""
         async with self._lock:
             self._state = self._state.with_sticks(left_stick=left, right_stick=right)
+            return self._state
+
+    async def imu(self, *frames: IMUFrame) -> InputState:
+        """Replace IMU frames."""
+        async with self._lock:
+            self._state = self._state.with_imu(*frames)
             return self._state
 
     async def press(self, *buttons: Button) -> InputState:

@@ -192,6 +192,60 @@ await pad.apply(state)
 
 `apply()` は現在入力全体を置き換えます。差分適用ではありません。
 
+## IMU Input
+
+### Update Gyro Only
+
+```python
+from swbt import IMUFrame
+
+await pad.imu(IMUFrame.gyro(100, 0, 0))
+```
+
+`imu()` は IMU だけを置き換える state update API です。`imu(frame)` は 3 frame すべてに同じ値を設定します。即時送信を保証しません。
+
+### Set Accel And Gyro In One Frame
+
+```python
+from swbt import IMUFrame
+
+frame = IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)
+await pad.imu(frame)
+```
+
+`IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)` は accel を設定した frame に gyro を追加します。`IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, 0))` と同じ値です。
+
+### Three IMU Frames
+
+```python
+from swbt import IMUFrame
+
+await pad.imu(
+    IMUFrame.gyro(100, 0, 0),
+    IMUFrame.gyro(120, 0, 0),
+    IMUFrame.gyro(140, 0, 0),
+)
+```
+
+3 frame を渡した場合は順に設定します。0 個、2 個、4 個以上、`IMUFrame` 以外は `InvalidInputError` です。
+
+### Complete State With Button, Stick, And IMU
+
+```python
+from swbt import Button, IMUFrame, InputState, Stick
+
+state = (
+    InputState.neutral()
+    .with_buttons([Button.B])
+    .with_sticks(left_stick=Stick.up())
+    .with_accel((0, 0, 4096))
+    .with_gyro((100, 0, 0))
+)
+await pad.apply(state)
+```
+
+`with_accel((0, 0, 4096))` と `with_gyro((100, 0, 0))` は 1 sample を 3 frame すべてに複製します。3 sample を渡すと、各 frame の accel または gyro を順に置き換えます。button、stick、IMU を同じ complete state として扱いたい場合は `InputState` + `apply()` を使います。
+
 ## Neutral And Close
 
 ```python

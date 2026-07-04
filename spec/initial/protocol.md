@@ -83,7 +83,7 @@ battery / connection info は初期値を固定する。実機検証で必要が
 
 ### 3.5 IMU frame
 
-初期実装では、IMU frame は neutral 値を送る。IMU を高水準 API として公開するかは未決事項とする。
+初期実装では、IMU frame は `InputState.imu_frames` の 3 frame をそのまま送る。IMU frame の byte layout は int16 little-endian の 6 軸値であり、公開 API helper はこの値オブジェクトを組み立てるだけに留める。
 
 IMU frame の構造は次の値オブジェクトで表す。
 
@@ -96,7 +96,26 @@ class IMUFrame:
     gyro_x: int
     gyro_y: int
     gyro_z: int
+
+    @classmethod
+    def neutral(cls) -> "IMUFrame": ...
+
+    @classmethod
+    def raw(
+        cls,
+        *,
+        accel: tuple[int, int, int] | None = None,
+        gyro: tuple[int, int, int] | None = None,
+    ) -> "IMUFrame": ...
+
+    @classmethod
+    def gyro(cls, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame": ...
+
+    @classmethod
+    def accel(cls, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame": ...
 ```
+
+`IMUFrame.raw()`、`gyro()`、`accel()`、`with_gyro()`、`with_accel()` は raw int16 値を扱う。物理単位、センサー補正、重力方向、姿勢推定は protocol core の責務に含めない。
 
 ## 4. Output report
 
