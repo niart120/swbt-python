@@ -21,8 +21,26 @@ Bumble の `usb:` adapter は USB HCI transport を libusb 経由で開きます
 | OS | status | 準備 |
 |---|---|---|
 | Windows | supported | Zadig などで専用 dongle に WinUSB / libwdi driver を導入する |
-| Linux | unsupported / untrusted | Bumble 同梱の `libusb_package` で `libusb-1.0` を解決できない場合は、OS 側に `apt install libusb-1.0-0` で導入する。USB device への権限を与え、kernel / BlueZ が dongle を掴んでいる場合は `hciconfig hciX down` などで解放する |
-| macOS | unsupported / untrusted | 外付け HCI を macOS Bluetooth stack が掴まないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` を設定する。Bumble 同梱の `libusb_package` で `libusb-1.0` を解決できない場合は、OS 側に `brew install libusb` で導入する |
+| Linux | experimental | Bumble の USB transport を使うための準備候補として、`libusb-1.0`、USB device への権限、kernel / BlueZ との競合を確認する |
+| macOS | experimental | Bumble の USB transport を使うための準備候補として、`libusb-1.0` と外付け HCI を macOS Bluetooth stack が掴まない設定を確認する |
+
+#### Bumble USB transport の source fact
+
+Bumble の `usb:` adapter は USB HCI transport を libusb 経由で扱います。Bumble 側の USB transport documentation は、`usb:` moniker、`libusb-1.0` requirement、`usb_probe` / `lsusb` による列挙確認を示しています。
+
+`swbt-python` の lock file では Bumble 0.0.230 と `libusb1` / `libusb-package` dependency を固定しています。
+
+#### Linux / macOS の準備候補
+
+Linux では、Bumble 同梱の `libusb_package` で `libusb-1.0` を解決できない場合、OS 側に `apt install libusb-1.0-0` で導入する候補があります。USB device への権限を与え、kernel / BlueZ が dongle を掴んでいる場合は `hciconfig hciX down` などで解放する候補があります。
+
+macOS では、外付け HCI を macOS Bluetooth stack が掴まないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` を設定する候補があります。Bumble 同梱の `libusb_package` で `libusb-1.0` を解決できない場合は、OS 側に `brew install libusb` で導入する候補があります。
+
+#### Linux / macOS の未確認範囲
+
+Linux / macOS は experimental です。上の準備候補は adapter を Bumble から開くための前提整理であり、接続成功の保証ではありません。
+
+この repository では、Linux / macOS 上の adapter listing、adapter open、HID advertising、pairing、reconnect、input reflection をまだ確認していません。CI の macOS job は実ハードなしの dependency sync、unit tests、fake transport integration tests、package build に限ります。
 
 #### Windows Driver Setup
 
@@ -74,15 +92,14 @@ swbt-probe adapters --json
 
 確認済み条件の trace、Bumble version、Python version、driver version は [hardware-test-log](hardware-test-log.md) にあります。
 
-## Unsupported Environments
+## Experimental And Out-of-Scope Environments
 
-- Linux。
-- macOS。
+- Linux / macOS は experimental です。supported としては扱いません。
 - CSR8510 A10 以外の Bluetooth dongle。
 - Switch 2 firmware 22.1.0 以外の対象機器と firmware。
 - PC の通常 Bluetooth 機能と同じ adapter を使う構成。
 
-Linux / macOS は supported ではありません。上の OS 準備は adapter を Bumble から開くための前提であり、接続成功を意味しません。Linux の kernel / BlueZ との競合解消、macOS の NVRAM 設定、実機 pairing、入力反映は未確認です。
+Linux / macOS の OS 準備は adapter を Bumble から開くための準備候補であり、接続成功を意味しません。Linux の kernel / BlueZ との競合解消、macOS の NVRAM 設定、実機 pairing、入力反映は未確認です。
 
 ## Troubleshooting
 

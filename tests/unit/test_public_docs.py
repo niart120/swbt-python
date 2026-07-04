@@ -150,8 +150,10 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
         "left / right stick",
         "Linux",
         "macOS",
-        "unsupported",
-        "untrusted",
+        "experimental",
+        "準備候補",
+        "未確認",
+        "Bumble USB transport の source fact",
         "libusb_package",
         "apt install libusb-1.0-0",
         "hciconfig hciX down",
@@ -167,6 +169,12 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
     ):
         assert token in text
 
+    assert "| Linux | experimental |" in text
+    assert "| macOS | experimental |" in text
+    assert "| Linux | supported |" not in text
+    assert "| macOS | supported |" not in text
+    assert "unsupported / untrusted" not in text
+    assert "experimental" + " target" not in text
     assert "設計上できるはず" not in text
     assert "保証" in text
 

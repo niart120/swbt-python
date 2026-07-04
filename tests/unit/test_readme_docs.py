@@ -15,10 +15,13 @@ def test_readme_documents_confirmed_and_unconfirmed_hardware() -> None:
     assert "CSR8510 A10" in text
     assert "WinUSB" in text
     assert "`usb:0`" in text
-    assert "### 未対応構成" in text
+    assert "### 試験的構成" in text
     assert "Linux" in text
     assert "macOS" in text
-    assert "unsupported" in text
+    assert "experimental" in text
+    assert "supported としては扱いません" in text
+    assert "unsupported" not in text
+    assert "experimental" + " target" not in text
 
 
 def test_readme_documents_dedicated_adapter_and_driver_notes() -> None:
@@ -87,6 +90,9 @@ def test_readme_keeps_detailed_hardware_and_key_store_guidance_in_docs() -> None
     for detailed_phrase in (
         "| 項目 | 値 |",
         "libusb 権限設定",
+        "apt install libusb-1.0-0",
+        "brew install libusb",
+        "bluetoothHostControllerSwitchBehavior",
         "複数の接続先",
         "swbt-probe pair",
         "full observed subcommand handshake",

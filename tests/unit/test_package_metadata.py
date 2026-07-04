@@ -32,3 +32,14 @@ def test_docs_dependency_group_uses_mkdocs_without_runtime_dependency() -> None:
 
     assert "mkdocs>=1.6" in docs_dependencies
     assert not any(dependency.startswith("mkdocs") for dependency in runtime_dependencies)
+
+
+def test_package_metadata_does_not_claim_linux_or_macos_support() -> None:
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+
+    classifiers = pyproject["project"]["classifiers"]
+
+    assert "Operating System :: Microsoft :: Windows" in classifiers
+    assert "Operating System :: POSIX :: Linux" not in classifiers
+    assert "Operating System :: MacOS" not in classifiers
+    assert "Operating System :: MacOS :: MacOS X" not in classifiers

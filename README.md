@@ -70,9 +70,11 @@ driver 準備、adapter 名の確認、troubleshooting は [Hardware Guide](http
 
 2026-07-04 時点では、Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で、pairing、reconnect、Button A、D-pad、left / right stick、neutral 後の入力残りなしを確認済みです。adapter 名の例は `usb:0` です。
 
-### 未対応構成
+### 試験的構成
 
-Linux / macOS は unsupported です。CSR8510 A10 以外の Bluetooth dongle、Switch 2 firmware 22.1.0 以外の対象機器は確認済み構成に含めていません。
+Linux / macOS は experimental です。準備候補は Hardware Guide にありますが、supported としては扱いません。adapter open、pairing、入力反映は未確認です。
+
+CSR8510 A10 以外の Bluetooth dongle、Switch 2 firmware 22.1.0 以外の対象機器は確認済み構成に含めていません。
 
 ## 開発
 
