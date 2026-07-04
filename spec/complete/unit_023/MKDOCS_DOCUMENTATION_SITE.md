@@ -16,7 +16,7 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 |---|---|---|
 | GitHub Issue #30 | MkDocs 設定、`docs/index.md`、依存関係、ローカル確認コマンド、README 導線 | https://github.com/niart120/swbt-python/issues/30 |
 | user instruction | GitHub Pages を今回の実装対象に含め、Pages 公開までを完了条件にする | 2026-07-04 conversation |
-| repository state | Pages site は未設定。`gh api repos/niart120/swbt-python/pages` は 404 | GitHub API |
+| repository state | 着手時は Pages site 未設定。PR #36 merge 後は workflow build による Pages site が有効 | GitHub API |
 | prerequisite unit | docs 本文 `api.md` / `usage.md` / `hardware.md` / `agent-brief.md` | `spec/complete/unit_022/PUBLIC_API_USAGE_HARDWARE_DOCS.md` |
 | package config | `uv`、`pyproject.toml`、dependency groups、build backend | `pyproject.toml` |
 | CI | 現行 CI は `uv sync --locked --dev`、format、lint、type、unit、integration、build を実行する | `.github/workflows/ci.yml` |
@@ -110,7 +110,7 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 | green-local | docs workflow が `main` push だけで GitHub Pages deploy を行う | new | ci / docs | no | workflow YAML test は pass。remote deploy は merge 後に確認する |
 | green | Pages deploy job が `pages: write` と `id-token: write` を持つ | new | ci | no | deploy 権限を CI matrix へ混ぜないことも確認 |
 | green | README にローカル docs と公開 docs の導線がある | regression | unit | no | `tests/unit/test_readme_docs.py` |
-| pending-remote | `main` 反映後に GitHub Pages deployment が成功し、公開 URL で docs site を確認できる | new | remote docs | no | 完了条件。merge 後に実行結果を記録 |
+| green | `main` 反映後に GitHub Pages deployment が成功し、公開 URL で docs site を確認できる | new | remote docs | no | PR #36 merge 後の main Docs workflow `28701402844` で確認 |
 | deferred | Material for MkDocs を導入する | deferred | docs | no | 標準 theme で開始する |
 
 ## 8. 設計メモ
@@ -121,7 +121,7 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 - `unit_022` は完了済みの前提として扱う。`mkdocs build --strict` が本文リンク不足で失敗した場合は、この unit の link / nav 側の不整合として扱う。
 - docs build / deploy workflow は `.github/workflows/docs.yml` として分ける。既存の Python CI matrix は `contents: read` のまま維持する。
 - Pages deploy は `main` 反映後にしか公開状態を確認できない。完了移動は deployment 成功と公開 URL 確認を記録した後に行う。
-- 公開 URL は `https://niart120.github.io/swbt-python/` を想定する。ただし初回 deployment 前は未確認として扱い、確認済みのように書かない。
+- 公開 URL は `https://niart120.github.io/swbt-python/`。PR #36 merge 後に HTTP 200 と docs site の見出しを確認済み。
 - docs gate は実機不要の gate として扱い、`bumble` / `hardware` marker は実行しない。
 
 ## 9. 対象ファイル
@@ -140,7 +140,7 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 | `tests/unit/test_package_metadata.py` | modify | docs dependency group の確認を追加可能 |
 | `tests/unit/test_docs_workflow.py` | new | docs workflow の trigger、build command、Pages deploy 権限を確認 |
 | `tests/unit/test_mkdocs_site.py` | new | MkDocs navigation と docs index の確認 |
-| `spec/wip/unit_023/MKDOCS_DOCUMENTATION_SITE.md` | new / modify | この作業仕様 |
+| `spec/complete/unit_023/MKDOCS_DOCUMENTATION_SITE.md` | move / modify | この作業仕様 |
 
 ## 10. 検証
 
@@ -167,7 +167,9 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 | `uv run pytest tests\unit\test_docs_workflow.py tests\unit\test_mkdocs_site.py -q` after v5 update | pass | 5 passed。Pages upload / deploy action version を v5 に更新した workflow を確認 |
 | `uv run mkdocs build --strict` after v5 update | pass | Documentation built |
 | `git diff --check` after v5 update | pass | whitespace error なし |
-| GitHub Pages deployment after `deploy-pages@v5` update | not run | 完了条件。follow-up PR merge 後に deployment 成功と公開 URL 応答を確認する |
+| GitHub Actions docs workflow on main after PR #36 merge | pass | run `28701402844`。merge commit `94e1b47dd1ac3006b30762d1499f23b0aa684364`。`Build MkDocs site` と `Deploy GitHub Pages` が success |
+| GitHub Pages deployment after `deploy-pages@v5` update | pass | `gh api repos/niart120/swbt-python/pages/deployments/94e1b47dd1ac3006b30762d1499f23b0aa684364` が `{"status":"succeed"}` を返した |
+| `Invoke-WebRequest https://niart120.github.io/swbt-python/` | pass | HTTP 200 OK。`<title>swbt-python</title>` と `swbt-python ドキュメント` を確認 |
 
 ## 11. 実機実行条件
 
@@ -201,7 +203,7 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 - [x] README に docs のローカル閲覧手順を追加した
 - [x] GitHub Pages 用の docs workflow を追加した
 - [x] pull request で docs strict build が通ることを確認した
-- [ ] `main` 反映後に Pages deployment 成功を確認した
-- [ ] 公開 URL で docs site を確認した
+- [x] `main` 反映後に Pages deployment 成功を確認した
+- [x] 公開 URL で docs site を確認した
 - [x] `uv run mkdocs build --strict` の結果を記録した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] 完了条件を満たしたら `spec/complete` へ移動する
