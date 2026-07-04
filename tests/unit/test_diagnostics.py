@@ -1,5 +1,6 @@
 import json
 import platform
+from importlib import metadata
 from io import StringIO
 
 from swbt.diagnostics import DiagnosticsRecorder
@@ -32,7 +33,7 @@ def test_run_metadata_records_environment_and_adapter() -> None:
     assert payload["adapter"] == "usb:0"
     assert payload["os"] == platform.system()
     assert payload["python_version"] == platform.python_version()
-    assert payload["package_version"] == "0.1.0"
+    assert payload["package_version"] == metadata.version("swbt-python")
 
 
 def test_run_metadata_records_key_store_metadata_from_caller() -> None:
