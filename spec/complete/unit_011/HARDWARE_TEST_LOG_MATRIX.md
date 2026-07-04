@@ -52,7 +52,7 @@ Bumble adapter、Switch 実機、OS / driver、dongle、firmware に依存する
 - `spec/complete/unit_005/M4_SUBCOMMAND_RESPONDER_HARDWARE.md`
 - `spec/complete/unit_006/M5_INPUT_OPERATION_API.md`
 - `spec/wip/unit_007/M6_RECONNECT_KEYSTORE_DIAGNOSTICS.md`
-- `spec/wip/unit_012/INITIAL_RELEASE_GATE.md`
+- `spec/complete/unit_012/INITIAL_RELEASE_GATE.md`
 
 ## 5. 根拠監査
 
@@ -98,7 +98,7 @@ Bumble adapter、Switch 実機、OS / driver、dongle、firmware に依存する
 | `docs/hardware-test-log.md` | new | run entry と matrix |
 | `README.md` | modify | 実機検証状態を未記録として明示。release gate 時に確認済み / 未確認構成へ反映する |
 | `tests/hardware/README.md` | new | marker 実行結果と `docs/hardware-test-log.md` の対応を明示 |
-| `spec/wip/unit_012/INITIAL_RELEASE_GATE.md` | deferred | release gate の証跡照合時に更新する |
+| `spec/complete/unit_012/INITIAL_RELEASE_GATE.md` | complete | release gate の証跡照合時に更新する |
 | `tests/unit/test_hardware_test_log_docs.py` | new | hardware log template と matrix の docs check |
 
 ## 10. 検証

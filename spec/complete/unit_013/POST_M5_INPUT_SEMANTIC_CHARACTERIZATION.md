@@ -61,7 +61,7 @@
 - `spec/complete/unit_006/M5_INPUT_OPERATION_API.md`
 - `spec/complete/unit_007/M6_RECONNECT_KEYSTORE_DIAGNOSTICS.md`
 - `spec/wip/unit_008/M7_PACKAGING_EXAMPLES_CLI.md`
-- `spec/wip/unit_012/INITIAL_RELEASE_GATE.md`
+- `spec/complete/unit_012/INITIAL_RELEASE_GATE.md`
 - `docs/hardware-test-log.md`
 - `tests/hardware/README.md`
 - Nintendo Support Q&A: https://support-jp.nintendo.com/app/answers/detail/a_id/35165/
