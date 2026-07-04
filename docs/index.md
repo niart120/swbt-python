@@ -2,7 +2,7 @@
 
 `swbt-python` は、Python から NX 向けの仮想 Bluetooth HID 入力デバイスを扱うためのライブラリです。
 
-このサイトは、README に置くには長い API 仕様、利用例、実機条件、AI エージェント向けの短縮仕様をまとめます。README は導入と最小例の入口に留め、詳細はここから各文書へ辿る構成にします。
+このサイトでは API 仕様、利用例、実機条件、AI エージェント向けの短縮仕様をまとめています。
 
 ## 文書一覧
 
@@ -11,4 +11,4 @@
 - [docs/hardware.md](hardware.md): 実機、Bluetooth adapter、driver、pairing / reconnect、troubleshooting。
 - [docs/agent-brief.md](agent-brief.md): AI エージェントが未実装 API を作らないための短い仕様。
 
-実機や Bluetooth adapter に依存する情報は [docs/hardware.md](hardware.md) を参照してください。実機観測の正本は [docs/hardware-test-log.md](hardware-test-log.md) です。
+実機や Bluetooth adapter に依存する情報は [docs/hardware.md](hardware.md) を参照してください。
