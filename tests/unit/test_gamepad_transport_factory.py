@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from swbt._gamepad_transport import create_default_transport
 from swbt.diagnostics import DiagnosticsRecorder
+from swbt.gamepad.transport_factory import create_default_transport
 
 
 def test_default_transport_factory_passes_resource_config_to_bumble_transport(

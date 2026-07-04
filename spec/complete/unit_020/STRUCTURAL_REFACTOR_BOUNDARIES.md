@@ -369,6 +369,31 @@ Tidy decision:
 | `uv run pytest -m bumble` | not run | 実行には USB Bluetooth dongle open の明示承認が必要 |
 | `uv run pytest -m hardware` | not run | 実行には Switch-facing 動作の明示承認が必要 |
 
+### 10.1 後続 package 化
+
+2026-07-04 の後続構造変更で、`swbt.gamepad` を file module から package へ移した。公開 import は維持し、内部 import path は新しい package 内 module へ寄せた。
+
+| path | change | 内容 |
+|---|---|---|
+| `src/swbt/gamepad/__init__.py` | new | `swbt.gamepad` の public facade。`SwitchGamepad`、`SwitchGamepadConfig`、`ConnectionResult`、`ConnectionStatus`、`DISCONNECT_REQUEST_TIMEOUT_SECONDS` を re-export する |
+| `src/swbt/gamepad.py` -> `src/swbt/gamepad/core.py` | move | `SwitchGamepad` 本体と `SwitchGamepadConfig` を package 内へ移す。public method、diagnostics、close ordering は変えない |
+| `src/swbt/_gamepad_connection.py` -> `src/swbt/gamepad/connection.py` | move | `ConnectionWorkflow` と `ConnectionResult` を package 内へ移す |
+| `src/swbt/_gamepad_output.py` -> `src/swbt/gamepad/output.py` | move | `OutputReportDispatcher` を package 内へ移す |
+| `src/swbt/_gamepad_transport.py` -> `src/swbt/gamepad/transport_factory.py` | move | default transport factory を package 内へ移す。Bumble import は関数内部に閉じる |
+| `tests/unit/test_gamepad_*` | modify | 内部 import を `swbt.gamepad.*` へ更新する |
+
+| command | result | notes |
+|---|---|---|
+| `uv sync --dev` | pass | 41 packages checked |
+| `uv run pytest tests\unit\test_package_import.py tests\unit\test_public_api_boundary.py tests\unit\test_gamepad_connection_workflow.py tests\unit\test_gamepad_output_dispatcher.py tests\unit\test_gamepad_transport_factory.py tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | 72 passed。public import、Bumble import boundary、gamepad package 内部部品、fake transport integration を確認 |
+| `uv run ruff format --check .` | pass | 67 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\unit -q` | pass | 160 passed |
+| `uv run pytest tests\integration -q` | pass | 55 passed |
+| `uv build` | pass | `dist\swbt_python-0.1.0.tar.gz` と `dist\swbt_python-0.1.0-py3-none-any.whl` を生成 |
+| `uv run python -c "...wheel content check..."` | pass | wheel に `swbt/gamepad/{__init__,core,connection,output,transport_factory}.py` が入り、旧 `swbt/gamepad.py` と `swbt/_gamepad_*.py` は含まれない |
+
 ## 11. 実機実行条件
 
 | 項目 | 内容 |
@@ -387,7 +412,7 @@ Tidy decision:
 - `transport/bumble.py` の package 化は別 unit に送る。この unit では `_bumble_*.py` への責務分割で読みやすさと import timing の検証を満たしたため、file-to-package 変換まで同時に行わない。
 - `tests/unit/test_bumble_transport.py` の fake class 共通化と fixture 再配置は別 unit に送る。この unit では production 分割ごとに focused unit test を追加し、既存 fixture の大規模移動による差分拡大を避ける。
 - `SwitchGamepad` の public API 再設計は扱わない。必要なら別 unit で利用者向け contract と一緒に設計する。
-- `ConnectionResult` / `SwitchGamepadConfig` / `ConnectionStatus` の配置変更は、循環 import を避けるために必要になった場合だけ扱う。行数削減だけを理由に先に動かさない。
+- `ConnectionResult` / `ConnectionStatus` は `src/swbt/gamepad/connection.py`、`SwitchGamepadConfig` は `src/swbt/gamepad/core.py` に置いた。利用者向けには `swbt.gamepad` から re-export する。専用 `types.py` 相当の追加分割はまだ行わない。
 
 ## 13. チェックリスト
 
