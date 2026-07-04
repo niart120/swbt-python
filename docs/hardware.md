@@ -30,7 +30,7 @@ Bumble の `usb:` adapter は USB HCI transport を libusb 経由で扱います
 
 `swbt-python` の lock file では Bumble 0.0.230 と `libusb1` / `libusb-package` dependency を固定しています。
 
-#### Windows Driver & USB Setup
+#### Windows USB & Driver Setup
 
 Windows では、Zadig などで専用 USB Bluetooth dongle に WinUSB / libwdi driver を導入する必要があります。
 
@@ -47,13 +47,13 @@ Zadig では次の順に進めます。
 
 Zadig の操作画面と詳細: [Zadig 2.x User Guide](https://github.com/pbatard/libwdi/wiki/Zadig)。
 
-#### Linux Driver & USB Setup
+#### Linux USB & Driver Setup
 
 Linux の手順はこの Hardware Guide に整備されていますが、動作検証されていないことに留意してください。
 
 Linux では、Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合、OS 側で `apt install libusb-1.0-0` が必要になることがあります。USB デバイスへのアクセス権を付け、kernel / BlueZ が dongle を使用中の場合は `hciconfig hciX down` などで解放する必要があります。
 
-#### macOS Driver & USB Setup
+#### macOS USB & Driver Setup
 
 macOS では、macOS Bluetooth stack が外付け HCI を使用しないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` の設定が必要になる場合があります。実行前に現在の値を確認します。
 
