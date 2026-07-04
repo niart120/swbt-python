@@ -40,5 +40,6 @@ def test_docs_index_explains_site_scope_and_links_docs() -> None:
     assert "docs/usage.md" in text
     assert "docs/hardware.md" in text
     assert "docs/agent-brief.md" in text
+    assert "publishing.md" not in text
     assert "Bluetooth" in text
     assert "実機" in text
