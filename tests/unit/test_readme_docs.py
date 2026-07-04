@@ -19,9 +19,13 @@ def test_readme_documents_confirmed_and_unconfirmed_hardware() -> None:
     assert "Linux" in text
     assert "macOS" in text
     assert "experimental" in text
-    assert "supported としては扱いません" in text
+    assert "手順は Hardware Guide に整備されています" in text
+    assert "動作検証されていないことに留意してください" in text
     assert "unsupported" not in text
     assert "experimental" + " target" not in text
+    assert "準備" + "候補" not in text
+    assert "supported としては" + "扱いません" not in text
+    assert "試す前に" + "確認すること" not in text
 
 
 def test_readme_documents_dedicated_adapter_and_driver_notes() -> None:

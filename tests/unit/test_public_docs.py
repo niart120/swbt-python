@@ -151,9 +151,10 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
         "Linux",
         "macOS",
         "experimental",
-        "準備候補",
+        "Linux / macOS の手順",
+        "動作検証されていないことに留意してください",
         "未確認",
-        "Bumble USB transport の source fact",
+        "Bumble USB transport で必要なこと",
         "libusb_package",
         "apt install libusb-1.0-0",
         "hciconfig hciX down",
@@ -175,6 +176,11 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
     assert "| macOS | supported |" not in text
     assert "unsupported / untrusted" not in text
     assert "experimental" + " target" not in text
+    assert "準備" + "候補" not in text
+    assert "source" + " fact" not in text
+    assert "dependency" + " sync" not in text
+    assert "supported としては" + "扱いません" not in text
+    assert "試す前に" + "確認すること" not in text
     assert "設計上できるはず" not in text
     assert "保証" in text
 
@@ -227,6 +233,11 @@ def test_public_docs_do_not_carry_stale_or_placeholder_wording() -> None:
         "TBD",
         "xxx",
         "設計上できるはず",
+        "準備" + "候補",
+        "source" + " fact",
+        "dependency" + " sync",
+        "supported としては" + "扱いません",
+        "試す前に" + "確認すること",
         "この文書は",
         "このサイトでは",
         "このページでは",

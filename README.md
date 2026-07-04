@@ -72,7 +72,7 @@ driver 準備、adapter 名の確認、troubleshooting は [Hardware Guide](http
 
 ### 試験的構成
 
-Linux / macOS は experimental です。準備候補は Hardware Guide にありますが、supported としては扱いません。adapter open、pairing、入力反映は未確認です。
+Linux / macOS は experimental です。手順は Hardware Guide に整備されていますが、動作検証されていないことに留意してください。adapter を開けること、pairing、入力反映は未確認です。
 
 CSR8510 A10 以外の Bluetooth dongle、Switch 2 firmware 22.1.0 以外の対象機器は確認済み構成に含めていません。
 
