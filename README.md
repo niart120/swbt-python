@@ -24,6 +24,8 @@ uv sync --dev
 
 ## 利用例
 
+詳しい API 仕様は `docs/api.md`、目的別の使い方は `docs/usage.md`、実機構成と troubleshooting は `docs/hardware.md` を参照してください。AI エージェント向けの要約は `docs/agent-brief.md` にあります。
+
 ```python
 import asyncio
 from swbt import Button, SwitchGamepad
@@ -47,46 +49,19 @@ asyncio.run(main())
 
 この例は adapter を開き、HID advertising、pairing または reconnect、periodic report loop、入力送信を行います。専用 USB Bluetooth dongle と接続情報のファイルパスを指定し、終了時は neutral を送ってから接続を閉じます。
 
-`key_store_path` は pairing 情報を保存する JSON ファイルです。自動 reconnect の対象になる接続先は 1 件だけです。別の対象機器と pairing すると、新しい接続先が次回の reconnect 対象になります。以前の接続先へ reconnect したい場合は、対象機器ごとに別の `key_store_path` を指定してください。
-
-複数の接続先が含まれる key store では、どの接続先を使うかを推測しません。接続できない場合は key store を削除し、pairing をやり直してください。
+接続方法、`key_store_path`、入力 API の使い分けは `docs/usage.md` にあります。
 
 ## 実機検証
 
-詳細な実機ログは `docs/hardware-test-log.md` にあります。以下に動作確認済みの構成と未検証の範囲を示します。
+詳細な実機条件、adapter / driver 注意、troubleshooting は `docs/hardware.md` にあります。実機ログの正本は `docs/hardware-test-log.md` です。
 
 ### 確認済み構成
 
-2026-07-04 時点で、次の構成は pairing、L2CAP、subcommand 応答、Button A 入力、neutral 後の入力残りなしを確認済みです。D-pad と left / right stick の入力反映も同じ構成で確認済みです。
-
-| 項目 | 値 |
-|---|---|
-| OS | Windows 11 |
-| Bluetooth dongle | CSR8510 A10 |
-| driver | WinUSB / libwdi |
-| adapter | `usb:0` |
-| Python | 3.13.5 |
-| Bumble | Bumble 0.0.230 |
-| 対象機器 | Switch 2 |
-| firmware | 22.1.0 |
-| 入力反映 | 2026-07-02 に Button A が対象機器 UI に反映し、neutral 後の入力残りなしを目視確認 |
-
-この結果は上記構成での観測です。別 firmware や別 dongle で同じ挙動になることは確認していません。
+2026-07-04 時点では、Windows 11 / CSR8510 A10 / WinUSB / `usb:0` / Python 3.13.5 / Bumble 0.0.230 / Switch 2 firmware 22.1.0 で、pairing、L2CAP、subcommand 応答、Button A、neutral 後の入力残りなし、D-pad、left / right stick、active bond reuse reconnect を確認済みです。
 
 ### 未確認構成
 
-- Linux / libusb permission と udev rule
-- macOS
-- CSR8510 A10 以外の Bluetooth dongle
-- pairing-free incoming bond reuse
-- Switch 2 / firmware 22.1.0 以外の対象機器と firmware
-
-## Bluetooth adapter と driver
-
-- Bumble から開く adapter は専用 USB Bluetooth dongle にしてください。OS 標準 Bluetooth stack が使っている adapter を共有しないでください。
-- Windows では確認済み構成が WinUSB / libwdi です。標準 driver のままでは Bumble から開けない場合があります。
-- Linux は libusb 権限設定が必要になる想定ですが、まだ未検証です。
-- `swbt-probe adapters --help` と `swbt-probe pair --help` で、adapter、key store、trace 保存先、timeout を確認できます。`pair` は adapter を開き、対象機器からの接続を待ちます。実行前に専用 dongle を使っていることを確認してください。
+Linux、macOS、CSR8510 A10 以外の Bluetooth dongle、Switch 2 firmware 22.1.0 以外の対象機器、pairing-free incoming bond reuse は未確認です。
 
 ## 開発
 

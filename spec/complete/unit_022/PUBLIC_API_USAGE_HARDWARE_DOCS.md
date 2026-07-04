@@ -89,21 +89,23 @@ README に詰め込んでいる公開 API、目的別の使い方、実機依存
 | hardware troubleshooting | adapter open / pairing timeout / no bond / multiple current peers / input not reflected | 失敗点ごとの切り分けができる | 実装済み diagnostics に合わせる |
 | agent brief | `docs/agent-brief.md` | public import、最小接続 pattern、禁止 API が短く分かる | 未実装 API を作らせない |
 | README link | README | 詳細 docs へ辿れる | README は入口に留める |
+| README size reduction | README | key store 詳細、hardware table、driver troubleshooting を README に戻さず、詳細 docs へ誘導する | `tests/unit/test_readme_docs.py` で固定 |
 
 ## 7. TDD Test List
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | `docs/api.md` が `swbt.__all__` と主要 public methods を過不足なく扱う | new | unit | no | docs text と import surface の drift test を検討 |
-| todo | `docs/api.md` が state update / action / complete state の違いを明記する | new | unit | no | `unit_021` 後に確定 |
-| todo | `docs/usage.md` に初回接続、pairing のみ、reconnect のみ、`try_*()` の例がある | new | unit | no | examples は実装済み API だけを使う |
-| todo | `docs/usage.md` に button、stick、neutral、complete state の例がある | new | unit | no | 同時入力は `InputState` を使う |
-| todo | `docs/hardware.md` が確認済み構成と未確認構成を分ける | regression | unit | no | README / risks と同じ事実境界 |
-| todo | `docs/hardware.md` が `key_store_path`、no bond、multiple current peers、再 pairing 手順を説明する | new | unit | no | reconnect / key store unit と整合 |
-| todo | `docs/agent-brief.md` が未実装 API の禁止事項を含む | new | unit | no | `hold()`、`sequence()`、`send_current_input()` など |
-| todo | README から `docs/api.md`、`docs/usage.md`、`docs/hardware.md`、`docs/agent-brief.md` へ辿れる | regression | unit | no | `tests/unit/test_readme_docs.py` へ追加 |
-| todo | public docs と agent brief に `set_input()` を利用可能 API として残さない | breaking cleanup | unit | no | complete state API は `apply()` に統一する |
-| todo | docs 内に Poetry 前提、未実装 helper、確認済みでない構成の保証が残っていない | regression | unit | no | text scan test を検討 |
+| red then green | `docs/api.md` が `swbt.__all__` と主要 public methods を過不足なく扱う | new | unit | no | `tests/unit/test_public_docs.py` で public export と主要 method token を固定 |
+| green | `docs/api.md` が state update / action / complete state の違いを明記する | new | unit | no | `unit_021` の `apply()` / `sticks()` contract に合わせた |
+| green | `docs/usage.md` に初回接続、pairing のみ、reconnect のみ、`try_*()` の例がある | new | unit | no | examples は実装済み API だけを使う |
+| green | `docs/usage.md` に button、stick、neutral、complete state の例がある | new | unit | no | 同時入力は `InputState` + `apply()` を使う |
+| green | `docs/hardware.md` が確認済み構成と未確認構成を分ける | regression | unit | no | README / risks と同じ事実境界を `tests/unit/test_public_docs.py` で固定 |
+| green | `docs/hardware.md` が `key_store_path`、no bond、multiple current peers、再 pairing 手順を説明する | new | unit | no | reconnect / key store unit と整合 |
+| green | `docs/agent-brief.md` が未実装 API の禁止事項を含む | new | unit | no | `hold()`、`sequence()`、`send_current_input()` など。旧 complete state API 名はユーザ指示により本文へ出さず、absence test で固定 |
+| green | README から `docs/api.md`、`docs/usage.md`、`docs/hardware.md`、`docs/agent-brief.md` へ辿れる | regression | unit | no | `tests/unit/test_readme_docs.py::test_readme_links_public_docs` で固定 |
+| green | README に hardware table、driver troubleshooting、key store 復旧手順を戻さない | regression | unit | no | `test_readme_keeps_detailed_hardware_and_key_store_guidance_in_docs` で固定 |
+| green | public docs と agent brief に旧 complete state API 名を利用可能 API として残さない | breaking cleanup | unit | no | public docs 全体の absence test で固定し、complete state API は `apply()` に統一する |
+| green | docs 内に Poetry 前提、未実装 helper、確認済みでない構成の保証が残っていない | regression | unit | no | `tests/unit/test_public_docs.py::test_public_docs_do_not_carry_stale_or_placeholder_wording` で固定 |
 | deferred | MkDocs navigation で docs を閲覧する | deferred | docs | no | `unit_023` で扱う |
 
 ## 8. 設計メモ
@@ -114,6 +116,8 @@ README に詰め込んでいる公開 API、目的別の使い方、実機依存
 - `docs/hardware.md` は `docs/hardware-test-log.md` の要約であり、実機ログそのものではない。観測日、構成、未確認範囲を分ける。
 - `docs/agent-brief.md` は短く保つ。AI エージェントが未実装 API を作りがちな箇所だけを明示する。
 - `unit_021` は完了済みである。docs は `apply()` / `sticks()` / `set_input()` 廃止を現在の public API contract として扱う。
+- 2026-07-04 のユーザ指示により、public docs では旧 complete state API 名を明示的に説明しない。利用可能 API として残っていないことは docs absence test で確認する。
+- 2026-07-04 のユーザ指示により、追加した docs の見出しは英語に統一する。
 
 ## 9. 対象ファイル
 
@@ -125,19 +129,23 @@ README に詰め込んでいる公開 API、目的別の使い方、実機依存
 | `docs/agent-brief.md` | new | AI エージェント向け短縮仕様 |
 | `README.md` | modify | 詳細 docs への導線 |
 | `tests/unit/test_readme_docs.py` | modify | README から docs への link と stale wording を確認 |
-| `tests/unit/test_public_api_docstrings.py` | modify | 必要なら docs と docstring の主要契約を固定 |
-| `tests/unit/test_release_gate_docs.py` | modify | hardware docs と release gate 境界の整合確認を追加 |
-| `spec/wip/unit_022/PUBLIC_API_USAGE_HARDWARE_DOCS.md` | new / modify | この作業仕様 |
+| `tests/unit/test_public_docs.py` | new | public docs と public surface / hardware 境界 / stale wording の整合確認 |
+| `tests/unit/test_public_api_docstrings.py` | inspect | docstring contract の既存 gate を局所検証で実行 |
+| `tests/unit/test_release_gate_docs.py` | inspect | release gate 境界の既存 gate を局所検証で実行 |
+| `spec/complete/unit_022/PUBLIC_API_USAGE_HARDWARE_DOCS.md` | move / modify | この作業仕様 |
 
 ## 10. 検証
 
 | command | result | notes |
 |---|---|---|
-| `uv run pytest tests\unit\test_readme_docs.py tests\unit\test_release_gate_docs.py tests\unit\test_public_api_docstrings.py -q` | not run | docs 実装後に実行する |
-| `uv run ruff format --check .` | not run | docs 変更後の標準 gate。Markdown format は experimental なので失敗時は原因を確認する |
-| `uv run ruff check .` | not run | docs 変更後の標準 gate |
-| `uv run ty check --no-progress` | not run | docs だけでも standard gate では確認する |
-| `uv run pytest tests\unit` | not run | docs drift test を含めて確認する |
+| `uv run pytest tests\unit\test_public_docs.py -q` | red | 5 failed。`docs/api.md`、`docs/usage.md`、`docs/hardware.md`、`docs/agent-brief.md` が未作成であることを確認 |
+| `uv run pytest tests\unit\test_public_docs.py tests\unit\test_readme_docs.py -q` | pass | 12 passed。docs 4 本追加、README 導線、README 縮小境界を確認 |
+| `uv run pytest tests\unit\test_readme_docs.py tests\unit\test_release_gate_docs.py tests\unit\test_public_api_docstrings.py tests\unit\test_public_docs.py -q` | pass | 15 passed。README、release gate、docstring、public docs drift を確認 |
+| `uv sync --dev` | pass | Resolved 41 packages / Checked 41 packages |
+| `uv run ruff format --check .` | pass | 69 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\unit -q` | pass | 171 passed |
 
 ## 11. 実機実行条件
 
@@ -156,6 +164,7 @@ README に詰め込んでいる公開 API、目的別の使い方、実機依存
 - GitHub Pages 公開、versioned docs、自動 API reference 生成は対象外。
 - 未確認 OS / dongle / firmware の検証は別 unit。
 - API 実装変更は `unit_021`。
+- 新規 hardware run は行わない。確認済み構成は既存 `docs/hardware-test-log.md` と completed specs の観測から要約した。
 
 ## 13. チェックリスト
 
@@ -164,8 +173,8 @@ README に詰め込んでいる公開 API、目的別の使い方、実機依存
 - [x] Issue #29 を起点として対象範囲と対象外を整理した
 - [x] TDD Test List の初期案を作成した
 - [x] 根拠監査と実機実行条件を記録した
-- [ ] `docs/api.md` / `docs/usage.md` / `docs/hardware.md` / `docs/agent-brief.md` を追加した
-- [ ] README から各 docs へ辿れるようにした
-- [ ] docs と `swbt.__all__` / public method contract の整合を確認した
-- [ ] 検証結果を実行結果で更新した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] `docs/api.md` / `docs/usage.md` / `docs/hardware.md` / `docs/agent-brief.md` を追加した
+- [x] README から各 docs へ辿れるようにした
+- [x] docs と `swbt.__all__` / public method contract の整合を確認した
+- [x] 検証結果を実行結果で更新した
+- [x] 完了条件を満たしたら `spec/complete` へ移動する

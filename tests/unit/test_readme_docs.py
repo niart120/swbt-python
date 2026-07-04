@@ -25,9 +25,9 @@ def test_readme_documents_dedicated_adapter_and_driver_notes() -> None:
     text = README.read_text(encoding="utf-8")
 
     assert "専用 USB Bluetooth dongle" in text
-    assert "OS 標準 Bluetooth stack" in text
+    assert "`docs/hardware.md`" in text
     assert "WinUSB" in text
-    assert "libusb" in text
+    assert "troubleshooting" in text
 
 
 def test_readme_reflects_button_a_and_neutral_observation() -> None:
@@ -35,9 +35,9 @@ def test_readme_reflects_button_a_and_neutral_observation() -> None:
 
     assert "Button A" in text
     assert "neutral" in text
-    assert "対象機器 UI" in text
     assert "入力残りなし" in text
-    assert "2026-07-02" in text
+    assert "D-pad" in text
+    assert "active bond reuse reconnect" in text
 
 
 def test_readme_records_current_switch_model_and_firmware_evidence() -> None:
@@ -46,3 +46,28 @@ def test_readme_records_current_switch_model_and_firmware_evidence() -> None:
     assert "Switch 2" in text
     assert "22.1.0" in text
     assert "model / firmware は未記録" not in text
+
+
+def test_readme_links_public_docs() -> None:
+    text = README.read_text(encoding="utf-8")
+
+    for docs_path in (
+        "docs/api.md",
+        "docs/usage.md",
+        "docs/hardware.md",
+        "docs/agent-brief.md",
+    ):
+        assert f"`{docs_path}`" in text
+
+
+def test_readme_keeps_detailed_hardware_and_key_store_guidance_in_docs() -> None:
+    text = README.read_text(encoding="utf-8")
+
+    for detailed_phrase in (
+        "| 項目 | 値 |",
+        "OS 標準 Bluetooth stack",
+        "libusb 権限設定",
+        "複数の接続先",
+        "swbt-probe pair",
+    ):
+        assert detailed_phrase not in text

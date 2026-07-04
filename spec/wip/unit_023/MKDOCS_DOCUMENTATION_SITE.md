@@ -13,7 +13,7 @@
 | source | 内容 | path |
 |---|---|---|
 | GitHub Issue #30 | MkDocs 設定、`docs/index.md`、依存関係、ローカル確認コマンド、README 導線 | https://github.com/niart120/swbt-python/issues/30 |
-| prerequisite unit | docs 本文 `api.md` / `usage.md` / `hardware.md` / `agent-brief.md` | `spec/wip/unit_022/PUBLIC_API_USAGE_HARDWARE_DOCS.md` |
+| prerequisite unit | docs 本文 `api.md` / `usage.md` / `hardware.md` / `agent-brief.md` | `spec/complete/unit_022/PUBLIC_API_USAGE_HARDWARE_DOCS.md` |
 | package config | `uv`、`pyproject.toml`、dependency groups、build backend | `pyproject.toml` |
 | CI | 現行 CI は `uv sync --locked --dev`、format、lint、type、unit、integration、build を実行する | `.github/workflows/ci.yml` |
 | README | 現在は `docs/hardware-test-log.md` への導線のみ | `README.md` |
@@ -51,7 +51,7 @@
 
 ## 4. 関連 docs
 
-- `spec/wip/unit_022/PUBLIC_API_USAGE_HARDWARE_DOCS.md`
+- `spec/complete/unit_022/PUBLIC_API_USAGE_HARDWARE_DOCS.md`
 - `README.md`
 - `pyproject.toml`
 - `.github/workflows/ci.yml`
@@ -97,7 +97,7 @@
 - docs 依存は runtime dependency に入れない。利用者が `swbt-python` を install するだけで MkDocs が入る状態にはしない。
 - `docs` dependency group を分ける。既存 `dev` group は test / lint / type check の標準 gate に使われているため、docs site 専用 dependency は分離する。
 - README には、詳細 docs への導線とローカル確認 command だけを書く。docs 本文を README へ戻さない。
-- `unit_022` が未完了なら、`mkdocs build --strict` はリンク先不足で失敗する。その場合はこの unit を実装せず、`unit_022` を前提として明記する。
+- `unit_022` は完了済みの前提として扱う。`mkdocs build --strict` が本文リンク不足で失敗した場合は、この unit の link / nav 側の不整合として扱う。
 - CI 追加は任意だが、追加するなら実機不要の docs gate として扱い、`bumble` / `hardware` marker は実行しない。
 
 ## 9. 対象ファイル
