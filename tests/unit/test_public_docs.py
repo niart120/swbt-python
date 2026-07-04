@@ -6,10 +6,13 @@ import swbt
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
+DOC_INDEX = DOCS / "index.md"
 API_DOC = DOCS / "api.md"
 USAGE_DOC = DOCS / "usage.md"
 HARDWARE_DOC = DOCS / "hardware.md"
+HARDWARE_LOG = DOCS / "hardware-test-log.md"
 AGENT_BRIEF = DOCS / "agent-brief.md"
+PUBLIC_DOCS = (DOC_INDEX, API_DOC, USAGE_DOC, HARDWARE_DOC, HARDWARE_LOG, AGENT_BRIEF)
 
 
 def _read(path: Path) -> str:
@@ -17,7 +20,7 @@ def _read(path: Path) -> str:
 
 
 def test_public_docs_files_exist() -> None:
-    for path in (API_DOC, USAGE_DOC, HARDWARE_DOC, AGENT_BRIEF):
+    for path in PUBLIC_DOCS:
         assert path.is_file(), f"missing public docs file: {path}"
 
 
@@ -119,30 +122,48 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
 
     for token in (
         "Python 3.12",
-        "Bumble 0.0.230",
         "専用 USB Bluetooth dongle",
+        "Windows Driver Setup",
+        "Zadig",
+        "https://zadig.akeo.ie/",
+        "Zadig 2.x User Guide",
+        "swbt-probe adapters --json",
+        "Switch-facing pairing",
+        "USB HCI transport",
+        "libusb",
+        "OS 側設定",
+        "管理者権限",
+        "対象の dongle",
+        "VID / PID",
+        "Install Driver",
         "Windows 11",
         "CSR8510 A10",
         "WinUSB / libwdi",
         "`usb:0`",
-        "Python 3.13.5",
         "Switch 2",
         "22.1.0",
+        "初回 pairing",
+        "保存済み pairing 情報",
         "Button A",
         "neutral",
         "D-pad",
         "left / right stick",
-        "active bond reuse reconnect",
         "Linux",
         "macOS",
+        "unsupported",
+        "untrusted",
+        "libusb_package",
+        "apt install libusb-1.0-0",
+        "hciconfig hciX down",
+        "brew install libusb",
+        'bluetoothHostControllerSwitchBehavior="never"',
+        "USB device への権限",
         "CSR8510 A10 以外",
-        "pairing-free incoming bond reuse",
-        "OS 標準 Bluetooth stack",
+        "PC の通常 Bluetooth 機能",
         "key_store_path",
         "no bond",
         "multiple current peers",
         "Input Is Not Reflected In The UI",
-        "未確認",
     ):
         assert token in text
 
@@ -189,7 +210,7 @@ def test_agent_brief_keeps_generation_on_implemented_public_api() -> None:
 
 
 def test_public_docs_do_not_carry_stale_or_placeholder_wording() -> None:
-    text = "\n".join(_read(path) for path in (API_DOC, USAGE_DOC, HARDWARE_DOC, AGENT_BRIEF))
+    text = "\n".join(_read(path) for path in PUBLIC_DOCS)
 
     for stale_token in (
         "set_input",
@@ -198,5 +219,10 @@ def test_public_docs_do_not_carry_stale_or_placeholder_wording() -> None:
         "TBD",
         "xxx",
         "設計上できるはず",
+        "この文書は",
+        "このサイトでは",
+        "このページでは",
+        "まとめています",
+        "参照してください",
     ):
         assert stale_token not in text

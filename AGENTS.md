@@ -100,8 +100,7 @@ repo-local skill は `.agents/skills` を正本として管理する。`.github/
 - `tidy-first`: 振る舞い変更と構造変更を分ける。
 - `test-desiderata-review`: Test Desiderata に基づきテスト価値と trade-off を確認する。
 - `pr-merge-cleanup`: remote 設定後に PR 作成、merge、default branch 同期、branch cleanup を行う。
-
-`pypi-release` は現段階では配置しない。packaging と publish 方針が固まった段階で別途作る。
+- `pypi-release`: PyPI / TestPyPI 公開、version bump、release PR、publish workflow、公開後 smoke check を扱う。publish workflow / runbook が未整備の場合は release 実行前に停止する。
 
 ## Python
 

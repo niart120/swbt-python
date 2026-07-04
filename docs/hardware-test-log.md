@@ -1,6 +1,6 @@
 # Hardware Test Log
 
-この文書は、Bumble adapter と対象機器に依存する観測を記録する正本である。
+Bumble adapter と対象機器に依存する観測を記録する正本である。
 
 実機観測は、OS、driver、dongle、adapter string、Bumble version、Python version、Switch model / firmware に依存する。ここに記録した結果は、その条件での観測であり、別構成での保証には使わない。
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "PyPI Release"
+  short_description: "swbt-python PyPI release workflow"
+  default_prompt: "Use $pypi-release to plan and run a swbt-python PyPI release."

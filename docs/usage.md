@@ -1,6 +1,6 @@
 # Usage
 
-この文書は目的別の利用例です。API の詳細な引数と例外は `docs/api.md` を参照してください。実機接続には専用 USB Bluetooth dongle、Bumble、対象機器側の pairing / reconnect 操作が必要です。
+目的別の利用例です。API の引数と例外は `docs/api.md`、実機条件は `docs/hardware.md` にあります。実機接続には専用 USB Bluetooth dongle、Bumble、対象機器側の pairing / reconnect 操作が必要です。
 
 ## Minimal Example
 
@@ -258,7 +258,7 @@ await pad.neutral()
 await pad.close(neutral=True)
 ```
 
-`close(neutral=True)` は接続中なら trailing neutral を試みてから transport を閉じます。`async with` を使う場合は、通常は明示的に呼ぶ必要はありません。
+`close(neutral=True)` は接続中なら trailing neutral を試みてから transport を閉じます。`async with` の scope 終了時に同じ処理が走るため、scope の最後で重ねて呼ぶ必要はありません。
 
 ## Diagnostics
 
