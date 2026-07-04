@@ -100,17 +100,17 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | `mkdocs.yml` に `docs/index.md`、`docs/api.md`、`docs/usage.md`、`docs/hardware.md`、`docs/agent-brief.md` の nav がある | new | unit / docs | no | Python unit test か strict build で固定 |
-| todo | `docs/index.md` が docs の目的、README との役割分担、各 docs の説明を含む | new | unit / docs | no | text drift test を検討 |
-| todo | `pyproject.toml` に docs dependency group と `mkdocs>=1.6` がある | new | unit | no | `tomllib` test を追加可能 |
-| todo | README に docs のローカル閲覧手順がある | regression | unit | no | `tests/unit/test_readme_docs.py` |
-| todo | Poetry 前提の docs command が残っていない | regression | unit | no | text scan |
-| todo | `uv run mkdocs build --strict` が通る | new | docs | no | 実装後に実行結果を記録 |
-| todo | docs workflow が pull request と `main` push で docs group を使い strict build する | regression | ci | no | workflow YAML test と remote Actions で確認 |
-| todo | docs workflow が `main` push だけで GitHub Pages deploy を行う | new | ci / docs | no | PR では deploy しない |
-| todo | Pages deploy job が `pages: write` と `id-token: write` を持つ | new | ci | no | deploy 権限を CI matrix へ混ぜない |
-| todo | README にローカル docs と公開 docs の導線がある | regression | unit | no | 初回 deploy 前後の表現を確認 |
-| todo | `main` 反映後に GitHub Pages deployment が成功し、公開 URL で docs site を確認できる | new | remote docs | no | 完了条件。merge 後に実行結果を記録 |
+| green | `mkdocs.yml` に `docs/index.md`、`docs/api.md`、`docs/usage.md`、`docs/hardware.md`、`docs/agent-brief.md` の nav がある | new | unit / docs | no | `tests/unit/test_mkdocs_site.py` と strict build で固定 |
+| green | `docs/index.md` が docs の目的、README との役割分担、各 docs の説明を含む | new | unit / docs | no | `tests/unit/test_mkdocs_site.py` |
+| green | `pyproject.toml` に docs dependency group と `mkdocs>=1.6` がある | new | unit | no | `tests/unit/test_package_metadata.py` |
+| green | README に docs のローカル閲覧手順がある | regression | unit | no | `tests/unit/test_readme_docs.py` |
+| green | Poetry 前提の docs command が残っていない | regression | unit | no | text scan と README docs test |
+| green | `uv run mkdocs build --strict` が通る | new | docs | no | local pass。`site/` は `.gitignore` で除外 |
+| green-local | docs workflow が pull request と `main` push で docs group を使い strict build する | regression | ci | no | workflow YAML test は pass。remote Actions は PR 上で確認する |
+| green-local | docs workflow が `main` push だけで GitHub Pages deploy を行う | new | ci / docs | no | workflow YAML test は pass。remote deploy は merge 後に確認する |
+| green | Pages deploy job が `pages: write` と `id-token: write` を持つ | new | ci | no | deploy 権限を CI matrix へ混ぜないことも確認 |
+| green | README にローカル docs と公開 docs の導線がある | regression | unit | no | `tests/unit/test_readme_docs.py` |
+| pending-remote | `main` 反映後に GitHub Pages deployment が成功し、公開 URL で docs site を確認できる | new | remote docs | no | 完了条件。merge 後に実行結果を記録 |
 | deferred | Material for MkDocs を導入する | deferred | docs | no | 標準 theme で開始する |
 
 ## 8. 設計メモ
@@ -135,22 +135,32 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 | `README.md` | modify | docs への導線とローカル閲覧手順 |
 | `.github/workflows/docs.yml` | new | docs strict build と GitHub Pages deploy |
 | `.github/PULL_REQUEST_TEMPLATE.md` | modify / optional | docs gate を標準 Testing 例へ追加する場合だけ変更 |
+| `.gitignore` | modify | MkDocs build output `site/` を commit 対象から外す |
 | `tests/unit/test_readme_docs.py` | modify | README docs 手順と link の確認 |
 | `tests/unit/test_package_metadata.py` | modify | docs dependency group の確認を追加可能 |
 | `tests/unit/test_docs_workflow.py` | new | docs workflow の trigger、build command、Pages deploy 権限を確認 |
+| `tests/unit/test_mkdocs_site.py` | new | MkDocs navigation と docs index の確認 |
 | `spec/wip/unit_023/MKDOCS_DOCUMENTATION_SITE.md` | new / modify | この作業仕様 |
 
 ## 10. 検証
 
 | command | result | notes |
 |---|---|---|
-| `uv sync --group docs` | not run | 実装後に docs dependency group を確認する |
-| `uv run mkdocs build --strict` | not run | 実装後に docs site を確認する |
-| `uv run pytest tests\unit\test_readme_docs.py tests\unit\test_package_metadata.py tests\unit\test_docs_workflow.py -q` | not run | docs command / dependency group / Pages workflow の drift test |
-| `uv run ruff format --check .` | not run | 実装後の標準 gate |
-| `uv run ruff check .` | not run | 実装後の標準 gate |
-| `uv run ty check --no-progress` | not run | 実装後の標準 gate |
-| `uv run pytest tests\unit` | not run | docs metadata test を含めて確認する |
+| `uv run pytest tests\unit\test_mkdocs_site.py tests\unit\test_docs_workflow.py tests\unit\test_readme_docs.py tests\unit\test_package_metadata.py -q` | red | 7 failed / 7 passed。`mkdocs.yml`、`docs/index.md`、`.github/workflows/docs.yml`、README docs site 導線、docs dependency group が未実装であることを確認 |
+| `uv run pytest tests\unit\test_mkdocs_site.py tests\unit\test_docs_workflow.py tests\unit\test_readme_docs.py tests\unit\test_package_metadata.py -q` | pass | 14 passed。MkDocs navigation、docs index、README command、docs dependency group、Pages workflow 権限と条件を確認 |
+| `uv sync --group docs` | pass | sandbox 内初回は PyPI download が network restriction で失敗。承認付き再実行で MkDocs 1.6.1 と docs dependency を install |
+| `uv run mkdocs build --strict` | pass | Documentation built。`site/` は `.gitignore` で除外 |
+| `uv sync --dev` | pass | Resolved 53 packages。docs group は標準 dev sync から外れるため MkDocs 依存は uninstall された |
+| `uv run ruff format --check .` | pass | 71 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\unit -q` | pass | 178 passed |
+| `uv run pytest tests\integration -q` | pass | 63 passed |
+| `uv lock --check` | pass | lockfile 整合を確認 |
+| `uv build` | pass | `dist\swbt_python-0.1.0.tar.gz` と `dist\swbt_python-0.1.0-py3-none-any.whl` を生成 |
+| `git diff --check` | pass | whitespace error なし |
+| `uv sync --group docs` | pass | dev gate 後に docs dependency group を再同期 |
+| `uv run mkdocs build --strict` | pass | Documentation built。標準 gate 後にも strict build が通ることを確認 |
 | GitHub Actions docs workflow on pull request | not run | PR 上で strict build を確認する |
 | GitHub Pages deployment after merge to `main` | not run | 完了条件。deployment 成功と公開 URL 応答を確認する |
 
@@ -181,12 +191,12 @@ GitHub Pages 公開は Issue #30 では非対象だったが、2026-07-04 のユ
 - [x] Issue #30 を起点として対象範囲と対象外を整理した
 - [x] TDD Test List の初期案を作成した
 - [x] 根拠監査と実機実行条件を記録した
-- [ ] `mkdocs.yml` と `docs/index.md` を追加した
-- [ ] docs dependency group と lockfile を更新した
-- [ ] README に docs のローカル閲覧手順を追加した
-- [ ] GitHub Pages 用の docs workflow を追加した
+- [x] `mkdocs.yml` と `docs/index.md` を追加した
+- [x] docs dependency group と lockfile を更新した
+- [x] README に docs のローカル閲覧手順を追加した
+- [x] GitHub Pages 用の docs workflow を追加した
 - [ ] pull request で docs strict build が通ることを確認した
 - [ ] `main` 反映後に Pages deployment 成功を確認した
 - [ ] 公開 URL で docs site を確認した
-- [ ] `uv run mkdocs build --strict` の結果を記録した
+- [x] `uv run mkdocs build --strict` の結果を記録した
 - [ ] 完了条件を満たしたら `spec/complete` へ移動する

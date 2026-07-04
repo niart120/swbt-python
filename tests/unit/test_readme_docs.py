@@ -52,12 +52,22 @@ def test_readme_links_public_docs() -> None:
     text = README.read_text(encoding="utf-8")
 
     for docs_path in (
+        "docs/index.md",
         "docs/api.md",
         "docs/usage.md",
         "docs/hardware.md",
         "docs/agent-brief.md",
     ):
         assert f"`{docs_path}`" in text
+
+
+def test_readme_documents_local_and_published_docs_site() -> None:
+    text = README.read_text(encoding="utf-8")
+
+    assert "https://niart120.github.io/swbt-python/" in text
+    assert "uv sync --group docs" in text
+    assert "uv run mkdocs serve" in text
+    assert "uv run mkdocs build --strict" in text
 
 
 def test_readme_keeps_detailed_hardware_and_key_store_guidance_in_docs() -> None:

@@ -22,6 +22,18 @@ pip install swbt-python
 uv sync --dev
 ```
 
+## ドキュメント
+
+詳細ドキュメントは `docs/index.md` から辿れます。公開サイトは `https://niart120.github.io/swbt-python/` です。
+
+ローカルで確認する場合は次を使います。
+
+```powershell
+uv sync --group docs
+uv run mkdocs serve
+uv run mkdocs build --strict
+```
+
 ## 利用例
 
 詳しい API 仕様は `docs/api.md`、目的別の使い方は `docs/usage.md`、実機構成と troubleshooting は `docs/hardware.md` を参照してください。AI エージェント向けの要約は `docs/agent-brief.md` にあります。
