@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 
 from swbt.errors import InvalidInputError
@@ -41,6 +43,49 @@ def test_stick_normalized_converts_endpoints_to_raw_values(value: float, expecte
 def test_stick_normalized_rejects_values_outside_unit_range(x: float, y: float) -> None:
     with pytest.raises(InvalidInputError):
         Stick.normalized(x=x, y=y)
+
+
+@pytest.mark.parametrize(
+    ("x", "y"),
+    [
+        (0.0, 1.0),
+        (0.25, -0.5),
+        (1.0, 1.0),
+    ],
+)
+def test_stick_tilt_matches_normalized_values(x: float, y: float) -> None:
+    assert Stick.tilt(x, y) == Stick.normalized(x=x, y=y)
+
+
+@pytest.mark.parametrize(("x", "y"), [(-1.01, 0.0), (1.01, 0.0), (0.0, -1.01), (0.0, 1.01)])
+def test_stick_tilt_rejects_values_outside_unit_range(x: float, y: float) -> None:
+    with pytest.raises(InvalidInputError):
+        Stick.tilt(x, y)
+
+
+def test_stick_direction_shorthands_return_full_tilt_values() -> None:
+    assert Stick.up() == Stick.tilt(0.0, 1.0)
+    assert Stick.down() == Stick.tilt(0.0, -1.0)
+    assert Stick.left() == Stick.tilt(-1.0, 0.0)
+    assert Stick.right() == Stick.tilt(1.0, 0.0)
+
+
+def test_stick_direction_shorthands_accept_partial_amounts() -> None:
+    assert Stick.up(0.5) == Stick.tilt(0.0, 0.5)
+    assert Stick.down(0.5) == Stick.tilt(0.0, -0.5)
+    assert Stick.left(0.25) == Stick.tilt(-0.25, 0.0)
+    assert Stick.right(0.25) == Stick.tilt(0.25, 0.0)
+    assert Stick.up(0.0) == Stick.center()
+
+
+@pytest.mark.parametrize("factory", [Stick.up, Stick.down, Stick.left, Stick.right])
+@pytest.mark.parametrize("amount", [-0.01, 1.01])
+def test_stick_direction_shorthands_reject_amounts_outside_unit_range(
+    factory: Callable[[float], Stick],
+    amount: float,
+) -> None:
+    with pytest.raises(InvalidInputError):
+        factory(amount)
 
 
 @pytest.mark.parametrize("value", [-32769, 32768])
