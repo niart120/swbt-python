@@ -15,10 +15,10 @@ def test_readme_documents_confirmed_and_unconfirmed_hardware() -> None:
     assert "CSR8510 A10" in text
     assert "WinUSB" in text
     assert "`usb:0`" in text
-    assert "Bumble 0.0.230" in text
-    assert "### 未確認構成" in text
+    assert "### 未対応構成" in text
     assert "Linux" in text
     assert "macOS" in text
+    assert "unsupported" in text
 
 
 def test_readme_documents_dedicated_adapter_and_driver_notes() -> None:
@@ -26,7 +26,11 @@ def test_readme_documents_dedicated_adapter_and_driver_notes() -> None:
 
     assert "専用 USB Bluetooth dongle" in text
     assert "https://niart120.github.io/swbt-python/hardware/" in text
+    assert "https://zadig.akeo.ie/" in text
+    assert "Zadig" in text
     assert "WinUSB" in text
+    assert "WinUSB / libwdi driver" in text
+    assert "通常 Bluetooth 機能" in text
     assert "troubleshooting" in text
 
 
@@ -37,7 +41,7 @@ def test_readme_reflects_button_a_and_neutral_observation() -> None:
     assert "neutral" in text
     assert "入力残りなし" in text
     assert "D-pad" in text
-    assert "active bond reuse reconnect" in text
+    assert "reconnect" in text
 
 
 def test_readme_records_current_switch_model_and_firmware_evidence() -> None:
@@ -82,9 +86,11 @@ def test_readme_keeps_detailed_hardware_and_key_store_guidance_in_docs() -> None
 
     for detailed_phrase in (
         "| 項目 | 値 |",
-        "OS 標準 Bluetooth stack",
         "libusb 権限設定",
         "複数の接続先",
         "swbt-probe pair",
+        "full observed subcommand handshake",
+        "active bond reuse reconnect",
+        "pairing-free incoming bond reuse",
     ):
         assert detailed_phrase not in text
