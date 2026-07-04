@@ -102,6 +102,86 @@ class Stick:
         )
 
     @classmethod
+    def tilt(cls, x: float, y: float) -> "Stick":
+        """Return a stick position from normalized tilt values.
+
+        Args:
+            x: Horizontal tilt in the inclusive ``-1.0..1.0`` range.
+            y: Vertical tilt in the inclusive ``-1.0..1.0`` range.
+
+        Returns:
+            Stick: Raw stick position converted from normalized tilt values.
+
+        Raises:
+            InvalidInputError: Either tilt axis is outside the supported range.
+        """
+        return cls.normalized(x=x, y=y)
+
+    @classmethod
+    def up(cls, amount: float = 1.0) -> "Stick":
+        """Return an upward stick tilt.
+
+        Args:
+            amount: Tilt amount in the inclusive ``0.0..1.0`` range.
+
+        Returns:
+            Stick: Stick tilted upward by ``amount``.
+
+        Raises:
+            InvalidInputError: ``amount`` is outside the supported range.
+        """
+        cls._validate_amount(amount)
+        return cls.tilt(0.0, amount)
+
+    @classmethod
+    def down(cls, amount: float = 1.0) -> "Stick":
+        """Return a downward stick tilt.
+
+        Args:
+            amount: Tilt amount in the inclusive ``0.0..1.0`` range.
+
+        Returns:
+            Stick: Stick tilted downward by ``amount``.
+
+        Raises:
+            InvalidInputError: ``amount`` is outside the supported range.
+        """
+        cls._validate_amount(amount)
+        return cls.tilt(0.0, -amount)
+
+    @classmethod
+    def left(cls, amount: float = 1.0) -> "Stick":
+        """Return a leftward stick tilt.
+
+        Args:
+            amount: Tilt amount in the inclusive ``0.0..1.0`` range.
+
+        Returns:
+            Stick: Stick tilted left by ``amount``.
+
+        Raises:
+            InvalidInputError: ``amount`` is outside the supported range.
+        """
+        cls._validate_amount(amount)
+        return cls.tilt(-amount, 0.0)
+
+    @classmethod
+    def right(cls, amount: float = 1.0) -> "Stick":
+        """Return a rightward stick tilt.
+
+        Args:
+            amount: Tilt amount in the inclusive ``0.0..1.0`` range.
+
+        Returns:
+            Stick: Stick tilted right by ``amount``.
+
+        Raises:
+            InvalidInputError: ``amount`` is outside the supported range.
+        """
+        cls._validate_amount(amount)
+        return cls.tilt(amount, 0.0)
+
+    @classmethod
     def _validate_axis(cls, axis_name: str, value: int) -> None:
         if not cls.MIN <= value <= cls.MAX:
             msg = f"{axis_name} must be between {cls.MIN} and {cls.MAX}: {value}"
@@ -115,6 +195,12 @@ class Stick:
         if value < 0:
             return cls.CENTER + round(value * (cls.CENTER - cls.MIN))
         return cls.CENTER + round(value * (cls.MAX - cls.CENTER))
+
+    @classmethod
+    def _validate_amount(cls, value: float) -> None:
+        if not 0.0 <= value <= 1.0:
+            msg = f"amount must be between 0.0 and 1.0: {value}"
+            raise InvalidInputError(msg)
 
 
 @dataclass(frozen=True)

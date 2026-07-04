@@ -31,6 +31,8 @@ Unit tests は `tests/unit/` に置く。
 
 - `Stick.raw()` が範囲外値を拒否する
 - `Stick.normalized()` が `-1.0` から `1.0` の値を raw 値へ変換する
+- `Stick.tilt()` が `Stick.normalized()` と同じ正規化座標を扱う
+- `Stick.up()` / `down()` / `left()` / `right()` が方向 preset と `amount` 範囲を固定する
 - `InputState.neutral()` が空の button 集合と center stick を持つ
 - `InputState` が immutable に扱える
 

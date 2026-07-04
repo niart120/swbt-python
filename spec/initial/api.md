@@ -9,7 +9,7 @@
 - 入力状態は `InputState` として明示的に扱う
 - 短い操作には `tap()`、`press()`、`release()` を提供する
 - 完全な状態更新には `apply()` を提供する
-- stick だけの状態更新には `sticks()` を提供し、axis 値は `Stick` に閉じ込める
+- stick だけの状態更新には `lstick()`、`rstick()`、`sticks()` を提供し、axis 値は `Stick` に閉じ込める
 - 終了時は `neutral()` または `close(neutral=True)` により入力を戻せるようにする
 - API は `asyncio` 前提にする
 - duration を伴う操作は protocol ではなく API helper の責務にする
@@ -66,7 +66,8 @@ async def main() -> None:
     async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
         await pad.connect(timeout=30.0)
 
-        await pad.sticks(left=Stick.normalized(x=0.0, y=1.0))
+        await pad.lstick(Stick.up())
+        await pad.rstick(Stick.right(0.5))
 
         await asyncio.sleep(0.2)
         await pad.neutral()
@@ -85,7 +86,7 @@ async def main() -> None:
         await pad.connect(timeout=30.0)
 
         state = InputState.neutral().with_buttons([Button.L, Button.R]).with_sticks(
-            left_stick=Stick.normalized(x=0.0, y=1.0),
+            left_stick=Stick.up(),
         )
         await pad.apply(state)
 
@@ -212,6 +213,8 @@ async def sticks(
     left: Stick | None = None,
     right: Stick | None = None,
 ) -> None: ...
+async def lstick(self, stick: Stick) -> None: ...
+async def rstick(self, stick: Stick) -> None: ...
 async def neutral(self) -> None: ...
 
 async def press(self, *buttons: Button) -> None: ...
@@ -219,9 +222,9 @@ async def release(self, *buttons: Button) -> None: ...
 async def tap(self, *buttons: Button, duration: float = 0.08) -> None: ...
 ```
 
-`press()`、`release()`、`sticks()`、`neutral()`、`apply()` は state update API である。接続は要求せず、即時送信もしない。接続中は次の periodic report で反映される。
+`press()`、`release()`、`lstick()`、`rstick()`、`sticks()`、`neutral()`、`apply()` は state update API である。接続は要求せず、即時送信もしない。接続中は次の periodic report で反映される。
 
-`apply()` は完成済みの `InputState` で現在入力全体を置き換える。差分適用ではない。`sticks()` は左右どちらか、または両方の stick だけを置き換える。`sticks()` は `Stick` だけを受け、tuple や raw int tuple は受けない。
+`apply()` は完成済みの `InputState` で現在入力全体を置き換える。差分適用ではない。`lstick()` は left stick だけを置き換え、`rstick()` は right stick だけを置き換える。`sticks()` は左右どちらか、または両方の stick だけを置き換える。stick API は `Stick` だけを受け、tuple や raw int tuple は受けない。
 
 `tap()` は action API である。接続済みを要求し、押下 report と release report を即時送信する。release 対象は `tap()` に渡した button だけであり、既に押されていた他の button は維持する。
 
@@ -326,9 +329,26 @@ class Stick:
 
     @classmethod
     def normalized(cls, *, x: float, y: float) -> "Stick": ...
+
+    @classmethod
+    def tilt(cls, x: float, y: float) -> "Stick": ...
+
+    @classmethod
+    def up(cls, amount: float = 1.0) -> "Stick": ...
+
+    @classmethod
+    def down(cls, amount: float = 1.0) -> "Stick": ...
+
+    @classmethod
+    def left(cls, amount: float = 1.0) -> "Stick": ...
+
+    @classmethod
+    def right(cls, amount: float = 1.0) -> "Stick": ...
 ```
 
 `normalized()` は `-1.0` から `1.0` の値を受け取り、内部 raw 値へ変換する。範囲外の値は例外にする。
+
+`tilt(x, y)` は `normalized(x=x, y=y)` と同じ正規化座標を使う短い生成 API である。`up()`、`down()`、`left()`、`right()` は単一方向の倒し込み量を `amount=0.0..1.0` で受ける。`Stick.tilt(1.0, 1.0)` は x/y を個別に検証する既存の矩形座標モデルとして許可する。
 
 ## 7. 例外設計
 

@@ -144,10 +144,31 @@ await pad.neutral()
 ```python
 from swbt import Stick
 
-await pad.sticks(left=Stick.normalized(x=0.0, y=1.0))
+await pad.lstick(Stick.up())
+await pad.lstick(Stick.up(0.5))
 ```
 
-`sticks()` は `Stick` だけを受けます。tuple や raw tuple は受けません。
+`lstick()` は left stick だけを置き換える state update API です。`Stick.up()` は全倒し、`Stick.up(0.5)` は半倒しです。
+
+### Tilt The Right Stick
+
+```python
+from swbt import Stick
+
+await pad.rstick(Stick.right())
+```
+
+`rstick()` は right stick だけを置き換えます。
+
+### Arbitrary Stick Coordinates
+
+```python
+from swbt import Stick
+
+await pad.sticks(left=Stick.tilt(0.7, 0.7))
+```
+
+`Stick.tilt(x, y)` は `Stick.normalized(x=x, y=y)` と同じ `-1.0..1.0` の正規化座標を使う短い生成 API です。`sticks()`、`lstick()`、`rstick()` は `Stick` だけを受けます。tuple や raw tuple は受けません。
 
 ### Press B And Tilt The Left Stick
 
@@ -155,7 +176,7 @@ await pad.sticks(left=Stick.normalized(x=0.0, y=1.0))
 
 ```python
 await pad.press(Button.B)
-await pad.sticks(left=Stick.normalized(x=0.0, y=1.0))
+await pad.lstick(Stick.up())
 ```
 
 完全同時入力が必要な場合は、complete `InputState` を作って `apply()` します。
@@ -164,7 +185,7 @@ await pad.sticks(left=Stick.normalized(x=0.0, y=1.0))
 from swbt import Button, InputState, Stick
 
 state = InputState.neutral().with_buttons([Button.B]).with_sticks(
-    left_stick=Stick.normalized(x=0.0, y=1.0),
+    left_stick=Stick.up(),
 )
 await pad.apply(state)
 ```

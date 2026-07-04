@@ -105,17 +105,21 @@ async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as 
 | `press(*buttons)` | state update API | 現在の button set に button を追加する。即時送信を保証しない。 |
 | `release(*buttons)` | state update API | 現在の button set から button を取り除く。即時送信を保証しない。 |
 | `sticks(left=None, right=None)` | state update API | 指定された stick だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
+| `lstick(stick)` | state update API | left stick だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
+| `rstick(stick)` | state update API | right stick だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
 | `neutral()` | state update API | `InputState.neutral()` 相当に戻す。即時送信を保証しない。 |
 | `apply(state)` | complete state | 完成済み `InputState` で現在入力全体を置き換える。差分適用ではない。 |
 | `tap(*buttons, duration=0.08)` | action API | 接続済みを要求し、押下 report と release report を即時送信する。 |
 
 `tap()` の release は、この呼び出しで渡した button だけを解除します。事前に `press()` していた別 button は維持します。
 
-`press()` の直後に `sticks()` を呼んでも、同一 HID report に入る保証はありません。button と stick を完全な同時入力として扱う場合は complete state を作り、`apply(state)` に渡してください。
+`lstick(stick)` は `sticks(left=stick)`、`rstick(stick)` は `sticks(right=stick)` と同じ state update API です。左右を同じ状態更新で置き換える場合は `sticks(left=..., right=...)` を使います。
+
+`press()` の直後に `lstick()`、`rstick()`、`sticks()` を呼んでも、同一 HID report に入る保証はありません。button と stick を完全な同時入力として扱う場合は complete state を作り、`apply(state)` に渡してください。
 
 ```python
 state = InputState.neutral().with_buttons([Button.B]).with_sticks(
-    left_stick=Stick.normalized(x=0.0, y=1.0),
+    left_stick=Stick.up(),
 )
 await pad.apply(state)
 ```
@@ -131,6 +135,8 @@ await pad.apply(state)
 `Button` は `A`、`B`、`X`、`Y`、`L`、`R`、`ZL`、`ZR`、`PLUS`、`MINUS`、`HOME`、`CAPTURE`、`LEFT_STICK`、`RIGHT_STICK`、`DPAD_UP`、`DPAD_DOWN`、`DPAD_LEFT`、`DPAD_RIGHT` を持ちます。
 
 `Stick.center()` は中央位置を返します。`Stick.raw(x=..., y=...)` は `0..4095` の raw 値を受けます。`Stick.normalized(x=..., y=...)` は `-1.0..1.0` を raw 値へ変換します。
+
+`Stick.tilt(x, y)` は `Stick.normalized(x=x, y=y)` と同じ正規化座標を使う短い生成 API です。`Stick.up(amount=1.0)`、`Stick.down(amount=1.0)`、`Stick.left(amount=1.0)`、`Stick.right(amount=1.0)` は単一方向の倒し込み量を `0.0..1.0` で受けます。`amount=0.0` は中央、`amount=1.0` は全倒しです。`Stick.tilt(1.0, 1.0)` は x/y を個別に検証する既存の矩形座標モデルとして許可します。
 
 `IMUFrame.neutral()` は移動なしの IMU frame を返します。`InputState.neutral()` は button なし、左右 stick 中央、neutral IMU frame の状態を返します。`InputState.with_buttons(...)` と `InputState.with_sticks(...)` は新しい immutable state を返します。
 

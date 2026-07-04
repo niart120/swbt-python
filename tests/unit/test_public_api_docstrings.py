@@ -47,6 +47,11 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         Stick.center,
         Stick.raw,
         Stick.normalized,
+        Stick.tilt,
+        Stick.up,
+        Stick.down,
+        Stick.left,
+        Stick.right,
         IMUFrame.neutral,
         InputState.neutral,
     ):
@@ -87,6 +92,8 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         (SwitchGamepad.press, ("Args:", "buttons", "does not send")),
         (SwitchGamepad.apply, ("Args:", "state", "does not send")),
         (SwitchGamepad.sticks, ("Args:", "left", "right", "does not send")),
+        (SwitchGamepad.lstick, ("Args:", "stick", "left stick", "does not send")),
+        (SwitchGamepad.rstick, ("Args:", "stick", "right stick", "does not send")),
         (SwitchGamepad.release, ("Args:", "buttons", "does not send")),
         (SwitchGamepad.neutral, ("InputState.neutral()", "without immediate transmission")),
         (

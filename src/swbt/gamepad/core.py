@@ -406,6 +406,32 @@ class SwitchGamepad:
         self._validate_stick("right", right)
         await self._state_store.sticks(left=left, right=right)
 
+    async def lstick(self, stick: Stick) -> None:
+        """Replace the left stick position without immediate transmission.
+
+        Args:
+            stick: Replacement for the left stick.
+
+        Raises:
+            InvalidInputError: ``stick`` is not a ``Stick``.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        await self.sticks(left=stick)
+
+    async def rstick(self, stick: Stick) -> None:
+        """Replace the right stick position without immediate transmission.
+
+        Args:
+            stick: Replacement for the right stick.
+
+        Raises:
+            InvalidInputError: ``stick`` is not a ``Stick``.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        await self.sticks(right=stick)
+
     async def release(self, *buttons: Button) -> None:
         """Remove buttons from the current input state.
 

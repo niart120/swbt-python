@@ -75,7 +75,7 @@ input
 
 ### 2.1 `SwitchGamepad`
 
-利用者が直接扱う公開 API の中心。resource scope の `open()` / `close()`、明示接続 API の `pair()` / `connect()` / `reconnect()`、入力操作の `tap()`、`press()`、`release()`、`sticks()`、`apply()`、`neutral()` を提供する。
+利用者が直接扱う公開 API の中心。resource scope の `open()` / `close()`、明示接続 API の `pair()` / `connect()` / `reconnect()`、入力操作の `tap()`、`press()`、`release()`、`lstick()`、`rstick()`、`sticks()`、`apply()`、`neutral()` を提供する。
 
 `SwitchGamepad` は内部に `InputStateStore`、`ReportLoop`、`SwitchHidProtocol`、`HidDeviceTransport` を保持する。ただし、利用者にそれらの内部状態を直接操作させない。
 
