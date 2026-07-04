@@ -198,8 +198,8 @@ M6 では次を追加する。
 
 同時操作の方針は次の通り。
 
-- `set_input()`、`press()`、`release()`、`neutral()` は `InputStateStore` の lock で保護する
+- `apply()`、`sticks()`、`press()`、`release()`、`neutral()` は `InputStateStore` の lock で保護する
 - `open()` と `close()` は lifecycle lock で直列化する
-- `tap()` は途中で他 task の `set_input()` と競合する可能性があるため、documented behavior を明確にする
+- `tap()` は途中で他 task の state update API と競合する可能性があるため、documented behavior を明確にする
 
 初期実装では、同一 `SwitchGamepad` に対する複雑な同時 macro 実行は保証しない。必要になった場合は、上位に macro scheduler を追加する。

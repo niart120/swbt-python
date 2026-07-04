@@ -8,7 +8,8 @@
 - Bluetooth や Bumble の詳細は public API に露出させない
 - 入力状態は `InputState` として明示的に扱う
 - 短い操作には `tap()`、`press()`、`release()` を提供する
-- 完全な状態更新には `set_input()` を提供する
+- 完全な状態更新には `apply()` を提供する
+- stick だけの状態更新には `sticks()` を提供し、axis 値は `Stick` に閉じ込める
 - 終了時は `neutral()` または `close(neutral=True)` により入力を戻せるようにする
 - API は `asyncio` 前提にする
 - duration を伴う操作は protocol ではなく API helper の責務にする
@@ -59,18 +60,13 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from swbt import SwitchGamepad, InputState, Stick
+from swbt import SwitchGamepad, Stick
 
 async def main() -> None:
     async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
         await pad.connect(timeout=30.0)
 
-        await pad.set_input(
-            InputState.neutral().with_sticks(
-                left_stick=Stick.normalized(x=0.0, y=1.0),
-                right_stick=Stick.center(),
-            )
-        )
+        await pad.sticks(left=Stick.normalized(x=0.0, y=1.0))
 
         await asyncio.sleep(0.2)
         await pad.neutral()
@@ -78,7 +74,30 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### 2.4 fake transport を使う
+### 2.4 ボタンとスティックを同じ状態として反映する
+
+```python
+import asyncio
+from swbt import Button, InputState, Stick, SwitchGamepad
+
+async def main() -> None:
+    async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+        await pad.connect(timeout=30.0)
+
+        state = InputState.neutral().with_buttons([Button.L, Button.R]).with_sticks(
+            left_stick=Stick.normalized(x=0.0, y=1.0),
+        )
+        await pad.apply(state)
+
+        await asyncio.sleep(0.2)
+        await pad.neutral()
+
+asyncio.run(main())
+```
+
+`press()` と `sticks()` のような複数の state update API 呼び出しは、同じ HID report に入ることを保証しない。完全に同じ状態として反映したい入力は `InputState` を作って `apply()` に渡す。
+
+### 2.5 fake transport を使う
 
 ```python
 import asyncio
@@ -186,7 +205,13 @@ async def close(self, *, neutral: bool = True) -> None: ...
 ### 3.3 入力操作
 
 ```python
-async def set_input(self, state: InputState) -> None: ...
+async def apply(self, state: InputState) -> None: ...
+async def sticks(
+    self,
+    *,
+    left: Stick | None = None,
+    right: Stick | None = None,
+) -> None: ...
 async def neutral(self) -> None: ...
 
 async def press(self, *buttons: Button) -> None: ...
@@ -194,7 +219,11 @@ async def release(self, *buttons: Button) -> None: ...
 async def tap(self, *buttons: Button, duration: float = 0.08) -> None: ...
 ```
 
-`set_input()` は現在入力全体を置き換える。`press()` と `release()` は現在入力のボタン集合だけを更新し、即時送信はしない。接続中は次の periodic report で反映される。`tap()` は `press()`、即時送信、sleep、`release()`、即時送信を組み合わせた helper として実装する。
+`press()`、`release()`、`sticks()`、`neutral()`、`apply()` は state update API である。接続は要求せず、即時送信もしない。接続中は次の periodic report で反映される。
+
+`apply()` は完成済みの `InputState` で現在入力全体を置き換える。差分適用ではない。`sticks()` は左右どちらか、または両方の stick だけを置き換える。`sticks()` は `Stick` だけを受け、tuple や raw int tuple は受けない。
+
+`tap()` は action API である。接続済みを要求し、押下 report と release report を即時送信する。release 対象は `tap()` に渡した button だけであり、既に押されていた他の button は維持する。
 
 `tap()` の `duration` は秒単位とする。packet protocol へ duration を埋め込まない。
 
@@ -332,6 +361,7 @@ class InvalidKeyStoreError(SwbtError): ...
 初期実装では次を public API に含めない。
 
 - raw HID packet 送信 API
+- `set_input()` の互換 alias
 - daemon IPC API
 - 高水準 rumble API
 - amiibo / NFC API
