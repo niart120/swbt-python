@@ -128,7 +128,7 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
         "https://zadig.akeo.ie/",
         "Zadig 2.x User Guide",
         "swbt-probe adapters --json",
-        "Switch-facing pairing",
+        "Switch に向けた pairing",
         "USB HCI transport",
         "libusb",
         "OS 側設定",
@@ -150,14 +150,17 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
         "left / right stick",
         "Linux",
         "macOS",
-        "unsupported",
-        "untrusted",
+        "experimental",
+        "Linux / macOS の手順",
+        "動作検証されていないことに留意してください",
+        "未確認",
+        "Bumble USB transport で必要なこと",
         "libusb_package",
         "apt install libusb-1.0-0",
         "hciconfig hciX down",
         "brew install libusb",
         'bluetoothHostControllerSwitchBehavior="never"',
-        "USB device への権限",
+        "USB デバイスへのアクセス権",
         "CSR8510 A10 以外",
         "PC の通常 Bluetooth 機能",
         "key_store_path",
@@ -167,6 +170,17 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
     ):
         assert token in text
 
+    assert "| Linux | experimental |" in text
+    assert "| macOS | experimental |" in text
+    assert "| Linux | supported |" not in text
+    assert "| macOS | supported |" not in text
+    assert "unsupported / untrusted" not in text
+    assert "experimental" + " target" not in text
+    assert "準備" + "候補" not in text
+    assert "source" + " fact" not in text
+    assert "dependency" + " sync" not in text
+    assert "supported としては" + "扱いません" not in text
+    assert "試す前に" + "確認すること" not in text
     assert "設計上できるはず" not in text
     assert "保証" in text
 
@@ -219,6 +233,11 @@ def test_public_docs_do_not_carry_stale_or_placeholder_wording() -> None:
         "TBD",
         "xxx",
         "設計上できるはず",
+        "準備" + "候補",
+        "source" + " fact",
+        "dependency" + " sync",
+        "supported としては" + "扱いません",
+        "試す前に" + "確認すること",
         "この文書は",
         "このサイトでは",
         "このページでは",

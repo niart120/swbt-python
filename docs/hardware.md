@@ -15,14 +15,34 @@
 
 ### Driver / USB Access
 
-Bumble の `usb:` adapter は USB HCI transport を libusb 経由で開きます。
+Bumble の `usb:` adapter は USB HCI transport を libusb 経由で使用します。
 ここでの driver 準備は、OS の Bluetooth 機能で使う driver ではなく、専用 dongle を Bumble から直接開くための OS 側設定を指します。
 
 | OS | status | 準備 |
 |---|---|---|
 | Windows | supported | Zadig などで専用 dongle に WinUSB / libwdi driver を導入する |
-| Linux | unsupported / untrusted | Bumble 同梱の `libusb_package` で `libusb-1.0` を解決できない場合は、OS 側に `apt install libusb-1.0-0` で導入する。USB device への権限を与え、kernel / BlueZ が dongle を掴んでいる場合は `hciconfig hciX down` などで解放する |
-| macOS | unsupported / untrusted | 外付け HCI を macOS Bluetooth stack が掴まないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` を設定する。Bumble 同梱の `libusb_package` で `libusb-1.0` を解決できない場合は、OS 側に `brew install libusb` で導入する |
+| Linux | experimental | `libusb-1.0` が使えること、USB デバイスにアクセスできること、kernel / BlueZ が対象 dongle を使用中でないことを確認する |
+| macOS | experimental | `libusb-1.0` が使えることと、macOS Bluetooth stack が外付け HCI を使用しない設定になっていることを確認する |
+
+#### Bumble USB transport で必要なこと
+
+Bumble の `usb:` adapter は USB HCI transport を libusb 経由で扱います。Bumble の USB transport documentation では、`usb:` moniker、`libusb-1.0`、`usb_probe` / `lsusb` による列挙確認が示されています。
+
+`swbt-python` の lock file では Bumble 0.0.230 と `libusb1` / `libusb-package` dependency を固定しています。
+
+#### Linux / macOS の手順
+
+Linux / macOS の手順はこの Hardware Guide に整備されていますが、動作検証されていないことに留意してください。
+
+Linux では、Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合、OS 側で `apt install libusb-1.0-0` が必要になることがあります。USB デバイスへのアクセス権を付け、kernel / BlueZ が dongle を使用中の場合は `hciconfig hciX down` などで解放する必要があります。
+
+macOS では、macOS Bluetooth stack が外付け HCI を使用しないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` の設定が必要になる場合があります。Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合は、OS 側で `brew install libusb` が必要になることがあります。
+
+#### Linux / macOS の未確認範囲
+
+Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用 adapter を使う前に確認する項目です。接続成功を保証するものではありません。
+
+このリポジトリでは、Linux / macOS 上の adapter listing、adapter open、HID advertising、pairing、reconnect、input reflection をまだ確認していません。macOS CI で確認するのは、依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までです。USB Bluetooth dongle は使いません。
 
 #### Windows Driver Setup
 
@@ -35,7 +55,7 @@ Zadig では次の順に進めます。
 - 専用 USB Bluetooth dongle を接続し、Zadig を管理者権限で起動する。
 - 対象の dongle を選択する。
 - 一覧に出ない場合は `Options > List All Devices` を使う。
-- 選択した USB device の VID / PID が対象 dongle と一致することを確認する。
+- 選択した USB デバイスの VID / PID が対象 dongle と一致することを確認する。
 - driver は `WinUSB` を選ぶ。
 - `Install Driver` を実行する。
 
@@ -49,7 +69,7 @@ driver 準備後、Bumble から見える adapter 名を確認します。
 swbt-probe adapters --json
 ```
 
-この command は adapter 一覧確認用です。Switch-facing pairing、HID advertising、report loop は開始しません。
+このコマンドは adapter 一覧確認用です。Switch に向けた pairing、HID advertising、report loop は開始しません。
 
 `adapter` には `usb:0` のような Bumble adapter 名を指定します。adapter 名は PC の接続状態で変わるため、コード例の `usb:0` を固定値として扱わないでください。
 
@@ -74,15 +94,14 @@ swbt-probe adapters --json
 
 確認済み条件の trace、Bumble version、Python version、driver version は [hardware-test-log](hardware-test-log.md) にあります。
 
-## Unsupported Environments
+## Experimental And Out-of-Scope Environments
 
-- Linux。
-- macOS。
+- Linux / macOS は experimental です。対応確認済みではありません。
 - CSR8510 A10 以外の Bluetooth dongle。
 - Switch 2 firmware 22.1.0 以外の対象機器と firmware。
 - PC の通常 Bluetooth 機能と同じ adapter を使う構成。
 
-Linux / macOS は supported ではありません。上の OS 準備は adapter を Bumble から開くための前提であり、接続成功を意味しません。Linux の kernel / BlueZ との競合解消、macOS の NVRAM 設定、実機 pairing、入力反映は未確認です。
+Linux / macOS で必要になる OS 側設定は、Bumble から専用 adapter を使うためのものです。設定しても接続成功を意味しません。Linux の kernel / BlueZ との競合解消、macOS の NVRAM 設定、実機 pairing、入力反映は未確認です。
 
 ## Troubleshooting
 
