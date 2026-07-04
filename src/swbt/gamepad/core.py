@@ -20,7 +20,7 @@ from swbt.gamepad.connection import (
 )
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.transport_factory import create_default_transport
-from swbt.input import Button, InputState
+from swbt.input import Button, InputState, Stick
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
@@ -380,13 +380,31 @@ class SwitchGamepad:
         """
         await self._state_store.press(*buttons)
 
-    async def set_input(self, state: InputState) -> None:
-        """Replace the current input state.
+    async def apply(self, state: InputState) -> None:
+        """Replace the current input state without immediate transmission.
 
         Args:
             state: Complete input state to commit.
+
+        This updates local state only and does not send an immediate input report.
         """
-        await self._state_store.set_input(state)
+        await self._state_store.apply(state)
+
+    async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
+        """Replace one or both stick positions without immediate transmission.
+
+        Args:
+            left: Optional replacement for the left stick.
+            right: Optional replacement for the right stick.
+
+        Raises:
+            InvalidInputError: ``left`` or ``right`` is not a ``Stick``.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        self._validate_stick("left", left)
+        self._validate_stick("right", right)
+        await self._state_store.sticks(left=left, right=right)
 
     async def release(self, *buttons: Button) -> None:
         """Remove buttons from the current input state.
@@ -399,11 +417,11 @@ class SwitchGamepad:
         await self._state_store.release(*buttons)
 
     async def neutral(self) -> None:
-        """Return the current input state to ``InputState.neutral()``."""
+        """Return local input state to ``InputState.neutral()`` without immediate transmission."""
         await self._state_store.neutral()
 
     async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
-        """Press buttons briefly and then release them.
+        """Send a short connected button action.
 
         Args:
             buttons: Buttons to press for the tap.
@@ -411,6 +429,9 @@ class SwitchGamepad:
 
         Raises:
             ClosedError: The gamepad is not open and cannot send input reports.
+
+        The tap sends immediate press and release input reports. The release step
+        removes only the buttons supplied to this call, preserving other held buttons.
         """
         self._require_connected_for_input()
         await self.press(*buttons)
@@ -489,6 +510,12 @@ class SwitchGamepad:
         if self._report_loop is None or not self._connected_event.is_set():
             msg = "gamepad is not connected"
             raise ClosedError(msg)
+
+    @staticmethod
+    def _validate_stick(name: str, value: Stick | None) -> None:
+        if value is not None and not isinstance(value, Stick):
+            msg = f"{name} must be a Stick"
+            raise InvalidInputError(msg)
 
     def _record_run_metadata(self) -> None:
         key_store_exists: bool | None = None

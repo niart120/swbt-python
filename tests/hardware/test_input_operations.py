@@ -662,7 +662,7 @@ def test_switch_stick_calibration_after_active_reconnect_for_manual_reflection(
                     stick=stick_name,
                 )
 
-                await pad.set_input(_stick_state(stick_name, Stick.normalized(x=1.0, y=0.0)))
+                await pad.apply(_stick_state(stick_name, Stick.normalized(x=1.0, y=0.0)))
                 hold_start_count = pad.status().report_counters.get(0x30, 0)
                 _record_probe_event(
                     trace,
@@ -880,7 +880,7 @@ async def _send_stick_circle(
 ) -> None:
     for step in range(_STICK_CIRCLE_STEPS):
         angle = 2 * math.pi * step / _STICK_CIRCLE_STEPS
-        await pad.set_input(
+        await pad.apply(
             _stick_state(
                 stick_name,
                 Stick.normalized(x=math.cos(angle), y=math.sin(angle)),

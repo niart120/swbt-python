@@ -2,7 +2,7 @@
 
 import asyncio
 
-from swbt.input import Button, InputState
+from swbt.input import Button, InputState, Stick
 
 
 class InputStateStore:
@@ -23,10 +23,16 @@ class InputStateStore:
         """Return the latest committed input state."""
         return self._state
 
-    async def set_input(self, state: InputState) -> InputState:
+    async def apply(self, state: InputState) -> InputState:
         """Replace the current input state."""
         async with self._lock:
             self._state = state
+            return self._state
+
+    async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> InputState:
+        """Replace one or both stick positions."""
+        async with self._lock:
+            self._state = self._state.with_sticks(left_stick=left, right_stick=right)
             return self._state
 
     async def press(self, *buttons: Button) -> InputState:

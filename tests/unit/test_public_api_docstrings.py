@@ -85,10 +85,14 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         ),
         (SwitchGamepad.close, ("Args:", "neutral")),
         (SwitchGamepad.press, ("Args:", "buttons", "does not send")),
-        (SwitchGamepad.set_input, ("Args:", "state")),
+        (SwitchGamepad.apply, ("Args:", "state", "does not send")),
+        (SwitchGamepad.sticks, ("Args:", "left", "right", "does not send")),
         (SwitchGamepad.release, ("Args:", "buttons", "does not send")),
-        (SwitchGamepad.neutral, ("InputState.neutral()",)),
-        (SwitchGamepad.tap, ("Args:", "buttons", "duration", "Raises:", "ClosedError")),
+        (SwitchGamepad.neutral, ("InputState.neutral()", "without immediate transmission")),
+        (
+            SwitchGamepad.tap,
+            ("Args:", "buttons", "duration", "Raises:", "ClosedError", "immediate", "preserving"),
+        ),
         (SwitchGamepad.status, ("Returns:", "GamepadStatus")),
         (SwitchGamepad.snapshot, ("Returns:", "InputState")),
     )

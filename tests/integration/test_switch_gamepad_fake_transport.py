@@ -3,6 +3,7 @@ import json
 import platform
 from io import StringIO
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -12,6 +13,7 @@ from swbt.errors import (
     ClosedError,
     ConnectionFailedError,
     ConnectionTimeoutError,
+    InvalidInputError,
     InvalidKeyStoreError,
 )
 from swbt.transport.fake import FakeHidTransport
@@ -301,14 +303,14 @@ def test_release_only_clears_requested_buttons_in_next_periodic_report() -> None
     asyncio.run(run())
 
 
-def test_set_input_updates_snapshot_and_next_periodic_report() -> None:
+def test_apply_updates_snapshot_and_next_periodic_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
         state = InputState.neutral().with_buttons([Button.X])
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.set_input(state)
+            await pad.apply(state)
 
             assert pad.snapshot() == state
 
@@ -319,7 +321,11 @@ def test_set_input_updates_snapshot_and_next_periodic_report() -> None:
     asyncio.run(run())
 
 
-def test_set_input_reflects_left_and_right_sticks_in_next_periodic_report() -> None:
+def test_set_input_is_not_public_method() -> None:
+    assert not hasattr(SwitchGamepad, "set_input")
+
+
+def test_apply_reflects_left_and_right_sticks_in_next_periodic_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
         state = InputState.neutral().with_sticks(
@@ -329,7 +335,7 @@ def test_set_input_reflects_left_and_right_sticks_in_next_periodic_report() -> N
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.set_input(state)
+            await pad.apply(state)
 
             start_count = len(transport.sent_interrupt_reports)
             reports = await transport.wait_for_interrupt_report_count(start_count + 1)
@@ -341,6 +347,134 @@ def test_set_input_reflects_left_and_right_sticks_in_next_periodic_report() -> N
     asyncio.run(run())
 
 
+def test_sticks_left_updates_only_left_stick_and_preserves_buttons_and_right_stick() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        right_stick = Stick.normalized(x=-1.0, y=1.0)
+        initial = InputState.neutral().with_buttons([Button.A]).with_sticks(right_stick=right_stick)
+        left_stick = Stick.normalized(x=1.0, y=-1.0)
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.apply(initial)
+
+            await pad.sticks(left=left_stick)
+
+            assert pad.snapshot() == initial.with_sticks(left_stick=left_stick)
+
+            start_count = len(transport.sent_interrupt_reports)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 1)
+            report = reports[-1]
+
+            assert report[3:6] == bytes.fromhex("08 00 00")
+            assert report[6:9] == bytes.fromhex("ff 0f 00")
+            assert report[9:12] == bytes.fromhex("00 f0 ff")
+
+    asyncio.run(run())
+
+
+def test_sticks_right_updates_only_right_stick_and_preserves_buttons_and_left_stick() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        left_stick = Stick.normalized(x=1.0, y=-1.0)
+        initial = InputState.neutral().with_buttons([Button.B]).with_sticks(left_stick=left_stick)
+        right_stick = Stick.normalized(x=-1.0, y=1.0)
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+            await pad.apply(initial)
+
+            await pad.sticks(right=right_stick)
+
+            assert pad.snapshot() == initial.with_sticks(right_stick=right_stick)
+
+            start_count = len(transport.sent_interrupt_reports)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 1)
+            report = reports[-1]
+
+            assert report[3:6] == bytes.fromhex("04 00 00")
+            assert report[6:9] == bytes.fromhex("ff 0f 00")
+            assert report[9:12] == bytes.fromhex("00 f0 ff")
+
+    asyncio.run(run())
+
+
+def test_sticks_updates_left_and_right_in_same_committed_state() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        left_stick = Stick.normalized(x=1.0, y=-1.0)
+        right_stick = Stick.normalized(x=-1.0, y=1.0)
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+
+            await pad.sticks(left=left_stick, right=right_stick)
+
+            assert pad.snapshot() == InputState.neutral().with_sticks(
+                left_stick=left_stick,
+                right_stick=right_stick,
+            )
+
+            start_count = len(transport.sent_interrupt_reports)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 1)
+            report = reports[-1]
+
+            assert report[6:9] == bytes.fromhex("ff 0f 00")
+            assert report[9:12] == bytes.fromhex("00 f0 ff")
+
+    asyncio.run(run())
+
+
+def test_sticks_rejects_tuple_inputs() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport) as pad:
+            with pytest.raises(InvalidInputError):
+                await pad.sticks(left=cast("Stick", (0.0, 1.0)))
+
+            with pytest.raises(InvalidInputError):
+                await pad.sticks(right=cast("Stick", (0, 4095)))
+
+    asyncio.run(run())
+
+
+def test_state_update_apis_do_not_require_connection() -> None:
+    async def run() -> None:
+        pad = SwitchGamepad(transport=FakeHidTransport())
+        left_stick = Stick.normalized(x=0.0, y=1.0)
+        state = InputState.neutral().with_buttons([Button.X])
+
+        await pad.press(Button.A)
+        await pad.release(Button.A)
+        await pad.sticks(left=left_stick)
+        await pad.apply(state)
+        await pad.neutral()
+
+        assert pad.snapshot() == InputState.neutral()
+
+    asyncio.run(run())
+
+
+def test_state_update_apis_do_not_send_immediate_interrupt_reports() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport, report_period_us=60_000_000) as pad:
+            await transport.connect()
+            report_count = len(transport.sent_interrupt_reports)
+
+            await pad.press(Button.A)
+            await pad.release(Button.A)
+            await pad.sticks(left=Stick.normalized(x=0.0, y=1.0))
+            await pad.apply(InputState.neutral().with_buttons([Button.X]))
+            await pad.neutral()
+
+            assert len(transport.sent_interrupt_reports) == report_count
+
+    asyncio.run(run())
+
+
 def test_neutral_updates_snapshot_and_clears_next_periodic_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
@@ -348,7 +482,7 @@ def test_neutral_updates_snapshot_and_clears_next_periodic_report() -> None:
 
         async with SwitchGamepad(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
-            await pad.set_input(pressed)
+            await pad.apply(pressed)
             pressed_count = len(transport.sent_interrupt_reports)
             pressed_reports = await transport.wait_for_interrupt_report_count(pressed_count + 1)
             assert pressed_reports[-1][3:6] == bytes.fromhex("08 00 00")
@@ -1291,6 +1425,25 @@ def test_tap_button_a_records_press_and_release_reports() -> None:
             assert pressed[3:6] == bytes.fromhex("08 00 00")
             assert released[0] == 0x30
             assert released[3:6] == bytes.fromhex("00 00 00")
+
+    asyncio.run(run())
+
+
+def test_tap_releases_only_tapped_button_and_preserves_held_buttons() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with SwitchGamepad(transport=transport) as pad:
+            await transport.connect()
+            await pad.press(Button.ZL)
+
+            await pad.tap(Button.A, duration=0)
+
+            assert pad.snapshot() == InputState.neutral().with_buttons([Button.ZL])
+            assert len(transport.sent_interrupt_reports) == 2
+            pressed, released = transport.sent_interrupt_reports
+            assert pressed[3:6] == bytes.fromhex("08 00 80")
+            assert released[3:6] == bytes.fromhex("00 00 80")
 
     asyncio.run(run())
 

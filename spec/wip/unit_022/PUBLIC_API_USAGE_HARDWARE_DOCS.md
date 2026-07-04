@@ -13,7 +13,7 @@ README に詰め込んでいる公開 API、目的別の使い方、実機依存
 | source | 内容 | path |
 |---|---|---|
 | GitHub Issue #29 | `docs/api.md`、`docs/usage.md`、`docs/hardware.md`、`docs/agent-brief.md` の追加要件 | https://github.com/niart120/swbt-python/issues/29 |
-| prerequisite unit | `apply()` / `sticks()`、`set_input()` 廃止、state update / action / complete state の最終 contract | `spec/wip/unit_021/SWITCH_GAMEPAD_INPUT_API_CONTRACT.md` |
+| prerequisite unit | `apply()` / `sticks()`、`set_input()` 廃止、state update / action / complete state の最終 contract | `spec/complete/unit_021/SWITCH_GAMEPAD_INPUT_API_CONTRACT.md` |
 | current public exports | top-level import surface | `src/swbt/__init__.py` |
 | current API implementation | `SwitchGamepad`、connection methods、input methods、status / snapshot | `src/swbt/gamepad/core.py` |
 | initial design | 公開 API、入力状態、例外、transport extension point | `spec/initial/api.md` |
@@ -55,7 +55,7 @@ README に詰め込んでいる公開 API、目的別の使い方、実機依存
 
 ## 4. 関連 docs
 
-- `spec/wip/unit_021/SWITCH_GAMEPAD_INPUT_API_CONTRACT.md`
+- `spec/complete/unit_021/SWITCH_GAMEPAD_INPUT_API_CONTRACT.md`
 - `spec/initial/api.md`
 - `spec/initial/lifecycle.md`
 - `spec/initial/testing.md`
@@ -113,7 +113,7 @@ README に詰め込んでいる公開 API、目的別の使い方、実機依存
 - `docs/usage.md` は使い方中心にする。API の全引数説明を重複させすぎない。
 - `docs/hardware.md` は `docs/hardware-test-log.md` の要約であり、実機ログそのものではない。観測日、構成、未確認範囲を分ける。
 - `docs/agent-brief.md` は短く保つ。AI エージェントが未実装 API を作りがちな箇所だけを明示する。
-- `unit_021` が未完了の状態でこの unit を実装する場合、docs は「提案」ではなく現在実装済み API に合わせる。`apply()` / `sticks()` を docs に載せるのは実装後に限る。
+- `unit_021` は完了済みである。docs は `apply()` / `sticks()` / `set_input()` 廃止を現在の public API contract として扱う。
 
 ## 9. 対象ファイル
 

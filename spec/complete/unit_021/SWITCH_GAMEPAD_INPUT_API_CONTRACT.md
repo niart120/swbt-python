@@ -14,10 +14,10 @@
 |---|---|---|
 | GitHub Issue #28 | input API の責務整理。state update、action、complete state の分類、`apply()` / `sticks()` の判断、macro / sequence を追加しない方針 | https://github.com/niart120/swbt-python/issues/28 |
 | user clarification | `set_input()` は廃止し、互換目的の alias は残さない | conversation, 2026-07-04 |
-| current implementation | `press()` / `release()` / `neutral()` / `set_input()` / `tap()` の現状。`apply()` と `sticks()` は未実装 | `src/swbt/gamepad/core.py` |
+| implementation result | `apply()` / `sticks()` を追加し、`set_input()` は public method として廃止した。`press()` / `release()` / `sticks()` / `neutral()` / `apply()` は state update API、`tap()` は action API として固定した | `src/swbt/gamepad/core.py` |
 | current implementation | `InputState.with_sticks(left_stick=..., right_stick=...)` と `Stick.normalized()` / `Stick.raw()` は実装済み | `src/swbt/input.py` |
-| current implementation | `InputStateStore` は button 更新、complete state replacement、neutral を持つが stick 更新 helper はない | `src/swbt/state_store.py` |
-| initial design | 公開 API、入力状態、`set_input()`、`tap()`、`press()` / `release()` の位置付け | `spec/initial/api.md` |
+| implementation result | `InputStateStore` は complete state replacement と stick 更新 helper を持つ | `src/swbt/state_store.py` |
+| initial design | 公開 API、入力状態、`apply()`、`sticks()`、`tap()`、`press()` / `release()` の位置付け | `spec/initial/api.md` |
 | completed unit | M5 入力操作 API。`tap()`、`press()` / `release()`、`set_input()`、`status()` の既存 contract | `spec/complete/unit_006/M5_INPUT_OPERATION_API.md` |
 | completed unit | post-M5 入力意味検証。D-pad と left / right stick の実機反映観測 | `spec/complete/unit_013/POST_M5_INPUT_SEMANTIC_CHARACTERIZATION.md` |
 | completed unit | API hardening。`tap()` fail-safe、`press()` / `release()` の非即時送信 docstring、top-level export | `spec/complete/unit_017/SWITCH_GAMEPAD_API_HARDENING.md` |
@@ -60,6 +60,8 @@
 ## 4. 関連 docs
 
 - `spec/initial/api.md`
+- `spec/initial/architecture.md`
+- `spec/initial/lifecycle.md`
 - `spec/initial/testing.md`
 - `spec/initial/roadmap.md`
 - `spec/complete/unit_006/M5_INPUT_OPERATION_API.md`
@@ -96,18 +98,18 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | `SwitchGamepad.apply(state)` が snapshot を complete replacement する | new | integration | no | `InputState` 全体の置き換えとして固定する |
-| todo | `SwitchGamepad.set_input` が public method として残っていない | breaking cleanup | unit / integration | no | pre-alpha の整理として互換 alias は置かない |
-| todo | `sticks(left=...)` は left stick だけを更新し、right stick と button set を維持する | new | integration | no | fake transport の次 periodic report で確認 |
-| todo | `sticks(right=...)` は right stick だけを更新し、left stick と button set を維持する | new | integration | no | left / right を分けて固定 |
-| todo | `sticks(left=..., right=...)` は左右 stick を同じ committed state に更新する | new | integration | no | helper 内の state replacement を確認 |
-| todo | `sticks()` は tuple や raw int tuple を受けず、`Stick` だけを受ける | edge | unit / integration | no | runtime validation が必要なら `InvalidInputError` |
-| todo | `press()` / `release()` / `sticks()` / `neutral()` / `apply()` は未接続でも state update できる | regression | integration | no | open 前または fake transport 未接続で確認 |
-| todo | state update API は即時 interrupt report を送らない | regression | integration | no | report count が増えないことを確認 |
-| todo | `tap(Button.A)` は未接続時に state を残さず `ClosedError` を投げる | regression | integration | no | unit_017 の contract を維持 |
-| todo | `tap(Button.A)` は既存押下 button を維持し、A だけ release する | new | integration | no | `press(Button.ZL)` 後の tap で確認 |
-| todo | docstring が state update、action、complete state の違いを説明する | regression | unit | no | `tests/unit/test_public_api_docstrings.py` |
-| todo | `spec/initial/api.md` が `apply()` / `sticks()` 採用と `set_input()` 廃止に一致する | docs | unit | no | docs drift 防止 |
+| green | `SwitchGamepad.apply(state)` が snapshot を complete replacement する | new | integration | no | `test_apply_updates_snapshot_and_next_periodic_report` で固定 |
+| green | `SwitchGamepad.set_input` が public method として残っていない | breaking cleanup | unit / integration | no | `test_set_input_is_not_public_method` で互換 alias なしを固定 |
+| green | `sticks(left=...)` は left stick だけを更新し、right stick と button set を維持する | new | integration | no | `test_sticks_left_updates_only_left_stick_and_preserves_buttons_and_right_stick` で確認 |
+| green | `sticks(right=...)` は right stick だけを更新し、left stick と button set を維持する | new | integration | no | `test_sticks_right_updates_only_right_stick_and_preserves_buttons_and_left_stick` で確認 |
+| green | `sticks(left=..., right=...)` は左右 stick を同じ committed state に更新する | new | integration | no | `test_sticks_updates_left_and_right_in_same_committed_state` で確認 |
+| green | `sticks()` は tuple や raw int tuple を受けず、`Stick` だけを受ける | edge | unit / integration | no | `test_sticks_rejects_tuple_inputs` で `InvalidInputError` を確認 |
+| green | `press()` / `release()` / `sticks()` / `neutral()` / `apply()` は未接続でも state update できる | regression | integration | no | `test_state_update_apis_do_not_require_connection` で確認 |
+| green | state update API は即時 interrupt report を送らない | regression | integration | no | `test_state_update_apis_do_not_send_immediate_interrupt_reports` で確認 |
+| green | `tap(Button.A)` は未接続時に state を残さず `ClosedError` を投げる | regression | integration | no | unit_017 由来の `test_tap_before_connection_does_not_leave_pressed_state` を維持 |
+| green | `tap(Button.A)` は既存押下 button を維持し、A だけ release する | new | integration | no | `test_tap_releases_only_tapped_button_and_preserves_held_buttons` で確認 |
+| green | docstring が state update、action、complete state の違いを説明する | regression | unit | no | `tests/unit/test_public_api_docstrings.py` |
+| green | `spec/initial/api.md` が `apply()` / `sticks()` 採用と `set_input()` 廃止に一致する | docs | unit | no | `spec/initial/architecture.md`、`lifecycle.md`、`roadmap.md` も追従 |
 | deferred | sequence runner / macro API を設計する | deferred | docs | no | この unit では追加しない |
 
 ## 8. 設計メモ
@@ -125,25 +127,33 @@
 | path | change | 内容 |
 |---|---|---|
 | `src/swbt/gamepad/core.py` | modify | `apply()`、`sticks()`、docstring、state update / action contract |
-| `src/swbt/state_store.py` | modify | stick state update helper または replacement helper |
-| `src/swbt/input.py` | modify | 必要なら helper naming / docstring を更新。value object の範囲は変えない |
+| `src/swbt/state_store.py` | modify | complete replacement helper と stick state update helper |
+| `src/swbt/input.py` | inspect | 既存の `InputState.with_sticks()` と `Stick` value object をそのまま使用 |
 | `spec/initial/api.md` | modify | `apply()` / `sticks()` 採用、`set_input()` 廃止、同時性 contract を反映 |
+| `spec/initial/architecture.md` | modify | `SwitchGamepad` の公開入力 API 一覧を追従 |
+| `spec/initial/lifecycle.md` | modify | state update API の lock 対象と `tap()` 競合説明を追従 |
+| `spec/initial/roadmap.md` | modify | M1 入力操作 API 名を追従 |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | fake transport integration で API contract を固定 |
 | `tests/unit/test_public_api_docstrings.py` | modify | docstring contract を固定 |
-| `README.md` | modify | 必要なら最小例の API 名を採用結果へ追従 |
-| `examples/*.py` | modify | `set_input()` を使っている例を `apply()` に寄せる |
-| `spec/wip/unit_021/SWITCH_GAMEPAD_INPUT_API_CONTRACT.md` | new / modify | この作業仕様 |
+| `tests/hardware/test_input_operations.py` | modify | 実機未実行のまま、API 呼び出し名を `apply()` へ追従 |
+| `README.md` | inspect | `set_input()` 利用例なし。既存最小例は `tap()` / `neutral()` のまま維持 |
+| `examples/*.py` | inspect | `set_input()` 利用例なし。既存例は `tap()` 中心のため変更なし |
+| `spec/complete/unit_021/SWITCH_GAMEPAD_INPUT_API_CONTRACT.md` | move / modify | この作業仕様 |
 
 ## 10. 検証
 
 | command | result | notes |
 |---|---|---|
-| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -q` | not run | 実装後に fake transport API contract を確認する |
-| `uv run pytest tests\unit\test_public_api_docstrings.py -q` | not run | 実装後に docstring drift を確認する |
-| `uv run ruff format --check .` | not run | 実装後の標準 gate |
-| `uv run ruff check .` | not run | 実装後の標準 gate |
-| `uv run ty check --no-progress` | not run | 実装後の標準 gate |
-| `uv run pytest tests\unit` | not run | 実装後の標準 gate |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_apply_updates_snapshot_and_next_periodic_report tests\integration\test_switch_gamepad_fake_transport.py::test_set_input_is_not_public_method tests\integration\test_switch_gamepad_fake_transport.py::test_sticks_left_updates_only_left_stick_and_preserves_buttons_and_right_stick tests\unit\test_public_api_docstrings.py::test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors -q` | red | 4 failed。`apply()` / `sticks()` 未実装と `set_input` 残存を確認 |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | 63 passed |
+| `uv run pytest tests\unit\test_public_api_docstrings.py -q` | pass | 2 passed |
+| `uv sync --dev` | pass | Resolved 41 packages / Checked 41 packages |
+| `uv run ruff format --check .` | pass | 68 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\unit -q` | pass | 163 passed |
+| `uv run pytest tests\integration -q` | pass | 63 passed |
+| `uv run pytest tests\hardware --collect-only -q` | pass | 18 tests collected。実機は未実行 |
 
 ## 11. 実機実行条件
 
@@ -170,7 +180,7 @@
 - [x] Issue #28 を起点として対象範囲と対象外を整理した
 - [x] TDD Test List の初期案を作成した
 - [x] 根拠監査と実機実行条件を記録した
-- [ ] `apply()` / `sticks()` を実装し、`set_input()` を廃止した
-- [ ] public docs / docstring / initial design を実装結果へ追従した
-- [ ] 検証結果を実行結果で更新した
-- [ ] 完了条件を満たしたら `spec/complete` へ移動する
+- [x] `apply()` / `sticks()` を実装し、`set_input()` を廃止した
+- [x] public docs / docstring / initial design を実装結果へ追従した
+- [x] 検証結果を実行結果で更新した
+- [x] 完了条件を満たしたため `spec/complete` へ移動する
