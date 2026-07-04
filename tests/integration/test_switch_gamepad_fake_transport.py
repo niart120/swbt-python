@@ -1,6 +1,7 @@
 import asyncio
 import json
 import platform
+from importlib import metadata
 from io import StringIO
 from pathlib import Path
 from typing import cast
@@ -150,7 +151,7 @@ def test_key_store_path_is_recorded_in_run_metadata(tmp_path: Path) -> None:
             "key_store_path": str(key_store_path),
             "key_store_previous_exists": False,
             "os": platform.system(),
-            "package_version": "0.1.0",
+            "package_version": metadata.version("swbt-python"),
             "python_version": platform.python_version(),
         } in events
 
@@ -189,7 +190,7 @@ def test_key_store_previous_generation_is_recorded_in_run_metadata(tmp_path: Pat
             "key_store_path": str(key_store_path),
             "key_store_previous_exists": True,
             "os": platform.system(),
-            "package_version": "0.1.0",
+            "package_version": metadata.version("swbt-python"),
             "python_version": platform.python_version(),
         } in events
 

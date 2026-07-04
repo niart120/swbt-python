@@ -1,6 +1,6 @@
 [project]
 name = "swbt-python"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python library for presenting an NX-compatible virtual Bluetooth HID input device."
 readme = "README.md"
 authors = [
