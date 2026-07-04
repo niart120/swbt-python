@@ -1,6 +1,6 @@
 # Hardware
 
-この文書は実機、Bluetooth adapter、driver、pairing / reconnect、troubleshooting の正本です。ここに書く確認済み範囲は `docs/hardware-test-log.md` と completed specs の観測に限定します。別構成への保証には使いません。
+実機、Bluetooth adapter、driver、pairing / reconnect、troubleshooting の確認済み条件は、`docs/hardware-test-log.md` と completed specs の観測に基づきます。別構成に同じ結果を保証しません。
 
 ## Requirements
 

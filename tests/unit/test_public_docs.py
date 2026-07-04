@@ -6,10 +6,13 @@ import swbt
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
+DOC_INDEX = DOCS / "index.md"
 API_DOC = DOCS / "api.md"
 USAGE_DOC = DOCS / "usage.md"
 HARDWARE_DOC = DOCS / "hardware.md"
+HARDWARE_LOG = DOCS / "hardware-test-log.md"
 AGENT_BRIEF = DOCS / "agent-brief.md"
+PUBLIC_DOCS = (DOC_INDEX, API_DOC, USAGE_DOC, HARDWARE_DOC, HARDWARE_LOG, AGENT_BRIEF)
 
 
 def _read(path: Path) -> str:
@@ -17,7 +20,7 @@ def _read(path: Path) -> str:
 
 
 def test_public_docs_files_exist() -> None:
-    for path in (API_DOC, USAGE_DOC, HARDWARE_DOC, AGENT_BRIEF):
+    for path in PUBLIC_DOCS:
         assert path.is_file(), f"missing public docs file: {path}"
 
 
@@ -189,7 +192,7 @@ def test_agent_brief_keeps_generation_on_implemented_public_api() -> None:
 
 
 def test_public_docs_do_not_carry_stale_or_placeholder_wording() -> None:
-    text = "\n".join(_read(path) for path in (API_DOC, USAGE_DOC, HARDWARE_DOC, AGENT_BRIEF))
+    text = "\n".join(_read(path) for path in PUBLIC_DOCS)
 
     for stale_token in (
         "set_input",
@@ -198,5 +201,10 @@ def test_public_docs_do_not_carry_stale_or_placeholder_wording() -> None:
         "TBD",
         "xxx",
         "設計上できるはず",
+        "この文書は",
+        "このサイトでは",
+        "このページでは",
+        "まとめています",
+        "参照してください",
     ):
         assert stale_token not in text

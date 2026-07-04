@@ -25,7 +25,7 @@ def test_readme_documents_dedicated_adapter_and_driver_notes() -> None:
     text = README.read_text(encoding="utf-8")
 
     assert "専用 USB Bluetooth dongle" in text
-    assert "`docs/hardware.md`" in text
+    assert "https://niart120.github.io/swbt-python/hardware/" in text
     assert "WinUSB" in text
     assert "troubleshooting" in text
 
@@ -48,7 +48,21 @@ def test_readme_records_current_switch_model_and_firmware_evidence() -> None:
     assert "model / firmware は未記録" not in text
 
 
-def test_readme_links_public_docs() -> None:
+def test_readme_links_public_docs_with_https_urls() -> None:
+    text = README.read_text(encoding="utf-8")
+
+    for docs_url in (
+        "https://niart120.github.io/swbt-python/",
+        "https://niart120.github.io/swbt-python/api/",
+        "https://niart120.github.io/swbt-python/usage/",
+        "https://niart120.github.io/swbt-python/hardware/",
+        "https://niart120.github.io/swbt-python/hardware-test-log/",
+        "https://niart120.github.io/swbt-python/agent-brief/",
+    ):
+        assert docs_url in text
+
+
+def test_readme_avoids_relative_markdown_links_for_pypi_rendering() -> None:
     text = README.read_text(encoding="utf-8")
 
     for docs_path in (
@@ -56,18 +70,11 @@ def test_readme_links_public_docs() -> None:
         "docs/api.md",
         "docs/usage.md",
         "docs/hardware.md",
+        "docs/hardware-test-log.md",
         "docs/agent-brief.md",
     ):
-        assert f"`{docs_path}`" in text
-
-
-def test_readme_documents_local_and_published_docs_site() -> None:
-    text = README.read_text(encoding="utf-8")
-
-    assert "https://niart120.github.io/swbt-python/" in text
-    assert "uv sync --group docs" in text
-    assert "uv run mkdocs serve" in text
-    assert "uv run mkdocs build --strict" in text
+        assert f"]({docs_path})" not in text
+        assert f"`{docs_path}`" not in text
 
 
 def test_readme_keeps_detailed_hardware_and_key_store_guidance_in_docs() -> None:

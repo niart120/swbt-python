@@ -35,7 +35,6 @@ def test_docs_index_explains_site_scope_and_links_docs() -> None:
     text = DOCS_INDEX.read_text(encoding="utf-8")
 
     assert "swbt-python" in text
-    assert "README" in text
     assert "docs/api.md" in text
     assert "docs/usage.md" in text
     assert "docs/hardware.md" in text

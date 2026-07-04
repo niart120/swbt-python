@@ -1,12 +1,12 @@
 # Public API
 
-この文書は `swbt-python` の公開 API 仕様です。通常利用では `swbt` module root から import します。
+`swbt-python` の公開 API は `swbt` module root から import します。
 
 ```python
 from swbt import Button, IMUFrame, InputState, Stick, SwitchGamepad
 ```
 
-`swbt.gamepad.*` や `swbt.transport.*` の deep import は、テスト、移行作業、custom transport 実装時だけに限定してください。`HidDeviceTransport` は custom transport 用の public extension point です。Bumble 型を public API に露出しません。
+`swbt.gamepad.*` や `swbt.transport.*` の deep import は、テスト、移行作業、custom transport 実装に限定します。`HidDeviceTransport` は custom transport 用の public extension point です。Bumble 型を public API に露出しません。
 
 ## Top-Level Exports
 
@@ -17,18 +17,18 @@ from swbt import Button, IMUFrame, InputState, Stick, SwitchGamepad
 | `SwitchGamepad` | 利用者が操作する仮想 gamepad |
 | `SwitchGamepadConfig` | `from_config()` 用の resource 設定 |
 | `ConnectionResult` | `try_connect()` / `try_reconnect()` の結果 |
-| `Button` | 対応ボタン |
-| `Stick` | 12-bit stick 位置 |
-| `IMUFrame` | IMU frame 値 |
-| `InputState` | immutable な完全入力状態 |
+| `Button` | 対応する各種ボタン |
+| `Stick` | スティック入力 |
+| `IMUFrame` | IMU frame |
+| `InputState` | イミュータブルな完全入力状態 |
 | `DiagnosticsConfig` | diagnostics trace 設定 |
-| `GamepadStatus` | `status()` の snapshot |
+| `GamepadStatus` | `status()` のスナップショット |
 | `HidDeviceTransport` | custom transport の Protocol |
 | `BondedPeer` | transport が返す bonded peer 候補 |
 | `DisconnectRequestResult` | remote disconnect request の結果 |
-| `SwbtError` | swbt 例外の基底 class |
+| `SwbtError` | swbt 例外基底 class |
 | `TransportOpenError` | adapter / transport open 失敗 |
-| `ConnectionTimeoutError` | 接続待ち timeout |
+| `ConnectionTimeoutError` | 接続待ちのタイムアウト |
 | `ConnectionFailedError` | timeout 以外の接続不成立 |
 | `ClosedError` | 接続済みまたは open 済み resource が必要な操作の失敗 |
 | `InvalidInputError` | 引数値や入力値の不正 |
@@ -48,9 +48,9 @@ pad = SwitchGamepad(
 )
 ```
 
-`adapter` は default Bumble transport に渡す adapter moniker です。default transport を使う場合は必須です。`transport` を注入する custom transport では `adapter` を省略できます。
+`adapter` は default Bumble transport に渡す adapter 名称です。default transport を使う場合は必須です。custom transport を注入する場合は `adapter` を省略できます。
 
-`key_store_path` は default Bumble transport が pairing key を保存する JSON key store path です。1 つの仮想 controller と 1 つの対象機器の組み合わせごとに分けてください。`None` は永続 bond を持たない一時的な controller を意味します。
+`key_store_path` は default Bumble transport が pairing key を保存する JSON key store path です。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに分けてください。`None` は永続 bond を持たない一時的なコントローラーを意味します。
 
 `report_period_us` は periodic input report の送信周期です。`device_name` は HID Device として出す表示名です。
 
@@ -98,7 +98,7 @@ async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 ### Input
 
-入力 API は state update API、action API、complete state API に分かれます。
+入力 API は state update API、action API、complete state API に分類されます。
 
 | method | 種別 | contract |
 |---|---|---|
@@ -133,13 +133,13 @@ await pad.apply(state)
 
 `snapshot()` は現在の `InputState` を返します。`status()` は `GamepadStatus` を返します。
 
-`GamepadStatus` は `connection_state`、`report_counters`、`last_subcommand_id`、`raw_rumble`、`last_error` を持ちます。状態監視や diagnostics の確認用であり、高頻度 control path には使いません。
+`GamepadStatus` は `connection_state`、`report_counters`、`last_subcommand_id`、`raw_rumble`、`last_error` を持ちます。
 
 ## Input Model
 
 `Button` は `A`、`B`、`X`、`Y`、`L`、`R`、`ZL`、`ZR`、`PLUS`、`MINUS`、`HOME`、`CAPTURE`、`LEFT_STICK`、`RIGHT_STICK`、`DPAD_UP`、`DPAD_DOWN`、`DPAD_LEFT`、`DPAD_RIGHT` を持ちます。
 
-`Stick.center()` は中央位置を返します。`Stick.raw(x=..., y=...)` は `0..4095` の raw 値を受けます。`Stick.normalized(x=..., y=...)` は `-1.0..1.0` を raw 値へ変換します。
+`Stick.center()` はスティックの中央位置を返します。`Stick.raw(x=..., y=...)` は `0..4095` の生の値を受けます。`Stick.normalized(x=..., y=...)` は `-1.0..1.0` を生の値へ変換します。
 
 `Stick.tilt(x, y)` は `Stick.normalized(x=x, y=y)` と同じ正規化座標を使う短い生成 API です。`Stick.up(amount=1.0)`、`Stick.down(amount=1.0)`、`Stick.left(amount=1.0)`、`Stick.right(amount=1.0)` は単一方向の倒し込み量を `0.0..1.0` で受けます。`amount=0.0` は中央、`amount=1.0` は全倒しです。`Stick.tilt(1.0, 1.0)` は x/y を個別に検証する既存の矩形座標モデルとして許可します。
 
