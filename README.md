@@ -56,7 +56,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-この例は adapter を開き、HID advertising、pairing または reconnect、periodic report loop、入力送信を行います。専用 USB Bluetooth dongle と接続情報のファイルパスを指定し、終了時は neutral を送ってから接続を閉じます。
+この例は専用 Bluetooth adapter を使い、HID advertising、pairing または reconnect、periodic report loop、入力送信を行います。専用 USB Bluetooth dongle と接続情報のファイルパスを指定し、終了時は neutral を送ってから接続を閉じます。
 
 接続方法、`key_store_path`、入力 API の使い分けは [Usage Guide](https://niart120.github.io/swbt-python/usage/) にあります。
 
@@ -72,7 +72,7 @@ driver 準備、adapter 名の確認、troubleshooting は [Hardware Guide](http
 
 ### 試験的構成
 
-Linux / macOS は experimental です。手順は Hardware Guide に整備されていますが、動作検証されていないことに留意してください。adapter を開けること、pairing、入力反映は未確認です。
+Linux / macOS は experimental です。手順は Hardware Guide に整備されていますが、動作検証されていないことに留意してください。adapter が開けるか、pairing できるか、入力が反映されるかは未確認です。
 
 CSR8510 A10 以外の Bluetooth dongle、Switch 2 firmware 22.1.0 以外の対象機器は確認済み構成に含めていません。
 
