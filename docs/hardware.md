@@ -129,7 +129,7 @@ key store は controller profile ごとに分けてください。Pro Controller
 
 同じ profile でも、接続先の対象機器を分ける場合は key store も分けます。1 つの key store は「1 つの対象機器」と「1 つの controller profile」の組み合わせに固定してください。
 
-Joy-Con profile の実機互換は未検証です。2026-07-06 の Joy-Con L run では、`Joy-Con (L)` の device name、Joy-Con L device-info reply、Switch からの subcommand 応答、neutral report loop、clean close までは trace で確認しました。後続 run では、Joy-Con L の観測済み初期 sequence `0x02` / `0x08` / `0x10` / `0x03` / `0x04` / `0x40` / `0x30` / `0x48` に返信した後、`Button.SR` + `Button.SL` を約 5 秒間押下状態で periodic report に乗せました。ユーザ目視では pairing 自体は完了しましたが、登録 toast は Pro Controller のままで、コントローラーの順番画面は Joy-Con L として表示されました。次の検証では、Device Info の Bluetooth address が実 transport の local address と一致しているか、Switch 側 toast が Joy-Con へ変わるかを分けて記録してください。Joy-Con 固有の pairing button / 登録完了手順、reconnect、入力反映、SDP の細部一致、OS / dongle / firmware をまたぐ互換性は確認済みとして扱わないでください。
+Joy-Con profile の実機互換は限定的な観測です。2026-07-06 の Joy-Con L run では、`Joy-Con (L)` の device name、Joy-Con L device-info reply、Switch からの subcommand 応答、neutral report loop、clean close を trace で確認しました。SDP policy 反映後の retest では、Joy-Con L の観測済み初期 sequence `0x02` / `0x08` / `0x10` / `0x03` / `0x04` / `0x40` / `0x30` / `0x48` に返信した後、`Button.SR` + `Button.SL` を約 5 秒間押下状態で periodic report に乗せ、ユーザ目視では Switch UI で Joy-Con として登録されました。Joy-Con 固有の reconnect、通常入力反映、Joy-Con R、SDP の細部一致、OS / dongle / firmware をまたぐ互換性は確認済みとして扱わないでください。
 
 Bumble adapter open、HID advertising、Switch pairing、Switch-facing output report / subcommand handling、periodic input report loop は実機または USB Bluetooth dongle に触れる操作です。Joy-Con profile でこれらを試す場合も、対象 adapter、実行 command、Switch-facing 動作範囲、cleanup plan を明示したうえで、人間の承認を得てから実行してください。
 

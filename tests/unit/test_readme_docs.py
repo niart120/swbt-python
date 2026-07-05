@@ -73,11 +73,10 @@ def test_readme_documents_single_joycon_public_api_and_scope() -> None:
         "SR+SL を送ります",
         "Pro Controller、Joy-Con L、Joy-Con R では `key_store_path` を分けてください",
         "`JoyConPair` は未実装",
-        "Joy-Con profile の実機互換",
+        "Switch UI で Joy-Con として登録",
+        "Joy-Con R、reconnect",
         "SDP 完全一致",
         "OS / dongle / firmware をまたぐ互換性は未検証",
-        "登録 toast は Pro Controller",
-        "順番画面は Joy-Con L",
     ):
         assert token in text
 
