@@ -3,7 +3,7 @@
 `swbt-python` の公開 API は `swbt` module root から import します。
 
 ```python
-from swbt import Button, IMUFrame, InputState, Stick, SwitchGamepad
+from swbt import AdapterInfo, Button, IMUFrame, InputState, Stick, SwitchGamepad
 ```
 
 `swbt.gamepad.*` や `swbt.transport.*` の deep import は、テスト、移行作業、custom transport 実装に限定します。`HidDeviceTransport` は custom transport 用の public extension point です。Bumble 型を public API に露出しません。
@@ -14,6 +14,8 @@ from swbt import Button, IMUFrame, InputState, Stick, SwitchGamepad
 
 | name | 用途 |
 |---|---|
+| `list_adapters` | `SwitchGamepad(adapter=...)` に渡せる USB Bluetooth adapter 候補の列挙 |
+| `AdapterInfo` | adapter 候補の no-open snapshot |
 | `SwitchGamepad` | 利用者が操作する仮想 gamepad |
 | `SwitchGamepadConfig` | `from_config()` 用の resource 設定 |
 | `ConnectionResult` | `try_connect()` / `try_reconnect()` の結果 |
@@ -27,12 +29,35 @@ from swbt import Button, IMUFrame, InputState, Stick, SwitchGamepad
 | `BondedPeer` | transport が返す bonded peer 候補 |
 | `DisconnectRequestResult` | remote disconnect request の結果 |
 | `SwbtError` | swbt 例外基底 class |
+| `AdapterDiscoveryError` | no-open adapter 列挙の失敗 |
 | `TransportOpenError` | adapter / transport open 失敗 |
 | `ConnectionTimeoutError` | 接続待ちのタイムアウト |
 | `ConnectionFailedError` | timeout 以外の接続不成立 |
 | `ClosedError` | 接続済みまたは open 済み resource が必要な操作の失敗 |
 | `InvalidInputError` | 引数値や入力値の不正 |
 | `InvalidKeyStoreError` | key store の未対応形式または複数 current peer |
+
+## Adapter Discovery
+
+```python
+from swbt import AdapterDiscoveryError, list_adapters
+
+try:
+    adapters = list_adapters()
+except AdapterDiscoveryError as error:
+    print(error.backend, error.platform, error.bumble_version)
+else:
+    for info in adapters:
+        print(info.name, info.aliases)
+```
+
+`list_adapters()` は PC に接続された専用 USB Bluetooth dongle 候補を返します。Nintendo Switch 本体や周辺 Bluetooth host は列挙しません。
+
+戻り値は `tuple[AdapterInfo, ...]` です。候補が 0 件の場合は空 tuple を返します。libusb の読み込み、USB context 作成、device iteration の開始に失敗した場合は `AdapterDiscoveryError` を投げます。候補 0 件と列挙不能は別の状態です。
+
+`AdapterInfo.name` は `SwitchGamepad(adapter=info.name)` に渡す adapter moniker です。`AdapterInfo.aliases` には `usb:0A12:0001`、`usb:0A12:0001#1`、`usb:0A12:0001/ABC123` のような別指定を入れます。`usb:N` は USB 接続状態で変わり得ます。`serial_number` が取れる場合は serial alias を永続的な指定として使います。
+
+`list_adapters()` は USB descriptor を読むために libusb enumeration を行いますが、Bumble transport として device handle を開きません。adapter open、Bluetooth controller power on、HID advertising、pairing、periodic report loop は開始しません。候補が返っても、その adapter で `SwitchGamepad(adapter=...)` が open できることや対象機器と接続できることは保証しません。
 
 ## SwitchGamepad
 
@@ -149,7 +174,7 @@ await pad.apply(state)
 
 ## Errors And Diagnostics
 
-例外は `SwbtError` を基底にします。利用者入力の不正は `InvalidInputError`、transport open 失敗は `TransportOpenError`、接続 timeout は `ConnectionTimeoutError`、接続不成立は `ConnectionFailedError`、key store 形式不一致は `InvalidKeyStoreError` です。
+例外は `SwbtError` を基底にします。no-open adapter 列挙の失敗は `AdapterDiscoveryError`、利用者入力の不正は `InvalidInputError`、transport open 失敗は `TransportOpenError`、接続 timeout は `ConnectionTimeoutError`、接続不成立は `ConnectionFailedError`、key store 形式不一致は `InvalidKeyStoreError` です。
 
 `DiagnosticsConfig(trace_writer=...)` を渡すと JSON Lines trace を記録します。raw link key などの secret material は記録しません。
 

@@ -10,6 +10,7 @@ from typing import Protocol, TextIO
 
 import pytest
 
+from swbt import AdapterDiscoveryError, AdapterInfo
 from swbt import probe as probe_module
 
 
@@ -42,22 +43,126 @@ def test_swbt_probe_adapters_help_runs_without_opening_adapter() -> None:
     assert "does not open a Bluetooth adapter" in help_text
 
 
-def test_swbt_probe_adapters_json_reports_no_open_environment() -> None:
-    result = subprocess.run(
-        [sys.executable, "-m", "swbt.probe", "adapters", "--json"],
-        capture_output=True,
-        check=False,
-        text=True,
+def test_swbt_probe_adapters_json_reports_no_open_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        probe_module,
+        "list_adapters",
+        lambda: (
+            AdapterInfo(
+                name="usb:0",
+                aliases=("usb:0A12:0001", "usb:0A12:0001/ABC123"),
+                vendor_id=0x0A12,
+                product_id=0x0001,
+                manufacturer="Cambridge Silicon Radio",
+                product="Bluetooth Dongle",
+                serial_number="ABC123",
+                bus_number=1,
+                device_address=7,
+                port_numbers=(2, 4),
+                is_bluetooth_hci=True,
+            ),
+        ),
     )
 
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
+    exit_code = probe_module.main(["adapters", "--json"])
+    payload = json.loads(capsys.readouterr().out)
 
+    assert exit_code == 0
     assert payload["opens_adapter"] is False
-    assert payload["candidate_adapters"] == ["usb:0"]
+    assert "candidate_adapters" not in payload
+    assert payload["adapters"] == [
+        {
+            "aliases": ["usb:0A12:0001", "usb:0A12:0001/ABC123"],
+            "bus_number": 1,
+            "device_address": 7,
+            "is_bluetooth_hci": True,
+            "manufacturer": "Cambridge Silicon Radio",
+            "name": "usb:0",
+            "port_numbers": [2, 4],
+            "product": "Bluetooth Dongle",
+            "product_id": 1,
+            "product_id_hex": "0001",
+            "serial_number": "ABC123",
+            "vendor_id": 2578,
+            "vendor_id_hex": "0A12",
+        }
+    ]
     assert payload["platform"]
     assert payload["python_version"]
     assert payload["bumble_version"]
+
+
+def test_swbt_probe_adapters_json_reports_discovery_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    message = "libusb unavailable"
+
+    def fail_discovery() -> tuple[AdapterInfo, ...]:
+        raise AdapterDiscoveryError(
+            message,
+            platform="test-platform",
+            backend="bumble-usb",
+            libusb_available=False,
+            bumble_version="0.0.230",
+        )
+
+    monkeypatch.setattr(probe_module, "list_adapters", fail_discovery)
+
+    exit_code = probe_module.main(["adapters", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["status"] == "discovery_error"
+    assert payload["opens_adapter"] is False
+    assert payload["error"] == {
+        "backend": "bumble-usb",
+        "bumble_version": "0.0.230",
+        "libusb_available": False,
+        "message": "libusb unavailable",
+        "platform": "test-platform",
+        "type": "AdapterDiscoveryError",
+    }
+
+
+def test_swbt_probe_adapters_human_output_reports_no_open_and_candidate_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        probe_module,
+        "list_adapters",
+        lambda: (
+            AdapterInfo(
+                name="usb:0",
+                aliases=("usb:0A12:0001",),
+                vendor_id=0x0A12,
+                product_id=0x0001,
+                manufacturer="Cambridge Silicon Radio",
+                product="Bluetooth Dongle",
+                serial_number="ABC123",
+                bus_number=1,
+                device_address=7,
+                port_numbers=(2, 4),
+                is_bluetooth_hci=True,
+            ),
+        ),
+    )
+
+    exit_code = probe_module.main(["adapters"])
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "This command does not open a Bluetooth adapter." in output
+    assert "Candidate adapters:" in output
+    assert "usb:0" in output
+    assert "VID/PID: 0A12:0001" in output
+    assert "Cambridge Silicon Radio" in output
+    assert "Bluetooth Dongle" in output
+    assert "ABC123" in output
 
 
 def test_swbt_probe_pair_help_describes_approval_boundary() -> None:

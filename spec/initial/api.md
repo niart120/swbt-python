@@ -6,6 +6,7 @@
 
 - 利用者が最初に触る入口は `SwitchGamepad` にする
 - Bluetooth や Bumble の詳細は public API に露出させない
+- USB Bluetooth adapter 候補の確認は `list_adapters()` に分け、adapter open とは別の no-open API とする
 - 入力状態は `InputState` として明示的に扱う
 - 短い操作には `tap()`、`press()`、`release()` を提供する
 - 完全な状態更新には `apply()` を提供する
@@ -252,6 +253,33 @@ async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 `async with` は `open()` と `close(neutral=True)` を呼ぶ resource scope である。`__aenter__()` は HID advertising、pairing、reconnect を開始しない。
 
+## 3.6 Adapter discovery
+
+```python
+@dataclass(frozen=True, slots=True)
+class AdapterInfo:
+    name: str
+    aliases: tuple[str, ...]
+    vendor_id: int | None
+    product_id: int | None
+    manufacturer: str | None
+    product: str | None
+    serial_number: str | None
+    bus_number: int | None
+    device_address: int | None
+    port_numbers: tuple[int, ...]
+    is_bluetooth_hci: bool
+
+
+def list_adapters() -> tuple[AdapterInfo, ...]: ...
+```
+
+`list_adapters()` は `SwitchGamepad(adapter=...)` に渡す USB Bluetooth adapter 候補を返す。Nintendo Switch 本体や周辺 Bluetooth host は列挙しない。
+
+この API は libusb の USB device enumeration と descriptor 読み取りを行うが、Bumble transport として adapter を開かない。Bluetooth controller power on、HID advertising、pairing、report loop も開始しない。
+
+候補が 0 件の場合は空 tuple を返す。USB 列挙処理自体を開始できない場合は `AdapterDiscoveryError` を投げる。候補が返っても adapter open や対象機器との接続成功は保証しない。
+
 ## 4. `InputState`
 
 `InputState` は入力状態を表す値オブジェクトである。
@@ -400,6 +428,7 @@ class IMUFrame:
 
 ```python
 class SwbtError(Exception): ...
+class AdapterDiscoveryError(SwbtError): ...
 class TransportOpenError(SwbtError): ...
 class ConnectionTimeoutError(SwbtError): ...
 class ConnectionFailedError(SwbtError): ...
@@ -409,7 +438,7 @@ class InvalidInputError(SwbtError): ...
 class InvalidKeyStoreError(SwbtError): ...
 ```
 
-利用者の入力不正は `InvalidInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError`、timeout 以外の接続不成立は `ConnectionFailedError` として分ける。key store の unsupported shape や複数 current peer は `InvalidKeyStoreError` とする。
+no-open adapter 列挙の失敗は `AdapterDiscoveryError` とする。利用者の入力不正は `InvalidInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError`、timeout 以外の接続不成立は `ConnectionFailedError` として分ける。key store の unsupported shape や複数 current peer は `InvalidKeyStoreError` とする。
 
 ## 9. 非同期 API の扱い
 

@@ -3,6 +3,8 @@
 import inspect
 
 from swbt import (
+    AdapterDiscoveryError,
+    AdapterInfo,
     DiagnosticsConfig,
     GamepadStatus,
     IMUFrame,
@@ -10,6 +12,7 @@ from swbt import (
     Stick,
     SwitchGamepad,
     SwitchGamepadConfig,
+    list_adapters,
 )
 from swbt.gamepad import ConnectionResult
 
@@ -25,6 +28,22 @@ def _assert_doc_contains(obj: object, *tokens: str) -> None:
 def test_public_value_object_docstrings_describe_attributes_and_factory_returns() -> None:
     for cls, attributes in (
         (ConnectionResult, ("route", "status", "peer_address", "peer_count")),
+        (
+            AdapterInfo,
+            (
+                "name",
+                "aliases",
+                "vendor_id",
+                "product_id",
+                "manufacturer",
+                "product",
+                "serial_number",
+            ),
+        ),
+        (
+            AdapterDiscoveryError,
+            ("platform", "backend", "libusb_available", "bumble_version"),
+        ),
         (SwitchGamepadConfig, ("adapter", "key_store_path", "report_period_us", "device_name")),
         (DiagnosticsConfig, ("trace_writer",)),
         (
@@ -44,6 +63,7 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         _assert_doc_contains(cls, "Attributes:", *attributes)
 
     for factory in (
+        list_adapters,
         Stick.center,
         Stick.raw,
         Stick.normalized,
@@ -64,6 +84,8 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         InputState.with_accel,
     ):
         _assert_doc_contains(factory, "Returns:")
+
+    _assert_doc_contains(list_adapters, "Raises:", "AdapterDiscoveryError")
 
 
 def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors() -> None:

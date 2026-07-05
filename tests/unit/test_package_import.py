@@ -5,6 +5,8 @@ import swbt
 
 def test_package_exports_public_gamepad_surface() -> None:
     assert swbt.__all__ == (
+        "AdapterDiscoveryError",
+        "AdapterInfo",
         "BondedPeer",
         "Button",
         "ClosedError",
@@ -24,4 +26,5 @@ def test_package_exports_public_gamepad_surface() -> None:
         "SwitchGamepad",
         "SwitchGamepadConfig",
         "TransportOpenError",
+        "list_adapters",
     )
