@@ -122,7 +122,8 @@ def test_switch_joycon_profile_pairing_records_device_info(
         events,
         "manual_joycon_profile_checkpoint",
         expected_button_bytes=_expected_order_button_bytes(side),
-        operation="sr_sl_order_buttons_hold_complete",
+        input_report_delta_at_least_2=True,
+        operation="sr_sl_order_buttons_tap_complete",
         side=side,
     )
     assert _contains_event(
@@ -193,26 +194,32 @@ def _install_device_info_probe(pad: JoyCon, trace: TextIO, *, side: str) -> None
 
 
 async def _send_order_buttons(pad: JoyCon, trace: TextIO, *, side: str) -> None:
+    report_0x30_count_before = pad.status().report_counters.get(0x30, 0)
     _record_probe_event(
         trace,
         "manual_joycon_profile_checkpoint",
         expected_button_bytes=_expected_order_button_bytes(side),
         hold_seconds=_ORDER_BUTTON_HOLD_SECONDS,
+        report_0x30_count_before=report_0x30_count_before,
         operation="sr_sl_order_buttons_start",
         side=side,
     )
-    await pad.press(Button.SR, Button.SL)
-    await asyncio.sleep(_ORDER_BUTTON_HOLD_SECONDS)
+    await pad.tap(Button.SR, Button.SL, duration=_ORDER_BUTTON_HOLD_SECONDS)
+    report_0x30_count_after = pad.status().report_counters.get(0x30, 0)
+    input_report_delta = report_0x30_count_after - report_0x30_count_before
+    assert input_report_delta >= 2
     _record_probe_event(
         trace,
         "manual_joycon_profile_checkpoint",
         expected_button_bytes=_expected_order_button_bytes(side),
         hold_seconds=_ORDER_BUTTON_HOLD_SECONDS,
-        operation="sr_sl_order_buttons_hold_complete",
-        report_0x30_count=pad.status().report_counters.get(0x30, 0),
+        input_report_delta=input_report_delta,
+        input_report_delta_at_least_2=True,
+        operation="sr_sl_order_buttons_tap_complete",
+        report_0x30_count=report_0x30_count_after,
+        report_0x30_count_before=report_0x30_count_before,
         side=side,
     )
-    await pad.release(Button.SR, Button.SL)
     await pad.neutral()
     assert pad.snapshot() == InputState.neutral()
     _record_probe_event(
