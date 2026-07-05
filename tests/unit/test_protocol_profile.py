@@ -27,13 +27,13 @@ def test_pro_controller_hid_descriptor_report_ids_are_fixed() -> None:
     assert report_ids == [0x30, 0x21, 0x81, 0x01, 0x10, 0x80, 0x82]
 
 
-def test_controller_colors_default_to_daemon_body_button_seed_and_body_colored_grips() -> None:
+def test_controller_colors_default_to_joy_con_like_profile() -> None:
     colors = ControllerColors()
 
-    assert colors.body == 0x0D0D0D
+    assert colors.body == 0x323232
     assert colors.buttons == 0xFFFFFF
-    assert colors.left_grip == 0x0D0D0D
-    assert colors.right_grip == 0x0D0D0D
+    assert colors.left_grip == 0x00B2FF
+    assert colors.right_grip == 0xFF3B30
 
 
 def test_controller_colors_convert_to_spi_bytes_in_rgb_order() -> None:
@@ -47,12 +47,12 @@ def test_controller_colors_convert_to_spi_bytes_in_rgb_order() -> None:
     assert colors.to_spi_bytes() == bytes.fromhex("11 22 33 44 55 66 77 88 99 aa bb cc")
 
 
-def test_controller_colors_default_grip_colors_to_body_color() -> None:
+def test_controller_colors_omitted_grips_keep_their_own_default_colors() -> None:
     colors = ControllerColors(body=0x112233, buttons=0x445566)
 
-    assert colors.left_grip == 0x112233
-    assert colors.right_grip == 0x112233
-    assert colors.to_spi_bytes() == bytes.fromhex("11 22 33 44 55 66 11 22 33 11 22 33")
+    assert colors.left_grip == 0x00B2FF
+    assert colors.right_grip == 0xFF3B30
+    assert colors.to_spi_bytes() == bytes.fromhex("11 22 33 44 55 66 00 b2 ff ff 3b 30")
 
 
 def _controller_colors_with_invalid_field(field: str, value: object) -> ControllerColors:

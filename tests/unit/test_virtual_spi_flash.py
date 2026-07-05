@@ -14,7 +14,7 @@ def test_virtual_spi_flash_returns_seeded_device_type() -> None:
 def test_virtual_spi_flash_returns_seeded_default_controller_colors() -> None:
     spi = VirtualSpiFlash()
 
-    assert spi.read(0x6050, 12) == bytes.fromhex("0d 0d 0d ff ff ff 0d 0d 0d 0d 0d 0d")
+    assert spi.read(0x6050, 12) == bytes.fromhex("32 32 32 ff ff ff 00 b2 ff ff 3b 30")
 
 
 def test_virtual_spi_flash_returns_seeded_color_info_exists_flag() -> None:

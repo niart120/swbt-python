@@ -220,35 +220,29 @@ class ControllerColors:
     Attributes:
         body: Body color as a 24-bit RGB integer.
         buttons: Button color as a 24-bit RGB integer.
-        left_grip: Left grip color as a 24-bit RGB integer. ``None`` inherits ``body``.
-        right_grip: Right grip color as a 24-bit RGB integer. ``None`` inherits ``body``.
+        left_grip: Left grip color as a 24-bit RGB integer.
+        right_grip: Right grip color as a 24-bit RGB integer.
     """
 
-    body: int = 0x0D0D0D
+    body: int = 0x323232
     buttons: int = 0xFFFFFF
-    left_grip: int | None = None
-    right_grip: int | None = None
+    left_grip: int = 0x00B2FF
+    right_grip: int = 0xFF3B30
 
     def __post_init__(self) -> None:
         """Validate 24-bit RGB color values."""
         self._validate_rgb("body", self.body)
         self._validate_rgb("buttons", self.buttons)
-        left_grip = self.body if self.left_grip is None else self.left_grip
-        right_grip = self.body if self.right_grip is None else self.right_grip
-        self._validate_rgb("left_grip", left_grip)
-        self._validate_rgb("right_grip", right_grip)
-        object.__setattr__(self, "left_grip", left_grip)
-        object.__setattr__(self, "right_grip", right_grip)
+        self._validate_rgb("left_grip", self.left_grip)
+        self._validate_rgb("right_grip", self.right_grip)
 
     def to_spi_bytes(self) -> bytes:
         """Return body, button, and grip colors in Switch SPI RGB order."""
-        left_grip = self._grip_or_body(self.left_grip)
-        right_grip = self._grip_or_body(self.right_grip)
         return (
             self.body.to_bytes(3, "big")
             + self.buttons.to_bytes(3, "big")
-            + left_grip.to_bytes(3, "big")
-            + right_grip.to_bytes(3, "big")
+            + self.left_grip.to_bytes(3, "big")
+            + self.right_grip.to_bytes(3, "big")
         )
 
     @staticmethod
@@ -256,11 +250,6 @@ class ControllerColors:
         if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 0xFFFFFF:
             msg = f"{name} must be a 24-bit RGB integer"
             raise InvalidInputError(msg)
-
-    def _grip_or_body(self, value: int | None) -> int:
-        if value is None:
-            return self.body
-        return value
 
 
 @dataclass(frozen=True)

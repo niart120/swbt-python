@@ -70,7 +70,12 @@ pad = SwitchGamepad(
     key_store_path="switch-bond.json",
     report_period_us=8000,
     device_name="Pro Controller",
-    controller_colors=ControllerColors(body=0x0D0D0D, buttons=0xFFFFFF),
+    controller_colors=ControllerColors(
+        body=0x323232,
+        buttons=0xFFFFFF,
+        left_grip=0x00B2FF,
+        right_grip=0xFF3B30,
+    ),
     diagnostics=None,
 )
 ```
@@ -81,7 +86,7 @@ pad = SwitchGamepad(
 
 `report_period_us` は periodic input report の送信周期です。`device_name` は HID Device として出す表示名です。
 
-`controller_colors` は controller body / buttons / left grip / right grip の固定 profile 色です。`None` は既定の `ControllerColors(body=0x0D0D0D, buttons=0xFFFFFF)` を使います。`left_grip` と `right_grip` を省略すると `body` と同じ色になります。この値は作成時に固定し、`set_color()` や `controller_colors=` setter は提供しません。Switch からの SPI read に対して `0x6050` から body、buttons、left grip、right grip を各 3 bytes の順で返します。
+`controller_colors` は controller body / buttons / left grip / right grip の固定 profile 色です。`None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使います。各 field は独立した既定値を持ちます。この値は作成時に固定し、`set_color()` や `controller_colors=` setter は提供しません。Switch からの SPI read に対して `0x6050` から body、buttons、left grip、right grip を各 3 bytes の順で返します。
 
 `SwitchGamepadConfig` は同じ resource 設定を値として保持します。
 

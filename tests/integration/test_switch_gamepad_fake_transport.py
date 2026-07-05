@@ -736,7 +736,7 @@ def test_output_report_injection_uses_default_controller_colors_when_none() -> N
             assert reply[0] == 0x21
             assert reply[14] == 0x10
             assert reply[15:32] == bytes.fromhex(
-                "50 60 00 00 0c 0d 0d 0d ff ff ff 0d 0d 0d 0d 0d 0d"
+                "50 60 00 00 0c 32 32 32 ff ff ff 00 b2 ff ff 3b 30"
             )
 
     asyncio.run(run())

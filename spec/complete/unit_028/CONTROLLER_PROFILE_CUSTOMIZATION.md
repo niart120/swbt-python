@@ -39,9 +39,9 @@
 
 - `ControllerColors` value object の公開 API 設計。
 - `SwitchGamepad(controller_colors=...)` と `SwitchGamepadConfig.controller_colors` の constructor-time 設定。
-- 既定色は daemon dev seed と同じ `body=0x0D0D0D`, `buttons=0xFFFFFF` とし、`left_grip` / `right_grip` は未指定時に `body` と同じ値へ正規化する。
+- 既定色は Joy-Con-ish profile `body=0x323232`, `buttons=0xFFFFFF`, `left_grip=0x00B2FF`, `right_grip=0xFF3B30` とする。
 - `ControllerColors` は `body`、`buttons`、`left_grip`、`right_grip` を 24-bit RGB integer として受ける。
-- `controller_colors=None` は既定色を使う。
+- `controller_colors=None` は既定色を使う。省略した field はそれぞれ独立した既定値を使い、grip を body 色へ正規化しない。
 - `ControllerColors` は immutable にし、`0 <= value <= 0xFFFFFF` だけを受ける。`str`、`bytes`、tuple、負数、`0x1000000` 以上は `InvalidInputError` とする。
 - `0x601B` color info exists flag を `0x01` に seed する。
 - SPI `0x6050`-`0x605B` への seed と `0x10` SPI read reply。
@@ -121,7 +121,7 @@
 |---|---|---|---|
 | custom color reflection path | Switch が `0x02` で color source を SPI と判断し、`0x10` で `0x6050` 付近を読むことで色を得る | daemon device info は `color_source=0x01`、SPI range は `0x6050`-`0x605B` | `0x02` reply と `0x10` SPI reply の unit test を分ける |
 | API field split | 12 bytes を `body`、`buttons`、`left_grip`、`right_grip` 各 3 bytes として公開する | upstream source が `0x6050`-`0x605B` を各 `#RGB` 24-bit として示し、mizuyoukanao/btstack も同じ 4 fields の placement を実装している | source fact に従い、実装時 test で byte order を固定する。mizuyoukanao/btstack の setter 引数 order は undocumented なので public API の根拠にしない |
-| default grip color | `left_grip` / `right_grip` 未指定時は `body` と同じ色にする | daemon には grip seed がない。body だけ指定したユーザが grip だけ既定 dark に戻るより、同じ body color に揃える方が profile color 設定として一貫する | public API docs に明記し、test で固定する |
+| default color profile | `body=0x323232`, `buttons=0xFFFFFF`, `left_grip=0x00B2FF`, `right_grip=0xFF3B30` | body と grip が同色だと実機観測で区別しづらい。Joy-Con-ish profile は body/buttons と左右 grip の 4 fields をログと UI 観測で区別しやすい | public API docs に明記し、test で固定する。daemon dev seed とは意図的に分ける |
 | ownership | `ControllerColors` は `InputState` ではなく profile / identity 設定に属する | 操作入力に影響せず、SPI / device info reply で観測される | `SwitchGamepad` 作成時に固定し、state update API には入れない |
 | profile propagation | `SwitchGamepadConfig` から `ProControllerProfile`、`VirtualSpiFlash`、`SubcommandResponder` へ渡す | dispatcher 構築時に configured responder を注入する | fake transport integration test で確認済み |
 
@@ -138,9 +138,9 @@
 
 | 振る舞い | 入力・状態 | 期待結果 | 備考 |
 |---|---|---|---|
-| default colors | `SwitchGamepad(..., controller_colors=None)` | SPI `0x6050` から `0d 0d 0d ff ff ff 0d 0d 0d 0d 0d 0d` を返す | body/buttons は daemon dev seed、grip は body と同じ既定挙動 |
+| default colors | `SwitchGamepad(..., controller_colors=None)` | SPI `0x6050` から `32 32 32 ff ff ff 00 b2 ff ff 3b 30` を返す | Joy-Con-ish profile。body/buttons/left grip/right grip は独立した既定値 |
 | custom colors | `ControllerColors(body=0x112233, buttons=0x445566, left_grip=0x778899, right_grip=0xAABBCC)` | SPI `0x6050` から `11 22 33 44 55 66 77 88 99 aa bb cc` を返す | source-backed `#RGB` order |
-| default grip colors | `ControllerColors(body=0x112233, buttons=0x445566)` | `left_grip` と `right_grip` は `0x112233` に正規化される | body だけを変えた場合に grip も同じ body color として扱う |
+| omitted grip colors | `ControllerColors(body=0x112233, buttons=0x445566)` | `left_grip=0x00B2FF`, `right_grip=0xFF3B30` の既定値を保つ | grip は body に fallback しない |
 | color info flag | default / custom colors のどちらでも | SPI `0x601B` から `01` を返す | source-backed flag。daemon dev seed との差異は互換ではなく堅牢性を優先する |
 | validation | `body=-1`, `buttons=0x1000000`, `left_grip="red"`, `right_grip=bytes`, non-int | `InvalidInputError` | 不正な値を wrap / mask しない |
 | constructor fixed identity | `SwitchGamepad(controller_colors=...)` 作成後 | profile は object lifetime 中に変わらない | setter は作らない |
@@ -153,9 +153,9 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| green | `ControllerColors()` が既定 body `0x0D0D0D` / buttons `0xFFFFFF` / left grip `0x0D0D0D` / right grip `0x0D0D0D` を持つ | new | unit | no | `tests/unit/test_protocol_profile.py` |
+| green | `ControllerColors()` が既定 body `0x323232` / buttons `0xFFFFFF` / left grip `0x00B2FF` / right grip `0xFF3B30` を持つ | new | unit | no | `tests/unit/test_protocol_profile.py` |
 | green | `ControllerColors(body=0x112233, buttons=0x445566, left_grip=0x778899, right_grip=0xAABBCC)` が SPI bytes `11 22 33 44 55 66 77 88 99 aa bb cc` に変換される | new | unit | no | `tests/unit/test_protocol_profile.py` |
-| green | `ControllerColors(body=0x112233, buttons=0x445566)` が omitted grip を body color に正規化する | new | unit | no | `tests/unit/test_protocol_profile.py` |
+| green | `ControllerColors(body=0x112233, buttons=0x445566)` が omitted grip を独立 default の `0x00B2FF` / `0xFF3B30` に保つ | new | unit | no | `tests/unit/test_protocol_profile.py` |
 | green | `ControllerColors` が body / buttons / left grip / right grip の範囲外値と non-int を `InvalidInputError` にする | edge | unit | no | `tests/unit/test_protocol_profile.py` |
 | green | `SwitchGamepadConfig(controller_colors=...)` と `SwitchGamepad(..., controller_colors=...)` が公開 signature に出る | new | unit | no | `tests/unit/test_public_api_boundary.py` |
 | green | `SwitchGamepad.from_config()` が `controller_colors` を保持し default transport / fake transport のどちらでも protocol path へ渡す | new | unit / integration | no | `tests/integration/test_switch_gamepad_fake_transport.py` |
@@ -181,16 +181,16 @@ pad = SwitchGamepad(
     adapter="usb:0",
     key_store_path="switch-bond.json",
     controller_colors=ControllerColors(
-        body=0x0D0D0D,
+        body=0x323232,
         buttons=0xFFFFFF,
-        left_grip=0x0D0D0D,
-        right_grip=0x0D0D0D,
+        left_grip=0x00B2FF,
+        right_grip=0xFF3B30,
     ),
 )
 ```
 
 `ControllerColors` は constructor-time profile 設定である。`await pad.set_color(...)`、`pad.controller_colors = ...`、`pad.profile.colors = ...` のような接続後変更 API は作らない。
-`left_grip` と `right_grip` を省略した場合は `body` と同じ値に正規化する。
+`left_grip` と `right_grip` を省略した場合は、それぞれの既定値 `0x00B2FF` / `0xFF3B30` を使う。body 色への正規化は行わない。
 
 ### 8.2 配置と依存方向
 
@@ -264,6 +264,13 @@ player lights は `0x30` set player lights で Switch から要求される muta
 | `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_subcommand_responder.py` | red | 16 failed, 28 passed。`left_grip` / `right_grip` 未実装、`0x6050`-`0x605B` seed 未実装、12 bytes SPI reply 未対応を確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_subcommand_responder.py` | pass | 44 passed。body / buttons / left grip / right grip の validation、byte order、SPI seed、subcommand reply を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_uses_configured_controller_colors tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_uses_default_controller_colors_when_none tests/integration/test_switch_gamepad_fake_transport.py::test_from_config_output_report_injection_uses_configured_controller_colors tests/unit/test_public_api_docstrings.py` | pass | 5 passed。fake transport 経由の 12 bytes color SPI reply と public docstring を確認 |
+| `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_uses_default_controller_colors_when_none` | red | 4 failed, 30 passed。既定色を Joy-Con-ish profile に変え、body fallback を削除する期待値に対して旧 daemon-seed / body fallback 実装が残っていることを確認 |
+| `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_uses_default_controller_colors_when_none` | pass | 34 passed。`ControllerColors()`、`VirtualSpiFlash`、fake transport の default color SPI reply が `32 32 32 ff ff ff 00 b2 ff ff 3b 30` になることを確認 |
+| `uv run ruff format --check .` | pass | 73 files already formatted。Joy-Con-ish default profile 変更後に再実行 |
+| `uv run ruff check .` | pass | All checks passed。Joy-Con-ish default profile 変更後に再実行 |
+| `uv run ty check --no-progress` | pass | All checks passed。Joy-Con-ish default profile 変更後に再実行 |
+| `uv run pytest tests/unit` | pass | 259 passed。Joy-Con-ish default profile 変更後に再実行 |
+| `uv run pytest tests/integration` | pass | 72 passed。Joy-Con-ish default profile 変更後に再実行 |
 | `uv sync --dev` | pass | Resolved 53 packages。Checked 41 packages |
 | `uv run ruff format --check .` | pass | 73 files already formatted |
 | `uv run ruff check .` | pass | All checks passed |
