@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -6,8 +7,13 @@ from swbt.errors import InvalidInputError
 from swbt.protocol.profile import (
     SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR,
     ControllerColors,
+    ControllerKind,
+    JoyConLeftProfile,
+    JoyConRightProfile,
     ProControllerProfile,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_pro_controller_hid_descriptor_is_203_bytes() -> None:
@@ -25,6 +31,60 @@ def test_pro_controller_hid_descriptor_report_ids_are_fixed() -> None:
     ]
 
     assert report_ids == [0x30, 0x21, 0x81, 0x01, 0x10, 0x80, 0x82]
+
+
+def test_controller_profiles_have_distinct_identity_values() -> None:
+    pro = ProControllerProfile()
+    left = JoyConLeftProfile()
+    right = JoyConRightProfile()
+
+    assert pro.kind is ControllerKind.PRO_CONTROLLER
+    assert pro.device_name == "Pro Controller"
+    assert pro.device_type == 0x03
+    assert left.kind is ControllerKind.JOYCON_LEFT
+    assert left.device_name == "Joy-Con (L)"
+    assert left.device_type == 0x01
+    assert right.kind is ControllerKind.JOYCON_RIGHT
+    assert right.device_name == "Joy-Con (R)"
+    assert right.device_type == 0x02
+
+
+def test_profile_build_device_info_uses_caller_bluetooth_address() -> None:
+    bluetooth_address = bytes.fromhex("01 23 45 67 89 ab")
+
+    assert ProControllerProfile().build_device_info(bluetooth_address) == bytes.fromhex(
+        "04 00 03 02 01 23 45 67 89 ab 03 02"
+    )
+    assert JoyConLeftProfile().build_device_info(bluetooth_address) == bytes.fromhex(
+        "04 00 01 02 01 23 45 67 89 ab 01 01"
+    )
+    assert JoyConRightProfile().build_device_info(bluetooth_address) == bytes.fromhex(
+        "04 00 02 02 01 23 45 67 89 ab 01 01"
+    )
+
+
+def test_profile_build_device_info_rejects_non_address_length() -> None:
+    with pytest.raises(InvalidInputError):
+        ProControllerProfile().build_device_info(b"\x00\x01")
+
+
+@pytest.mark.parametrize("value", [0, -1, True, 1.5])
+def test_controller_profile_rejects_invalid_default_report_period(value: object) -> None:
+    with pytest.raises(InvalidInputError):
+        ProControllerProfile(default_report_period_us=cast("int", value))
+
+
+def test_pro_controller_profile_direct_construction_is_limited_to_profile_factory() -> None:
+    direct_construction_sites = []
+
+    for path in (ROOT / "src" / "swbt").rglob("*.py"):
+        if path == ROOT / "src" / "swbt" / "protocol" / "profile.py":
+            continue
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if "ProControllerProfile(" in line:
+                direct_construction_sites.append(f"{path.relative_to(ROOT)}:{line_number}")
+
+    assert direct_construction_sites == []
 
 
 def test_controller_colors_default_to_joy_con_like_profile() -> None:

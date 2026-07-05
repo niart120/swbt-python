@@ -21,6 +21,14 @@ REQUIRED_ENTRY_IDS = {
     "subcommand_reply_0x21_layout",
     "subcommand_reply_payloads",
     "device_info_swbt_pro_profile",
+    "device_info_grip_color_tail_0302",
+    "joycon_device_info_profile",
+    "joycon_spi_device_type_values",
+    "joycon_standard_button_mapping",
+    "joycon_standard_stick_availability",
+    "subcommand_report_mode_session_state",
+    "subcommand_imu_vibration_enable_state",
+    "profile_aware_bumble_sdp_boundary",
     "spi_flash_boundary_and_seed_map",
     "raw_rumble_payload",
     "hid_report_descriptor",
@@ -200,3 +208,116 @@ def test_default_report_period_remains_configurable() -> None:
 
     assert entry["classification"] == "inference"
     assert entry["status"] == "configurable"
+
+
+def test_pro_device_info_reference_and_current_tail_are_separated() -> None:
+    reference = _entry_by_id("device_info_swbt_pro_profile")
+    observation = _entry_by_id("device_info_grip_color_tail_0302")
+
+    assert reference["classification"] == "implementation fact"
+    assert observation["classification"] == "hardware observation"
+
+    value = reference["value"]
+    assert isinstance(value, str)
+    assert "swbt-daemon reference" in value
+    assert "tail=01 01" in value
+    assert "Current swbt-python ProControllerProfile uses tail=03 02" in value
+    assert "device_info_grip_color_tail_0302" in value
+
+
+def test_joycon_device_info_profile_is_source_audited() -> None:
+    entry = _entry_by_id("joycon_device_info_profile")
+
+    assert entry["classification"] in {"source fact", "implementation fact"}
+    assert entry["status"] == "stable-profile-core"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "JOYCON_L=0x01" in value
+    assert "JOYCON_R=0x02" in value
+    assert "marker=0x02" in value
+    assert "tail=01 01" in value
+
+
+def test_joycon_spi_device_type_values_are_source_audited() -> None:
+    entry = _entry_by_id("joycon_spi_device_type_values")
+
+    assert entry["classification"] in {"source fact", "implementation fact"}
+    assert entry["status"] == "stable-profile-core"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x6012" in value
+    assert "JOYCON_L=0x01" in value
+    assert "JOYCON_R=0x02" in value
+
+
+def test_joycon_standard_button_mapping_is_source_audited() -> None:
+    entry = _entry_by_id("joycon_standard_button_mapping")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "stable-profile-core"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "byte3_right" in value
+    assert "byte5_left" in value
+    assert "SL" in value
+    assert "SR" in value
+
+
+def test_joycon_standard_stick_availability_is_recorded() -> None:
+    entry = _entry_by_id("joycon_standard_stick_availability")
+
+    assert entry["classification"] in {"source fact", "inference"}
+    assert entry["status"] == "profile-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "JOYCON_L left stick only" in value
+    assert "JOYCON_R right stick only" in value
+
+
+def test_subcommand_report_mode_session_state_is_source_audited() -> None:
+    entry = _entry_by_id("subcommand_report_mode_session_state")
+
+    assert entry["classification"] in {"source fact", "implementation fact"}
+    assert entry["status"] == "session-state-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x03" in value
+    assert "0x30" in value
+    assert "0x3F" in value
+    assert "not coerced" in value
+
+
+def test_subcommand_imu_vibration_enable_state_is_source_audited() -> None:
+    entry = _entry_by_id("subcommand_imu_vibration_enable_state")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "session-state-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x40" in value
+    assert "0x48" in value
+    assert "0x00" in value
+    assert "0x01" in value
+    assert "SubcommandSessionState" in value
+
+
+def test_profile_aware_bumble_sdp_boundary_is_source_audited() -> None:
+    entry = _entry_by_id("profile_aware_bumble_sdp_boundary")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "profile-boundary-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "ControllerProfile.hid_report_descriptor" in value
+    assert "profile.device_name" in value
+    assert "explicit device_name override" in value
+    assert "Class of Device 0x002508" in value
+    assert "Pro-compatible fixed" in value
+    assert "Joy-Con descriptor bytes remain unaudited" in value

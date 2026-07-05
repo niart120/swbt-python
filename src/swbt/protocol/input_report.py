@@ -1,39 +1,19 @@
 """Input report builders."""
 
-from swbt.input import Button, InputState, Stick
-from swbt.protocol.profile import ProControllerProfile
-
-BUTTON_BITS = {
-    Button.Y: (3, 0x01),
-    Button.X: (3, 0x02),
-    Button.B: (3, 0x04),
-    Button.A: (3, 0x08),
-    Button.R: (3, 0x40),
-    Button.ZR: (3, 0x80),
-    Button.MINUS: (4, 0x01),
-    Button.PLUS: (4, 0x02),
-    Button.RIGHT_STICK: (4, 0x04),
-    Button.LEFT_STICK: (4, 0x08),
-    Button.HOME: (4, 0x10),
-    Button.CAPTURE: (4, 0x20),
-    Button.DPAD_DOWN: (5, 0x01),
-    Button.DPAD_UP: (5, 0x02),
-    Button.DPAD_RIGHT: (5, 0x04),
-    Button.DPAD_LEFT: (5, 0x08),
-    Button.L: (5, 0x40),
-    Button.ZL: (5, 0x80),
-}
+from swbt.input import InputState, Stick
+from swbt.protocol.profile import ControllerProfile, default_controller_profile
 
 
 class InputReportBuilder:
     """Build Switch HID input reports from immutable input state."""
 
-    def __init__(self, profile: ProControllerProfile | None = None) -> None:
+    def __init__(self, profile: ControllerProfile | None = None) -> None:
         """Create a report builder."""
-        self._profile = profile or ProControllerProfile()
+        self._profile = profile or default_controller_profile()
 
     def build_0x30(self, state: InputState, *, timer: int = 0) -> bytes:
         """Build a 0x30 standard full input report."""
+        self._profile.validate_input_state(state)
         report = bytearray(49)
         report[0] = 0x30
         report[1] = timer & 0xFF
@@ -45,10 +25,9 @@ class InputReportBuilder:
         self._pack_imu_frames(report, state)
         return bytes(report)
 
-    @staticmethod
-    def _pack_buttons(report: bytearray, state: InputState) -> None:
+    def _pack_buttons(self, report: bytearray, state: InputState) -> None:
         for button in state.buttons:
-            offset, mask = BUTTON_BITS[button]
+            offset, mask = self._profile.button_bit(button)
             report[offset] |= mask
 
     @staticmethod

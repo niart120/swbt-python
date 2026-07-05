@@ -75,12 +75,14 @@ handoff = ["unit_001", "unit_005"]
 id = "device_info_swbt_pro_profile"
 fixture_name = "device_info_swbt_pro_profile"
 area = "protocol"
-value = "swbt-pro profile: firmware=04 00; controller_type=0x03; marker=0x02; runtime Bluetooth address; tail=01 01"
+value = "swbt-daemon reference Pro-compatible device info: firmware=04 00; controller_type=0x03; marker=0x02; runtime Bluetooth address; tail=01 01. Current swbt-python ProControllerProfile uses tail=03 02 based on the separate device_info_grip_color_tail_0302 hardware-observation entry."
 classification = "implementation fact"
 source = [
     'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-subcommand-dispatcher-core.md',
     'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_device_info.h:6-10',
     'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_device_info.c:21-31',
+    'src\swbt\protocol\profile.py',
+    'spec\complete\unit_028\CONTROLLER_PROFILE_CUSTOMIZATION.md',
 ]
 status = "handoff-ready"
 handoff = ["unit_005"]
@@ -98,6 +100,97 @@ source = [
 status = "hardware-observed-only"
 condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; Switch 2 firmware 22.1.0; controller search or change grip order screen; 2026-07-05 unit_028 tracked hardware tests"
 handoff = ["unit_028"]
+
+[[entry]]
+id = "joycon_device_info_profile"
+fixture_name = "joycon_device_info_profile"
+area = "protocol"
+value = "Joy-Con device info core: JOYCON_L=0x01, JOYCON_R=0x02, PRO_CONTROLLER=0x03; byte 3 marker=0x02; Bluetooth address is caller supplied; tail=01 01 uses SPI colors. swbt-python uses firmware=04 00 as an implementation-compatible default from existing Pro behavior and joycontrol, not as a Joy-Con hardware firmware observation."
+classification = "implementation fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
+    'https://github.com/mart1nro/joycontrol/blob/master/joycontrol/controller.py',
+    'https://github.com/mart1nro/joycontrol/blob/master/joycontrol/report.py',
+]
+status = "stable-profile-core"
+handoff = ["unit_030"]
+
+[[entry]]
+id = "joycon_spi_device_type_values"
+fixture_name = "joycon_spi_device_type_values"
+area = "protocol"
+value = "SPI address 0x6012 stores device type; JOYCON_L=0x01, JOYCON_R=0x02, PRO_CONTROLLER=0x03. Only the 3 LSB are accounted for and the value is used internally and for subcommand 0x02."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md',
+]
+status = "stable-profile-core"
+handoff = ["unit_030"]
+
+[[entry]]
+id = "joycon_standard_button_mapping"
+fixture_name = "joycon_standard_button_mapping"
+area = "protocol"
+value = "Standard input report button bytes: byte3_right maps Y=0x01, X=0x02, B=0x04, A=0x08, SR=0x10, SL=0x20, R=0x40, ZR=0x80; byte4_shared maps Minus=0x01, Plus=0x02, R Stick=0x04, L Stick=0x08, Home=0x10, Capture=0x20; byte5_left maps Down=0x01, Up=0x02, Right=0x04, Left=0x08, SR=0x10, SL=0x20, L=0x40, ZL=0x80."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_notes.md',
+]
+status = "stable-profile-core"
+handoff = ["unit_031"]
+
+[[entry]]
+id = "joycon_standard_stick_availability"
+fixture_name = "joycon_standard_stick_availability"
+area = "protocol"
+value = "Standard input report keeps left stick bytes at offsets 6-8 and right stick bytes at offsets 9-11. Profile policy treats JOYCON_L left stick only and JOYCON_R right stick only; the unavailable side must remain neutral and requested updates to that side are rejected before commit."
+classification = "inference"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_notes.md',
+    'https://github.com/niart120/swbt-python/issues/51',
+]
+status = "profile-policy"
+handoff = ["unit_031"]
+
+[[entry]]
+id = "subcommand_report_mode_session_state"
+fixture_name = "subcommand_report_mode_session_state"
+area = "protocol"
+value = "Subcommand 0x03 Set input report mode takes one argument byte; documented modes include 0x30 standard full mode, 0x31 NFC/IR mode, and 0x3F simple HID mode. swbt-python records the requested byte in SubcommandSessionState; only 0x30 is supported by the periodic ReportLoop for now, so unsupported modes such as 0x3F are ACK-compatible but marked unsupported and not coerced to 0x30."
+classification = "implementation fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
+    'https://github.com/niart120/swbt-python/issues/52',
+]
+status = "session-state-policy"
+handoff = ["unit_032"]
+
+[[entry]]
+id = "subcommand_imu_vibration_enable_state"
+fixture_name = "subcommand_imu_vibration_enable_state"
+area = "protocol"
+value = "Subcommand 0x40 Enable IMU and 0x48 Enable vibration each take one argument byte, with 0x00 disable and 0x01 enable. swbt-python stores these as booleans in SubcommandSessionState and does not put them in ControllerProfile or InputState."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
+]
+status = "session-state-policy"
+handoff = ["unit_032"]
+
+[[entry]]
+id = "profile_aware_bumble_sdp_boundary"
+fixture_name = "profile_aware_bumble_sdp_boundary"
+area = "transport"
+value = "Bumble transport passes ControllerProfile.hid_report_descriptor into the SDP HID descriptor list and uses profile.device_name as the default service/device name, while an explicit device_name override wins. Descriptor-adjacent Bluetooth/SDP values remain Pro-compatible fixed values for now, including Class of Device 0x002508, HID country code 0x21, remote wake true, supervision timeout 0x0c80, and SSR max/min 0xffff. Joy-Con descriptor bytes remain unaudited and are not promoted to a stable profile-specific SDP fixture."
+classification = "implementation fact"
+source = [
+    'src\swbt\gamepad\transport_factory.py',
+    'src\swbt\transport\bumble.py',
+    'src\swbt\transport\_bumble_sdp.py',
+    'https://github.com/niart120/swbt-python/issues/53',
+]
+status = "profile-boundary-policy"
+handoff = ["unit_033"]
 
 [[entry]]
 id = "spi_flash_boundary_and_seed_map"

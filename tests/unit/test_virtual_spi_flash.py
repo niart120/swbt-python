@@ -1,7 +1,12 @@
 import pytest
 
 from swbt.errors import ProtocolError
-from swbt.protocol.profile import ControllerColors, ProControllerProfile
+from swbt.protocol.profile import (
+    ControllerColors,
+    JoyConLeftProfile,
+    JoyConRightProfile,
+    ProControllerProfile,
+)
 from swbt.protocol.spi import VirtualSpiFlash
 
 
@@ -9,6 +14,11 @@ def test_virtual_spi_flash_returns_seeded_device_type() -> None:
     spi = VirtualSpiFlash()
 
     assert spi.read(0x6012, 1) == b"\x03"
+
+
+def test_virtual_spi_flash_seeds_device_type_from_profile() -> None:
+    assert VirtualSpiFlash(profile=JoyConLeftProfile()).read(0x6012, 1) == b"\x01"
+    assert VirtualSpiFlash(profile=JoyConRightProfile()).read(0x6012, 1) == b"\x02"
 
 
 def test_virtual_spi_flash_returns_seeded_default_controller_colors() -> None:
@@ -41,6 +51,14 @@ def test_virtual_spi_flash_returns_erased_bytes_for_unseeded_address() -> None:
     spi = VirtualSpiFlash()
 
     assert spi.read(0x70000, 2) == b"\xff\xff"
+
+
+def test_virtual_spi_flash_leaves_unaudited_calibration_erased_for_joycon_profiles() -> None:
+    spi = VirtualSpiFlash(profile=JoyConLeftProfile())
+
+    assert spi.read(0x6020, 0x18) == b"\xff" * 0x18
+    assert spi.read(0x603D, 9) == b"\xff" * 9
+    assert spi.read(0x6046, 9) == b"\xff" * 9
 
 
 @pytest.mark.parametrize(
