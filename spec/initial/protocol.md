@@ -215,7 +215,7 @@ class VirtualSpiFlash:
 | `0x601B` | `01` | color info exists |
 | `0x6050`-`0x605B` | `ControllerColors.to_spi_bytes()` | body、buttons、left grip、right grip を各 3 bytes の RGB color |
 
-`SubcommandResponder` は configured `ProControllerProfile` から `VirtualSpiFlash` を作る。`0x10` SPI read は request prefix 5 bytes に `VirtualSpiFlash.read(address, size)` を続けて返す。`0x02` request device info reply は color source として SPI を指す `0x01` を維持し、色 bytes 自体は device info reply に埋め込まない。
+`SubcommandResponder` は configured `ProControllerProfile` から `VirtualSpiFlash` を作る。`0x10` SPI read は request prefix 5 bytes に `VirtualSpiFlash.read(address, size)` を続けて返す。`0x02` request device info reply は Pro Controller profile bytes `04 00 03 02 <6 byte address> 03 02` を返す。現行 swbt-python は Bluetooth address customization を持たないため address は `00 00 00 00 00 00` とする。色 bytes 自体は device info reply に埋め込まない。2026-07-05 の Windows / Switch 2 / firmware 22.1.0 実機検証では、tail `01 01` だと grip が body 色に寄り、tail `03 02` で SPI `0x6056`-`0x605B` の左右 grip 色が UI に反映された。
 
 ## 8. Rumble raw state
 

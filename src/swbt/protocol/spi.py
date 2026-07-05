@@ -23,9 +23,10 @@ class VirtualSpiFlash:
         self._data = bytearray([self.ERASED_BYTE] * self.STORAGE_SIZE)
         self._data[self.DEVICE_TYPE_ADDRESS] = self.PRO_CONTROLLER_DEVICE_TYPE
         self._data[self.COLOR_INFO_EXISTS_ADDRESS] = self.COLOR_INFO_EXISTS
-        self._data[self.CONTROLLER_COLORS_ADDRESS : self.CONTROLLER_COLORS_ADDRESS + 6] = (
-            profile.controller_colors.to_spi_bytes()
-        )
+        controller_colors = profile.controller_colors.to_spi_bytes()
+        self._data[
+            self.CONTROLLER_COLORS_ADDRESS : self.CONTROLLER_COLORS_ADDRESS + len(controller_colors)
+        ] = controller_colors
 
     def read(self, address: int, size: int) -> bytes:
         """Read bytes from the virtual SPI address space."""

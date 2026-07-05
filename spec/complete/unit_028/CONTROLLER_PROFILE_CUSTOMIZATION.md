@@ -22,8 +22,8 @@
 | tests | public API、profile、SPI、subcommand、docs、fake transport integration の test surface | `tests/unit/`, `tests/integration/` |
 | daemon source audit | SPI color range と seed data | `E:/documents/VSCodeWorkspace/swbt-daemon/spec/references/switch-spi-core.md`, `E:/documents/VSCodeWorkspace/swbt-daemon/spec/references/switch-virtual-spi-seed-data.md` |
 | upstream source audit | controller color の body / buttons / left grip / right grip range と `#RGB` 24-bit 表現 | `https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md` |
-| implementation audit | mizuyoukanao/btstack の fixed SPI reply と `send_padcolor` が body / buttons / left grip / right grip の 12 bytes placement を使う | `https://github.com/mizuyoukanao/btstack/blob/master/example/btkeyLib.c` |
-| daemon implementation | device info color source と virtual SPI color seed | `E:/documents/VSCodeWorkspace/swbt-daemon/swbt/switch/switch_device_info.c`, `switch_device_info.h`, `switch_spi.h`, `switch_spi_seed.c`, `switch_spi_seed.h` |
+| implementation audit | mizuyoukanao/btstack の `0x02` device info reply、fixed SPI reply、`send_padcolor` が body / buttons / left grip / right grip の 12 bytes placement を使う | `https://github.com/mizuyoukanao/btstack/blob/ec9e2858003c19b1591a9acefd265bb4673fcb6e/example/btkeyLib.c` |
+| daemon implementation | device info tail bytes と virtual SPI color seed | `E:/documents/VSCodeWorkspace/swbt-daemon/swbt/switch/switch_device_info.c`, `switch_device_info.h`, `switch_spi.h`, `switch_spi_seed.c`, `switch_spi_seed.h` |
 
 ### 1.3 use case
 
@@ -31,8 +31,8 @@
 |---|---|---|---|
 | library user | `SwitchGamepad(..., controller_colors=ControllerColors(body=0x112233, buttons=0x445566, left_grip=0x778899, right_grip=0xAABBCC))` | Switch からの SPI read に指定色が返る | 作成時に固定する。接続後 setter は作らない |
 | protocol core | `0x10` SPI read for `0x6050`, size `12` | reply payload が request prefix と 12 bytes color を含む | Bumble / 実機なしの unit test で検証する |
-| protocol core | `0x02` request device info | color source が SPI を指す profile reply を返す | 色そのものは device info reply に埋め込まない |
-| reviewer | source / implementation / inference の確認 | SPI address、device info color_source、subcommand 関係の根拠分類を追える | 未検証仮説を public API 契約にしない |
+| protocol core | `0x02` request device info | Pro Controller profile bytes `04 00 03 02 <6 byte address> 03 02` を返す | 色そのものは device info reply に埋め込まない |
+| reviewer | source / implementation / inference の確認 | SPI address、device info profile bytes、subcommand 関係の根拠分類を追える | 未検証仮説を public API 契約にしない |
 | hardware follow-up | 実機で color 反映を見る | Switch UI で色表示が変わるか記録する | adapter open、advertising、pairing、report loop は明示承認が必要 |
 
 ## 2. 対象範囲
@@ -45,7 +45,7 @@
 - `ControllerColors` は immutable にし、`0 <= value <= 0xFFFFFF` だけを受ける。`str`、`bytes`、tuple、負数、`0x1000000` 以上は `InvalidInputError` とする。
 - `0x601B` color info exists flag を `0x01` に seed する。
 - SPI `0x6050`-`0x605B` への seed と `0x10` SPI read reply。
-- `0x02` device info reply の color source を SPI として扱うこと。
+- `0x02` device info reply を Pro Controller profile bytes `04 00 03 02 <addr> 03 02` として返すこと。
 - public API docs、docstring、`swbt.__all__` の更新方針。
 
 ## 3. 対象外
@@ -80,7 +80,7 @@
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | done | SPI address、subcommand `0x02` / `0x10` reply payload、device info color_source を TDD fixture に反映した |
+| Switch HID / report bytes | required | done | SPI address、subcommand `0x02` / `0x10` reply payload、device info profile bytes を TDD fixture に反映した |
 | Bumble / transport | not applicable | not applicable | 色設定は protocol core の SPI / subcommand data で完結する。Bumble object 型や callback 型は public API に出さない |
 | OS / driver / adapter | not applicable | not applicable | automated scope では adapter を開かない。実機反映確認を行う場合だけ hardware 承認境界を通す |
 
@@ -107,11 +107,12 @@
 | daemon seed writer | writes `controller_colors` to `SWBT_SWITCH_SPI_ADDRESS_CONTROLLER_COLORS` | `switch_spi_seed.c` | implementation behavior |
 | daemon seed length | `6` bytes for body/buttons | `switch-virtual-spi-seed-data.md`; `switch_spi_seed.h` | implementation fact; swbt-python intentionally extends to source-backed grip range |
 | daemon color flag handling | `SWBT_SWITCH_SPI_ADDRESS_COLOR_INFO_EXISTS = 0x601B` is defined, but the dev seed writer does not seed it | `switch_spi.h`, `switch_spi_seed.c` | implementation fact; swbt-python chooses the source-backed seed |
-| daemon device info color source | `SWBT_SWITCH_DEVICE_INFO_COLORS_FROM_SPI = 0x01` and reply data byte 11 stores `color_source` | `switch_device_info.h`, `switch_device_info.c` | implementation behavior |
+| daemon device info tail | default swbt-pro profile reply data tail is `01 01`; byte 11 is named `color_source` and `SWBT_SWITCH_DEVICE_INFO_COLORS_FROM_SPI = 0x01` | `switch_device_info.h`, `switch_device_info.c` | implementation behavior; 2026-07-05 の Switch 2 / firmware 22.1.0 観測では independent Pro grip UI reflection には足りなかった |
 | swbt-python SPI seed | `VirtualSpiFlash` seeds `0x6012 = 0x03`, `0x601B = 0x01`, and `0x6050`-`0x605B` from `ControllerColors` | `src/swbt/protocol/spi.py` | current implementation |
-| swbt-python `0x02` reply | static `DEVICE_INFO_DATA = 04 00 03 02 00 00 00 00 00 00 01 01` | `src/swbt/protocol/subcommand.py` | current implementation; last byte matches SPI color source |
+| swbt-python `0x02` reply | static `DEVICE_INFO_DATA = 04 00 03 02 00 00 00 00 00 00 03 02` | `src/swbt/protocol/subcommand.py` | current implementation; mizuyoukanao/btstack の `reply02` と 2026-07-05 hardware observation に合わせる |
 | swbt-python `0x10` reply | returns request prefix plus configured `VirtualSpiFlash.read(address, size)` | `src/swbt/protocol/subcommand.py` | current implementation |
 | swbt-python construction path | `SwitchGamepad` builds `ProControllerProfile(controller_colors=...)` and injects `SubcommandResponder(profile=...)` into `OutputReportDispatcher` | `src/swbt/gamepad/core.py` | current implementation |
+| mizuyoukanao/btstack `0x02` reply | `reply02` returns device info data `03 48 03 02 <6 byte address> 03 02` after HIDP/report/ack/subcommand bytes | `mizuyoukanao/btstack` commit `ec9e2858003c19b1591a9acefd265bb4673fcb6e`, `example/btkeyLib.c` | implementation fact; successful swbt-python hardware characterization used the same tail `03 02` |
 | mizuyoukanao/btstack `0x6050` reply | `reply1050` contains SPI read subcommand `0x10`, address bytes `50 60 00 00`, size `0x18`, followed by 12 controller color bytes at reply indexes `0x15`-`0x20` | `mizuyoukanao/btstack` commit `ec9e2858003c19b1591a9acefd265bb4673fcb6e`, `example/btkeyLib.c` | implementation fact; confirms body/buttons/left grip/right grip placement but uses a fixed 24-byte reply fixture |
 | mizuyoukanao/btstack color setter | `send_padcolor(pad_color, button_color, leftgrip_color, rightgrip_color)` writes low byte, middle byte, high byte to each 3-byte field | same source | implementation fact; do not use this as swbt-python public input order because caller-side color integer convention is not documented in that repo |
 
@@ -119,7 +120,7 @@
 
 | 項目 | 推論 | 根拠 | 実装上の扱い |
 |---|---|---|---|
-| custom color reflection path | Switch が `0x02` で color source を SPI と判断し、`0x10` で `0x6050` 付近を読むことで色を得る | daemon device info は `color_source=0x01`、SPI range は `0x6050`-`0x605B` | `0x02` reply と `0x10` SPI reply の unit test を分ける |
+| custom color reflection path | Switch は `0x02` device info 後に `0x10` で `0x6050` 付近を読み、body/buttons/grip 色を得る。Windows / Switch 2 / firmware 22.1.0 では independent Pro grip UI reflection に device-info tail `03 02` が必要だった | `01 01` tail、nonzero BD_ADDR だけ、`0x605C=00` はいずれも grip が body 色に寄った。`03 02` tail では `0x6056`-`0x605B` の left/right grip が UI に反映された | `0x02` reply と `0x10` SPI reply の unit test を分け、実機条件は hardware observation として記録する |
 | API field split | 12 bytes を `body`、`buttons`、`left_grip`、`right_grip` 各 3 bytes として公開する | upstream source が `0x6050`-`0x605B` を各 `#RGB` 24-bit として示し、mizuyoukanao/btstack も同じ 4 fields の placement を実装している | source fact に従い、実装時 test で byte order を固定する。mizuyoukanao/btstack の setter 引数 order は undocumented なので public API の根拠にしない |
 | default color profile | `body=0x323232`, `buttons=0xFFFFFF`, `left_grip=0x00B2FF`, `right_grip=0xFF3B30` | body と grip が同色だと実機観測で区別しづらい。Joy-Con-ish profile は body/buttons と左右 grip の 4 fields をログと UI 観測で区別しやすい | public API docs に明記し、test で固定する。daemon dev seed とは意図的に分ける |
 | ownership | `ControllerColors` は `InputState` ではなく profile / identity 設定に属する | 操作入力に影響せず、SPI / device info reply で観測される | `SwitchGamepad` 作成時に固定し、state update API には入れない |
@@ -129,10 +130,11 @@
 
 | 項目 | 内容 | 扱い |
 |---|---|---|
-| Switch UI reflection | Switch UI がこの color range を表示へ反映するか | 2026-07-05 に Windows / Switch 2 / firmware 22.1.0 で緑 body / 黄 buttons の表示をユーザ目視確認。同条件で `left_grip=0x2962FF`, `right_grip=0xD50000` を返したが、15 秒 hold と 30 秒 hold のどちらでもユーザ目視では左右 grip は青/赤に変わらず緑のままだった。automated gate にはしない |
+| Switch UI reflection | Switch UI がこの color range を表示へ反映するか | 2026-07-05 に Windows / Switch 2 / firmware 22.1.0 で sentinel `body=0xFF0000`, `buttons=0x0000FF`, `left_grip=0xFF00FF`, `right_grip=0xFF8000` を返した。device-info tail `01 01` では body が赤、buttons が青、grip も赤に見えた。device-info tail `03 02` では左 grip がマゼンタ、右 grip がオレンジに見え、zero BD_ADDR でも同じ表示が保持された |
+| device-info tail characterization | `0x02` reply の末尾 2 bytes と grip UI reflection の関係 | nonzero BD_ADDR だけ、または SPI `0x605C=00` だけでは grip は body 色に寄った。tail `03 02` で独立 grip 色が反映された。tail の意味名は未確定なので、現時点では `device-info tail 03 02` として扱う |
 | firmware / model difference | Switch model / firmware ごとの color read sequence 差 | 実機観測時に condition を記録する |
 | bond cache interaction | 既存 bond がある場合、色変更が再 pairing なしで見えるか | public API 保証にしない |
-| Switch UI の表示順 | source-backed SPI order と Switch UI 表示の対応 | Windows / Switch 2 / firmware 22.1.0 では `body=0x00C853`, `buttons=0xFFEB3B` が緑 body / 黄 buttons として目視確認済み。grip は同 UI 上では指定色に見えなかった。public API は SPI 上の body/buttons/grip `#RGB` を保証し、UI 表示は条件付き observation として扱う |
+| Switch UI の表示順 | source-backed SPI order と Switch UI 表示の対応 | Windows / Switch 2 / firmware 22.1.0 の tail `03 02` sentinel run では `body=0xFF0000`, `buttons=0x0000FF`, `left_grip=0xFF00FF`, `right_grip=0xFF8000` が赤 body / 青 buttons / 左マゼンタ / 右オレンジとして目視確認済み。public API は SPI 上の body/buttons/grip `#RGB` を保証し、UI 表示は条件付き observation として扱う |
 
 ## 6. 振る舞い仕様
 
@@ -145,7 +147,7 @@
 | validation | `body=-1`, `buttons=0x1000000`, `left_grip="red"`, `right_grip=bytes`, non-int | `InvalidInputError` | 不正な値を wrap / mask しない |
 | constructor fixed identity | `SwitchGamepad(controller_colors=...)` 作成後 | profile は object lifetime 中に変わらない | setter は作らない |
 | state update separation | `press()` / `release()` / `apply()` / `neutral()` | controller colors は変わらない | `InputState` へ入れない |
-| device info | `0x02` request device info | color source byte は SPI を指す `0x01` | 色 bytes は含めない |
+| device info | `0x02` request device info | `04 00 03 02 00 00 00 00 00 00 03 02` を返す | 色 bytes は含めない。Bluetooth address customization はこの unit では持たない |
 | SPI read | `0x10` request address `0x6050`, size `12` | request prefix 5 bytes + color 12 bytes を返す | `SubcommandResponder` unit test で固定 |
 | public docs | docs / docstring / `__all__` | `ControllerColors` と `controller_colors=` の使い方が記載される | 接続後変更不可と対象外を明記する |
 
@@ -163,12 +165,13 @@
 | green | `VirtualSpiFlash` が custom `ControllerColors` を `0x6050`-`0x605B` に seed する | new | unit | no | `tests/unit/test_virtual_spi_flash.py` |
 | green | `VirtualSpiFlash` が `0x601B` に color info exists flag `01` を seed する | new | unit | no | `tests/unit/test_virtual_spi_flash.py` |
 | green | `SubcommandResponder` の `0x10` SPI read reply が custom colors を返す | new | unit | no | `tests/unit/test_subcommand_responder.py` |
-| green | `SubcommandResponder` の `0x02` device info reply が color_source `0x01` を保つ | regression | unit | no | `tests/unit/test_subcommand_responder.py` |
+| green | `SubcommandResponder` の `0x02` device info reply が Pro Controller profile bytes `04 00 03 02 00 00 00 00 00 00 03 02` を返す | regression | unit | no | `tests/unit/test_subcommand_responder.py` |
 | green | fake transport 経由の output report injection で default / custom color SPI reply が送信される | new | integration | no | `tests/integration/test_switch_gamepad_fake_transport.py` |
 | green | `swbt.__all__` が `ControllerColors` を含み、package import が Bumble を解決しない | regression | unit | no | `tests/unit/test_package_import.py`, `tests/unit/test_public_api_boundary.py` |
 | green | public API docstring と `docs/api.md` が `ControllerColors` / `controller_colors=` を説明する | new | unit | no | `tests/unit/test_public_api_docstrings.py`, `tests/unit/test_public_docs.py` |
+| hardware-pass | tracked hardware test で実機が sentinel body / buttons / left grip / right grip の 12 bytes color block を読み、production default `0x02` reply `04 00 03 02 00 00 00 00 00 00 03 02` を使うことを確認する | characterization | hardware | yes | `tests/hardware/test_controller_colors.py`。2026-07-05 Windows / Switch 2 / firmware 22.1.0。trace は device info `040003020000000000000302` と color bytes `ff 00 00 00 00 ff ff 00 ff ff 80 00` を記録。ユーザは左 grip がマゼンタ、右 grip がオレンジに見えたと報告。UI 表示は自動判定しない |
 | hardware-pass | 実機で Switch UI に body / buttons color が反映されるか観測する | characterization | hardware | yes | 2026-07-05 Windows / Switch 2 / firmware 22.1.0。trace は `0x6050` SPI read reply `00 c8 53 ff eb 3b` を記録し、ユーザは緑 body / 黄 buttons の controller 表示を目視確認 |
-| hardware-pass | 実機で Switch が body / buttons / left grip / right grip の 12 bytes color block を読むか観測する | characterization | hardware | yes | 2026-07-05 Windows / Switch 2 / firmware 22.1.0。15 秒 hold と 30 秒 hold の trace は `0x6050` SPI read reply `00 c8 53 ff eb 3b 29 62 ff d5 00 00` を記録し、ユーザは左右 grip が青/赤に変わらず緑のままに見えると報告 |
+| hardware-pass | 実機で device-info tail と grip UI reflection の関係を切り分ける | characterization | hardware | yes | 2026-07-05 Windows / Switch 2 / firmware 22.1.0。tail `01 01`、nonzero BD_ADDR だけ、SPI `0x605C=00` だけでは body/grip が赤、buttons が青のままだった。tail `03 02` では left/right grip がマゼンタ/オレンジに変わり、zero BD_ADDR でも保持された |
 
 ## 8. 設計メモ
 
@@ -229,11 +232,13 @@ player lights は `0x30` set player lights で Switch から要求される muta
 | `tests/unit/test_package_import.py` | modify | `swbt.__all__` |
 | `tests/unit/test_public_api_docstrings.py` | modify | public docstring contract |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | fake transport output report injection |
+| `tests/hardware/test_controller_colors.py` | add | sentinel controller color SPI reply の tracked hardware characterization |
+| `spec/hardware-test-log.md` | modify | tracked hardware run の条件、artifact、結果 |
 | `spec/complete/unit_028/CONTROLLER_PROFILE_CUSTOMIZATION.md` | move / modify | TDD status、検証結果、完了状態 |
 
 ## 10. 検証
 
-自動化対象は unit / fake transport integration で検証した。実機 UI 反映は 2026-07-05 に任意観測として実行し、条件付き observation として `spec/hardware-test-log.md` に記録した。
+自動化対象は unit / fake transport integration で検証した。実機 UI 反映は 2026-07-05 に任意観測として実行し、条件付き observation として `spec/hardware-test-log.md` に記録した。sentinel color profile の tracked hardware test では on-wire SPI reply と device info reply を確認した。device-info tail `01 01` では grip が body 色に寄ったが、tail `03 02` では left/right grip がマゼンタ/オレンジとして UI に反映された。UI 表示は自動判定せず、Switch 2 / firmware 22.1.0 条件の観測として扱う。
 
 | command | result | notes |
 |---|---|---|
@@ -252,7 +257,7 @@ player lights は `0x30` set player lights で Switch から要求される muta
 | `uv run pytest tests/unit/test_virtual_spi_flash.py` | red | `0x601B` read が erased byte を返す failure を確認 |
 | `uv run pytest tests/unit/test_virtual_spi_flash.py` | pass | 8 passed。color info exists flag の SPI seed を確認 |
 | `uv run pytest tests/unit/test_subcommand_responder.py` | red | custom profile の SPI read が default color を返す failure を確認 |
-| `uv run pytest tests/unit/test_subcommand_responder.py` | pass | 11 passed。custom controller colors の `0x10` SPI read reply と `0x02` color_source regression を確認 |
+| `uv run pytest tests/unit/test_subcommand_responder.py` | pass | 11 passed。custom controller colors の `0x10` SPI read reply と `0x02` device info profile bytes regression を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_uses_configured_controller_colors` | red | `SwitchGamepad(controller_colors=...)` が default color を返す failure を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_uses_configured_controller_colors` | pass | 1 passed。fake transport output report injection で custom color SPI reply を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_uses_default_controller_colors_when_none` | pass | 1 passed。`controller_colors=None` から default color SPI reply までの経路を確認 |
@@ -280,6 +285,29 @@ player lights は `0x30` set player lights で Switch から要求される muta
 | `uv run python .pytest_cache\hardware\unit_028_controller_color_probe.py --adapter usb:0 --artifact-dir .pytest_cache\hardware\unit_028 --body 0x00c853 --buttons 0xffeb3b --timeout 60 --spi-timeout 25 --hold-seconds 15 --switch-start-condition "Switch 2 22.1.0 controller search / change grip order screen; UI color observation by user"` | hardware-pass | Windows 11 / CSR8510 A10 / WinUSB / Bumble 0.0.230 / Switch 2 firmware 22.1.0。trace は `0x006050` と `0x00603d` の SPI read で `controller_color_bytes=00c853ffeb3b`、`matches_expected_controller_colors=true` を記録した。ユーザは Switch UI で緑 body / 黄 buttons の controller 表示を目視確認した。non-neutral input は送っていない |
 | `uv run python tmp\hardware\unit_028_controller_color_probe.py --adapter usb:0 --artifact-dir .pytest_cache\hardware\unit_028 --body 0x00c853 --buttons 0xffeb3b --left-grip 0x2962ff --right-grip 0xd50000 --timeout 60 --spi-timeout 25 --hold-seconds 15 --switch-start-condition "Switch 2 22.1.0 controller search / change grip order screen; unit_028 grip color observation by user"` | hardware-pass | Windows 11 / CSR8510 A10 / WinUSB / Bumble 0.0.230 / Switch 2 firmware 22.1.0。trace は `0x006050` size 13 で `controller_color_bytes=00c853ffeb3b2962ffd50000`、`matches_expected_controller_colors=true` を記録した。ユーザは左右 grip が青/赤に変わらず緑のままに見えると報告した。non-neutral input は送っていない |
 | `uv run python tmp\hardware\unit_028_controller_color_probe.py --adapter usb:0 --artifact-dir .pytest_cache\hardware\unit_028 --trace-name controller-colors-and-grips-hold30.jsonl --body 0x00c853 --buttons 0xffeb3b --left-grip 0x2962ff --right-grip 0xd50000 --timeout 60 --spi-timeout 25 --hold-seconds 30 --switch-start-condition "Switch 2 22.1.0 controller search / change grip order screen; unit_028 grip color 30s hold observation by user"` | hardware-pass | Windows 11 / CSR8510 A10 / WinUSB / Bumble 0.0.230 / Switch 2 firmware 22.1.0。trace は `0x006050` size 13 で `controller_color_bytes=00c853ffeb3b2962ffd50000`、`matches_expected_controller_colors=true`、`hold_seconds=30.0`、`connection_state=closed` を記録した。ユーザは 30 秒後も左右 grip が緑のままと報告した。non-neutral input は送っていない |
+| `uv run ruff format --check .` | pass | 74 files already formatted。tracked hardware test 追加後に実行 |
+| `uv run ruff check .` | pass | All checks passed。tracked hardware test 追加後に実行 |
+| `uv run ty check --no-progress` | pass | All checks passed。tracked hardware test 追加後に実行 |
+| `uv run pytest tests\unit\test_virtual_spi_flash.py tests\unit\test_subcommand_responder.py tests\unit\test_protocol_profile.py -q` | pass | 44 passed。`VirtualSpiFlash` の 12 bytes seed endpoint 修正と controller color protocol tests を確認 |
+| `uv run pytest tests\hardware\test_controller_colors.py::test_switch_reads_sentinel_controller_color_profile -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_028\tracked-sentinel --log-file .pytest_cache\hardware\unit_028\tracked-sentinel\pytest-debug.log --log-file-level=DEBUG -q -s` | hardware-pass | 1 passed in 33.43s。trace は `0x006050` size 13 で sentinel `controller_color_bytes=ff00000000ffff00ffff8000`、`matches_expected_controller_colors=true`、`hold_seconds=30.0`、`manual_controller_color_cleanup connection_state=closed` を記録した。ユーザは body が赤、buttons が青、grip も赤に見えると報告した。artifact は `.pytest_cache/hardware/unit_028/tracked-sentinel/controller-colors-sentinel.jsonl` と `pytest-debug.log` |
+| `uv run pytest tests\hardware\test_controller_colors.py::test_switch_reads_sentinel_controller_color_profile -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_028\tracked-sentinel-device-info --log-file .pytest_cache\hardware\unit_028\tracked-sentinel-device-info\pytest-debug.log --log-file-level=DEBUG -q -s` | hardware-pass | 1 passed in 33.42s。旧 `DEVICE_INFO_DATA=040003020000000000000101` と sentinel color bytes `ff00000000ffff00ffff8000` を記録した。ユーザは body/grip が赤、buttons が青と報告した |
+| `uv run pytest tests\hardware\test_controller_colors.py::test_switch_reads_sentinel_controller_color_profile_with_device_info_address -m hardware --swbt-bumble-adapter usb:0 --swbt-device-info-address 00:1B:DC:F9:9F:7D --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_028\tracked-sentinel-device-info-address --log-file .pytest_cache\hardware\unit_028\tracked-sentinel-device-info-address\pytest-debug.log --log-file-level=DEBUG -q -s` | hardware-pass | 1 passed in 33.39s。旧 tail `01 01` のまま local BD_ADDR `001bdcf99f7d` を返した。ユーザ報告は body/grip が赤、buttons が青のまま |
+| `uv run pytest tests\hardware\test_controller_colors.py::test_switch_reads_sentinel_controller_color_profile_with_zero_tail_byte -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_028\tracked-sentinel-zero-tail --log-file .pytest_cache\hardware\unit_028\tracked-sentinel-zero-tail\pytest-debug.log --log-file-level=DEBUG -q -s` | hardware-pass | 1 passed in 33.38s。旧 tail `01 01` のまま `0x605C=00` を返した。ユーザ報告は body/grip が赤、buttons が青のまま |
+| `uv run pytest tests\hardware\test_controller_colors.py::test_switch_reads_sentinel_controller_color_profile_with_device_info_tail_0x03_0x02 -m hardware --swbt-bumble-adapter usb:0 --swbt-device-info-address 00:1B:DC:F9:9F:7D --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_028\tracked-sentinel-device-info-tail-0302 --log-file .pytest_cache\hardware\unit_028\tracked-sentinel-device-info-tail-0302\pytest-debug.log --log-file-level=DEBUG -q -s` | hardware-pass | 1 passed in 33.42s。`device_info_data=04000302001bdcf99f7d0302` と sentinel color bytes を記録した。ユーザは左 grip がマゼンタ、右 grip がオレンジに変わったと報告した |
+| `uv run pytest tests\hardware\test_controller_colors.py::test_switch_reads_sentinel_controller_color_profile_with_device_info_tail_0x03_0x02 -m hardware --swbt-bumble-adapter usb:0 --swbt-device-info-address 00:00:00:00:00:00 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_028\tracked-sentinel-device-info-tail-0302-zero-address --log-file .pytest_cache\hardware\unit_028\tracked-sentinel-device-info-tail-0302-zero-address\pytest-debug.log --log-file-level=DEBUG -q -s` | hardware-pass | 1 passed in 32.79s。`device_info_data=040003020000000000000302` と sentinel color bytes を記録した。ユーザは同じように左マゼンタ、右オレンジが保持されたと報告した |
+| `uv run pytest tests\hardware\test_controller_colors.py::test_switch_reads_sentinel_controller_color_profile -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir .pytest_cache\hardware\unit_028\tracked-sentinel-default-tail-0302 --log-file .pytest_cache\hardware\unit_028\tracked-sentinel-default-tail-0302\pytest-debug.log --log-file-level=DEBUG -q -s` | hardware-pass | 1 passed in 33.45s。production default `DEVICE_INFO_DATA=040003020000000000000302` で sentinel color bytes を返し、ユーザは同じように左マゼンタ、右オレンジが保持されたと報告した |
+| `uv run ruff format src\swbt\protocol\subcommand.py tests\unit\test_subcommand_responder.py tests\hardware\test_controller_colors.py tests\conftest.py` | pass | 4 files left unchanged。device-info tail `03 02` 変更と tracked hardware characterization test 更新後に実行 |
+| `uv run ruff check src\swbt\protocol\subcommand.py tests\unit\test_subcommand_responder.py tests\hardware\test_controller_colors.py tests\conftest.py` | pass | All checks passed |
+| `uv run ty check --no-progress src\swbt\protocol\subcommand.py tests\unit\test_subcommand_responder.py tests\hardware\test_controller_colors.py tests\conftest.py` | pass | All checks passed |
+| `uv run pytest tests\unit\test_subcommand_responder.py tests\unit\test_virtual_spi_flash.py tests\unit\test_protocol_profile.py tests\unit\test_source_audit_fixtures.py -q` | pass | 53 passed。device-info tail `03 02`、controller color SPI seed、source audit fixture を確認 |
+| `uv sync --dev` | pass | Resolved 53 packages。Checked 41 packages |
+| `uv run ruff format --check .` | pass | 74 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests\unit` | pass | 259 passed |
+| `uv run pytest tests\integration` | pass | 72 passed |
+| `uv run pytest tests\unit\test_hardware_test_log_docs.py tests\unit\test_source_audit_fixtures.py -q` | pass | 12 passed。検証表更新後の docs/source-audit checks |
+| `git diff --check` | pass | whitespace error なし |
 
 ## 11. 実機実行条件
 
@@ -294,8 +322,8 @@ player lights は `0x30` set player lights で Switch から要求される muta
 
 ## 12. 先送り事項
 
-- 別 OS、別 firmware、既存 bond cache 条件での controller color UI 反映確認。この unit では Windows / Switch 2 / firmware 22.1.0 の条件付き observation まで完了とする。
-- grip color の別 UI / 別 firmware 条件での目視確認。この unit では Windows / Switch 2 / firmware 22.1.0 の controller search / change grip order screen で、`0x6056`-`0x605B` に指定した left/right grip 色が 15 秒 hold と 30 秒 hold のどちらでも controller graphic 上の左右 grip としては見えないことまでを条件付き observation とする。
+- 別 OS、別 firmware、既存 bond cache 条件での controller color UI 反映確認。この unit では Windows / Switch 2 / firmware 22.1.0 の条件付き observation まで完了とする。tracked sentinel test では production default `03 02` tail で left/right grip がマゼンタ/オレンジとして反映された。
+- device-info tail `03 02` の意味名は未確定。この unit では mizuyoukanao/btstack 実装事実と Windows / Switch 2 / firmware 22.1.0 hardware observation に基づく protocol profile byte として採用する。別 firmware や別 UI での再確認は後続に回す。
 - serial number、Bluetooth address、calibration、battery、player lights、report period の customization は別 unit に分ける。
 
 ## 13. チェックリスト

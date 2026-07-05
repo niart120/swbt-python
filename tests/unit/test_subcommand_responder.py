@@ -36,7 +36,7 @@ def test_device_info_subcommand_builds_profile_reply() -> None:
 
     assert reply[13] == 0x82
     assert reply[14] == 0x02
-    assert reply[15:27] == bytes.fromhex("04 00 03 02 00 00 00 00 00 00 01 01")
+    assert reply[15:27] == bytes.fromhex("04 00 03 02 00 00 00 00 00 00 03 02")
     assert reply[27:] == bytes(23)
 
 

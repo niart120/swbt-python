@@ -18,6 +18,15 @@ def pytest_addoption(parser: Parser) -> None:
         default=None,
         help="Directory where hardware diagnostics artifacts should be written.",
     )
+    group.addoption(
+        "--swbt-device-info-address",
+        action="store",
+        default=None,
+        help=(
+            "Optional controller Bluetooth address bytes for hardware characterization, "
+            "formatted as 00:1B:DC:F9:9F:7D."
+        ),
+    )
 
 
 @pytest.fixture
@@ -37,3 +46,24 @@ def swbt_hardware_artifact_dir(pytestconfig: Config, tmp_path: Path) -> Path:
     artifact_dir = Path(option)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     return artifact_dir
+
+
+@pytest.fixture
+def swbt_device_info_address(pytestconfig: Config) -> bytes:
+    option = pytestconfig.getoption("--swbt-device-info-address")
+    if not isinstance(option, str) or option == "":
+        pytest.skip("--swbt-device-info-address is required for this hardware characterization")
+    return _parse_bt_address(option)
+
+
+def _parse_bt_address(value: str) -> bytes:
+    parts = value.split(":")
+    if len(parts) != 6:
+        pytest.fail("--swbt-device-info-address must contain 6 colon-separated bytes")
+    try:
+        address = bytes(int(part, 16) for part in parts)
+    except ValueError:
+        pytest.fail("--swbt-device-info-address must be hexadecimal")
+    if len(address) != 6:
+        pytest.fail("--swbt-device-info-address must contain byte values")
+    return address
