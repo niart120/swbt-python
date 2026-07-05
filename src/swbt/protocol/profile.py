@@ -314,6 +314,74 @@ class ControllerColors:
 
 
 @dataclass(frozen=True)
+class HidSdpPolicy:
+    """Classic HID SDP attributes associated with a controller profile."""
+
+    service_name: str | None = None
+    service_description: str | None = None
+    provider_name: str | None = None
+    device_release_number: int | None = None
+    bluetooth_profile_version: int = 0x0101
+    parser_version: int = 0x0111
+    device_subclass: int = 0x08
+    country_code: int = 0x21
+    virtual_cable: bool = True
+    reconnect_initiate: bool = True
+    remote_wake: bool | None = True
+    profile_version: int = 0x0101
+    supervision_timeout: int = 0x0C80
+    normally_connectable: bool = True
+    boot_device: bool = False
+    ssr_host_max_latency: int = 0xFFFF
+    ssr_host_min_timeout: int = 0xFFFF
+
+    def __post_init__(self) -> None:
+        """Validate SDP scalar values."""
+        for name in (
+            "bluetooth_profile_version",
+            "parser_version",
+            "profile_version",
+            "supervision_timeout",
+            "ssr_host_max_latency",
+            "ssr_host_min_timeout",
+        ):
+            self._validate_uint16(name, getattr(self, name))
+        if self.device_release_number is not None:
+            self._validate_uint16("device_release_number", self.device_release_number)
+        self._validate_byte("device_subclass", self.device_subclass)
+        self._validate_byte("country_code", self.country_code)
+
+    @staticmethod
+    def _validate_uint16(name: str, value: int) -> None:
+        if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 0xFFFF:
+            msg = f"{name} must be a 16-bit integer"
+            raise InvalidInputError(msg)
+
+    @staticmethod
+    def _validate_byte(name: str, value: int) -> None:
+        if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 0xFF:
+            msg = f"{name} must be a byte integer"
+            raise InvalidInputError(msg)
+
+
+def _joycontrol_hid_sdp_policy() -> HidSdpPolicy:
+    return HidSdpPolicy(
+        service_name="Wireless Gamepad",
+        service_description="Gamepad",
+        provider_name="Nintendo",
+        device_release_number=0x0100,
+        bluetooth_profile_version=0x0100,
+        country_code=0x00,
+        remote_wake=None,
+        profile_version=0x0100,
+        normally_connectable=False,
+        boot_device=True,
+        ssr_host_max_latency=0x0640,
+        ssr_host_min_timeout=0x0320,
+    )
+
+
+@dataclass(frozen=True)
 class ControllerProfile:
     """Protocol defaults for a Switch-compatible controller shape."""
 
@@ -327,6 +395,7 @@ class ControllerProfile:
     battery_connection: int = 0x91
     vibrator_input: int = 0x00
     hid_report_descriptor: bytes = SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
+    hid_sdp_policy: HidSdpPolicy = field(default_factory=HidSdpPolicy)
     controller_colors: ControllerColors = field(default_factory=ControllerColors)
     button_bits: ButtonBitMap = field(default_factory=lambda: PRO_CONTROLLER_BUTTON_BITS)
     supports_left_stick: bool = True
@@ -464,6 +533,7 @@ class JoyConLeftProfile(ControllerProfile):
     device_name: str = "Joy-Con (L)"
     device_type: int = 0x01
     device_info_tail: bytes = b"\x01\x01"
+    hid_sdp_policy: HidSdpPolicy = field(default_factory=_joycontrol_hid_sdp_policy)
     button_bits: ButtonBitMap = field(default_factory=lambda: JOYCON_LEFT_BUTTON_BITS)
     supports_left_stick: bool = True
     supports_right_stick: bool = False
@@ -477,6 +547,7 @@ class JoyConRightProfile(ControllerProfile):
     device_name: str = "Joy-Con (R)"
     device_type: int = 0x02
     device_info_tail: bytes = b"\x01\x01"
+    hid_sdp_policy: HidSdpPolicy = field(default_factory=_joycontrol_hid_sdp_policy)
     button_bits: ButtonBitMap = field(default_factory=lambda: JOYCON_RIGHT_BUTTON_BITS)
     supports_left_stick: bool = False
     supports_right_stick: bool = True

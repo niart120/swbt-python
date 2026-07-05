@@ -218,16 +218,29 @@ handoff = ["joycon-profile-hardware"]
 id = "profile_aware_bumble_sdp_boundary"
 fixture_name = "profile_aware_bumble_sdp_boundary"
 area = "transport"
-value = "Bumble transport passes ControllerProfile.hid_report_descriptor into the SDP HID descriptor list and uses profile.device_name as the default service/device name, while an explicit device_name override wins. Descriptor-adjacent Bluetooth/SDP values remain Pro-compatible fixed values for now, including Class of Device 0x002508, HID country code 0x21, remote wake true, supervision timeout 0x0c80, and SSR max/min 0xffff. Joy-Con descriptor bytes remain unaudited and are not promoted to a stable profile-specific SDP fixture."
+value = "Bumble transport passes ControllerProfile.hid_report_descriptor into the SDP HID descriptor list and uses profile.device_name as the HCI local name default, while an explicit device_name override wins. Pro profile SDP values remain Pro-compatible fixed values, including Class of Device 0x002508, HID country code 0x21, remote wake true, supervision timeout 0x0c80, and SSR max/min 0xffff. Joy-Con profiles use the joycontrol_sdp_record_policy source fact for SDP service/provider and HID attributes, but Class of Device remains 0x002508 and Joy-Con descriptor bytes remain unaudited."
 classification = "implementation fact"
 source = [
     'src\swbt\gamepad\transport_factory.py',
+    'src\swbt\protocol\profile.py',
     'src\swbt\transport\bumble.py',
     'src\swbt\transport\_bumble_sdp.py',
     'https://github.com/niart120/swbt-python/issues/53',
 ]
 status = "profile-boundary-policy"
-handoff = ["unit_033"]
+handoff = ["unit_033", "unit_036"]
+
+[[entry]]
+id = "joycontrol_sdp_record_policy"
+fixture_name = "joycontrol_sdp_record_policy"
+area = "transport"
+value = "joycontrol SDP XML for the emulated Nintendo Switch controller uses service name 0x0100=Wireless Gamepad, service description 0x0101=Gamepad, provider 0x0102=Nintendo, device release number 0x0200=0x0100, HID country code 0x0203=0x00, HID profile version 0x020b=0x0100, omits HID remote wake 0x020a, sets normally connectable 0x020d=false, boot device 0x020e=true, and sets SSR host max/min 0x020f/0x0210=0x0640/0x0320. The HID descriptor bytes in the same XML match the existing 203-byte descriptor shape, so this entry is not a new Joy-Con-specific descriptor source."
+classification = "source fact"
+source = [
+    'https://github.com/mart1nro/joycontrol/blob/master/joycontrol/profile/sdp_record_hid.xml',
+]
+status = "stable-sdp-policy"
+handoff = ["unit_036"]
 
 [[entry]]
 id = "spi_flash_boundary_and_seed_map"

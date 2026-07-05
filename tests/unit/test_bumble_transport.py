@@ -14,7 +14,7 @@ from bumble.keys import PairingKeys
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
-from swbt.protocol.profile import ProControllerProfile
+from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
 from swbt.transport import bumble as bumble_module
 from swbt.transport._bumble_sdp import build_hid_service_records
 from swbt.transport.bumble import BumbleHidTransport
@@ -929,16 +929,18 @@ def test_bumble_initialize_device_uses_profile_hid_descriptor(
             hid_descriptor: bytes,
             *,
             device_name: str = "Pro Controller",
+            sdp_policy: object,
         ) -> dict[int, list[object]]:
             captured_sdp["hid_descriptor"] = hid_descriptor
             captured_sdp["device_name"] = device_name
+            captured_sdp["sdp_policy"] = sdp_policy
             return {0x00010001: []}
 
         monkeypatch.setattr(bumble_device_module, "Device", FakeDeviceFactory)
         monkeypatch.setattr(bumble_hid_module, "Device", create_hid_device)
         monkeypatch.setattr(bumble_module, "build_hid_service_records", build_service_records)
 
-        profile = ProControllerProfile(hid_report_descriptor=b"\x85\x30\x00")
+        profile = JoyConLeftProfile(hid_report_descriptor=b"\x85\x30\x00")
         handle = FakeBumbleHandle()
 
         runtime = await bumble_module._default_initialize_device(
@@ -950,6 +952,7 @@ def test_bumble_initialize_device_uses_profile_hid_descriptor(
         assert captured_sdp == {
             "hid_descriptor": b"\x85\x30\x00",
             "device_name": "Profile Pad",
+            "sdp_policy": profile.hid_sdp_policy,
         }
         assert cast("Any", fake_device).sdp_service_records == {0x00010001: []}
         assert runtime.hid_descriptor_size == 3

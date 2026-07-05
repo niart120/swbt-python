@@ -49,6 +49,23 @@ def test_controller_profiles_have_distinct_identity_values() -> None:
     assert right.device_type == 0x02
 
 
+def test_joycon_profiles_use_joycontrol_sdp_policy() -> None:
+    left_policy = JoyConLeftProfile().hid_sdp_policy
+    right_policy = JoyConRightProfile().hid_sdp_policy
+
+    assert left_policy == right_policy
+    assert left_policy.service_name == "Wireless Gamepad"
+    assert left_policy.service_description == "Gamepad"
+    assert left_policy.provider_name == "Nintendo"
+    assert left_policy.device_release_number == 0x0100
+    assert left_policy.country_code == 0x00
+    assert left_policy.profile_version == 0x0100
+    assert left_policy.normally_connectable is False
+    assert left_policy.boot_device is True
+    assert left_policy.ssr_host_max_latency == 0x0640
+    assert left_policy.ssr_host_min_timeout == 0x0320
+
+
 def test_profile_build_device_info_uses_caller_bluetooth_address() -> None:
     bluetooth_address = bytes.fromhex("01 23 45 67 89 ab")
 

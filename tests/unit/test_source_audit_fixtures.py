@@ -30,6 +30,7 @@ REQUIRED_ENTRY_IDS = {
     "subcommand_report_mode_session_state",
     "subcommand_imu_vibration_enable_state",
     "profile_aware_bumble_sdp_boundary",
+    "joycontrol_sdp_record_policy",
     "spi_flash_boundary_and_seed_map",
     "raw_rumble_payload",
     "hid_report_descriptor",
@@ -353,4 +354,25 @@ def test_profile_aware_bumble_sdp_boundary_is_source_audited() -> None:
     assert "explicit device_name override" in value
     assert "Class of Device 0x002508" in value
     assert "Pro-compatible fixed" in value
+    assert "joycontrol_sdp_record_policy" in value
     assert "Joy-Con descriptor bytes remain unaudited" in value
+
+
+def test_joycontrol_sdp_record_policy_is_source_audited() -> None:
+    entry = _entry_by_id("joycontrol_sdp_record_policy")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "stable-sdp-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "Wireless Gamepad" in value
+    assert "Gamepad" in value
+    assert "Nintendo" in value
+    assert "0x0203=0x00" in value
+    assert "0x020b=0x0100" in value
+    assert "omits HID remote wake" in value
+    assert "0x020d=false" in value
+    assert "0x020e=true" in value
+    assert "0x0640/0x0320" in value
+    assert "not a new Joy-Con-specific descriptor source" in value

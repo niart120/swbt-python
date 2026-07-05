@@ -689,6 +689,7 @@ async def _default_initialize_device(
     service_records = build_hid_service_records(
         profile.hid_report_descriptor,
         device_name=device_name,
+        sdp_policy=profile.hid_sdp_policy,
     )
     device.sdp_service_records = service_records
     hid_device = HidDevice(device)
