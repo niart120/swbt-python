@@ -994,6 +994,42 @@ def test_joycon_wrapper_sends_sr_sl_order_button_input(
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    ("side", "button_bytes"),
+    [
+        ("left", "00 00 30"),
+        ("right", "30 00 00"),
+    ],
+)
+def test_joycon_wrapper_holds_sr_sl_in_periodic_input(
+    side: Literal["left", "right"],
+    button_bytes: str,
+) -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with JoyCon(side, transport=transport, report_period_us=1000) as pad:
+            await transport.connect()
+
+            start_count = len(transport.sent_interrupt_reports)
+            await pad.press(Button.SR, Button.SL)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 1)
+
+            hold_report = reports[start_count]
+            assert hold_report[0] == 0x30
+            assert hold_report[3:6] == bytes.fromhex(button_bytes)
+
+            await pad.release(Button.SR, Button.SL)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 2)
+
+            neutral_report = reports[start_count + 1]
+            assert neutral_report[0] == 0x30
+            assert neutral_report[3:6] == b"\x00\x00\x00"
+            assert pad.snapshot() == InputState.neutral()
+
+    asyncio.run(run())
+
+
 def test_joycon_wrapper_rejects_invalid_side() -> None:
     with pytest.raises(InvalidInputError):
         JoyCon(cast("Any", "center"), transport=FakeHidTransport())

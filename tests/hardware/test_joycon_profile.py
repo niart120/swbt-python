@@ -11,7 +11,8 @@ from swbt.protocol.output_report import OutputReport
 from swbt.protocol.subcommand import SubcommandResponder, SubcommandSessionState
 
 _OPERATOR_WAIT_SECONDS = 5.0
-_ORDER_BUTTON_HOLD_SECONDS = 1.0
+_ORDER_BUTTON_VISIBLE_REPORT_COUNT = 120
+_NEUTRAL_REPORT_HOLD_COUNT = 8
 _UI_OBSERVATION_HOLD_SECONDS = 10.0
 
 
@@ -78,6 +79,16 @@ def test_switch_joycon_profile_pairing_records_device_info(
                     report_0x30_count=pad.status().report_counters.get(0x30, 0),
                     side=side,
                 )
+                await _wait_for_full_handshake(trace_path, timeout_seconds=20.0)
+                _record_probe_event(
+                    trace,
+                    "manual_joycon_profile_checkpoint",
+                    last_subcommand_id=_format_optional_hex(pad.status().last_subcommand_id),
+                    operation="full_handshake_observed",
+                    report_0x21_count=pad.status().report_counters.get(0x21, 0),
+                    report_0x30_count=pad.status().report_counters.get(0x30, 0),
+                    side=side,
+                )
                 await _send_order_buttons(pad, trace, side=side)
                 await asyncio.sleep(_UI_OBSERVATION_HOLD_SECONDS)
                 _record_probe_event(
@@ -122,8 +133,8 @@ def test_switch_joycon_profile_pairing_records_device_info(
         events,
         "manual_joycon_profile_checkpoint",
         expected_button_bytes=_expected_order_button_bytes(side),
-        input_report_delta_at_least_2=True,
-        operation="sr_sl_order_buttons_tap_complete",
+        input_report_delta_at_least_order_hold=True,
+        operation="sr_sl_order_buttons_hold_reports_sent",
         side=side,
     )
     assert _contains_event(
@@ -194,34 +205,47 @@ def _install_device_info_probe(pad: JoyCon, trace: TextIO, *, side: str) -> None
 
 
 async def _send_order_buttons(pad: JoyCon, trace: TextIO, *, side: str) -> None:
+    await pad.press(Button.SR, Button.SL)
     report_0x30_count_before = pad.status().report_counters.get(0x30, 0)
     _record_probe_event(
         trace,
         "manual_joycon_profile_checkpoint",
         expected_button_bytes=_expected_order_button_bytes(side),
-        hold_seconds=_ORDER_BUTTON_HOLD_SECONDS,
+        hold_report_count=_ORDER_BUTTON_VISIBLE_REPORT_COUNT,
         report_0x30_count_before=report_0x30_count_before,
         operation="sr_sl_order_buttons_start",
         side=side,
     )
-    await pad.tap(Button.SR, Button.SL, duration=_ORDER_BUTTON_HOLD_SECONDS)
+    await _wait_for_report_counter(
+        pad,
+        report_id=0x30,
+        minimum_count=report_0x30_count_before + _ORDER_BUTTON_VISIBLE_REPORT_COUNT,
+        timeout_seconds=3.0,
+    )
     report_0x30_count_after = pad.status().report_counters.get(0x30, 0)
     input_report_delta = report_0x30_count_after - report_0x30_count_before
-    assert input_report_delta >= 2
+    assert input_report_delta >= _ORDER_BUTTON_VISIBLE_REPORT_COUNT
     _record_probe_event(
         trace,
         "manual_joycon_profile_checkpoint",
         expected_button_bytes=_expected_order_button_bytes(side),
-        hold_seconds=_ORDER_BUTTON_HOLD_SECONDS,
+        hold_report_count=_ORDER_BUTTON_VISIBLE_REPORT_COUNT,
         input_report_delta=input_report_delta,
-        input_report_delta_at_least_2=True,
-        operation="sr_sl_order_buttons_tap_complete",
+        input_report_delta_at_least_order_hold=True,
+        operation="sr_sl_order_buttons_hold_reports_sent",
         report_0x30_count=report_0x30_count_after,
         report_0x30_count_before=report_0x30_count_before,
         side=side,
     )
-    await pad.neutral()
+    await pad.release(Button.SR, Button.SL)
     assert pad.snapshot() == InputState.neutral()
+    neutral_start_count = pad.status().report_counters.get(0x30, 0)
+    await _wait_for_report_counter(
+        pad,
+        report_id=0x30,
+        minimum_count=neutral_start_count + _NEUTRAL_REPORT_HOLD_COUNT,
+        timeout_seconds=2.0,
+    )
     _record_probe_event(
         trace,
         "manual_joycon_profile_checkpoint",
@@ -248,6 +272,34 @@ async def _wait_for_device_info_reply(
             ):
                 return
             await asyncio.sleep(0.05)
+
+
+async def _wait_for_full_handshake(trace_path: Path, *, timeout_seconds: float) -> None:
+    async with asyncio.timeout(timeout_seconds):
+        while True:
+            if _contains_full_handshake(_read_jsonl(trace_path)):
+                return
+            await asyncio.sleep(0.05)
+
+
+async def _wait_for_report_counter(
+    pad: JoyCon,
+    *,
+    report_id: int,
+    minimum_count: int,
+    timeout_seconds: float,
+) -> None:
+    interval_seconds = 0.01
+    attempts = max(1, int(timeout_seconds / interval_seconds))
+
+    for _ in range(attempts):
+        if pad.status().report_counters.get(report_id, 0) >= minimum_count:
+            return
+        await asyncio.sleep(interval_seconds)
+
+    current_count = pad.status().report_counters.get(report_id, 0)
+    msg = f"report 0x{report_id:02x} count stayed at {current_count}, expected {minimum_count}"
+    raise TimeoutError(msg)
 
 
 def _expected_device_name(side: Literal["left", "right"]) -> str:
@@ -310,7 +362,34 @@ def _contains_event(
     return False
 
 
+def _contains_full_handshake(events: list[dict[str, Any]]) -> bool:
+    subcommands = [
+        event.get("subcommand_id") for event in events if event.get("event") == "subcommand_rx"
+    ]
+    required = {"0x02", "0x08", "0x10", "0x03", "0x04", "0x40", "0x48", "0x21", "0x30"}
+    return required.issubset(set(subcommands)) and _all_observed_subcommands_have_replies(events)
+
+
+def _all_observed_subcommands_have_replies(events: list[dict[str, Any]]) -> bool:
+    reply_keys = {
+        (event.get("packet_id"), event.get("subcommand_id"))
+        for event in events
+        if event.get("event") == "subcommand_reply_tx"
+    }
+    return all(
+        (event.get("packet_id"), event.get("subcommand_id")) in reply_keys
+        for event in events
+        if event.get("event") == "subcommand_rx"
+    )
+
+
 def _format_optional_byte(data: bytes, index: int) -> str | None:
     if index >= len(data):
         return None
     return f"0x{data[index]:02x}"
+
+
+def _format_optional_hex(value: int | None) -> str | None:
+    if value is None:
+        return None
+    return f"0x{value:02x}"
