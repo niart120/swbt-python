@@ -66,6 +66,17 @@ def test_device_info_subcommand_uses_caller_bluetooth_address() -> None:
     assert reply[15:27] == bytes.fromhex("04 00 03 02 01 23 45 67 89 ab 03 02")
 
 
+def test_device_info_subcommand_updates_bluetooth_address_without_new_responder() -> None:
+    session_state = SubcommandSessionState(report_mode=0x30, report_mode_supported=True)
+    responder = SubcommandResponder(session_state=session_state)
+
+    responder.set_device_info_bluetooth_address(bytes.fromhex("00 1b dc f9 9f 7d"))
+    reply = responder.respond(_subcommand_report(0x02), state=InputState.neutral())
+
+    assert responder.session_state is session_state
+    assert reply[15:27] == bytes.fromhex("04 00 03 02 00 1b dc f9 9f 7d 03 02")
+
+
 def test_trigger_buttons_elapsed_subcommand_builds_pairing_reply() -> None:
     reply = _reply(0x04)
 

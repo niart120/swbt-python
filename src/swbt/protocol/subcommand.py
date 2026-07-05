@@ -67,6 +67,13 @@ class SubcommandResponder:
         """Return the mutable subcommand state owned by this responder."""
         return self._session_state
 
+    def set_device_info_bluetooth_address(self, bluetooth_address: bytes) -> None:
+        """Update the Bluetooth address returned by subcommand 0x02."""
+        if len(bluetooth_address) != 6:
+            msg = "bluetooth_address must be 6 bytes"
+            raise ProtocolError(msg)
+        self._device_info_bluetooth_address = bytes(bluetooth_address)
+
     def respond(self, output_report: OutputReport, *, state: InputState, timer: int = 0) -> bytes:
         """Return a 0x21 reply for an output report with a subcommand."""
         if output_report.subcommand_id is None:

@@ -175,6 +175,10 @@ class RecordingDeviceInfoResponder(SubcommandResponder):
         """Return the wrapped responder session state."""
         return self._inner.session_state
 
+    def set_device_info_bluetooth_address(self, bluetooth_address: bytes) -> None:
+        """Forward Device Info address updates to the wrapped responder."""
+        self._inner.set_device_info_bluetooth_address(bluetooth_address)
+
     def respond(self, output_report: OutputReport, *, state: InputState, timer: int = 0) -> bytes:
         """Return the inner responder reply and emit device-info observations."""
         reply = self._inner.respond(output_report, state=state, timer=timer)

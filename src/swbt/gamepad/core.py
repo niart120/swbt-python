@@ -603,10 +603,8 @@ class SwitchGamepad:
             raise InvalidInputError(msg)
         if address == self._configured_device_info_bluetooth_address:
             return
-        self._output_report_dispatcher.subcommand_responder = SubcommandResponder(
-            profile=self._controller_profile,
-            session_state=self._output_report_dispatcher.subcommand_responder.session_state,
-            device_info_bluetooth_address=address,
+        self._output_report_dispatcher.subcommand_responder.set_device_info_bluetooth_address(
+            address
         )
         self._configured_device_info_bluetooth_address = address
         self._diagnostics.record_event(
