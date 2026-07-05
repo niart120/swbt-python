@@ -778,6 +778,24 @@ def test_output_report_injection_sends_subcommand_reply() -> None:
     asyncio.run(run())
 
 
+def test_output_report_injection_uses_transport_bluetooth_address_for_device_info() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport(local_bluetooth_address=bytes.fromhex("00 1b dc f9 9f 7d"))
+        request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
+
+        async with SwitchGamepad(transport=transport, report_period_us=1000):
+            await transport.connect()
+
+            await transport.inject_interrupt_data(request_device_info)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[0] == 0x21
+            assert reply[14] == 0x02
+            assert reply[15:27] == bytes.fromhex("04 00 03 02 00 1b dc f9 9f 7d 03 02")
+
+    asyncio.run(run())
+
+
 def test_output_report_injection_uses_configured_controller_colors() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

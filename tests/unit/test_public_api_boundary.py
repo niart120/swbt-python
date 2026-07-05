@@ -457,6 +457,17 @@ def test_hid_transport_bonded_peer_listing_documents_current_candidate_contract(
     assert "InvalidKeyStoreError" in doc
 
 
+def test_hid_transport_local_bluetooth_address_boundary_uses_plain_types() -> None:
+    signature = inspect.signature(HidDeviceTransport.local_bluetooth_address)
+    annotation_text = repr(signature.return_annotation).lower()
+    doc = inspect.getdoc(HidDeviceTransport.local_bluetooth_address)
+
+    assert list(signature.parameters) == ["self"]
+    assert "bumble" not in annotation_text
+    assert doc is not None
+    assert "Device Info" in doc
+
+
 def test_default_transport_without_key_store_records_reconnect_limitation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

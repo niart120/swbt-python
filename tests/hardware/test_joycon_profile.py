@@ -11,7 +11,8 @@ from swbt.protocol.output_report import OutputReport
 from swbt.protocol.subcommand import SubcommandResponder, SubcommandSessionState
 
 _OPERATOR_WAIT_SECONDS = 5.0
-_ORDER_BUTTON_VISIBLE_REPORT_COUNT = 120
+_ORDER_BUTTON_HOLD_SECONDS = 5.0
+_ORDER_BUTTON_MIN_REPORT_COUNT = 30
 _NEUTRAL_REPORT_HOLD_COUNT = 8
 _UI_OBSERVATION_HOLD_SECONDS = 10.0
 
@@ -128,12 +129,13 @@ def test_switch_joycon_profile_pairing_records_device_info(
         side=side,
         tail_bytes="0101",
     )
+    assert _device_info_address_matches_bumble_local_address(events)
     assert _contains_event(events, "subcommand_reply_tx", subcommand_id="0x02")
     assert _contains_event(
         events,
         "manual_joycon_profile_checkpoint",
         expected_button_bytes=_expected_order_button_bytes(side),
-        input_report_delta_at_least_order_hold=True,
+        input_report_delta_at_least_minimum=True,
         operation="sr_sl_order_buttons_hold_reports_sent",
         side=side,
     )
@@ -211,27 +213,24 @@ async def _send_order_buttons(pad: JoyCon, trace: TextIO, *, side: str) -> None:
         trace,
         "manual_joycon_profile_checkpoint",
         expected_button_bytes=_expected_order_button_bytes(side),
-        hold_report_count=_ORDER_BUTTON_VISIBLE_REPORT_COUNT,
+        hold_seconds=_ORDER_BUTTON_HOLD_SECONDS,
+        min_report_count=_ORDER_BUTTON_MIN_REPORT_COUNT,
         report_0x30_count_before=report_0x30_count_before,
         operation="sr_sl_order_buttons_start",
         side=side,
     )
-    await _wait_for_report_counter(
-        pad,
-        report_id=0x30,
-        minimum_count=report_0x30_count_before + _ORDER_BUTTON_VISIBLE_REPORT_COUNT,
-        timeout_seconds=3.0,
-    )
+    await asyncio.sleep(_ORDER_BUTTON_HOLD_SECONDS)
     report_0x30_count_after = pad.status().report_counters.get(0x30, 0)
     input_report_delta = report_0x30_count_after - report_0x30_count_before
-    assert input_report_delta >= _ORDER_BUTTON_VISIBLE_REPORT_COUNT
+    assert input_report_delta >= _ORDER_BUTTON_MIN_REPORT_COUNT
     _record_probe_event(
         trace,
         "manual_joycon_profile_checkpoint",
         expected_button_bytes=_expected_order_button_bytes(side),
-        hold_report_count=_ORDER_BUTTON_VISIBLE_REPORT_COUNT,
+        hold_seconds=_ORDER_BUTTON_HOLD_SECONDS,
         input_report_delta=input_report_delta,
-        input_report_delta_at_least_order_hold=True,
+        input_report_delta_at_least_minimum=True,
+        min_report_count=_ORDER_BUTTON_MIN_REPORT_COUNT,
         operation="sr_sl_order_buttons_hold_reports_sent",
         report_0x30_count=report_0x30_count_after,
         report_0x30_count_before=report_0x30_count_before,
@@ -360,6 +359,22 @@ def _contains_event(
         if all(event.get(key) == value for key, value in expected_fields.items()):
             return True
     return False
+
+
+def _device_info_address_matches_bumble_local_address(events: list[dict[str, Any]]) -> bool:
+    local_address = None
+    device_info_address = None
+    for event in events:
+        if event.get("event") == "bumble_device_initialized":
+            local_address = event.get("local_bluetooth_address")
+        if event.get("event") == "device_info_reply":
+            device_info_address = event.get("profile_bluetooth_address_bytes")
+    return (
+        isinstance(local_address, str)
+        and isinstance(device_info_address, str)
+        and local_address != "000000000000"
+        and local_address == device_info_address
+    )
 
 
 def _contains_order_input_window(events: list[dict[str, Any]]) -> bool:

@@ -245,6 +245,7 @@ class SwitchGamepad:
             self._connected_event.clear()
             try:
                 await transport.open()
+                self._configure_device_info_bluetooth_address(transport)
                 self._report_loop = ReportLoop(
                     transport=transport,
                     state_store=self._state_store,
@@ -587,6 +588,26 @@ class SwitchGamepad:
         self._transport.on_control_data(self._handle_control_data)
         self._transport.on_connected(self._handle_connected)
         self._transport.on_disconnected(self._handle_disconnected)
+
+    def _configure_device_info_bluetooth_address(self, transport: HidDeviceTransport) -> None:
+        get_address = getattr(transport, "local_bluetooth_address", None)
+        if not callable(get_address):
+            return
+        address = get_address()
+        if address is None:
+            return
+        if len(address) != 6:
+            msg = "local_bluetooth_address must return 6 bytes"
+            raise InvalidInputError(msg)
+        self._output_report_dispatcher.subcommand_responder = SubcommandResponder(
+            profile=self._controller_profile,
+            session_state=self._output_report_dispatcher.subcommand_responder.session_state,
+            device_info_bluetooth_address=address,
+        )
+        self._diagnostics.record_event(
+            "device_info_bluetooth_address_configured",
+            address=address.hex(),
+        )
 
     async def _send_trailing_neutral_if_connected(self) -> None:
         await self._state_store.neutral()

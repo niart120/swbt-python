@@ -9,6 +9,7 @@ from typing import Any, cast
 import bumble.device as bumble_device_module
 import bumble.hid as bumble_hid_module
 import pytest
+from bumble.hci import Address
 from bumble.keys import PairingKeys
 
 from swbt.diagnostics import DiagnosticsRecorder
@@ -1846,6 +1847,47 @@ def test_bumble_connection_request_is_recorded_before_connection_complete() -> N
             "peer_address": "01:02:03:04:05:06",
         } in events
         assert device.connection_requests == [("01:02:03:04:05:06", 0x2508, 1)]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_device_info_bluetooth_address_uses_display_order() -> None:
+    address = bumble_module._device_info_bluetooth_address_from_bumble_address(
+        Address("00:1B:DC:F9:9F:7D")
+    )
+
+    assert address == bytes.fromhex("00 1b dc f9 9f 7d")
+
+
+def test_bumble_transport_exposes_runtime_local_bluetooth_address() -> None:
+    async def run() -> None:
+        local_address = bytes.fromhex("00 1b dc f9 9f 7d")
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return bumble_module._BumbleRuntime(
+                device=cast("bumble_module._BumbleDeviceRuntime", FakeBumbleDevice()),
+                hid_device=cast("bumble_module._BumbleHidRuntime", FakeHidDevice()),
+                service_record_count=1,
+                hid_descriptor_size=203,
+                local_bluetooth_address=local_address,
+            )
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+
+        assert transport.local_bluetooth_address() == local_address
 
         await transport.close()
 

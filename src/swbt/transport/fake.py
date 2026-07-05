@@ -26,6 +26,7 @@ class FakeHidTransport:
         active_reconnect_auto_connect: bool = True,
         active_reconnect_error: BaseException | None = None,
         send_interrupt_error: Exception | None = None,
+        local_bluetooth_address: bytes | None = None,
         close_wait: asyncio.Event | None = None,
     ) -> None:
         """Create a closed fake transport."""
@@ -38,6 +39,9 @@ class FakeHidTransport:
         self._active_reconnect_auto_connect = active_reconnect_auto_connect
         self._active_reconnect_error = active_reconnect_error
         self._send_interrupt_error = send_interrupt_error
+        self._local_bluetooth_address = (
+            None if local_bluetooth_address is None else bytes(local_bluetooth_address)
+        )
         self._close_wait = close_wait
         self._events: list[str] = []
         self._control_channel_open = False
@@ -147,6 +151,10 @@ class FakeHidTransport:
             status="requested",
             channels=("control", "interrupt"),
         )
+
+    def local_bluetooth_address(self) -> bytes | None:
+        """Return the configured fake local Bluetooth address."""
+        return self._local_bluetooth_address
 
     async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
         """Return the fake current reconnect candidate configured by a test."""

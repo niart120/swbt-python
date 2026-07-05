@@ -23,6 +23,7 @@ REQUIRED_ENTRY_IDS = {
     "device_info_swbt_pro_profile",
     "device_info_grip_color_tail_0302",
     "joycon_device_info_profile",
+    "device_info_local_bluetooth_address_wiring",
     "joycon_spi_device_type_values",
     "joycon_standard_button_mapping",
     "joycon_standard_stick_availability",
@@ -237,6 +238,20 @@ def test_joycon_device_info_profile_is_source_audited() -> None:
     assert "JOYCON_R=0x02" in value
     assert "marker=0x02" in value
     assert "tail=01 01" in value
+
+
+def test_device_info_local_bluetooth_address_wiring_is_recorded() -> None:
+    entry = _entry_by_id("device_info_local_bluetooth_address_wiring")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "implementation-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "transport.local_bluetooth_address()" in value
+    assert "Device Info" in value
+    assert "Bumble Address bytes" in value
+    assert "display order" in value
 
 
 def test_joycon_spi_device_type_values_are_source_audited() -> None:
