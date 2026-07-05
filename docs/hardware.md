@@ -117,6 +117,22 @@ swbt-probe adapters --json
 
 `key_store_path` は pairing 情報を保存する JSON key store path です。保存済み bond を使う場合は `SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json")` のように指定します。
 
+### Profile-specific Key Stores
+
+key store は controller profile ごとに分けてください。Pro Controller 相当、Joy-Con L 相当、Joy-Con R 相当のように HID identity や SDP record が異なる profile を同じ key store に混ぜると、保存済み bond と実際に advertising する identity の対応が崩れます。
+
+運用例:
+
+- Pro Controller 相当: `keys/pro-controller.json`
+- Joy-Con L 相当: `keys/joy-con-left.json`
+- Joy-Con R 相当: `keys/joy-con-right.json`
+
+同じ profile でも、接続先の対象機器を分ける場合は key store も分けます。1 つの key store は「1 つの対象機器」と「1 つの controller profile」の組み合わせに固定してください。
+
+Joy-Con profile の実機互換は未検証です。現時点の確認済み hardware log は Pro Controller 相当の動作を中心に扱っています。Joy-Con L / R 相当の profile で、Switch 側の認識、pairing、reconnect、入力反映、SDP の細部一致、OS / dongle / firmware をまたぐ互換性は確認済みとして扱わないでください。
+
+Bumble adapter open、HID advertising、Switch pairing、Switch-facing output report / subcommand handling、periodic input report loop は実機または USB Bluetooth dongle に触れる操作です。Joy-Con profile でこれらを試す場合も、対象 adapter、実行 command、Switch-facing 動作範囲、cleanup plan を明示したうえで、人間の承認を得てから実行してください。
+
 `connect(timeout=..., allow_pairing=True)` は保存済み bond があれば reconnect を優先し、bond がない場合だけ pairing fallback へ進みます。初回 pairing では対象機器を controller pairing / search 画面に置いてください。
 
 `reconnect(timeout=...)` は key store に current bonded peer が 1 件ある場合だけ active reconnect を試します。pairing fallback はしません。

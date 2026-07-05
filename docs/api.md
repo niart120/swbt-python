@@ -3,7 +3,7 @@
 `swbt-python` の公開 API は `swbt` module root から import します。
 
 ```python
-from swbt import AdapterInfo, Button, ControllerColors, IMUFrame, InputState, Stick, SwitchGamepad
+from swbt import AdapterInfo, Button, ControllerColors, IMUFrame, InputState, JoyCon, Stick, SwitchGamepad
 ```
 
 `swbt.gamepad.*` や `swbt.transport.*` の deep import は、テスト、移行作業、custom transport 実装に限定します。`HidDeviceTransport` は custom transport 用の public extension point です。Bumble 型を public API に露出しません。
@@ -17,6 +17,7 @@ from swbt import AdapterInfo, Button, ControllerColors, IMUFrame, InputState, St
 | `list_adapters` | `SwitchGamepad(adapter=...)` に渡せる USB Bluetooth adapter 候補の列挙 |
 | `AdapterInfo` | adapter 候補の no-open snapshot |
 | `SwitchGamepad` | 利用者が操作する仮想 gamepad |
+| `JoyCon` | 単体 Joy-Con L/R 相当の thin wrapper |
 | `SwitchGamepadConfig` | `from_config()` 用の resource 設定 |
 | `ControllerColors` | controller body / buttons / left grip / right grip の固定 profile 色 |
 | `ConnectionResult` | `try_connect()` / `try_reconnect()` の結果 |
@@ -36,6 +37,7 @@ from swbt import AdapterInfo, Button, ControllerColors, IMUFrame, InputState, St
 | `ConnectionFailedError` | timeout 以外の接続不成立 |
 | `ClosedError` | 接続済みまたは open 済み resource が必要な操作の失敗 |
 | `InvalidInputError` | 引数値や入力値の不正 |
+| `UnsupportedInputError` | profile が対応しない入力の拒否 |
 | `InvalidKeyStoreError` | key store の未対応形式または複数 current peer |
 
 ## Adapter Discovery
@@ -84,7 +86,7 @@ pad = SwitchGamepad(
 
 `key_store_path` は default Bumble transport が pairing key を保存する JSON key store path です。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに分けてください。`None` は永続 bond を持たない一時的なコントローラーを意味します。
 
-`report_period_us` は periodic input report の送信周期です。`device_name` は HID Device として出す表示名です。
+`report_period_us` は periodic input report の送信周期です。`None` は controller profile の既定周期を使います。`device_name` は HID Device として出す表示名です。`None` は controller profile の既定名を使います。
 
 `controller_colors` は controller body / buttons / left grip / right grip の固定 profile 色です。`None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使います。各 field は独立した既定値を持ちます。この値は作成時に固定し、`set_color()` や `controller_colors=` setter は提供しません。Switch からの SPI read に対して `0x6050` から body、buttons、left grip、right grip を各 3 bytes の順で返します。
 
@@ -175,9 +177,52 @@ await pad.apply(state)
 
 `GamepadStatus` は `connection_state`、`report_counters`、`last_subcommand_id`、`raw_rumble`、`last_error` を持ちます。
 
+## JoyCon
+
+`JoyCon` は単体 Joy-Con L/R 相当の公開 wrapper です。`side` は `"left"` または `"right"` を受けます。接続、入力、diagnostics、`close()` の契約は `SwitchGamepad` と同じです。
+
+```python
+from swbt import Button, JoyCon, Stick
+
+left = JoyCon(
+    "left",
+    adapter="usb:0",
+    key_store_path="switch-left-joycon-bond.json",
+)
+right = JoyCon(
+    "right",
+    adapter="usb:0",
+    key_store_path="switch-right-joycon-bond.json",
+)
+```
+
+左 Joy-Con は `Button.L`、`Button.ZL`、`Button.MINUS`、`Button.CAPTURE`、D-pad、`Button.LEFT_STICK`、`Button.SL`、`Button.SR`、left stick を扱います。右 Joy-Con は `Button.A`、`Button.B`、`Button.X`、`Button.Y`、`Button.R`、`Button.ZR`、`Button.PLUS`、`Button.HOME`、`Button.RIGHT_STICK`、`Button.SL`、`Button.SR`、right stick を扱います。
+
+片側 profile が持たない入力は `UnsupportedInputError` です。
+
+```python
+async with JoyCon(
+    "left",
+    adapter="usb:0",
+    key_store_path="switch-left-joycon-bond.json",
+) as left:
+    await left.connect(timeout=30.0, allow_pairing=True)
+    await left.lstick(Stick.left())
+    await left.tap(Button.L)
+    await left.rstick(Stick.right())  # UnsupportedInputError
+```
+
+`apply(state)` でも同じ制約を検査します。左 Joy-Con に right stick を含む `InputState`、右 Joy-Con に left stick や D-pad を含む `InputState` を渡すと `UnsupportedInputError` です。
+
+Pro Controller、Joy-Con L、Joy-Con R は HID identity と pairing key の対応を分けるため、別々の `key_store_path` を使ってください。同じ対象機器でも profile を変える場合は key store を共有しません。
+
+左右ペアの `JoyConPair` は public API にありません。単体 L/R だけを作れます。
+
+Joy-Con profile の実機互換、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証です。現時点の確認済み実機範囲は Pro Controller 相当の動作が中心です。
+
 ## Input Model
 
-`Button` は `A`、`B`、`X`、`Y`、`L`、`R`、`ZL`、`ZR`、`PLUS`、`MINUS`、`HOME`、`CAPTURE`、`LEFT_STICK`、`RIGHT_STICK`、`DPAD_UP`、`DPAD_DOWN`、`DPAD_LEFT`、`DPAD_RIGHT` を持ちます。
+`Button` は `A`、`B`、`X`、`Y`、`L`、`R`、`ZL`、`ZR`、`PLUS`、`MINUS`、`HOME`、`CAPTURE`、`LEFT_STICK`、`RIGHT_STICK`、`SL`、`SR`、`DPAD_UP`、`DPAD_DOWN`、`DPAD_LEFT`、`DPAD_RIGHT` を持ちます。profile が対応しない button は state update API で `UnsupportedInputError` になります。
 
 `Stick.center()` はスティックの中央位置を返します。`Stick.raw(x=..., y=...)` は `0..4095` の生の値を受けます。`Stick.normalized(x=..., y=...)` は `-1.0..1.0` を生の値へ変換します。
 
@@ -191,7 +236,7 @@ await pad.apply(state)
 
 ## Errors And Diagnostics
 
-例外は `SwbtError` を基底にします。no-open adapter 列挙の失敗は `AdapterDiscoveryError`、利用者入力の不正は `InvalidInputError`、transport open 失敗は `TransportOpenError`、接続 timeout は `ConnectionTimeoutError`、接続不成立は `ConnectionFailedError`、key store 形式不一致は `InvalidKeyStoreError` です。
+例外は `SwbtError` を基底にします。no-open adapter 列挙の失敗は `AdapterDiscoveryError`、利用者入力の不正は `InvalidInputError`、profile が対応しない入力は `UnsupportedInputError`、transport open 失敗は `TransportOpenError`、接続 timeout は `ConnectionTimeoutError`、接続不成立は `ConnectionFailedError`、key store 形式不一致は `InvalidKeyStoreError` です。
 
 `DiagnosticsConfig(trace_writer=...)` を渡すと JSON Lines trace を記録します。raw link key などの secret material は記録しません。
 

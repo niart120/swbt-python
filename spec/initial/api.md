@@ -5,6 +5,7 @@
 ## 1. API 設計の方針
 
 - 利用者が最初に触る入口は `SwitchGamepad` にする
+- 単体 Joy-Con L/R の短い入口は `JoyCon("left", ...)` / `JoyCon("right", ...)` にする
 - Bluetooth や Bumble の詳細は public API に露出させない
 - USB Bluetooth adapter 候補の確認は `list_adapters()` に分け、adapter open とは別の no-open API とする
 - 入力状態は `InputState` として明示的に扱う
@@ -133,8 +134,8 @@ class SwitchGamepad:
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
-        report_period_us: int = 8000,
-        device_name: str = "Pro Controller",
+        report_period_us: int | None = None,
+        device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
@@ -156,8 +157,8 @@ class SwitchGamepad:
 |---|---|
 | `adapter` | Bumble transport に渡す adapter moniker |
 | `key_store_path` | default Bumble transport が pairing key を保存する JSON key store path |
-| `report_period_us` | periodic input report の送信周期 |
-| `device_name` | HID Device として使う表示名 |
+| `report_period_us` | periodic input report の送信周期。`None` は profile の既定値 |
+| `device_name` | HID Device として使う表示名。`None` は profile の既定名 |
 | `controller_colors` | SPI profile で返す controller body / buttons / left grip / right grip の固定色 |
 | `diagnostics` | trace と counter の設定 |
 | `transport` | テストや別 transport 実装を注入するための引数 |
@@ -165,6 +166,8 @@ class SwitchGamepad:
 default transport を使う場合、`adapter` は必須である。`transport` が指定された場合、`adapter` は省略できる。この場合、diagnostics の adapter metadata は `"custom"` とする。
 
 `key_store_path` は 1 つの仮想 Pro Controller の pairing storage を定義する構成値である。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。pairing 自体は可能だが、プロセス終了後の reconnect は期待しない。
+
+`report_period_us=None` は profile が持つ既定周期を使う。`device_name=None` は profile の `device_name` を使う。Pro Controller の既定 profile では `8000us` と `"Pro Controller"` になる。
 
 `controller_colors=None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使う。`body`、`buttons`、`left_grip`、`right_grip` はそれぞれ独立した既定値を持つ。色は作成時に固定し、接続後の `set_color()`、`controller_colors=` setter、profile mutation API は提供しない。
 
@@ -230,7 +233,7 @@ async def tap(self, *buttons: Button, duration: float = 0.08) -> None: ...
 
 `press()`、`release()`、`lstick()`、`rstick()`、`sticks()`、`imu()`、`neutral()`、`apply()` は state update API である。接続は要求せず、即時送信もしない。接続中は次の periodic report で反映される。
 
-`apply()` は完成済みの `InputState` で現在入力全体を置き換える。差分適用ではない。`lstick()` は left stick だけを置き換え、`rstick()` は right stick だけを置き換える。`sticks()` は左右どちらか、または両方の stick だけを置き換える。stick API は `Stick` だけを受け、tuple や raw int tuple は受けない。`imu()` は IMU 3 frame だけを置き換える。1 frame を渡した場合は 3 frame すべてに複製し、3 frame を渡した場合は順に設定する。0 個、2 個、4 個以上、`IMUFrame` 以外は `InvalidInputError` とする。
+`apply()` は完成済みの `InputState` で現在入力全体を置き換える。差分適用ではない。`lstick()` は left stick だけを置き換え、`rstick()` は right stick だけを置き換える。`sticks()` は左右どちらか、または両方の stick だけを置き換える。stick API は `Stick` だけを受け、tuple や raw int tuple は受けない。profile が対応しない button / stick update は state store へ commit する前に `UnsupportedInputError` とする。`imu()` は IMU 3 frame だけを置き換える。1 frame を渡した場合は 3 frame すべてに複製し、3 frame を渡した場合は順に設定する。0 個、2 個、4 個以上、`IMUFrame` 以外は `InvalidInputError` とする。
 
 `tap()` は action API である。接続済みを要求し、押下 report と release report を即時送信する。release 対象は `tap()` に渡した button だけであり、既に押されていた他の button は維持する。
 
@@ -257,7 +260,45 @@ async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 `async with` は `open()` と `close(neutral=True)` を呼ぶ resource scope である。`__aenter__()` は HID advertising、pairing、reconnect を開始しない。
 
-## 3.6 Adapter discovery
+## 3.6 `JoyCon`
+
+```python
+class JoyCon(SwitchGamepad):
+    def __init__(
+        self,
+        side: Literal["left", "right"],
+        *,
+        adapter: str | None = None,
+        key_store_path: str | None = None,
+        report_period_us: int | None = None,
+        device_name: str | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> None: ...
+```
+
+`JoyCon` は単体 Joy-Con L/R 相当の薄い wrapper である。`side="left"` は Joy-Con L profile、`side="right"` は Joy-Con R profile を選ぶ。接続、入力、diagnostics、`close(neutral=True)` の契約は `SwitchGamepad` と同じにする。
+
+```python
+async with JoyCon(
+    "left",
+    adapter="usb:0",
+    key_store_path="switch-left-joycon-bond.json",
+) as left:
+    await left.connect(timeout=30.0, allow_pairing=True)
+    await left.tap(Button.L)
+```
+
+片側 Joy-Con が持たない button / stick は `UnsupportedInputError` とする。左 Joy-Con は A/B/X/Y、right stick などを扱わない。右 Joy-Con は D-pad、left stick などを扱わない。`InputState` を `apply()` する場合も同じ検査を行い、不正 state は commit しない。
+
+Pro Controller、Joy-Con L、Joy-Con R は HID identity と pairing key の対応を分けるため、別々の `key_store_path` を使う。同じ対象機器でも profile を変える場合は key store を共有しない。
+
+`JoyConPair` は初期 API に含めない。左右を 1 つの controller として束ねる API は、左右別 device の connect / disconnect failure semantics と cleanup を別途設計してから追加する。
+
+Joy-Con profile の実機互換、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証である。docs は確認済み Pro Controller 相当の実機範囲と単体 Joy-Con の未検証範囲を分けて書く。
+
+## 3.7 Adapter discovery
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -337,13 +378,15 @@ class Button(Enum):
     CAPTURE = auto()
     LEFT_STICK = auto()
     RIGHT_STICK = auto()
+    SL = auto()
+    SR = auto()
     DPAD_UP = auto()
     DPAD_DOWN = auto()
     DPAD_LEFT = auto()
     DPAD_RIGHT = auto()
 ```
 
-HID report 上の bit 配置は `protocol.md` と `swbt.protocol.input_report` の test で固定する。
+HID report 上の bit 配置は `protocol.md` と `swbt.protocol.input_report` の test で固定する。`SL` / `SR` は単体 Joy-Con profile で使う button であり、Pro Controller profile では unsupported input として扱う。
 
 ## 6. `Stick`
 
@@ -458,10 +501,11 @@ class ConnectionFailedError(SwbtError): ...
 class ProtocolError(SwbtError): ...
 class ClosedError(SwbtError): ...
 class InvalidInputError(SwbtError): ...
+class UnsupportedInputError(InvalidInputError): ...
 class InvalidKeyStoreError(SwbtError): ...
 ```
 
-no-open adapter 列挙の失敗は `AdapterDiscoveryError` とする。利用者の入力不正は `InvalidInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError`、timeout 以外の接続不成立は `ConnectionFailedError` として分ける。key store の unsupported shape や複数 current peer は `InvalidKeyStoreError` とする。
+no-open adapter 列挙の失敗は `AdapterDiscoveryError` とする。利用者の入力不正は `InvalidInputError`、profile が対応しない入力は `UnsupportedInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError`、timeout 以外の接続不成立は `ConnectionFailedError` として分ける。key store の unsupported shape や複数 current peer は `InvalidKeyStoreError` とする。
 
 ## 10. 非同期 API の扱い
 

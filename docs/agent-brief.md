@@ -4,6 +4,7 @@ Use public imports:
 
 ```python
 from swbt import Button, InputState, Stick, SwitchGamepad
+from swbt import JoyCon
 ```
 
 Prefer this minimal pattern:
@@ -13,6 +14,15 @@ async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as 
     await pad.connect(timeout=30.0, allow_pairing=True)
     await pad.tap(Button.A)
     await pad.neutral()
+```
+
+For a single Joy-Con L/R, use `JoyCon("left", ...)` or `JoyCon("right", ...)`:
+
+```python
+async with JoyCon("left", adapter="usb:0", key_store_path="switch-left-joycon-bond.json") as left:
+    await left.connect(timeout=30.0, allow_pairing=True)
+    await left.tap(Button.L)
+    await left.neutral()
 ```
 
 Rules:
@@ -29,9 +39,13 @@ Rules:
 - Use `imu()` for IMU state updates.
 - Use `IMUFrame.gyro()`, `IMUFrame.accel()`, `IMUFrame.raw()`, `IMUFrame.with_gyro()`, or `IMUFrame.with_accel()` to construct IMU frames.
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
+- Use a separate `key_store_path` for Pro Controller, Joy-Con L, and Joy-Con R profiles, even when the target device is the same.
+- Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`: left does not support right stick or A/B/X/Y, right does not support left stick or D-pad.
 - Do not assume `press()` / `release()` / `lstick()` / `rstick()` / `sticks()` / `imu()` / `neutral()` send immediately.
 - Do not pass tuples or raw tuples to stick APIs.
 - Do not invent `pad.gyro()` or `pad.accel()`.
 - Do not invent `hold()`, `sequence()`, `send_current_input()`, fluent builder APIs, or macro helpers.
+- Do not invent `JoyConPair`; paired left/right Joy-Con support is not implemented.
+- Do not show low-level Joy-Con profile classes in user-facing examples.
 - Do not import internal modules unless writing tests or custom transport code.
-- Do not present Linux, macOS, other dongles, other firmware, or pairing-free incoming bond reuse as confirmed.
+- Do not present Joy-Con real-device compatibility, exact SDP parity, Linux, macOS, other dongles, other firmware, or pairing-free incoming bond reuse as confirmed.

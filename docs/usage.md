@@ -88,7 +88,7 @@ async with SwitchGamepad(
 
 `try_connect()` / `try_reconnect()` は接続戦略の結果を `ConnectionResult` で返します。key store の形式不一致や複数 current peers は `InvalidKeyStoreError` として扱います。
 
-### Separate Key Stores By Target Device
+### Separate Key Stores By Target Device And Profile
 
 ```python
 first = SwitchGamepad(
@@ -101,7 +101,88 @@ second = SwitchGamepad(
 )
 ```
 
-1 つの key store に複数の current peer を混ぜないでください。別の対象機器へ pairing したい場合は、対象機器ごとに別の `key_store_path` を使います。
+1 つの key store に複数の current peer を混ぜないでください。別の対象機器へ pairing したい場合は、対象機器ごとに別の `key_store_path` を使います。Pro Controller、Joy-Con L、Joy-Con R のように profile が違う場合も、同じ対象機器で key store を共有しません。
+
+## Single Joy-Con L/R
+
+単体 Joy-Con 相当の仮想デバイスは `JoyCon("left", ...)` または `JoyCon("right", ...)` で作ります。`JoyCon` は `SwitchGamepad` の薄い wrapper で、`connect()`、`pair()`、`reconnect()`、入力 API、`close(neutral=True)` の契約は同じです。
+
+### Left Joy-Con
+
+```python
+import asyncio
+from swbt import Button, JoyCon, Stick
+
+
+async def main() -> None:
+    async with JoyCon(
+        "left",
+        adapter="usb:0",
+        key_store_path="switch-left-joycon-bond.json",
+    ) as left:
+        await left.connect(timeout=30.0, allow_pairing=True)
+        await left.tap(Button.L)
+        await left.lstick(Stick.left())
+        await left.neutral()
+
+
+asyncio.run(main())
+```
+
+左 Joy-Con では D-pad、L/ZL、MINUS、CAPTURE、SL/SR、left stick を使います。
+
+### Right Joy-Con
+
+```python
+import asyncio
+from swbt import Button, JoyCon, Stick
+
+
+async def main() -> None:
+    async with JoyCon(
+        "right",
+        adapter="usb:0",
+        key_store_path="switch-right-joycon-bond.json",
+    ) as right:
+        await right.connect(timeout=30.0, allow_pairing=True)
+        await right.tap(Button.A)
+        await right.rstick(Stick.right())
+        await right.neutral()
+
+
+asyncio.run(main())
+```
+
+右 Joy-Con では A/B/X/Y、R/ZR、PLUS、HOME、SL/SR、right stick を使います。
+
+### Unsupported Inputs
+
+片側 Joy-Con が持たない button や stick は `UnsupportedInputError` になります。
+
+```python
+from swbt import Button, JoyCon, Stick, UnsupportedInputError
+
+async with JoyCon(
+    "left",
+    adapter="usb:0",
+    key_store_path="switch-left-joycon-bond.json",
+) as left:
+    try:
+        await left.rstick(Stick.right())
+    except UnsupportedInputError as error:
+        print(error)
+
+    try:
+        await left.tap(Button.A)
+    except UnsupportedInputError as error:
+        print(error)
+```
+
+`InputState` + `apply()` でも同じ検査を行います。左 Joy-Con に right stick、右 Joy-Con に left stick や D-pad を含めると `UnsupportedInputError` です。
+
+左右ペアの `JoyConPair` は未実装です。左右を 1 つの controller として扱う API は別 issue の範囲です。
+
+Joy-Con profile の実機互換、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証です。Joy-Con L/R を実機で試す場合は、Pro Controller 相当で確認済みの結果とは分けて記録してください。
 
 ## Button Input
 
