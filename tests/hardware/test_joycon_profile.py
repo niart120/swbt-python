@@ -129,7 +129,7 @@ def test_switch_joycon_profile_pairing_records_device_info(
         side=side,
         tail_bytes="0101",
     )
-    assert _device_info_address_matches_bumble_local_address(events)
+    assert _device_info_address_matches_configured_local_address(events)
     assert _contains_event(events, "subcommand_reply_tx", subcommand_id="0x02")
     assert _contains_event(
         events,
@@ -361,12 +361,14 @@ def _contains_event(
     return False
 
 
-def _device_info_address_matches_bumble_local_address(events: list[dict[str, Any]]) -> bool:
+def _device_info_address_matches_configured_local_address(
+    events: list[dict[str, Any]],
+) -> bool:
     local_address = None
     device_info_address = None
     for event in events:
-        if event.get("event") == "bumble_device_initialized":
-            local_address = event.get("local_bluetooth_address")
+        if event.get("event") == "device_info_bluetooth_address_configured":
+            local_address = event.get("address")
         if event.get("event") == "device_info_reply":
             device_info_address = event.get("profile_bluetooth_address_bytes")
     return (

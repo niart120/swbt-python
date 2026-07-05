@@ -249,6 +249,8 @@ def test_device_info_local_bluetooth_address_wiring_is_recorded() -> None:
 
     assert isinstance(value, str)
     assert "transport.local_bluetooth_address()" in value
+    assert "after pairing advertising or connection completion" in value
+    assert "before power_on()" in value
     assert "Device Info" in value
     assert "Bumble Address bytes" in value
     assert "display order" in value

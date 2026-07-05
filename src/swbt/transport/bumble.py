@@ -264,6 +264,7 @@ class BumbleHidTransport:
         if self._runtime.advertising_started:
             return
         await self._start_advertising(self._runtime)
+        self._refresh_local_bluetooth_address(self._runtime)
         self._install_key_store_diagnostics(self._runtime)
         self._runtime.advertising_started = True
         if self._runtime.classic_link_policy_settings is not None:
@@ -611,6 +612,7 @@ class BumbleHidTransport:
     async def _ensure_classic_runtime_ready(self, runtime: _BumbleRuntime) -> None:
         if not runtime.device.powered_on:
             await runtime.device.power_on()
+        self._refresh_local_bluetooth_address(runtime)
         if runtime.classic_link_policy_settings is None:
             link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
             if link_policy_settings is not None:
@@ -621,6 +623,19 @@ class BumbleHidTransport:
                     settings=f"0x{link_policy_settings:04x}",
                 )
         self._install_key_store_diagnostics(runtime)
+
+    def _refresh_local_bluetooth_address(self, runtime: _BumbleRuntime) -> None:
+        address = _device_info_bluetooth_address_from_bumble_address(
+            getattr(runtime.device, "public_address", None)
+        )
+        if address is None or address == runtime.local_bluetooth_address:
+            return
+        runtime.local_bluetooth_address = address
+        self._record_event(
+            "local_bluetooth_address_configured",
+            adapter=self._adapter,
+            address=address.hex(),
+        )
 
     async def _cleanup_open_failure(self) -> None:
         handle = self._handle

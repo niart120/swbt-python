@@ -1248,6 +1248,51 @@ def test_bumble_start_advertising_powers_on_initialized_runtime() -> None:
     asyncio.run(run())
 
 
+def test_bumble_start_advertising_refreshes_local_bluetooth_address_after_power_on() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+
+        class AddressAfterPowerOnDevice(FakeBumbleDevice):
+            async def power_on(self) -> None:
+                await super().power_on()
+                self.public_address = Address("00:1B:DC:F9:9F:7D")
+
+        device = AddressAfterPowerOnDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        assert transport.local_bluetooth_address() is None
+
+        await transport.start_advertising()
+
+        assert transport.local_bluetooth_address() == bytes.fromhex("00 1b dc f9 9f 7d")
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "local_bluetooth_address_configured",
+            "adapter": "usb:0",
+            "address": "001bdcf99f7d",
+        } in events
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
 def test_bumble_start_advertising_configures_reference_classic_link_policy() -> None:
     async def run() -> None:
         trace = StringIO()

@@ -119,7 +119,7 @@ handoff = ["unit_030"]
 id = "device_info_local_bluetooth_address_wiring"
 fixture_name = "device_info_local_bluetooth_address_wiring"
 area = "protocol"
-value = "SubcommandResponder keeps Device Info Bluetooth address caller-supplied; production SwitchGamepad now obtains transport.local_bluetooth_address() after transport open and injects it into the responder. Bumble exposes the controller public address as an Address object whose raw bytes are little-endian, so swbt-python parses the display order string such as 00:1B:DC:F9:9F:7D into Device Info bytes 00 1b dc f9 9f 7d instead of using Bumble Address bytes directly. If a custom transport does not expose an address, the existing zero address fallback remains."
+value = "SubcommandResponder keeps Device Info Bluetooth address caller-supplied; production SwitchGamepad obtains transport.local_bluetooth_address() after transport open and again after pairing advertising or connection completion, because Bumble Device.public_address is still ANY before power_on() and becomes the real controller address during connection preparation. Bumble exposes the controller public address as an Address object whose raw bytes are little-endian, so swbt-python parses the display order string such as 00:1B:DC:F9:9F:7D into Device Info bytes 00 1b dc f9 9f 7d instead of using Bumble Address bytes directly. If a custom transport does not expose an address, the existing zero address fallback remains."
 classification = "implementation fact"
 source = [
     'src\swbt\protocol\subcommand.py',

@@ -161,6 +161,7 @@ class SwitchGamepad:
         self._connection_state = "closed"
         self._is_open = False
         self._close_in_progress = False
+        self._configured_device_info_bluetooth_address: bytes | None = None
         self._connection_workflow = ConnectionWorkflow(
             clear_connected=self._connected_event.clear,
             close_neutral=self._close_neutral_for_connection_workflow,
@@ -280,6 +281,7 @@ class SwitchGamepad:
             raise ClosedError(msg)
         self._connection_state = "advertising"
         await self._transport.start_advertising()
+        self._configure_device_info_bluetooth_address(self._transport)
         if timeout is None:
             await self._connected_event.wait()
             return
@@ -599,11 +601,14 @@ class SwitchGamepad:
         if len(address) != 6:
             msg = "local_bluetooth_address must return 6 bytes"
             raise InvalidInputError(msg)
+        if address == self._configured_device_info_bluetooth_address:
+            return
         self._output_report_dispatcher.subcommand_responder = SubcommandResponder(
             profile=self._controller_profile,
             session_state=self._output_report_dispatcher.subcommand_responder.session_state,
             device_info_bluetooth_address=address,
         )
+        self._configured_device_info_bluetooth_address = address
         self._diagnostics.record_event(
             "device_info_bluetooth_address_configured",
             address=address.hex(),
@@ -736,6 +741,8 @@ class SwitchGamepad:
 
     async def _handle_connected(self) -> None:
         previous_state = self._connection_state
+        if self._transport is not None:
+            self._configure_device_info_bluetooth_address(self._transport)
         if previous_state == "advertising":
             self._diagnostics.record_event(
                 "incoming_connection",
