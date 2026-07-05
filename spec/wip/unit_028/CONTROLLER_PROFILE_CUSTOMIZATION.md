@@ -42,6 +42,7 @@
 - `ControllerColors` は `body` と `buttons` を 24-bit RGB integer として受ける。
 - `controller_colors=None` は既定色を使う。
 - `ControllerColors` は immutable にし、`0 <= value <= 0xFFFFFF` だけを受ける。`str`、`bytes`、tuple、負数、`0x1000000` 以上は `InvalidInputError` とする。
+- `0x601B` color info exists flag を `0x01` に seed する。
 - SPI `0x6050`-`0x6055` への seed と `0x10` SPI read reply。
 - `0x02` device info reply の color source を SPI として扱うこと。
 - public API docs、docstring、`swbt.__all__` の更新方針。
@@ -57,7 +58,6 @@
 - report period customization。既存の `report_period_us` とは別の責務として維持する。
 - high-level rumble API。
 - 複数 controller の profile 管理。
-- `0x601B` color info exists flag の seed。daemon header には address があるが、この unit では外部 source と Switch 側の必要性を確定していない。
 - Switch UI で色が見えることを release blocker にすること。
 
 ## 4. 関連 docs
@@ -89,6 +89,7 @@
 | SPI flash address limit | `0x80000` exclusive | `switch-spi-core.md`; `switch_spi.h` | stable boundary |
 | SPI read max size | `0x1d` bytes | `switch-spi-core.md`; `switch_spi.h` | stable boundary |
 | device type address / value | address `0x6012`, Pro Controller `0x03` | `switch-spi-core.md`; `switch_spi.h` | stable address/value |
+| color info exists flag | address `0x601B`, value `0x01` means color info exists | dekuNukem `spi_flash_notes.md`; `switch_spi.h` | source-backed seed value |
 | controller color range | `0x6050`-`0x6055` inclusive | `switch-spi-core.md` | stable address map; payload is caller-seeded |
 | body color range and byte order | `0x6050`-`0x6052`, Body `#RGB` color, 24-bit | dekuNukem `spi_flash_notes.md` | source fact |
 | buttons color range and byte order | `0x6053`-`0x6055`, Buttons `#RGB` color, 24-bit | dekuNukem `spi_flash_notes.md` | source fact |
@@ -100,6 +101,7 @@
 |---|---:|---|---|
 | daemon dev color seed | `0d 0d 0d ff ff ff` | `switch_spi_seed.c` | implementation default, not factory data |
 | daemon seed writer | writes `controller_colors` to `SWBT_SWITCH_SPI_ADDRESS_CONTROLLER_COLORS` | `switch_spi_seed.c` | implementation behavior |
+| daemon color flag handling | `SWBT_SWITCH_SPI_ADDRESS_COLOR_INFO_EXISTS = 0x601B` is defined, but the dev seed writer does not seed it | `switch_spi.h`, `switch_spi_seed.c` | implementation fact; swbt-python chooses the source-backed seed |
 | daemon device info color source | `SWBT_SWITCH_DEVICE_INFO_COLORS_FROM_SPI = 0x01` and reply data byte 11 stores `color_source` | `switch_device_info.h`, `switch_device_info.c` | implementation behavior |
 | swbt-python current SPI seed | `VirtualSpiFlash` seeds only `0x6012 = 0x03`; color bytes remain erased | `src/swbt/protocol/spi.py` | current implementation |
 | swbt-python current `0x02` reply | static `DEVICE_INFO_DATA = 04 00 03 02 00 00 00 00 00 00 01 01` | `src/swbt/protocol/subcommand.py` | current implementation; last byte already matches SPI color source |
@@ -122,7 +124,6 @@
 | Switch UI reflection | Switch UI がこの 6 bytes を常に表示へ反映するか | hardware optional。automated gate にはしない |
 | firmware / model difference | Switch model / firmware ごとの color read sequence 差 | 実機観測時に condition を記録する |
 | bond cache interaction | 既存 bond がある場合、色変更が再 pairing なしで見えるか | public API 保証にしない |
-| `0x601B` color info exists flag | `0x601B` を seed しないと色が無視される環境があるか | この unit では未実装。必要なら別 source-audit item とする |
 | Switch UI の表示順 | source-backed SPI order と Switch UI 表示の対応 | public API は SPI 上の body/buttons `#RGB` として保証し、UI 表示は hardware observation まで保証しない |
 
 ## 6. 振る舞い仕様
@@ -131,6 +132,7 @@
 |---|---|---|---|
 | default colors | `SwitchGamepad(..., controller_colors=None)` | SPI `0x6050` から `0d 0d 0d ff ff ff` を返す | 既定挙動を明示する |
 | custom colors | `ControllerColors(body=0x112233, buttons=0x445566)` | SPI `0x6050` から `11 22 33 44 55 66` を返す | source-backed `#RGB` order |
+| color info flag | default / custom colors のどちらでも | SPI `0x601B` から `01` を返す | source-backed flag。daemon dev seed との差異は互換ではなく堅牢性を優先する |
 | validation | `body=-1`, `buttons=0x1000000`, non-int | `InvalidInputError` | 不正な値を wrap / mask しない |
 | constructor fixed identity | `SwitchGamepad(controller_colors=...)` 作成後 | profile は object lifetime 中に変わらない | setter は作らない |
 | state update separation | `press()` / `release()` / `apply()` / `neutral()` | controller colors は変わらない | `InputState` へ入れない |
@@ -149,6 +151,7 @@
 | todo | `SwitchGamepad.from_config()` が `controller_colors` を保持し default transport / fake transport のどちらでも protocol path へ渡す | new | unit / integration | no | existing config pass-through test に近い |
 | todo | `VirtualSpiFlash` が既定色を `0x6050`-`0x6055` に seed する | new | unit | no | 既存 `0x6012` device type test を維持 |
 | todo | `VirtualSpiFlash` が custom `ControllerColors` を `0x6050`-`0x6055` に seed する | new | unit | no | source-backed `#RGB` order を維持 |
+| todo | `VirtualSpiFlash` が `0x601B` に color info exists flag `01` を seed する | new | unit | no | daemon 互換より source-backed SPI state を優先する |
 | todo | `SubcommandResponder` の `0x10` SPI read reply が custom colors を返す | new | unit | no | payload `50 60 00 00 06` に対して prefix + 6 bytes |
 | todo | `SubcommandResponder` の `0x02` device info reply が color_source `0x01` を保つ | regression | unit | no | color bytes を device info に入れない |
 | todo | fake transport 経由の output report injection で custom color SPI reply が送信される | new | integration | no | `SwitchGamepad` から dispatcher / responder へ渡る経路を確認 |
@@ -239,7 +242,6 @@ player lights は `0x30` set player lights で Switch から要求される muta
 
 ## 12. 先送り事項
 
-- `0x601B` color info exists flag の source audit と必要性確認。
 - grip color ranges `0x6056`-`0x605B` の扱い。upstream source には存在するが、この unit の初期 scope には入れない。
 - Switch UI での色反映確認。実行する場合は `hardware-harness` の承認境界を通し、`spec/hardware-test-log.md` に条件付き observation として記録する。
 - serial number、Bluetooth address、calibration、battery、player lights、report period の customization は別 unit に分ける。
