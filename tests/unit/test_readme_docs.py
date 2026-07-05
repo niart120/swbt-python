@@ -74,6 +74,8 @@ def test_readme_documents_single_joycon_public_api_and_scope() -> None:
         "Joy-Con profile の実機互換",
         "SDP 完全一致",
         "OS / dongle / firmware をまたぐ互換性は未検証",
+        "Pro Controller として登録",
+        "SR+SL 入力待ち",
     ):
         assert token in text
 

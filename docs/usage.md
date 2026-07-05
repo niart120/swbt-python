@@ -182,7 +182,7 @@ async with JoyCon(
 
 左右ペアの `JoyConPair` は未実装です。左右を 1 つの controller として扱う API は別 issue の範囲です。
 
-Joy-Con profile の実機互換、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証です。Joy-Con L/R を実機で試す場合は、Pro Controller 相当で確認済みの結果とは分けて記録してください。
+Joy-Con profile の実機互換、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証です。2026-07-06 の Joy-Con L 実機観測では、HID 通信上の device name と device-info reply は Joy-Con L になりましたが、Switch UI では Pro Controller として登録され、コントローラーの順番画面は Joy-Con L の SR+SL 入力待ちで止まりました。Joy-Con L/R を実機で試す場合は、Pro Controller 相当で確認済みの結果とは分けて記録してください。
 
 ## Button Input
 

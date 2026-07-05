@@ -86,7 +86,7 @@ asyncio.run(main())
 
 左 Joy-Con では right stick や A/B/X/Y、右 Joy-Con では left stick や D-pad など、片側 profile が持たない入力は `UnsupportedInputError` になります。Pro Controller、Joy-Con L、Joy-Con R では `key_store_path` を分けてください。
 
-左右ペアの `JoyConPair` は未実装です。Joy-Con profile の実機互換、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証です。
+左右ペアの `JoyConPair` は未実装です。Joy-Con profile の実機互換、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証です。2026-07-06 の Joy-Con L 実機観測では、HID 通信上の device name と device-info reply は Joy-Con L になりましたが、Switch UI では Pro Controller として登録され、コントローラーの順番画面は Joy-Con L の SR+SL 入力待ちで止まりました。
 
 ## 実機検証
 
