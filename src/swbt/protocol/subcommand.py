@@ -6,12 +6,13 @@ from swbt.errors import ProtocolError
 from swbt.input import InputState
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport
-from swbt.protocol.profile import ControllerProfile, default_controller_profile
+from swbt.protocol.profile import ControllerKind, ControllerProfile, default_controller_profile
 from swbt.protocol.spi import VirtualSpiFlash
 
 SIMPLE_ACK_SUBCOMMANDS = {0x08, 0x30}
 SESSION_STATE_SUBCOMMANDS = frozenset({0x03, 0x40, 0x48})
 SUPPORTED_INPUT_REPORT_MODE = 0x30
+JOYCON_IMU_ENABLE_MODE = 0x02
 DEFAULT_DEVICE_INFO_BLUETOOTH_ADDRESS = b"\x00\x00\x00\x00\x00\x00"
 TRIGGER_BUTTONS_ELAPSED_DATA = bytes.fromhex("2c 01 2c 01 00 00 00 00 00 00 00 00 00 00")
 MCU_CONFIG_DATA = bytes.fromhex(
@@ -27,6 +28,7 @@ class SubcommandSessionState:
     report_mode: int | None = None
     report_mode_supported: bool = False
     unsupported_report_mode: int | None = None
+    imu_mode: int | None = None
     imu_enabled: bool = False
     vibration_enabled: bool = False
 
@@ -113,7 +115,9 @@ class SubcommandResponder:
         return b""
 
     def _set_imu_enabled(self, payload: bytes) -> bytes:
-        self._session_state.imu_enabled = _enable_payload(payload, "enable IMU")
+        imu_mode = _imu_enable_payload(payload, self._profile.kind)
+        self._session_state.imu_mode = imu_mode
+        self._session_state.imu_enabled = imu_mode != 0x00
         return b""
 
     def _set_vibration_enabled(self, payload: bytes) -> bytes:
@@ -164,3 +168,16 @@ def _enable_payload(payload: bytes, subcommand_name: str) -> bool:
         msg = f"{subcommand_name} subcommand argument must be 0x00 or 0x01"
         raise ProtocolError(msg)
     return value == 0x01
+
+
+def _imu_enable_payload(payload: bytes, profile_kind: ControllerKind) -> int:
+    value = _first_payload_byte(payload, "enable IMU")
+    if value in (0x00, 0x01):
+        return value
+    if value == JOYCON_IMU_ENABLE_MODE and profile_kind in (
+        ControllerKind.JOYCON_LEFT,
+        ControllerKind.JOYCON_RIGHT,
+    ):
+        return value
+    msg = "enable IMU subcommand argument must be 0x00 or 0x01"
+    raise ProtocolError(msg)

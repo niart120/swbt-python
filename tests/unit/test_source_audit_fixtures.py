@@ -307,6 +307,22 @@ def test_subcommand_imu_vibration_enable_state_is_source_audited() -> None:
     assert "SubcommandSessionState" in value
 
 
+def test_joycon_imu_enable_mode_02_is_hardware_observed() -> None:
+    entry = _entry_by_id("joycon_imu_enable_mode_02")
+
+    assert entry["classification"] == "hardware observation"
+    assert entry["status"] == "hardware-observed-only"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "Joy-Con (L)" in value
+    assert "0x40" in value
+    assert "0x02" in value
+    assert "Joy-Con profiles" in value
+    assert "Pro Controller" in value
+    assert "SR+SL" in value
+
+
 def test_profile_aware_bumble_sdp_boundary_is_source_audited() -> None:
     entry = _entry_by_id("profile_aware_bumble_sdp_boundary")
 

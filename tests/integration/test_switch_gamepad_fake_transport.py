@@ -1103,6 +1103,7 @@ def test_output_report_injection_records_subcommand_session_state() -> None:
         assert {
             "event": "subcommand_session_state",
             "imu_enabled": False,
+            "imu_mode": None,
             "packet_id": 0x21,
             "report_mode": "0x3f",
             "report_mode_supported": False,

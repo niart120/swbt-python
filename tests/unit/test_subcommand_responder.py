@@ -1,5 +1,6 @@
 import pytest
 
+from swbt.errors import ProtocolError
 from swbt.input import InputState
 from swbt.protocol.output_report import OutputReport, OutputReportParser
 from swbt.protocol.profile import ControllerColors, JoyConLeftProfile, ProControllerProfile
@@ -105,10 +106,35 @@ def test_enable_imu_updates_session_state() -> None:
     responder = SubcommandResponder(session_state=session_state)
 
     responder.respond(_subcommand_report(0x40, payload=b"\x01"), state=InputState.neutral())
+    assert session_state.imu_mode == 0x01
     assert session_state.imu_enabled is True
 
     responder.respond(_subcommand_report(0x40, payload=b"\x00"), state=InputState.neutral())
+    assert session_state.imu_mode == 0x00
     assert session_state.imu_enabled is False
+
+
+def test_joycon_enable_imu_mode_0x02_updates_session_state() -> None:
+    session_state = SubcommandSessionState()
+    responder = SubcommandResponder(
+        profile=JoyConLeftProfile(),
+        session_state=session_state,
+    )
+
+    reply = responder.respond(_subcommand_report(0x40, payload=b"\x02"), state=InputState.neutral())
+
+    assert reply[13] == 0x80
+    assert reply[14] == 0x40
+    assert session_state.imu_mode == 0x02
+    assert session_state.imu_enabled is True
+
+
+def test_pro_controller_rejects_joycon_imu_mode_0x02() -> None:
+    with pytest.raises(ProtocolError):
+        SubcommandResponder().respond(
+            _subcommand_report(0x40, payload=b"\x02"),
+            state=InputState.neutral(),
+        )
 
 
 def test_enable_vibration_updates_session_state() -> None:
@@ -126,6 +152,7 @@ def test_controller_profile_does_not_hold_mutable_subcommand_session_state() -> 
     profile = ProControllerProfile()
 
     assert not hasattr(profile, "report_mode")
+    assert not hasattr(profile, "imu_mode")
     assert not hasattr(profile, "imu_enabled")
     assert not hasattr(profile, "vibration_enabled")
 

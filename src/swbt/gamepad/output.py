@@ -63,6 +63,7 @@ class OutputReportDispatcher:
             self.diagnostics.record_event(
                 "subcommand_session_state",
                 imu_enabled=session_state.imu_enabled,
+                imu_mode=_format_optional_byte(session_state.imu_mode),
                 packet_id=output_report.packet_id,
                 report_mode=_format_optional_byte(session_state.report_mode),
                 report_mode_supported=session_state.report_mode_supported,

@@ -178,6 +178,23 @@ status = "session-state-policy"
 handoff = ["unit_032"]
 
 [[entry]]
+id = "joycon_imu_enable_mode_02"
+fixture_name = "joycon_imu_enable_mode_02"
+area = "protocol"
+value = "Joy-Con (L) hardware run on Windows 11 / CSR8510 A10 / WinUSB / Bumble 0.0.230 / Switch 2 firmware not re-recorded in this run observed subcommand 0x40 Enable IMU with first payload byte 0x02 during pairing handshake. swbt-python accepts 0x02 only for Joy-Con profiles, records it as SubcommandSessionState.imu_mode, and treats it as IMU enabled for session-state diagnostics. The same run did not prove Joy-Con registration success: user-visible Switch UI registered the device as Pro Controller and then stopped on the Joy-Con L SR+SL order screen. This is hardware-observed only and does not change the Pro Controller 0x00/0x01 source fact."
+classification = "hardware observation"
+source = [
+    'spec\hardware-test-log.md',
+    'build\hardware\joycon-left-20260706-020308\joycon-left-profile-pairing.jsonl',
+    'build\hardware\joycon-left-20260706-020308\pytest-debug.log',
+    'build\hardware\joycon-left-20260706-020703\joycon-left-profile-pairing.jsonl',
+    'build\hardware\joycon-left-20260706-020703\pytest-debug.log',
+]
+status = "hardware-observed-only"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB; Bumble 0.0.230; Python 3.13.5; adapter usb:0; Switch model/firmware not re-recorded in this run; controller search or change grip order screen; 2026-07-06 Joy-Con L hardware run"
+handoff = ["joycon-profile-hardware"]
+
+[[entry]]
 id = "profile_aware_bumble_sdp_boundary"
 fixture_name = "profile_aware_bumble_sdp_boundary"
 area = "transport"
