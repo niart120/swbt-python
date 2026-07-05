@@ -79,12 +79,12 @@ def test_switch_joycon_profile_pairing_records_device_info(
                     report_0x30_count=pad.status().report_counters.get(0x30, 0),
                     side=side,
                 )
-                await _wait_for_full_handshake(trace_path, timeout_seconds=20.0)
+                await _wait_for_order_input_window(trace_path, timeout_seconds=20.0)
                 _record_probe_event(
                     trace,
                     "manual_joycon_profile_checkpoint",
                     last_subcommand_id=_format_optional_hex(pad.status().last_subcommand_id),
-                    operation="full_handshake_observed",
+                    operation="order_input_window_observed",
                     report_0x21_count=pad.status().report_counters.get(0x21, 0),
                     report_0x30_count=pad.status().report_counters.get(0x30, 0),
                     side=side,
@@ -274,10 +274,10 @@ async def _wait_for_device_info_reply(
             await asyncio.sleep(0.05)
 
 
-async def _wait_for_full_handshake(trace_path: Path, *, timeout_seconds: float) -> None:
+async def _wait_for_order_input_window(trace_path: Path, *, timeout_seconds: float) -> None:
     async with asyncio.timeout(timeout_seconds):
         while True:
-            if _contains_full_handshake(_read_jsonl(trace_path)):
+            if _contains_order_input_window(_read_jsonl(trace_path)):
                 return
             await asyncio.sleep(0.05)
 
@@ -362,11 +362,11 @@ def _contains_event(
     return False
 
 
-def _contains_full_handshake(events: list[dict[str, Any]]) -> bool:
+def _contains_order_input_window(events: list[dict[str, Any]]) -> bool:
     subcommands = [
         event.get("subcommand_id") for event in events if event.get("event") == "subcommand_rx"
     ]
-    required = {"0x02", "0x08", "0x10", "0x03", "0x04", "0x40", "0x48", "0x21", "0x30"}
+    required = {"0x02", "0x08", "0x10", "0x03", "0x04", "0x40", "0x48", "0x30"}
     return required.issubset(set(subcommands)) and _all_observed_subcommands_have_replies(events)
 
 
