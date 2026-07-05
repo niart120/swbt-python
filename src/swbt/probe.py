@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from swbt import DiagnosticsConfig, SwitchGamepad
+from swbt import AdapterDiscoveryError, AdapterInfo, DiagnosticsConfig, SwitchGamepad, list_adapters
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,9 +89,28 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _run_adapters(args: argparse.Namespace) -> int:
+    try:
+        adapters = list_adapters()
+    except AdapterDiscoveryError as error:
+        payload = {
+            "adapters": [],
+            "bumble_version": error.bumble_version,
+            "error": _adapter_discovery_error_payload(error),
+            "opens_adapter": False,
+            "platform": error.platform,
+            "python_version": platform.python_version(),
+            "status": "discovery_error",
+        }
+        if args.json:
+            sys.stdout.write(f"{json.dumps(payload, sort_keys=True)}\n")
+        else:
+            sys.stdout.write("Adapter discovery failed without opening a Bluetooth adapter.\n")
+            sys.stdout.write(f"Error: {error}\n")
+        return 1
+
     payload = {
+        "adapters": [_adapter_info_payload(adapter) for adapter in adapters],
         "bumble_version": _package_version("bumble"),
-        "candidate_adapters": ["usb:0"],
         "opens_adapter": False,
         "platform": platform.platform(),
         "python_version": platform.python_version(),
@@ -104,7 +123,12 @@ def _run_adapters(args: argparse.Namespace) -> int:
         sys.stdout.write(f"Platform: {payload['platform']}\n")
         sys.stdout.write(f"Python: {payload['python_version']}\n")
         sys.stdout.write(f"Bumble: {payload['bumble_version']}\n")
-        sys.stdout.write("Candidate adapters: usb:0\n")
+        if adapters:
+            sys.stdout.write("Candidate adapters:\n")
+            for adapter in adapters:
+                _write_adapter_text(adapter)
+        else:
+            sys.stdout.write("Candidate adapters: none\n")
         sys.stdout.write("Opening an adapter requires an explicit hardware approval scope.\n")
     return 0
 
@@ -144,6 +168,57 @@ def _package_version(package_name: str) -> str:
         return version(package_name)
     except PackageNotFoundError:
         return "unknown"
+
+
+def _adapter_info_payload(adapter: AdapterInfo) -> dict[str, object]:
+    return {
+        "aliases": list(adapter.aliases),
+        "bus_number": adapter.bus_number,
+        "device_address": adapter.device_address,
+        "is_bluetooth_hci": adapter.is_bluetooth_hci,
+        "manufacturer": adapter.manufacturer,
+        "name": adapter.name,
+        "port_numbers": list(adapter.port_numbers),
+        "product": adapter.product,
+        "product_id": adapter.product_id,
+        "product_id_hex": _usb_id_hex(adapter.product_id),
+        "serial_number": adapter.serial_number,
+        "vendor_id": adapter.vendor_id,
+        "vendor_id_hex": _usb_id_hex(adapter.vendor_id),
+    }
+
+
+def _usb_id_hex(value: int | None) -> str | None:
+    if value is None:
+        return None
+    return f"{value:04X}"
+
+
+def _adapter_discovery_error_payload(error: AdapterDiscoveryError) -> dict[str, object]:
+    return {
+        "backend": error.backend,
+        "bumble_version": error.bumble_version,
+        "libusb_available": error.libusb_available,
+        "message": str(error),
+        "platform": error.platform,
+        "type": type(error).__name__,
+    }
+
+
+def _write_adapter_text(adapter: AdapterInfo) -> None:
+    sys.stdout.write(f"- {adapter.name}\n")
+    if adapter.vendor_id is not None and adapter.product_id is not None:
+        sys.stdout.write(
+            f"  VID/PID: {_usb_id_hex(adapter.vendor_id)}:{_usb_id_hex(adapter.product_id)}\n"
+        )
+    if adapter.aliases:
+        sys.stdout.write(f"  Aliases: {', '.join(adapter.aliases)}\n")
+    if adapter.manufacturer:
+        sys.stdout.write(f"  Manufacturer: {adapter.manufacturer}\n")
+    if adapter.product:
+        sys.stdout.write(f"  Product: {adapter.product}\n")
+    if adapter.serial_number:
+        sys.stdout.write(f"  Serial: {adapter.serial_number}\n")
 
 
 if __name__ == "__main__":

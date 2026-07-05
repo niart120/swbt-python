@@ -1,7 +1,9 @@
 """Python API for virtual NX-compatible input devices."""
 
+from swbt.adapter_discovery import AdapterInfo, list_adapters
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
 from swbt.errors import (
+    AdapterDiscoveryError,
     ClosedError,
     ConnectionFailedError,
     ConnectionTimeoutError,
@@ -15,6 +17,8 @@ from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 
 __all__ = (
+    "AdapterDiscoveryError",
+    "AdapterInfo",
     "BondedPeer",
     "Button",
     "ClosedError",
@@ -34,4 +38,5 @@ __all__ = (
     "SwitchGamepad",
     "SwitchGamepadConfig",
     "TransportOpenError",
+    "list_adapters",
 )
