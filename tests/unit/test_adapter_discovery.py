@@ -50,13 +50,13 @@ class FakeUsbDevice:
     def getDeviceProtocol(self) -> int:
         return self.device_protocol
 
-    def getSerialNumber(self) -> str:
+    def getSerialNumber(self) -> str | None:
         return self.serial_number
 
-    def getManufacturer(self) -> str:
+    def getManufacturer(self) -> str | None:
         return self.manufacturer
 
-    def getProduct(self) -> str:
+    def getProduct(self) -> str | None:
         return self.product
 
     def getBusNumber(self) -> int:
@@ -181,6 +181,33 @@ def test_list_adapters_keeps_candidate_when_descriptor_strings_fail(
     adapter = list_adapters()[0]
 
     assert adapter.name == "usb:0"
+    assert adapter.serial_number is None
+    assert adapter.manufacturer is None
+    assert adapter.product is None
+
+
+def test_list_adapters_keeps_none_descriptor_values_as_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MissingDescriptorDevice(FakeUsbDevice):
+        def getSerialNumber(self) -> str | None:
+            return None
+
+        def getManufacturer(self) -> str | None:
+            return None
+
+        def getProduct(self) -> str | None:
+            return None
+
+    monkeypatch.setattr(
+        adapter_discovery,
+        "_iter_usb_devices",
+        lambda: (MissingDescriptorDevice(),),
+    )
+
+    adapter = list_adapters()[0]
+
+    assert adapter.aliases == ("usb:0A12:0001",)
     assert adapter.serial_number is None
     assert adapter.manufacturer is None
     assert adapter.product is None
