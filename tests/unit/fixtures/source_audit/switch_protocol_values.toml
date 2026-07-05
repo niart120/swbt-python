@@ -75,12 +75,14 @@ handoff = ["unit_001", "unit_005"]
 id = "device_info_swbt_pro_profile"
 fixture_name = "device_info_swbt_pro_profile"
 area = "protocol"
-value = "swbt-pro profile: firmware=04 00; controller_type=0x03; marker=0x02; runtime Bluetooth address; tail=01 01"
+value = "swbt-daemon reference Pro-compatible device info: firmware=04 00; controller_type=0x03; marker=0x02; runtime Bluetooth address; tail=01 01. Current swbt-python ProControllerProfile uses tail=03 02 based on the separate device_info_grip_color_tail_0302 hardware-observation entry."
 classification = "implementation fact"
 source = [
     'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-subcommand-dispatcher-core.md',
     'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_device_info.h:6-10',
     'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_device_info.c:21-31',
+    'src\swbt\protocol\profile.py',
+    'spec\complete\unit_028\CONTROLLER_PROFILE_CUSTOMIZATION.md',
 ]
 status = "handoff-ready"
 handoff = ["unit_005"]
@@ -98,6 +100,160 @@ source = [
 status = "hardware-observed-only"
 condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; Switch 2 firmware 22.1.0; controller search or change grip order screen; 2026-07-05 unit_028 tracked hardware tests"
 handoff = ["unit_028"]
+
+[[entry]]
+id = "joycon_device_info_profile"
+fixture_name = "joycon_device_info_profile"
+area = "protocol"
+value = "Joy-Con device info core: JOYCON_L=0x01, JOYCON_R=0x02, PRO_CONTROLLER=0x03; byte 3 marker=0x02; Bluetooth address is caller supplied; tail=01 01 uses SPI colors. swbt-python uses firmware=04 00 as an implementation-compatible default from existing Pro behavior and joycontrol, not as a Joy-Con hardware firmware observation."
+classification = "implementation fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
+    'https://github.com/mart1nro/joycontrol/blob/master/joycontrol/controller.py',
+    'https://github.com/mart1nro/joycontrol/blob/master/joycontrol/report.py',
+]
+status = "stable-profile-core"
+handoff = ["unit_030"]
+
+[[entry]]
+id = "device_info_local_bluetooth_address_wiring"
+fixture_name = "device_info_local_bluetooth_address_wiring"
+area = "protocol"
+value = "SubcommandResponder keeps Device Info Bluetooth address caller-supplied and updates that address in place so session state and responder wrappers remain attached; production SwitchGamepad obtains transport.local_bluetooth_address() after transport open and again after pairing advertising or connection completion, because Bumble Device.public_address is still ANY before power_on() and becomes the real controller address during connection preparation. Bumble exposes the controller public address as an Address object whose raw bytes are little-endian, so swbt-python parses the display order string such as 00:1B:DC:F9:9F:7D into Device Info bytes 00 1b dc f9 9f 7d instead of using Bumble Address bytes directly. If a custom transport does not expose an address, the existing zero address fallback remains."
+classification = "implementation fact"
+source = [
+    'src\swbt\protocol\subcommand.py',
+    'src\swbt\gamepad\core.py',
+    'src\swbt\transport\bumble.py',
+    'tests\unit\test_subcommand_responder.py',
+    'tests\unit\test_bumble_transport.py',
+    'tests\integration\test_switch_gamepad_fake_transport.py',
+    'https://github.com/niart120/swbt-python/issues/50',
+]
+status = "implementation-policy"
+handoff = ["joycon-profile-hardware"]
+
+[[entry]]
+id = "joycon_spi_device_type_values"
+fixture_name = "joycon_spi_device_type_values"
+area = "protocol"
+value = "SPI address 0x6012 stores device type; JOYCON_L=0x01, JOYCON_R=0x02, PRO_CONTROLLER=0x03. Only the 3 LSB are accounted for and the value is used internally and for subcommand 0x02."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md',
+]
+status = "stable-profile-core"
+handoff = ["unit_030"]
+
+[[entry]]
+id = "joycon_default_controller_color_profile"
+fixture_name = "joycon_default_controller_color_profile"
+area = "protocol"
+value = "Joy-Con L/R profile defaults seed SPI 0x6050-0x605B with side identity colors. Joy-Con L uses body=0x00B2FF, buttons=0x323232, left_grip=0x00B2FF, right_grip=0x00B2FF. Joy-Con R uses body=0xFF3B30, buttons=0x323232, left_grip=0xFF3B30, right_grip=0xFF3B30. Explicit user-supplied controller_colors overrides the profile default. These values reuse swbt-python's existing Joy-Con-ish blue/red defaults and are not claimed as factory Joy-Con color bytes."
+classification = "implementation fact"
+source = [
+    'src\swbt\protocol\profile.py',
+    'spec\complete\unit_028\CONTROLLER_PROFILE_CUSTOMIZATION.md',
+]
+status = "profile-default-policy"
+handoff = ["unit_037"]
+
+[[entry]]
+id = "joycon_standard_button_mapping"
+fixture_name = "joycon_standard_button_mapping"
+area = "protocol"
+value = "Standard input report button bytes: byte3_right maps Y=0x01, X=0x02, B=0x04, A=0x08, SR=0x10, SL=0x20, R=0x40, ZR=0x80; byte4_shared maps Minus=0x01, Plus=0x02, R Stick=0x04, L Stick=0x08, Home=0x10, Capture=0x20; byte5_left maps Down=0x01, Up=0x02, Right=0x04, Left=0x08, SR=0x10, SL=0x20, L=0x40, ZL=0x80."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_notes.md',
+]
+status = "stable-profile-core"
+handoff = ["unit_031"]
+
+[[entry]]
+id = "joycon_standard_stick_availability"
+fixture_name = "joycon_standard_stick_availability"
+area = "protocol"
+value = "Standard input report keeps left stick bytes at offsets 6-8 and right stick bytes at offsets 9-11. Profile policy treats JOYCON_L left stick only and JOYCON_R right stick only; the unavailable side must remain neutral and requested updates to that side are rejected before commit."
+classification = "inference"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_notes.md',
+    'https://github.com/niart120/swbt-python/issues/51',
+]
+status = "profile-policy"
+handoff = ["unit_031"]
+
+[[entry]]
+id = "subcommand_report_mode_session_state"
+fixture_name = "subcommand_report_mode_session_state"
+area = "protocol"
+value = "Subcommand 0x03 Set input report mode takes one argument byte; documented modes include 0x30 standard full mode, 0x31 NFC/IR mode, and 0x3F simple HID mode. swbt-python records the requested byte in SubcommandSessionState; only 0x30 is supported by the periodic ReportLoop for now, so unsupported modes such as 0x3F are ACK-compatible but marked unsupported and not coerced to 0x30."
+classification = "implementation fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
+    'https://github.com/niart120/swbt-python/issues/52',
+]
+status = "session-state-policy"
+handoff = ["unit_032"]
+
+[[entry]]
+id = "subcommand_imu_vibration_enable_state"
+fixture_name = "subcommand_imu_vibration_enable_state"
+area = "protocol"
+value = "Subcommand 0x40 Enable IMU and 0x48 Enable vibration each take one argument byte, with 0x00 disable and 0x01 enable. swbt-python stores these as booleans in SubcommandSessionState and does not put them in ControllerProfile or InputState."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
+]
+status = "session-state-policy"
+handoff = ["unit_032"]
+
+[[entry]]
+id = "joycon_imu_enable_mode_02"
+fixture_name = "joycon_imu_enable_mode_02"
+area = "protocol"
+value = "Joy-Con (L) hardware runs on Windows 11 / CSR8510 A10 / WinUSB / Bumble 0.0.230 observed subcommand 0x40 Enable IMU with first payload byte 0x02 during pairing handshake. swbt-python accepts 0x02 only for Joy-Con profiles, records it as SubcommandSessionState.imu_mode, and treats it as IMU enabled for session-state diagnostics. The later SR+SL-after-observed-window run completed pairing, but the Switch toast still identified the registration as Pro Controller while the controller order screen treated it as Joy-Con L. The trace still used local Bluetooth address 00:1B:DC:F9:9F:7D on-air but zero bytes in the 0x02 Device Info payload. This is hardware-observed only and does not change the Pro Controller 0x00/0x01 source fact."
+classification = "hardware observation"
+source = [
+    'spec\hardware-test-log.md',
+    'build\hardware\joycon-left-20260706-020308\joycon-left-profile-pairing.jsonl',
+    'build\hardware\joycon-left-20260706-020308\pytest-debug.log',
+    'build\hardware\joycon-left-20260706-020703\joycon-left-profile-pairing.jsonl',
+    'build\hardware\joycon-left-20260706-020703\pytest-debug.log',
+    'build\hardware\joycon-left-srsl-observed-window-20260706-024345\joycon-left-profile-pairing.jsonl',
+    'build\hardware\joycon-left-srsl-observed-window-20260706-024345\pytest-debug.log',
+]
+status = "hardware-observed-only"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB; Bumble 0.0.230; Python 3.13.5; adapter usb:0; Switch model/firmware not re-recorded in this run; controller search or change grip order screen; 2026-07-06 Joy-Con L hardware run"
+handoff = ["joycon-profile-hardware"]
+
+[[entry]]
+id = "profile_aware_bumble_sdp_boundary"
+fixture_name = "profile_aware_bumble_sdp_boundary"
+area = "transport"
+value = "Bumble transport passes ControllerProfile.hid_report_descriptor into the SDP HID descriptor list and uses profile.device_name as the HCI local name default, while an explicit device_name override wins. Pro profile SDP values remain Pro-compatible fixed values, including Class of Device 0x002508, HID country code 0x21, remote wake true, supervision timeout 0x0c80, and SSR max/min 0xffff. Joy-Con profiles use the joycontrol_sdp_record_policy source fact for SDP service/provider and HID attributes, but Class of Device remains 0x002508 and Joy-Con descriptor bytes remain unaudited."
+classification = "implementation fact"
+source = [
+    'src\swbt\gamepad\transport_factory.py',
+    'src\swbt\protocol\profile.py',
+    'src\swbt\transport\bumble.py',
+    'src\swbt\transport\_bumble_sdp.py',
+    'https://github.com/niart120/swbt-python/issues/53',
+]
+status = "profile-boundary-policy"
+handoff = ["unit_033", "unit_036"]
+
+[[entry]]
+id = "joycontrol_sdp_record_policy"
+fixture_name = "joycontrol_sdp_record_policy"
+area = "transport"
+value = "joycontrol SDP XML for the emulated Nintendo Switch controller uses service name 0x0100=Wireless Gamepad, service description 0x0101=Gamepad, provider 0x0102=Nintendo, device release number 0x0200=0x0100, HID country code 0x0203=0x00, HID profile version 0x020b=0x0100, omits HID remote wake 0x020a, sets normally connectable 0x020d=false, boot device 0x020e=true, and sets SSR host max/min 0x020f/0x0210=0x0640/0x0320. The HID descriptor bytes in the same XML match the existing 203-byte descriptor shape, so this entry is not a new Joy-Con-specific descriptor source."
+classification = "source fact"
+source = [
+    'https://github.com/mart1nro/joycontrol/blob/master/joycontrol/profile/sdp_record_hid.xml',
+]
+status = "stable-sdp-policy"
+handoff = ["unit_036"]
 
 [[entry]]
 id = "spi_flash_boundary_and_seed_map"

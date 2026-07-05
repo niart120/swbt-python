@@ -9,10 +9,12 @@ from typing import Any, cast
 import bumble.device as bumble_device_module
 import bumble.hid as bumble_hid_module
 import pytest
+from bumble.hci import Address
 from bumble.keys import PairingKeys
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
+from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
 from swbt.transport import bumble as bumble_module
 from swbt.transport._bumble_sdp import build_hid_service_records
 from swbt.transport.bumble import BumbleHidTransport
@@ -892,6 +894,7 @@ def test_bumble_initialize_device_configures_json_key_store(
         await bumble_module._default_initialize_device(
             handle,
             device_name="Pro Controller",
+            profile=ProControllerProfile(),
             key_store_path=str(key_store_path),
         )
 
@@ -901,6 +904,59 @@ def test_bumble_initialize_device_configures_json_key_store(
             "sink": handle.sink,
         }
         assert isinstance(fake_device.keystore, bumble_module._CurrentPreviousJsonKeyStore)
+
+    asyncio.run(run())
+
+
+def test_bumble_initialize_device_uses_profile_hid_descriptor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        captured_sdp: dict[str, object] = {}
+        fake_device = FakeBumbleDevice()
+
+        class FakeDeviceFactory:
+            @staticmethod
+            def from_config_with_hci(config: object, source: object, sink: object) -> object:
+                _ = (config, source, sink)
+                return fake_device
+
+        def create_hid_device(device: object) -> FakeHidDevice:
+            assert isinstance(device, FakeBumbleDevice)
+            return FakeHidDevice()
+
+        def build_service_records(
+            hid_descriptor: bytes,
+            *,
+            device_name: str = "Pro Controller",
+            sdp_policy: object,
+        ) -> dict[int, list[object]]:
+            captured_sdp["hid_descriptor"] = hid_descriptor
+            captured_sdp["device_name"] = device_name
+            captured_sdp["sdp_policy"] = sdp_policy
+            return {0x00010001: []}
+
+        monkeypatch.setattr(bumble_device_module, "Device", FakeDeviceFactory)
+        monkeypatch.setattr(bumble_hid_module, "Device", create_hid_device)
+        monkeypatch.setattr(bumble_module, "build_hid_service_records", build_service_records)
+
+        profile = JoyConLeftProfile(hid_report_descriptor=b"\x85\x30\x00")
+        handle = FakeBumbleHandle()
+
+        runtime = await bumble_module._default_initialize_device(
+            handle,
+            device_name="Profile Pad",
+            profile=profile,
+        )
+
+        assert captured_sdp == {
+            "hid_descriptor": b"\x85\x30\x00",
+            "device_name": "Profile Pad",
+            "sdp_policy": profile.hid_sdp_policy,
+        }
+        assert cast("Any", fake_device).sdp_service_records == {0x00010001: []}
+        assert runtime.hid_descriptor_size == 3
+        assert runtime.service_record_count == 1
 
     asyncio.run(run())
 
@@ -1189,6 +1245,51 @@ def test_bumble_start_advertising_powers_on_initialized_runtime() -> None:
         assert device.power_on_count == 1
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
         assert {"event": "advertising_start", "adapter": "usb:0"} in events
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_start_advertising_refreshes_local_bluetooth_address_after_power_on() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
+
+        class AddressAfterPowerOnDevice(FakeBumbleDevice):
+            async def power_on(self) -> None:
+                await super().power_on()
+                self.public_address = Address("00:1B:DC:F9:9F:7D")
+
+        device = AddressAfterPowerOnDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            diagnostics=diagnostics,
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        assert transport.local_bluetooth_address() is None
+
+        await transport.start_advertising()
+
+        assert transport.local_bluetooth_address() == bytes.fromhex("00 1b dc f9 9f 7d")
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        assert {
+            "event": "local_bluetooth_address_configured",
+            "adapter": "usb:0",
+            "address": "001bdcf99f7d",
+        } in events
 
         await transport.close()
 
@@ -1794,6 +1895,47 @@ def test_bumble_connection_request_is_recorded_before_connection_complete() -> N
             "peer_address": "01:02:03:04:05:06",
         } in events
         assert device.connection_requests == [("01:02:03:04:05:06", 0x2508, 1)]
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_device_info_bluetooth_address_uses_display_order() -> None:
+    address = bumble_module._device_info_bluetooth_address_from_bumble_address(
+        Address("00:1B:DC:F9:9F:7D")
+    )
+
+    assert address == bytes.fromhex("00 1b dc f9 9f 7d")
+
+
+def test_bumble_transport_exposes_runtime_local_bluetooth_address() -> None:
+    async def run() -> None:
+        local_address = bytes.fromhex("00 1b dc f9 9f 7d")
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return bumble_module._BumbleRuntime(
+                device=cast("bumble_module._BumbleDeviceRuntime", FakeBumbleDevice()),
+                hid_device=cast("bumble_module._BumbleHidRuntime", FakeHidDevice()),
+                service_record_count=1,
+                hid_descriptor_size=203,
+                local_bluetooth_address=local_address,
+            )
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+
+        assert transport.local_bluetooth_address() == local_address
 
         await transport.close()
 

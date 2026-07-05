@@ -1,8 +1,9 @@
 """Public gamepad API."""
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import TracebackType
+from typing import Literal, cast
 
 import swbt.gamepad as gamepad_module
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
@@ -21,7 +22,15 @@ from swbt.gamepad.connection import (
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.transport_factory import create_default_transport
 from swbt.input import Button, IMUFrame, InputState, Stick
-from swbt.protocol.profile import ControllerColors, ProControllerProfile
+from swbt.protocol.input_report import InputReportBuilder
+from swbt.protocol.profile import (
+    ControllerColors,
+    ControllerKind,
+    ControllerProfile,
+    JoyConLeftProfile,
+    JoyConRightProfile,
+    default_controller_profile,
+)
 from swbt.protocol.subcommand import SubcommandResponder
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
@@ -35,6 +44,7 @@ class SwitchGamepadConfig:
     Attributes:
         adapter: Bumble adapter moniker, such as ``"usb:0"``.
         key_store_path: Path used by the default transport to persist pairing keys.
+        profile: Fixed controller identity and protocol profile.
         report_period_us: Periodic input report interval in microseconds.
         device_name: HID device name advertised to the host.
         controller_colors: Fixed controller body, button, and grip colors for SPI profile data.
@@ -42,19 +52,30 @@ class SwitchGamepadConfig:
 
     adapter: str | None = None
     key_store_path: str | None = None
-    report_period_us: int = 8000
-    device_name: str = "Pro Controller"
-    controller_colors: ControllerColors | None = field(default_factory=ControllerColors)
+    profile: ControllerProfile = field(default_factory=default_controller_profile)
+    report_period_us: int | None = None
+    device_name: str | None = None
+    controller_colors: ControllerColors | None = None
 
     def __post_init__(self) -> None:
         """Validate resource configuration."""
-        if self.report_period_us <= 0:
+        if not isinstance(self.profile, ControllerProfile):
+            msg = "profile must be a ControllerProfile"
+            raise InvalidInputError(msg)
+        if self.report_period_us is None:
+            object.__setattr__(
+                self,
+                "report_period_us",
+                self.profile.default_report_period_us,
+            )
+        elif self.report_period_us <= 0:
             msg = "report_period_us must be positive"
             raise InvalidInputError(msg)
-        if self.controller_colors is None:
-            object.__setattr__(self, "controller_colors", ControllerColors())
-            return
-        if not isinstance(self.controller_colors, ControllerColors):
+        if self.device_name is None:
+            object.__setattr__(self, "device_name", self.profile.device_name)
+        if self.controller_colors is not None and not isinstance(
+            self.controller_colors, ControllerColors
+        ):
             msg = "controller_colors must be a ControllerColors"
             raise InvalidInputError(msg)
 
@@ -72,8 +93,8 @@ class SwitchGamepad:
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
-        report_period_us: int = 8000,
-        device_name: str = "Pro Controller",
+        report_period_us: int | None = None,
+        device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
@@ -84,8 +105,8 @@ class SwitchGamepad:
             adapter: Bumble adapter moniker used when the default transport is created.
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
-            report_period_us: Periodic input report interval in microseconds.
-            device_name: HID device name passed to the default transport.
+            report_period_us: Optional periodic input report interval in microseconds.
+            device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance. When supplied, no Bumble
@@ -95,31 +116,43 @@ class SwitchGamepad:
             InvalidInputError: ``adapter`` is omitted for the default transport or
                 ``report_period_us`` is not positive.
         """
-        if transport is None and adapter is None:
-            msg = "adapter is required when no custom transport is supplied"
-            raise InvalidInputError(msg)
-        self._config = SwitchGamepadConfig(
+        config = SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
             report_period_us=report_period_us,
             device_name=device_name,
             controller_colors=controller_colors,
         )
+        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+
+    def _init_from_config(
+        self,
+        config: SwitchGamepadConfig,
+        *,
+        diagnostics: DiagnosticsConfig | None,
+        transport: HidDeviceTransport | None,
+    ) -> None:
+        if transport is None and config.adapter is None:
+            msg = "adapter is required when no custom transport is supplied"
+            raise InvalidInputError(msg)
+        self._config = config
         self._transport = transport
         self._transport_was_injected = transport is not None
         self._state_store = InputStateStore()
         self._diagnostics = DiagnosticsRecorder(
             trace_writer=diagnostics.trace_writer if diagnostics is not None else None
         )
-        controller_profile = ProControllerProfile(
-            controller_colors=self._config.controller_colors or ControllerColors()
+        self._controller_profile = replace(
+            self._config.profile,
+            controller_colors=self._config.controller_colors
+            or self._config.profile.controller_colors,
         )
         self._output_report_dispatcher = OutputReportDispatcher(
             diagnostics=self._diagnostics,
             require_reply_sender=self._require_subcommand_reply_sender,
             send_subcommand_reply=self._send_subcommand_reply,
             state_store=self._state_store,
-            subcommand_responder=SubcommandResponder(profile=controller_profile),
+            subcommand_responder=SubcommandResponder(profile=self._controller_profile),
         )
         self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
@@ -128,6 +161,7 @@ class SwitchGamepad:
         self._connection_state = "closed"
         self._is_open = False
         self._close_in_progress = False
+        self._configured_device_info_bluetooth_address: bytes | None = None
         self._connection_workflow = ConnectionWorkflow(
             clear_connected=self._connected_event.clear,
             close_neutral=self._close_neutral_for_connection_workflow,
@@ -159,15 +193,13 @@ class SwitchGamepad:
         Returns:
             SwitchGamepad: A gamepad configured from ``config``.
         """
-        return cls(
-            adapter=config.adapter,
-            key_store_path=config.key_store_path,
-            report_period_us=config.report_period_us,
-            device_name=config.device_name,
-            controller_colors=config.controller_colors,
+        gamepad = cls.__new__(cls)
+        gamepad._init_from_config(
+            config,
             diagnostics=diagnostics,
             transport=transport,
         )
+        return gamepad
 
     async def __aenter__(self) -> "SwitchGamepad":
         """Open the gamepad for an async context manager.
@@ -214,10 +246,12 @@ class SwitchGamepad:
             self._connected_event.clear()
             try:
                 await transport.open()
+                self._configure_device_info_bluetooth_address(transport)
                 self._report_loop = ReportLoop(
                     transport=transport,
                     state_store=self._state_store,
-                    report_period_us=self._config.report_period_us,
+                    report_period_us=cast("int", self._config.report_period_us),
+                    input_report_builder=InputReportBuilder(self._controller_profile),
                     diagnostics=self._diagnostics,
                 )
                 self._connection_state = "opened"
@@ -247,6 +281,7 @@ class SwitchGamepad:
             raise ClosedError(msg)
         self._connection_state = "advertising"
         await self._transport.start_advertising()
+        self._configure_device_info_bluetooth_address(self._transport)
         if timeout is None:
             await self._connected_event.wait()
             return
@@ -396,7 +431,10 @@ class SwitchGamepad:
 
         This updates local state only and does not send an immediate input report.
         """
-        await self._state_store.press(*buttons)
+        await self._state_store.update(
+            lambda current: current.with_buttons((*current.buttons, *buttons)),
+            validate=self._controller_profile.validate_input_state,
+        )
 
     async def apply(self, state: InputState) -> None:
         """Replace the current input state without immediate transmission.
@@ -406,6 +444,7 @@ class SwitchGamepad:
 
         This updates local state only and does not send an immediate input report.
         """
+        self._controller_profile.validate_input_state(state)
         await self._state_store.apply(state)
 
     async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
@@ -422,7 +461,14 @@ class SwitchGamepad:
         """
         self._validate_stick("left", left)
         self._validate_stick("right", right)
-        await self._state_store.sticks(left=left, right=right)
+        self._controller_profile.validate_requested_sticks(
+            left=left is not None,
+            right=right is not None,
+        )
+        await self._state_store.update(
+            lambda current: current.with_sticks(left_stick=left, right_stick=right),
+            validate=self._controller_profile.validate_input_state,
+        )
 
     async def lstick(self, stick: Stick) -> None:
         """Replace the left stick position without immediate transmission.
@@ -473,7 +519,11 @@ class SwitchGamepad:
 
         This updates local state only and does not send an immediate input report.
         """
-        await self._state_store.release(*buttons)
+        self._controller_profile.validate_buttons(buttons)
+        await self._state_store.update(
+            lambda current: current.with_buttons(current.buttons.difference(buttons)),
+            validate=self._controller_profile.validate_input_state,
+        )
 
     async def neutral(self) -> None:
         """Return local input state to ``InputState.neutral()`` without immediate transmission."""
@@ -540,6 +590,27 @@ class SwitchGamepad:
         self._transport.on_control_data(self._handle_control_data)
         self._transport.on_connected(self._handle_connected)
         self._transport.on_disconnected(self._handle_disconnected)
+
+    def _configure_device_info_bluetooth_address(self, transport: HidDeviceTransport) -> None:
+        get_address = getattr(transport, "local_bluetooth_address", None)
+        if not callable(get_address):
+            return
+        address = get_address()
+        if address is None:
+            return
+        if len(address) != 6:
+            msg = "local_bluetooth_address must return 6 bytes"
+            raise InvalidInputError(msg)
+        if address == self._configured_device_info_bluetooth_address:
+            return
+        self._output_report_dispatcher.subcommand_responder.set_device_info_bluetooth_address(
+            address
+        )
+        self._configured_device_info_bluetooth_address = address
+        self._diagnostics.record_event(
+            "device_info_bluetooth_address_configured",
+            address=address.hex(),
+        )
 
     async def _send_trailing_neutral_if_connected(self) -> None:
         await self._state_store.neutral()
@@ -668,6 +739,8 @@ class SwitchGamepad:
 
     async def _handle_connected(self) -> None:
         previous_state = self._connection_state
+        if self._transport is not None:
+            self._configure_device_info_bluetooth_address(self._transport)
         if previous_state == "advertising":
             self._diagnostics.record_event(
                 "incoming_connection",
@@ -708,8 +781,95 @@ class SwitchGamepad:
                 raise InvalidInputError(msg)
             self._transport = create_default_transport(
                 adapter=self._config.adapter,
-                device_name=self._config.device_name,
+                device_name=cast("str", self._config.device_name),
+                profile=self._controller_profile,
                 diagnostics=self._diagnostics,
                 key_store_path=self._config.key_store_path,
             )
         return self._transport
+
+
+class JoyCon(SwitchGamepad):
+    """Thin SwitchGamepad wrapper for a single Joy-Con profile."""
+
+    def __init__(
+        self,
+        side: Literal["left", "right"],
+        *,
+        adapter: str | None = None,
+        key_store_path: str | None = None,
+        report_period_us: int | None = None,
+        device_name: str | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> None:
+        """Create a single left or right Joy-Con-compatible SwitchGamepad.
+
+        Args:
+            side: ``"left"`` for Joy-Con (L) or ``"right"`` for Joy-Con (R).
+            adapter: Bumble adapter moniker used when the default transport is created.
+                Required unless a custom transport is supplied.
+            key_store_path: Optional path used by the default transport to persist keys.
+            report_period_us: Optional periodic input report interval in microseconds.
+            device_name: Optional HID device name passed to the default transport.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance. When supplied, no Bumble
+                transport is created by the constructor.
+
+        Raises:
+            InvalidInputError: ``side`` is not ``"left"`` or ``"right"``, ``adapter``
+                is omitted for the default transport, or ``report_period_us`` is not
+                positive.
+        """
+        config = SwitchGamepadConfig(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            profile=_joycon_profile(side),
+            report_period_us=report_period_us,
+            device_name=device_name,
+            controller_colors=controller_colors,
+        )
+        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+
+    @classmethod
+    def from_config(
+        cls,
+        config: SwitchGamepadConfig,
+        *,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> "JoyCon":
+        """Create a JoyCon from an explicit Joy-Con resource configuration.
+
+        Args:
+            config: Resource configuration with a left or right Joy-Con profile.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance.
+
+        Raises:
+            InvalidInputError: ``config.profile`` is not a Joy-Con profile.
+        """
+        if config.profile.kind not in (ControllerKind.JOYCON_LEFT, ControllerKind.JOYCON_RIGHT):
+            msg = "JoyCon.from_config requires a Joy-Con profile"
+            raise InvalidInputError(msg)
+        gamepad = cls.__new__(cls)
+        gamepad._init_from_config(
+            config,
+            diagnostics=diagnostics,
+            transport=transport,
+        )
+        return gamepad
+
+
+def _joycon_profile(side: object) -> ControllerProfile:
+    if not isinstance(side, str):
+        msg = "side must be 'left' or 'right'"
+        raise InvalidInputError(msg)
+    if side == "left":
+        return JoyConLeftProfile()
+    if side == "right":
+        return JoyConRightProfile()
+    msg = "side must be 'left' or 'right'"
+    raise InvalidInputError(msg)

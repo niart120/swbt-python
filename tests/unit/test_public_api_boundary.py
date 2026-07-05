@@ -9,7 +9,7 @@ import sys
 from dataclasses import fields
 from io import StringIO
 from pathlib import Path
-from typing import get_args
+from typing import TYPE_CHECKING, cast, get_args
 
 import pytest
 
@@ -18,11 +18,18 @@ from swbt import (
     ControllerColors,
     DiagnosticsConfig,
     InvalidInputError,
+    JoyCon,
     SwitchGamepad,
     SwitchGamepadConfig,
 )
 from swbt.gamepad import ConnectionStatus
+from swbt.gamepad import core as gamepad_core
+from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
+from swbt.transport.fake import FakeHidTransport
+
+if TYPE_CHECKING:
+    from swbt.protocol.profile import ControllerProfile
 
 
 def test_public_api_import_does_not_import_bumble() -> None:
@@ -123,6 +130,47 @@ def test_switch_gamepad_constructor_accepts_controller_colors_config() -> None:
     assert config.controller_colors == colors
 
 
+def test_switch_gamepad_config_defaults_to_distinct_pro_controller_profiles() -> None:
+    config_a = SwitchGamepadConfig()
+    config_b = SwitchGamepadConfig()
+
+    assert isinstance(config_a.profile, ProControllerProfile)
+    assert isinstance(config_b.profile, ProControllerProfile)
+    assert config_a.profile == config_b.profile
+    assert config_a.profile is not config_b.profile
+
+
+def test_switch_gamepad_config_rejects_invalid_profile() -> None:
+    with pytest.raises(InvalidInputError):
+        SwitchGamepadConfig(profile=cast("ControllerProfile", object()))
+
+
+def test_joycon_public_constructor_is_thin_switch_gamepad_wrapper() -> None:
+    signature = inspect.signature(JoyCon)
+
+    assert issubclass(JoyCon, SwitchGamepad)
+    assert "side" in signature.parameters
+    assert "adapter" in signature.parameters
+    assert "key_store_path" in signature.parameters
+    assert "JoyConLeftProfile" not in swbt.__all__
+    assert "JoyConRightProfile" not in swbt.__all__
+
+
+def test_joycon_from_config_requires_joycon_profile() -> None:
+    with pytest.raises(InvalidInputError):
+        JoyCon.from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
+
+
+def test_joycon_from_config_accepts_joycon_profile() -> None:
+    pad = JoyCon.from_config(
+        SwitchGamepadConfig(profile=JoyConLeftProfile()),
+        transport=FakeHidTransport(),
+    )
+
+    assert isinstance(pad, JoyCon)
+    assert pad.snapshot() == swbt.InputState.neutral()
+
+
 def test_connection_methods_do_not_accept_key_store_path() -> None:
     for method in (
         SwitchGamepad.pair,
@@ -164,6 +212,7 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
                 *,
                 adapter: str,
                 device_name: str,
+                profile: ProControllerProfile,
                 key_store_path: str | None,
                 diagnostics: object,
             ) -> None:
@@ -171,6 +220,7 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
                     {
                         "adapter": adapter,
                         "device_name": device_name,
+                        "profile": profile,
                         "key_store_path": key_store_path,
                         "diagnostics": diagnostics,
                     }
@@ -234,11 +284,152 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
 
         assert captured_config["adapter"] == "usb:1"
         assert captured_config["device_name"] == "Reference Pad"
+        assert isinstance(captured_config["profile"], ProControllerProfile)
         assert captured_config["key_store_path"] == str(key_store_path)
         assert captured_config["diagnostics"] is not None
         assert result.status == "no_bond"
 
     asyncio.run(run())
+
+
+def test_from_config_uses_profile_device_name_unless_user_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run(config: SwitchGamepadConfig) -> str:
+        bumble_module = importlib.import_module("swbt.transport.bumble")
+        captured_config: dict[str, object] = {}
+
+        class FakeBumbleTransport:
+            def __init__(
+                self,
+                *,
+                adapter: str,
+                device_name: str,
+                profile: ProControllerProfile,
+                key_store_path: str | None,
+                diagnostics: object,
+            ) -> None:
+                _ = (adapter, profile, key_store_path, diagnostics)
+                captured_config["device_name"] = device_name
+
+            async def open(self) -> None:
+                return None
+
+            async def start_advertising(self) -> None:
+                return None
+
+            async def close(self) -> None:
+                return None
+
+            async def request_disconnect(self) -> DisconnectRequestResult:
+                return DisconnectRequestResult(status="unavailable")
+
+            async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
+                return ()
+
+            async def connect_bonded_peer(
+                self,
+                peer_address: str,
+                *,
+                connect_timeout: float | None,
+            ) -> None:
+                _ = (peer_address, connect_timeout)
+
+            async def send_interrupt(self, payload: bytes) -> None:
+                _ = payload
+
+            async def send_control(self, payload: bytes) -> None:
+                _ = payload
+
+            def on_interrupt_data(self, callback: object) -> None:
+                _ = callback
+
+            def on_control_data(self, callback: object) -> None:
+                _ = callback
+
+            def on_connected(self, callback: object) -> None:
+                _ = callback
+
+            def on_disconnected(self, callback: object) -> None:
+                _ = callback
+
+        monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
+
+        pad = SwitchGamepad.from_config(config)
+        await pad.open()
+        await pad.close(neutral=True)
+
+        return str(captured_config["device_name"])
+
+    profile_default_name = asyncio.run(
+        run(
+            SwitchGamepadConfig(
+                adapter="usb:1",
+                profile=ProControllerProfile(device_name="Profile Pad"),
+            )
+        )
+    )
+    explicit_name = asyncio.run(
+        run(
+            SwitchGamepadConfig(
+                adapter="usb:1",
+                device_name="Override Pad",
+                profile=ProControllerProfile(device_name="Profile Pad"),
+            )
+        )
+    )
+
+    assert profile_default_name == "Profile Pad"
+    assert explicit_name == "Override Pad"
+
+
+def test_from_config_uses_profile_report_period_unless_user_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_periods: list[int] = []
+
+    class SpyReportLoop:
+        def __init__(
+            self,
+            *,
+            transport: object,
+            state_store: object,
+            report_period_us: int,
+            input_report_builder: object | None = None,
+            diagnostics: object | None = None,
+        ) -> None:
+            _ = (transport, state_store, input_report_builder, diagnostics)
+            captured_periods.append(report_period_us)
+
+        async def stop(self) -> None:
+            return None
+
+    monkeypatch.setattr(gamepad_core, "ReportLoop", SpyReportLoop)
+
+    async def run(config: SwitchGamepadConfig) -> int:
+        pad = SwitchGamepad.from_config(config, transport=FakeHidTransport())
+        await pad.open()
+        await pad.close(neutral=False)
+        return captured_periods[-1]
+
+    profile_default_period = asyncio.run(
+        run(
+            SwitchGamepadConfig(
+                profile=ProControllerProfile(default_report_period_us=12_345),
+            )
+        )
+    )
+    explicit_period = asyncio.run(
+        run(
+            SwitchGamepadConfig(
+                profile=ProControllerProfile(default_report_period_us=12_345),
+                report_period_us=8000,
+            )
+        )
+    )
+
+    assert profile_default_period == 12_345
+    assert explicit_period == 8000
 
 
 def test_hid_transport_disconnect_request_boundary_uses_plain_types() -> None:
@@ -266,6 +457,17 @@ def test_hid_transport_bonded_peer_listing_documents_current_candidate_contract(
     assert "InvalidKeyStoreError" in doc
 
 
+def test_hid_transport_local_bluetooth_address_boundary_uses_plain_types() -> None:
+    signature = inspect.signature(HidDeviceTransport.local_bluetooth_address)
+    annotation_text = repr(signature.return_annotation).lower()
+    doc = inspect.getdoc(HidDeviceTransport.local_bluetooth_address)
+
+    assert list(signature.parameters) == ["self"]
+    assert "bumble" not in annotation_text
+    assert doc is not None
+    assert "Device Info" in doc
+
+
 def test_default_transport_without_key_store_records_reconnect_limitation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -279,10 +481,11 @@ def test_default_transport_without_key_store_records_reconnect_limitation(
                 *,
                 adapter: str,
                 device_name: str,
+                profile: ProControllerProfile,
                 key_store_path: str | None,
                 diagnostics: object,
             ) -> None:
-                _ = (adapter, device_name, key_store_path, diagnostics)
+                _ = (adapter, device_name, profile, key_store_path, diagnostics)
 
             async def open(self) -> None:
                 return None

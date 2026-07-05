@@ -22,10 +22,12 @@ def test_package_exports_public_gamepad_surface() -> None:
         "InputState",
         "InvalidInputError",
         "InvalidKeyStoreError",
+        "JoyCon",
         "Stick",
         "SwbtError",
         "SwitchGamepad",
         "SwitchGamepadConfig",
         "TransportOpenError",
+        "UnsupportedInputError",
         "list_adapters",
     )

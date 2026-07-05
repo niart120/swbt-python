@@ -58,3 +58,21 @@ class ClosedError(SwbtError):
 
 class InvalidInputError(SwbtError):
     """Raised when user-provided input values are outside the supported range."""
+
+
+class UnsupportedInputError(InvalidInputError):
+    """Raised when a controller profile does not support a requested input."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        profile_kind: str,
+        buttons: tuple[str, ...] = (),
+        sticks: tuple[str, ...] = (),
+    ) -> None:
+        """Initialize unsupported input details."""
+        super().__init__(message)
+        self.profile_kind = profile_kind
+        self.buttons = buttons
+        self.sticks = sticks

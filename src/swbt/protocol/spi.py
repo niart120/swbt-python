@@ -1,7 +1,7 @@
 """Virtual SPI flash."""
 
 from swbt.errors import ProtocolError
-from swbt.protocol.profile import ProControllerProfile
+from swbt.protocol.profile import ControllerProfile, default_controller_profile
 
 
 class VirtualSpiFlash:
@@ -12,16 +12,15 @@ class VirtualSpiFlash:
     MAX_READ_SIZE = 0x1D
     ERASED_BYTE = 0xFF
     DEVICE_TYPE_ADDRESS = 0x6012
-    PRO_CONTROLLER_DEVICE_TYPE = 0x03
     COLOR_INFO_EXISTS_ADDRESS = 0x601B
     COLOR_INFO_EXISTS = 0x01
     CONTROLLER_COLORS_ADDRESS = 0x6050
 
-    def __init__(self, *, profile: ProControllerProfile | None = None) -> None:
+    def __init__(self, *, profile: ControllerProfile | None = None) -> None:
         """Create a virtual SPI flash image."""
-        profile = profile or ProControllerProfile()
+        profile = profile or default_controller_profile()
         self._data = bytearray([self.ERASED_BYTE] * self.STORAGE_SIZE)
-        self._data[self.DEVICE_TYPE_ADDRESS] = self.PRO_CONTROLLER_DEVICE_TYPE
+        self._data[self.DEVICE_TYPE_ADDRESS] = profile.device_type
         self._data[self.COLOR_INFO_EXISTS_ADDRESS] = self.COLOR_INFO_EXISTS
         controller_colors = profile.controller_colors.to_spi_bytes()
         self._data[

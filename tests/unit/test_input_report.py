@@ -1,7 +1,9 @@
 import pytest
 
+from swbt.errors import UnsupportedInputError
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.input_report import InputReportBuilder
+from swbt.protocol.profile import JoyConLeftProfile, JoyConRightProfile
 
 
 def test_neutral_0x30_report_has_report_id_and_49_byte_length() -> None:
@@ -110,3 +112,89 @@ def test_all_exposed_buttons_pack_to_button_bytes(button: Button, button_bytes: 
     report = InputReportBuilder().build_0x30(InputState.neutral().with_buttons([button]))
 
     assert report[3:6] == button_bytes
+
+
+@pytest.mark.parametrize("button", [Button.SL, Button.SR])
+def test_pro_controller_rejects_single_joycon_sl_sr_buttons(button: Button) -> None:
+    with pytest.raises(UnsupportedInputError):
+        InputReportBuilder().build_0x30(InputState.neutral().with_buttons([button]))
+
+
+def test_joycon_left_profile_packs_supported_buttons() -> None:
+    state = InputState.neutral().with_buttons(
+        [
+            Button.DPAD_DOWN,
+            Button.DPAD_UP,
+            Button.DPAD_RIGHT,
+            Button.DPAD_LEFT,
+            Button.L,
+            Button.ZL,
+            Button.MINUS,
+            Button.CAPTURE,
+            Button.LEFT_STICK,
+            Button.SL,
+            Button.SR,
+        ]
+    )
+
+    report = InputReportBuilder(JoyConLeftProfile()).build_0x30(state)
+
+    assert report[3:6] == bytes.fromhex("00 29 ff")
+
+
+def test_joycon_right_profile_packs_supported_buttons() -> None:
+    state = InputState.neutral().with_buttons(
+        [
+            Button.A,
+            Button.B,
+            Button.X,
+            Button.Y,
+            Button.R,
+            Button.ZR,
+            Button.PLUS,
+            Button.HOME,
+            Button.RIGHT_STICK,
+            Button.SL,
+            Button.SR,
+        ]
+    )
+
+    report = InputReportBuilder(JoyConRightProfile()).build_0x30(state)
+
+    assert report[3:6] == bytes.fromhex("ff 16 00")
+
+
+def test_joycon_left_profile_rejects_unsupported_right_side_inputs() -> None:
+    state = InputState.neutral().with_buttons([Button.A])
+
+    with pytest.raises(UnsupportedInputError):
+        InputReportBuilder(JoyConLeftProfile()).build_0x30(state)
+
+
+def test_joycon_right_profile_rejects_unsupported_left_side_inputs() -> None:
+    state = InputState.neutral().with_buttons([Button.DPAD_LEFT])
+
+    with pytest.raises(UnsupportedInputError):
+        InputReportBuilder(JoyConRightProfile()).build_0x30(state)
+
+
+def test_joycon_profiles_reject_unsupported_non_neutral_sticks() -> None:
+    left_state_with_right_stick = InputState.neutral().with_sticks(right_stick=Stick.right())
+    right_state_with_left_stick = InputState.neutral().with_sticks(left_stick=Stick.left())
+
+    with pytest.raises(UnsupportedInputError):
+        InputReportBuilder(JoyConLeftProfile()).build_0x30(left_state_with_right_stick)
+    with pytest.raises(UnsupportedInputError):
+        InputReportBuilder(JoyConRightProfile()).build_0x30(right_state_with_left_stick)
+
+
+def test_joycon_profiles_allow_their_supported_stick_side() -> None:
+    left_report = InputReportBuilder(JoyConLeftProfile()).build_0x30(
+        InputState.neutral().with_sticks(left_stick=Stick.up())
+    )
+    right_report = InputReportBuilder(JoyConRightProfile()).build_0x30(
+        InputState.neutral().with_sticks(right_stick=Stick.right())
+    )
+
+    assert left_report[6:9] == bytes.fromhex("00 f8 ff")
+    assert right_report[9:12] == bytes.fromhex("ff 0f 80")

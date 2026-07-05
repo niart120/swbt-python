@@ -59,6 +59,31 @@ def test_readme_records_current_switch_model_and_firmware_evidence() -> None:
     assert "model / firmware は未記録" not in text
 
 
+def test_readme_documents_single_joycon_public_api_and_scope() -> None:
+    text = README.read_text(encoding="utf-8")
+
+    for token in (
+        "### 単体 Joy-Con L/R",
+        'JoyCon("left", ...)',
+        'JoyCon("right", ...)',
+        "from swbt import Button, JoyCon, Stick",
+        'key_store_path="switch-left-joycon-bond.json"',
+        "await left.tap(Button.SR, Button.SL)",
+        "`UnsupportedInputError`",
+        "SR+SL を送ります",
+        "Pro Controller、Joy-Con L、Joy-Con R では `key_store_path` を分けてください",
+        "`JoyConPair` は未実装",
+        "Switch UI で Joy-Con として登録",
+        "Joy-Con R、reconnect",
+        "SDP 完全一致",
+        "OS / dongle / firmware をまたぐ互換性は未検証",
+    ):
+        assert token in text
+
+    assert "JoyConLeftProfile" not in text
+    assert "JoyConRightProfile" not in text
+
+
 def test_readme_links_public_docs_with_https_urls() -> None:
     text = README.read_text(encoding="utf-8")
 

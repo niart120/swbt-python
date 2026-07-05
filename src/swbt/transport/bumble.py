@@ -10,7 +10,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
-from swbt.protocol.profile import ProControllerProfile
+from swbt.protocol.profile import default_controller_profile
 from swbt.transport._bumble_acl import drain_bumble_acl_queue
 from swbt.transport._bumble_hidp import (
     HID_GET_SET_SUCCESS,
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from bumble.transport.common import TransportSink, TransportSource
 
     from swbt.diagnostics import DiagnosticsRecorder
+    from swbt.protocol.profile import ControllerProfile
     from swbt.transport.base import (
         ConnectedCallback,
         ControlDataCallback,
@@ -149,6 +150,7 @@ class _BumbleRuntime:
     hid_device: _BumbleHidRuntime
     service_record_count: int
     hid_descriptor_size: int
+    local_bluetooth_address: bytes | None = None
     classic_link_policy_settings: int | None = None
     advertising_started: bool = False
 
@@ -166,6 +168,7 @@ class BumbleHidTransport:
         *,
         adapter: str,
         device_name: str = _DEFAULT_DEVICE_NAME,
+        profile: ControllerProfile | None = None,
         key_store_path: str | None = None,
         diagnostics: DiagnosticsRecorder | None = None,
         _open_transport: _OpenTransport | None = None,
@@ -176,6 +179,7 @@ class BumbleHidTransport:
         """Create a Bumble transport for an adapter string."""
         self._adapter = adapter
         self._device_name = device_name
+        self._profile = profile or default_controller_profile()
         self._key_store_path = key_store_path
         self._diagnostics = diagnostics
         self._open_transport = _open_transport or _default_open_transport
@@ -185,6 +189,7 @@ class BumbleHidTransport:
                 return await _default_initialize_device(
                     handle,
                     device_name=self._device_name,
+                    profile=self._profile,
                     key_store_path=self._key_store_path,
                 )
 
@@ -216,6 +221,12 @@ class BumbleHidTransport:
         try:
             self._handle = await self._open_transport(self._adapter)
             self._runtime = await self._initialize_device(self._handle)
+            self._runtime.local_bluetooth_address = (
+                self._runtime.local_bluetooth_address
+                or _device_info_bluetooth_address_from_bumble_address(
+                    getattr(self._runtime.device, "public_address", None)
+                )
+            )
             self._register_device_callbacks(self._runtime.device)
             self._register_hid_callbacks(self._runtime.hid_device)
             self._register_l2cap_lifecycle_bridge(self._runtime.hid_device)
@@ -224,13 +235,17 @@ class BumbleHidTransport:
             self._record_error(error)
             msg = f"failed to open Bumble adapter: {self._adapter}"
             raise TransportOpenError(msg) from error
-        self._record_event(
-            "bumble_device_initialized",
-            adapter=self._adapter,
-            classic_enabled=True,
-            device_name=self._device_name,
-            class_of_device=f"0x{_REFERENCE_CLASS_OF_DEVICE:06x}",
-        )
+        initialized_event: dict[str, object] = {
+            "adapter": self._adapter,
+            "classic_enabled": True,
+            "device_name": self._device_name,
+            "class_of_device": f"0x{_REFERENCE_CLASS_OF_DEVICE:06x}",
+        }
+        if self._runtime.local_bluetooth_address is not None:
+            initialized_event["local_bluetooth_address"] = (
+                self._runtime.local_bluetooth_address.hex()
+            )
+        self._record_event("bumble_device_initialized", **initialized_event)
         self._record_event(
             "sdp_record_registered",
             adapter=self._adapter,
@@ -249,6 +264,7 @@ class BumbleHidTransport:
         if self._runtime.advertising_started:
             return
         await self._start_advertising(self._runtime)
+        self._refresh_local_bluetooth_address(self._runtime)
         self._install_key_store_diagnostics(self._runtime)
         self._runtime.advertising_started = True
         if self._runtime.classic_link_policy_settings is not None:
@@ -310,6 +326,12 @@ class BumbleHidTransport:
             status="requested",
             channels=tuple(requested_channels),
         )
+
+    def local_bluetooth_address(self) -> bytes | None:
+        """Return the local Classic controller address for Device Info."""
+        if self._runtime is None:
+            return None
+        return self._runtime.local_bluetooth_address
 
     async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
         """Return bonded peer addresses from the Bumble key store."""
@@ -590,6 +612,7 @@ class BumbleHidTransport:
     async def _ensure_classic_runtime_ready(self, runtime: _BumbleRuntime) -> None:
         if not runtime.device.powered_on:
             await runtime.device.power_on()
+        self._refresh_local_bluetooth_address(runtime)
         if runtime.classic_link_policy_settings is None:
             link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
             if link_policy_settings is not None:
@@ -600,6 +623,19 @@ class BumbleHidTransport:
                     settings=f"0x{link_policy_settings:04x}",
                 )
         self._install_key_store_diagnostics(runtime)
+
+    def _refresh_local_bluetooth_address(self, runtime: _BumbleRuntime) -> None:
+        address = _device_info_bluetooth_address_from_bumble_address(
+            getattr(runtime.device, "public_address", None)
+        )
+        if address is None or address == runtime.local_bluetooth_address:
+            return
+        runtime.local_bluetooth_address = address
+        self._record_event(
+            "local_bluetooth_address_configured",
+            adapter=self._adapter,
+            address=address.hex(),
+        )
 
     async def _cleanup_open_failure(self) -> None:
         handle = self._handle
@@ -623,12 +659,12 @@ async def _default_initialize_device(
     handle: _BumbleHandle,
     *,
     device_name: str,
+    profile: ControllerProfile,
     key_store_path: str | None = None,
 ) -> _BumbleRuntime:
     from bumble.device import Device, DeviceConfiguration  # noqa: PLC0415
     from bumble.hid import Device as HidDevice  # noqa: PLC0415
 
-    profile = ProControllerProfile()
     config = DeviceConfiguration(
         name=device_name,
         class_of_device=_REFERENCE_CLASS_OF_DEVICE,
@@ -653,6 +689,7 @@ async def _default_initialize_device(
     service_records = build_hid_service_records(
         profile.hid_report_descriptor,
         device_name=device_name,
+        sdp_policy=profile.hid_sdp_policy,
     )
     device.sdp_service_records = service_records
     hid_device = HidDevice(device)
@@ -661,6 +698,9 @@ async def _default_initialize_device(
         hid_device=cast("_BumbleHidRuntime", hid_device),
         service_record_count=len(service_records),
         hid_descriptor_size=len(profile.hid_report_descriptor),
+        local_bluetooth_address=_device_info_bluetooth_address_from_bumble_address(
+            getattr(device, "public_address", None)
+        ),
     )
 
 
@@ -707,3 +747,22 @@ def _package_version(package_name: str) -> str:
         return version(package_name)
     except PackageNotFoundError:
         return "unknown"
+
+
+def _device_info_bluetooth_address_from_bumble_address(address: object) -> bytes | None:
+    """Return Device Info address bytes from a Bumble address object."""
+    if address is None:
+        return None
+    to_string = getattr(address, "to_string", None)
+    address_text = str(to_string(False)) if callable(to_string) else str(address)
+    address_text = address_text.split("/", 1)[0]
+    parts = address_text.split(":")
+    if len(parts) != 6 or any(len(part) != 2 for part in parts):
+        return None
+    try:
+        address_bytes = bytes.fromhex("".join(parts))
+    except ValueError:
+        return None
+    if address_bytes == b"\x00\x00\x00\x00\x00\x00":
+        return None
+    return address_bytes

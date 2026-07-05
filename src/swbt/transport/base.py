@@ -44,6 +44,9 @@ class HidDeviceTransport(Protocol):
     async def request_disconnect(self) -> DisconnectRequestResult:
         """Request a remote HID/L2CAP disconnect when the transport supports it."""
 
+    def local_bluetooth_address(self) -> bytes | None:
+        """Return the local controller address for Device Info, when available."""
+
     async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
         """Return current reconnect candidates.
 

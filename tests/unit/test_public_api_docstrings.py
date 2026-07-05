@@ -10,6 +10,7 @@ from swbt import (
     GamepadStatus,
     IMUFrame,
     InputState,
+    JoyCon,
     Stick,
     SwitchGamepad,
     SwitchGamepadConfig,
@@ -143,3 +144,18 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
 
     for method, tokens in expected_method_tokens:
         _assert_doc_contains(method, *tokens)
+
+
+def test_joycon_docstring_describes_side_and_switch_gamepad_contract() -> None:
+    _assert_doc_contains(
+        JoyCon.__init__,
+        "Args:",
+        "side",
+        '"left"',
+        '"right"',
+        "adapter",
+        "key_store_path",
+        "transport",
+        "Raises:",
+        "InvalidInputError",
+    )

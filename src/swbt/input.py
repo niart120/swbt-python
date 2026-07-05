@@ -28,6 +28,8 @@ class Button(Enum):
     CAPTURE = auto()
     LEFT_STICK = auto()
     RIGHT_STICK = auto()
+    SL = auto()
+    SR = auto()
     DPAD_UP = auto()
     DPAD_DOWN = auto()
     DPAD_LEFT = auto()

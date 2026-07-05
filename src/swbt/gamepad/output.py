@@ -5,7 +5,11 @@ from dataclasses import dataclass, field
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.protocol.output_report import OutputReportParser
-from swbt.protocol.subcommand import SubcommandResponder, UnsupportedSubcommandError
+from swbt.protocol.subcommand import (
+    SESSION_STATE_SUBCOMMANDS,
+    SubcommandResponder,
+    UnsupportedSubcommandError,
+)
 from swbt.state_store import InputStateStore
 
 ReplySender = Callable[[bytes], Awaitable[None]]
@@ -54,6 +58,21 @@ class OutputReportDispatcher:
                 subcommand_id=subcommand_id,
             )
             raise
+        if output_report.subcommand_id in SESSION_STATE_SUBCOMMANDS:
+            session_state = self.subcommand_responder.session_state
+            self.diagnostics.record_event(
+                "subcommand_session_state",
+                imu_enabled=session_state.imu_enabled,
+                imu_mode=_format_optional_byte(session_state.imu_mode),
+                packet_id=output_report.packet_id,
+                report_mode=_format_optional_byte(session_state.report_mode),
+                report_mode_supported=session_state.report_mode_supported,
+                subcommand_id=subcommand_id,
+                unsupported_report_mode=_format_optional_byte(
+                    session_state.unsupported_report_mode
+                ),
+                vibration_enabled=session_state.vibration_enabled,
+            )
         self.diagnostics.record_event(
             "subcommand_reply_tx",
             packet_id=output_report.packet_id,
@@ -71,3 +90,9 @@ def _format_subcommand_id(subcommand_id: int | None) -> str | None:
     if subcommand_id is None:
         return None
     return f"0x{subcommand_id:02x}"
+
+
+def _format_optional_byte(value: int | None) -> str | None:
+    if value is None:
+        return None
+    return f"0x{value:02x}"

@@ -16,6 +16,11 @@ def test_neutral_input_state_has_no_buttons_center_sticks_and_neutral_imu() -> N
     assert state.imu_frames == (IMUFrame.neutral(),) * 3
 
 
+def test_button_model_includes_single_joycon_sl_and_sr() -> None:
+    assert Button.SL.name == "SL"
+    assert Button.SR.name == "SR"
+
+
 @pytest.mark.parametrize(("x", "y"), [(-1, 2048), (4096, 2048), (2048, -1), (2048, 4096)])
 def test_stick_raw_rejects_values_outside_12_bit_range(x: int, y: int) -> None:
     with pytest.raises(InvalidInputError):

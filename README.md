@@ -60,6 +60,37 @@ asyncio.run(main())
 
 接続方法、`key_store_path`、入力 API の使い分けは [Usage Guide](https://niart120.github.io/swbt-python/usage/) にあります。
 
+### 単体 Joy-Con L/R
+
+単体 Joy-Con 相当の仮想デバイスは `JoyCon("left", ...)` または `JoyCon("right", ...)` で作ります。接続、入力、`close()` の契約は `SwitchGamepad` と同じです。
+
+```python
+import asyncio
+from swbt import Button, JoyCon, Stick
+
+
+async def main() -> None:
+    async with JoyCon(
+        "left",
+        adapter="usb:0",
+        key_store_path="switch-left-joycon-bond.json",
+    ) as left:
+        await left.connect(timeout=30.0, allow_pairing=True)
+        await left.tap(Button.SR, Button.SL)
+        await left.tap(Button.L)
+        await left.lstick(Stick.left())
+        await left.neutral()
+
+
+asyncio.run(main())
+```
+
+左 Joy-Con では right stick や A/B/X/Y、右 Joy-Con では left stick や D-pad など、片側 profile が持たない入力は `UnsupportedInputError` になります。Pro Controller、Joy-Con L、Joy-Con R では `key_store_path` を分けてください。
+
+Change Grip/Order 画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送ります。
+
+左右ペアの `JoyConPair` は未実装です。2026-07-06 の Joy-Con L 実機観測では、HID 通信上の device name と device-info reply が Joy-Con L になり、SDP policy 反映後に Switch UI で Joy-Con として登録されたことをユーザ目視で確認しました。Joy-Con R、reconnect、Joy-Con profile の通常入力反映、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証です。
+
 ## 実機検証
 
 実機接続には、PC の通常 Bluetooth 機能と共有しない専用 USB Bluetooth dongle と、OS ごとの driver 準備が必要です。Windows では、[Zadig](https://zadig.akeo.ie/) などで専用 dongle に WinUSB / libwdi driver を入れてから adapter 名を確認します。
