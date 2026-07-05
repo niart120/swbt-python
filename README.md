@@ -89,7 +89,7 @@ asyncio.run(main())
 
 Change Grip/Order 画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送ります。
 
-左右ペアの `JoyConPair` は未実装です。Joy-Con profile の実機互換、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証です。2026-07-06 の Joy-Con L 実機観測では、HID 通信上の device name と device-info reply は Joy-Con L になりましたが、Switch UI では Pro Controller として登録され、コントローラーの順番画面は Joy-Con L の SR+SL 入力待ちで止まりました。
+左右ペアの `JoyConPair` は未実装です。Joy-Con profile の実機互換、SDP 完全一致、OS / dongle / firmware をまたぐ互換性は未検証です。2026-07-06 の Joy-Con L 実機観測では、HID 通信上の device name と device-info reply は Joy-Con L になり、pairing 自体も完了しましたが、Switch の登録 toast は Pro Controller のままで、コントローラーの順番画面は Joy-Con L として表示されました。
 
 ## 実機検証
 
