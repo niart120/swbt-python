@@ -14,6 +14,7 @@ from swbt.errors import (
 )
 from swbt.gamepad import ConnectionResult, SwitchGamepad, SwitchGamepadConfig
 from swbt.input import Button, IMUFrame, InputState, Stick
+from swbt.protocol.profile import ControllerColors
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 
 __all__ = (
@@ -25,6 +26,7 @@ __all__ = (
     "ConnectionFailedError",
     "ConnectionResult",
     "ConnectionTimeoutError",
+    "ControllerColors",
     "DiagnosticsConfig",
     "DisconnectRequestResult",
     "GamepadStatus",

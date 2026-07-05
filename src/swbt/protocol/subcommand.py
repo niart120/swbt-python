@@ -36,8 +36,8 @@ class SubcommandResponder:
         profile: ProControllerProfile | None = None,
     ) -> None:
         """Create a responder."""
-        self._spi_flash = spi_flash or VirtualSpiFlash()
         self._profile = profile or ProControllerProfile()
+        self._spi_flash = spi_flash or VirtualSpiFlash(profile=self._profile)
 
     def respond(self, output_report: OutputReport, *, state: InputState, timer: int = 0) -> bytes:
         """Return a 0x21 reply for an output report with a subcommand."""

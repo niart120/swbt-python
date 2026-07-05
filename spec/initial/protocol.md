@@ -207,6 +207,16 @@ class VirtualSpiFlash:
 
 初期内容は `ProControllerProfile` として固定する。未定義領域は既存実装の挙動を確認した上で値を決める。未定義領域を読む場合は diagnostics に記録する。
 
+既定 seed は少なくとも次を含む。
+
+| Address | Data | 意味 |
+|---:|---|---|
+| `0x6012` | `03` | Pro Controller device type |
+| `0x601B` | `01` | color info exists |
+| `0x6050`-`0x605B` | `ControllerColors.to_spi_bytes()` | body、buttons、left grip、right grip を各 3 bytes の RGB color |
+
+`SubcommandResponder` は configured `ProControllerProfile` から `VirtualSpiFlash` を作る。`0x10` SPI read は request prefix 5 bytes に `VirtualSpiFlash.read(address, size)` を続けて返す。`0x02` request device info reply は color source として SPI を指す `0x01` を維持し、色 bytes 自体は device info reply に埋め込まない。
+
 ## 8. Rumble raw state
 
 rumble は初期実装では意味処理しない。Switch から受け取った raw 8 bytes を保持する。

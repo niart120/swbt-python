@@ -2,6 +2,7 @@ import pytest
 
 from swbt.input import InputState
 from swbt.protocol.output_report import OutputReport, OutputReportParser
+from swbt.protocol.profile import ControllerColors, ProControllerProfile
 from swbt.protocol.subcommand import SubcommandResponder, UnsupportedSubcommandError
 
 NEUTRAL_RUMBLE = bytes.fromhex("00 01 40 40 00 01 40 40")
@@ -55,6 +56,26 @@ def test_spi_flash_read_subcommand_returns_request_prefix_and_seed_data() -> Non
     assert reply[14] == 0x10
     assert reply[15:21] == bytes.fromhex("12 60 00 00 01 03")
     assert reply[21:] == bytes(29)
+
+
+def test_spi_flash_read_subcommand_returns_custom_controller_colors() -> None:
+    profile = ProControllerProfile(
+        controller_colors=ControllerColors(
+            body=0x112233,
+            buttons=0x445566,
+            left_grip=0x778899,
+            right_grip=0xAABBCC,
+        )
+    )
+    responder = SubcommandResponder(profile=profile)
+    report = _subcommand_report(0x10, payload=bytes.fromhex("50 60 00 00 0c"))
+
+    reply = responder.respond(report, state=InputState.neutral())
+
+    assert reply[13] == 0x90
+    assert reply[14] == 0x10
+    assert reply[15:32] == bytes.fromhex("50 60 00 00 0c 11 22 33 44 55 66 77 88 99 aa bb cc")
+    assert reply[32:] == bytes(18)
 
 
 def test_mcu_config_subcommand_builds_config_reply() -> None:

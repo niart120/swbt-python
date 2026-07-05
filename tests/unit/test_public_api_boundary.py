@@ -6,6 +6,7 @@ import json
 import pkgutil
 import subprocess
 import sys
+from dataclasses import fields
 from io import StringIO
 from pathlib import Path
 from typing import get_args
@@ -13,7 +14,13 @@ from typing import get_args
 import pytest
 
 import swbt
-from swbt import DiagnosticsConfig, InvalidInputError, SwitchGamepad, SwitchGamepadConfig
+from swbt import (
+    ControllerColors,
+    DiagnosticsConfig,
+    InvalidInputError,
+    SwitchGamepad,
+    SwitchGamepadConfig,
+)
 from swbt.gamepad import ConnectionStatus
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 
@@ -103,6 +110,17 @@ def test_switch_gamepad_constructor_accepts_key_store_path() -> None:
     signature = inspect.signature(SwitchGamepad)
 
     assert "key_store_path" in signature.parameters
+
+
+def test_switch_gamepad_constructor_accepts_controller_colors_config() -> None:
+    constructor_signature = inspect.signature(SwitchGamepad)
+    config_fields = {field.name for field in fields(SwitchGamepadConfig)}
+    colors = ControllerColors(body=0x112233, buttons=0x445566)
+    config = SwitchGamepadConfig(controller_colors=colors)
+
+    assert "controller_colors" in constructor_signature.parameters
+    assert "controller_colors" in config_fields
+    assert config.controller_colors == colors
 
 
 def test_connection_methods_do_not_accept_key_store_path() -> None:
