@@ -135,6 +135,7 @@ class SwitchGamepad:
         key_store_path: str | None = None,
         report_period_us: int = 8000,
         device_name: str = "Pro Controller",
+        controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
     ) -> None: ...
@@ -157,12 +158,15 @@ class SwitchGamepad:
 | `key_store_path` | default Bumble transport が pairing key を保存する JSON key store path |
 | `report_period_us` | periodic input report の送信周期 |
 | `device_name` | HID Device として使う表示名 |
+| `controller_colors` | SPI profile で返す controller body / buttons / left grip / right grip の固定色 |
 | `diagnostics` | trace と counter の設定 |
 | `transport` | テストや別 transport 実装を注入するための引数 |
 
 default transport を使う場合、`adapter` は必須である。`transport` が指定された場合、`adapter` は省略できる。この場合、diagnostics の adapter metadata は `"custom"` とする。
 
 `key_store_path` は 1 つの仮想 Pro Controller の pairing storage を定義する構成値である。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。pairing 自体は可能だが、プロセス終了後の reconnect は期待しない。
+
+`controller_colors=None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使う。`body`、`buttons`、`left_grip`、`right_grip` はそれぞれ独立した既定値を持つ。色は作成時に固定し、接続後の `set_color()`、`controller_colors=` setter、profile mutation API は提供しない。
 
 `transport` 注入は public extension point として扱う。`SwitchGamepad` は injected transport を後から再設定しない。key store を必要とする custom transport は、その transport 自身の constructor で設定を受ける。`SwitchGamepadConfig.key_store_path` は default Bumble transport の構築と diagnostics metadata に使う。
 
@@ -422,7 +426,26 @@ class IMUFrame:
 
 `IMUFrame.neutral()` は全軸ゼロの frame を返す。`IMUFrame.raw()` は accel / gyro を 3 軸 tuple で指定し、未指定側はゼロにする。`IMUFrame.gyro()` と `IMUFrame.accel()` は片側 sensor だけを指定する short form である。`with_gyro()` と `with_accel()` は既存 frame の反対側 sensor を維持して片側だけを置き換える。
 
-## 8. 例外設計
+## 8. `ControllerColors`
+
+`ControllerColors` は Pro Controller profile の body / buttons / left grip / right grip 色を表す値オブジェクトである。
+
+```python
+@dataclass(frozen=True)
+class ControllerColors:
+    body: int = 0x323232
+    buttons: int = 0xFFFFFF
+    left_grip: int = 0x00B2FF
+    right_grip: int = 0xFF3B30
+
+    def to_spi_bytes(self) -> bytes: ...
+```
+
+`body`、`buttons`、`left_grip`、`right_grip` は 24-bit RGB integer として扱う。省略した field はそれぞれの既定値を使い、grip を body 色へ正規化しない。`ControllerColors(body=0x112233, buttons=0x445566, left_grip=0x778899, right_grip=0xAABBCC)` は SPI `0x6050` から `11 22 33 44 55 66 77 88 99 aa bb cc` として返る。範囲外値、文字列、bytes、tuple は `InvalidInputError` とする。
+
+この値は入力状態ではなく controller identity / profile に属する。`InputState`、`press()`、`release()`、`apply()`、`neutral()` は色設定を扱わない。
+
+## 9. 例外設計
 
 例外型は `swbt.errors` に置く。
 
@@ -440,7 +463,7 @@ class InvalidKeyStoreError(SwbtError): ...
 
 no-open adapter 列挙の失敗は `AdapterDiscoveryError` とする。利用者の入力不正は `InvalidInputError`、transport の open 失敗は `TransportOpenError`、接続待ち timeout は `ConnectionTimeoutError`、timeout 以外の接続不成立は `ConnectionFailedError` として分ける。key store の unsupported shape や複数 current peer は `InvalidKeyStoreError` とする。
 
-## 9. 非同期 API の扱い
+## 10. 非同期 API の扱い
 
 すべての I/O と時間待ちは `asyncio` coroutine とする。
 
@@ -449,7 +472,7 @@ no-open adapter 列挙の失敗は `AdapterDiscoveryError` とする。利用者
 - `close()` は `ReportLoop` task を停止し、transport を閉じる
 - callback 例外は diagnostics に記録し、必要に応じて接続を failed 状態へ遷移させる
 
-## 10. 初期 API で公開しないもの
+## 11. 初期 API で公開しないもの
 
 初期実装では次を public API に含めない。
 

@@ -1,7 +1,7 @@
 """Public gamepad API."""
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import TracebackType
 
 import swbt.gamepad as gamepad_module
@@ -21,6 +21,8 @@ from swbt.gamepad.connection import (
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.transport_factory import create_default_transport
 from swbt.input import Button, IMUFrame, InputState, Stick
+from swbt.protocol.profile import ControllerColors, ProControllerProfile
+from swbt.protocol.subcommand import SubcommandResponder
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
@@ -35,17 +37,25 @@ class SwitchGamepadConfig:
         key_store_path: Path used by the default transport to persist pairing keys.
         report_period_us: Periodic input report interval in microseconds.
         device_name: HID device name advertised to the host.
+        controller_colors: Fixed controller body, button, and grip colors for SPI profile data.
     """
 
     adapter: str | None = None
     key_store_path: str | None = None
     report_period_us: int = 8000
     device_name: str = "Pro Controller"
+    controller_colors: ControllerColors | None = field(default_factory=ControllerColors)
 
     def __post_init__(self) -> None:
         """Validate resource configuration."""
         if self.report_period_us <= 0:
             msg = "report_period_us must be positive"
+            raise InvalidInputError(msg)
+        if self.controller_colors is None:
+            object.__setattr__(self, "controller_colors", ControllerColors())
+            return
+        if not isinstance(self.controller_colors, ControllerColors):
+            msg = "controller_colors must be a ControllerColors"
             raise InvalidInputError(msg)
 
 
@@ -64,6 +74,7 @@ class SwitchGamepad:
         key_store_path: str | None = None,
         report_period_us: int = 8000,
         device_name: str = "Pro Controller",
+        controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
     ) -> None:
@@ -75,6 +86,7 @@ class SwitchGamepad:
             key_store_path: Optional path used by the default transport to persist keys.
             report_period_us: Periodic input report interval in microseconds.
             device_name: HID device name passed to the default transport.
+            controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance. When supplied, no Bumble
                 transport is created by the constructor.
@@ -91,6 +103,7 @@ class SwitchGamepad:
             key_store_path=key_store_path,
             report_period_us=report_period_us,
             device_name=device_name,
+            controller_colors=controller_colors,
         )
         self._transport = transport
         self._transport_was_injected = transport is not None
@@ -98,11 +111,15 @@ class SwitchGamepad:
         self._diagnostics = DiagnosticsRecorder(
             trace_writer=diagnostics.trace_writer if diagnostics is not None else None
         )
+        controller_profile = ProControllerProfile(
+            controller_colors=self._config.controller_colors or ControllerColors()
+        )
         self._output_report_dispatcher = OutputReportDispatcher(
             diagnostics=self._diagnostics,
             require_reply_sender=self._require_subcommand_reply_sender,
             send_subcommand_reply=self._send_subcommand_reply,
             state_store=self._state_store,
+            subcommand_responder=SubcommandResponder(profile=controller_profile),
         )
         self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
@@ -147,6 +164,7 @@ class SwitchGamepad:
             key_store_path=config.key_store_path,
             report_period_us=config.report_period_us,
             device_name=config.device_name,
+            controller_colors=config.controller_colors,
             diagnostics=diagnostics,
             transport=transport,
         )

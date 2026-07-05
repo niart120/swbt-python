@@ -86,6 +86,20 @@ status = "handoff-ready"
 handoff = ["unit_005"]
 
 [[entry]]
+id = "device_info_grip_color_tail_0302"
+fixture_name = "device_info_grip_color_tail_0302"
+area = "protocol"
+value = "swbt-python controller color grip reflection on Switch 2 22.1.0: device-info tail 01 01 made grips body-colored; nonzero BD_ADDR alone and SPI 0x605C=00 did not change it; tail 03 02 made SPI 0x6056-0x605B left/right grip colors visible; zero BD_ADDR with 03 02 also worked"
+classification = "hardware observation"
+source = [
+    'spec\hardware-test-log.md',
+    'spec\complete\unit_028\CONTROLLER_PROFILE_CUSTOMIZATION.md',
+]
+status = "hardware-observed-only"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB/libwdi 6.1.7600.16385; Bumble 0.0.230; Python 3.13.5; adapter usb:0; Switch 2 firmware 22.1.0; controller search or change grip order screen; 2026-07-05 unit_028 tracked hardware tests"
+handoff = ["unit_028"]
+
+[[entry]]
 id = "spi_flash_boundary_and_seed_map"
 fixture_name = "spi_flash_boundary_seed_map"
 area = "protocol"

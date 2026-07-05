@@ -1,6 +1,8 @@
 """Fixed protocol profile values for the controller shape."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from swbt.errors import InvalidInputError
 
 SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR = bytes(
     (
@@ -212,6 +214,45 @@ SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR = bytes(
 
 
 @dataclass(frozen=True)
+class ControllerColors:
+    """Controller body, button, and grip colors stored in virtual SPI.
+
+    Attributes:
+        body: Body color as a 24-bit RGB integer.
+        buttons: Button color as a 24-bit RGB integer.
+        left_grip: Left grip color as a 24-bit RGB integer.
+        right_grip: Right grip color as a 24-bit RGB integer.
+    """
+
+    body: int = 0x323232
+    buttons: int = 0xFFFFFF
+    left_grip: int = 0x00B2FF
+    right_grip: int = 0xFF3B30
+
+    def __post_init__(self) -> None:
+        """Validate 24-bit RGB color values."""
+        self._validate_rgb("body", self.body)
+        self._validate_rgb("buttons", self.buttons)
+        self._validate_rgb("left_grip", self.left_grip)
+        self._validate_rgb("right_grip", self.right_grip)
+
+    def to_spi_bytes(self) -> bytes:
+        """Return body, button, and grip colors in Switch SPI RGB order."""
+        return (
+            self.body.to_bytes(3, "big")
+            + self.buttons.to_bytes(3, "big")
+            + self.left_grip.to_bytes(3, "big")
+            + self.right_grip.to_bytes(3, "big")
+        )
+
+    @staticmethod
+    def _validate_rgb(name: str, value: int) -> None:
+        if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 0xFFFFFF:
+            msg = f"{name} must be a 24-bit RGB integer"
+            raise InvalidInputError(msg)
+
+
+@dataclass(frozen=True)
 class ProControllerProfile:
     """Protocol defaults for a Pro Controller compatible report shape."""
 
@@ -219,3 +260,4 @@ class ProControllerProfile:
     vibrator_input: int = 0x00
     bluetooth_address: bytes = b"\x00\x00\x00\x00\x00\x00"
     hid_report_descriptor: bytes = SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
+    controller_colors: ControllerColors = field(default_factory=ControllerColors)

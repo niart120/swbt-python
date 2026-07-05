@@ -9,7 +9,16 @@ from typing import cast
 import pytest
 
 import swbt.gamepad as gamepad_module
-from swbt import Button, DiagnosticsConfig, IMUFrame, InputState, Stick, SwitchGamepad
+from swbt import (
+    Button,
+    ControllerColors,
+    DiagnosticsConfig,
+    IMUFrame,
+    InputState,
+    Stick,
+    SwitchGamepad,
+    SwitchGamepadConfig,
+)
 from swbt.errors import (
     ClosedError,
     ConnectionFailedError,
@@ -676,6 +685,88 @@ def test_output_report_injection_sends_subcommand_reply() -> None:
 
             assert reply[0] == 0x21
             assert reply[14] == 0x02
+
+    asyncio.run(run())
+
+
+def test_output_report_injection_uses_configured_controller_colors() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
+
+        async with SwitchGamepad(
+            controller_colors=ControllerColors(
+                body=0x112233,
+                buttons=0x445566,
+                left_grip=0x778899,
+                right_grip=0xAABBCC,
+            ),
+            transport=transport,
+            report_period_us=1000,
+        ):
+            await transport.connect()
+
+            await transport.inject_interrupt_data(request_controller_colors)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[0] == 0x21
+            assert reply[14] == 0x10
+            assert reply[15:32] == bytes.fromhex(
+                "50 60 00 00 0c 11 22 33 44 55 66 77 88 99 aa bb cc"
+            )
+
+    asyncio.run(run())
+
+
+def test_output_report_injection_uses_default_controller_colors_when_none() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
+
+        async with SwitchGamepad(
+            controller_colors=None,
+            transport=transport,
+            report_period_us=1000,
+        ):
+            await transport.connect()
+
+            await transport.inject_interrupt_data(request_controller_colors)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[0] == 0x21
+            assert reply[14] == 0x10
+            assert reply[15:32] == bytes.fromhex(
+                "50 60 00 00 0c 32 32 32 ff ff ff 00 b2 ff ff 3b 30"
+            )
+
+    asyncio.run(run())
+
+
+def test_from_config_output_report_injection_uses_configured_controller_colors() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        config = SwitchGamepadConfig(
+            controller_colors=ControllerColors(
+                body=0x102030,
+                buttons=0x405060,
+                left_grip=0x708090,
+                right_grip=0xA0B0C0,
+            ),
+            report_period_us=1000,
+        )
+        request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
+
+        async with SwitchGamepad.from_config(config, transport=transport):
+            await transport.connect()
+
+            await transport.inject_interrupt_data(request_controller_colors)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[0] == 0x21
+            assert reply[14] == 0x10
+            assert reply[15:32] == bytes.fromhex(
+                "50 60 00 00 0c 10 20 30 40 50 60 70 80 90 a0 b0 c0"
+            )
 
     asyncio.run(run())
 

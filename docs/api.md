@@ -3,7 +3,7 @@
 `swbt-python` の公開 API は `swbt` module root から import します。
 
 ```python
-from swbt import AdapterInfo, Button, IMUFrame, InputState, Stick, SwitchGamepad
+from swbt import AdapterInfo, Button, ControllerColors, IMUFrame, InputState, Stick, SwitchGamepad
 ```
 
 `swbt.gamepad.*` や `swbt.transport.*` の deep import は、テスト、移行作業、custom transport 実装に限定します。`HidDeviceTransport` は custom transport 用の public extension point です。Bumble 型を public API に露出しません。
@@ -18,6 +18,7 @@ from swbt import AdapterInfo, Button, IMUFrame, InputState, Stick, SwitchGamepad
 | `AdapterInfo` | adapter 候補の no-open snapshot |
 | `SwitchGamepad` | 利用者が操作する仮想 gamepad |
 | `SwitchGamepadConfig` | `from_config()` 用の resource 設定 |
+| `ControllerColors` | controller body / buttons / left grip / right grip の固定 profile 色 |
 | `ConnectionResult` | `try_connect()` / `try_reconnect()` の結果 |
 | `Button` | 対応する各種ボタン |
 | `Stick` | スティック入力 |
@@ -69,6 +70,12 @@ pad = SwitchGamepad(
     key_store_path="switch-bond.json",
     report_period_us=8000,
     device_name="Pro Controller",
+    controller_colors=ControllerColors(
+        body=0x323232,
+        buttons=0xFFFFFF,
+        left_grip=0x00B2FF,
+        right_grip=0xFF3B30,
+    ),
     diagnostics=None,
 )
 ```
@@ -79,6 +86,8 @@ pad = SwitchGamepad(
 
 `report_period_us` は periodic input report の送信周期です。`device_name` は HID Device として出す表示名です。
 
+`controller_colors` は controller body / buttons / left grip / right grip の固定 profile 色です。`None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使います。各 field は独立した既定値を持ちます。この値は作成時に固定し、`set_color()` や `controller_colors=` setter は提供しません。Switch からの SPI read に対して `0x6050` から body、buttons、left grip、right grip を各 3 bytes の順で返します。
+
 `SwitchGamepadConfig` は同じ resource 設定を値として保持します。
 
 ```python
@@ -87,6 +96,12 @@ config = SwitchGamepadConfig(
     key_store_path="switch-bond.json",
     report_period_us=8000,
     device_name="Pro Controller",
+    controller_colors=ControllerColors(
+        body=0x112233,
+        buttons=0x445566,
+        left_grip=0x778899,
+        right_grip=0xAABBCC,
+    ),
 )
 pad = SwitchGamepad.from_config(config)
 ```
@@ -171,6 +186,8 @@ await pad.apply(state)
 `IMUFrame.neutral()` は移動なしの IMU frame を返します。`IMUFrame.raw(accel=None, gyro=None)` は accelerometer / gyroscope の raw 3 軸 tuple から frame を作ります。未指定側はゼロです。`IMUFrame.gyro(x=0, y=0, z=0)` は gyro だけ、`IMUFrame.accel(x=0, y=0, z=0)` は accel だけを指定します。`IMUFrame.with_gyro(x=0, y=0, z=0)` は既存 accel を維持して gyro を置き換え、`IMUFrame.with_accel(x=0, y=0, z=0)` は既存 gyro を維持して accel を置き換えます。
 
 `InputState.neutral()` は button なし、左右 stick 中央、neutral IMU frame の状態を返します。`InputState.with_buttons(...)`、`InputState.with_sticks(...)`、`InputState.with_imu(...)`、`InputState.with_gyro(...)`、`InputState.with_accel(...)` は新しい immutable state を返します。`with_imu(frame)` は 1 frame を 3 frame に複製し、`with_imu(frame1, frame2, frame3)` は順に設定します。`with_gyro((x, y, z))` と `with_accel((x, y, z))` も 1 sample を 3 frame に複製し、3 sample では順に片側の sensor だけを置き換えます。
+
+`ControllerColors(body=..., buttons=..., left_grip=..., right_grip=...)` は 24-bit RGB integer だけを受けます。`body=0x112233`、`buttons=0x445566`、`left_grip=0x778899`、`right_grip=0xAABBCC` は SPI 上で `11 22 33 44 55 66 77 88 99 aa bb cc` になります。範囲外値、文字列、bytes、tuple は `InvalidInputError` です。
 
 ## Errors And Diagnostics
 

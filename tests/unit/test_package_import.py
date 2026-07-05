@@ -13,6 +13,7 @@ def test_package_exports_public_gamepad_surface() -> None:
         "ConnectionFailedError",
         "ConnectionResult",
         "ConnectionTimeoutError",
+        "ControllerColors",
         "DiagnosticsConfig",
         "DisconnectRequestResult",
         "GamepadStatus",

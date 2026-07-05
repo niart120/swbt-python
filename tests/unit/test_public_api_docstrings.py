@@ -5,6 +5,7 @@ import inspect
 from swbt import (
     AdapterDiscoveryError,
     AdapterInfo,
+    ControllerColors,
     DiagnosticsConfig,
     GamepadStatus,
     IMUFrame,
@@ -44,7 +45,10 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
             AdapterDiscoveryError,
             ("platform", "backend", "libusb_available", "bumble_version"),
         ),
-        (SwitchGamepadConfig, ("adapter", "key_store_path", "report_period_us", "device_name")),
+        (
+            SwitchGamepadConfig,
+            ("adapter", "key_store_path", "report_period_us", "device_name", "controller_colors"),
+        ),
         (DiagnosticsConfig, ("trace_writer",)),
         (
             GamepadStatus,
@@ -59,6 +63,7 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         (Stick, ("x", "y")),
         (IMUFrame, ("accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z")),
         (InputState, ("buttons", "left_stick", "right_stick", "imu_frames")),
+        (ControllerColors, ("body", "buttons", "left_grip", "right_grip")),
     ):
         _assert_doc_contains(cls, "Attributes:", *attributes)
 
@@ -96,6 +101,7 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         "key_store_path",
         "report_period_us",
         "device_name",
+        "controller_colors",
         "diagnostics",
         "transport",
     )

@@ -8,7 +8,7 @@ from swbt.protocol.profile import ProControllerProfile
 from swbt.protocol.spi import VirtualSpiFlash
 
 SIMPLE_ACK_SUBCOMMANDS = {0x03, 0x08, 0x30, 0x40, 0x48}
-DEVICE_INFO_DATA = bytes.fromhex("04 00 03 02 00 00 00 00 00 00 01 01")
+DEVICE_INFO_DATA = bytes.fromhex("04 00 03 02 00 00 00 00 00 00 03 02")
 TRIGGER_BUTTONS_ELAPSED_DATA = bytes.fromhex("2c 01 2c 01 00 00 00 00 00 00 00 00 00 00")
 MCU_CONFIG_DATA = bytes.fromhex(
     "01 00 ff 00 08 00 1b 01 00 00 00 00 00 00 00 00 00 00 00 00 "
@@ -36,8 +36,8 @@ class SubcommandResponder:
         profile: ProControllerProfile | None = None,
     ) -> None:
         """Create a responder."""
-        self._spi_flash = spi_flash or VirtualSpiFlash()
         self._profile = profile or ProControllerProfile()
+        self._spi_flash = spi_flash or VirtualSpiFlash(profile=self._profile)
 
     def respond(self, output_report: OutputReport, *, state: InputState, timer: int = 0) -> bytes:
         """Return a 0x21 reply for an output report with a subcommand."""
