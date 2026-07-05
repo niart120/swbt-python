@@ -121,6 +121,7 @@ async def main() -> None:
         key_store_path="switch-left-joycon-bond.json",
     ) as left:
         await left.connect(timeout=30.0, allow_pairing=True)
+        await left.tap(Button.SR, Button.SL)
         await left.tap(Button.L)
         await left.lstick(Stick.left())
         await left.neutral()
@@ -179,6 +180,8 @@ async with JoyCon(
 ```
 
 `InputState` + `apply()` でも同じ検査を行います。左 Joy-Con に right stick、右 Joy-Con に left stick や D-pad を含めると `UnsupportedInputError` です。
+
+Change Grip/Order 画面で単体 Joy-Con として順番登録する場合は、接続後に `await joycon.tap(Button.SR, Button.SL)` のように SR+SL を送ります。
 
 左右ペアの `JoyConPair` は未実装です。左右を 1 つの controller として扱う API は別 issue の範囲です。
 

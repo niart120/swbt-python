@@ -6,11 +6,12 @@ from typing import Any, Literal, TextIO
 
 import pytest
 
-from swbt import DiagnosticsConfig, InputState, JoyCon
+from swbt import Button, DiagnosticsConfig, InputState, JoyCon
 from swbt.protocol.output_report import OutputReport
 from swbt.protocol.subcommand import SubcommandResponder, SubcommandSessionState
 
 _OPERATOR_WAIT_SECONDS = 5.0
+_ORDER_BUTTON_HOLD_SECONDS = 1.0
 _UI_OBSERVATION_HOLD_SECONDS = 10.0
 
 
@@ -24,9 +25,9 @@ def test_switch_joycon_profile_pairing_records_device_info(
     """Record single Joy-Con profile identity during a real Switch handshake.
 
     A pytest pass proves the advertised device name, Switch connection, device-info
-    reply bytes, and cleanup. It does not prove that Switch completed Joy-Con
-    order registration; human-visible UI identity and SR/SL progress must be
-    recorded in spec/hardware-test-log.md.
+    reply bytes, an SR+SL order-screen input attempt, and cleanup. Human-visible
+    Switch UI identity and order registration progress must still be recorded in
+    spec/hardware-test-log.md.
     """
     expected_device_name = _expected_device_name(side)
     expected_device_type = _expected_device_type(side)
@@ -77,6 +78,7 @@ def test_switch_joycon_profile_pairing_records_device_info(
                     report_0x30_count=pad.status().report_counters.get(0x30, 0),
                     side=side,
                 )
+                await _send_order_buttons(pad, trace, side=side)
                 await asyncio.sleep(_UI_OBSERVATION_HOLD_SECONDS)
                 _record_probe_event(
                     trace,
@@ -116,6 +118,19 @@ def test_switch_joycon_profile_pairing_records_device_info(
         tail_bytes="0101",
     )
     assert _contains_event(events, "subcommand_reply_tx", subcommand_id="0x02")
+    assert _contains_event(
+        events,
+        "manual_joycon_profile_checkpoint",
+        expected_button_bytes=_expected_order_button_bytes(side),
+        operation="sr_sl_order_buttons_hold_complete",
+        side=side,
+    )
+    assert _contains_event(
+        events,
+        "manual_joycon_profile_checkpoint",
+        operation="sr_sl_order_buttons_neutral_complete",
+        side=side,
+    )
     assert _contains_event(
         events,
         "manual_joycon_profile_checkpoint",
@@ -177,6 +192,38 @@ def _install_device_info_probe(pad: JoyCon, trace: TextIO, *, side: str) -> None
     )
 
 
+async def _send_order_buttons(pad: JoyCon, trace: TextIO, *, side: str) -> None:
+    _record_probe_event(
+        trace,
+        "manual_joycon_profile_checkpoint",
+        expected_button_bytes=_expected_order_button_bytes(side),
+        hold_seconds=_ORDER_BUTTON_HOLD_SECONDS,
+        operation="sr_sl_order_buttons_start",
+        side=side,
+    )
+    await pad.press(Button.SR, Button.SL)
+    await asyncio.sleep(_ORDER_BUTTON_HOLD_SECONDS)
+    _record_probe_event(
+        trace,
+        "manual_joycon_profile_checkpoint",
+        expected_button_bytes=_expected_order_button_bytes(side),
+        hold_seconds=_ORDER_BUTTON_HOLD_SECONDS,
+        operation="sr_sl_order_buttons_hold_complete",
+        report_0x30_count=pad.status().report_counters.get(0x30, 0),
+        side=side,
+    )
+    await pad.release(Button.SR, Button.SL)
+    await pad.neutral()
+    assert pad.snapshot() == InputState.neutral()
+    _record_probe_event(
+        trace,
+        "manual_joycon_profile_checkpoint",
+        operation="sr_sl_order_buttons_neutral_complete",
+        report_0x30_count=pad.status().report_counters.get(0x30, 0),
+        side=side,
+    )
+
+
 async def _wait_for_device_info_reply(
     trace_path: Path,
     *,
@@ -206,6 +253,12 @@ def _expected_device_type(side: Literal["left", "right"]) -> int:
     if side == "left":
         return 0x01
     return 0x02
+
+
+def _expected_order_button_bytes(side: str) -> str:
+    if side == "left":
+        return "000030"
+    return "300000"
 
 
 def _delete_file_if_exists(path: Path) -> None:

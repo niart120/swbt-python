@@ -129,7 +129,7 @@ key store は controller profile ごとに分けてください。Pro Controller
 
 同じ profile でも、接続先の対象機器を分ける場合は key store も分けます。1 つの key store は「1 つの対象機器」と「1 つの controller profile」の組み合わせに固定してください。
 
-Joy-Con profile の実機互換は未検証です。2026-07-06 の Joy-Con L run では、`Joy-Con (L)` の device name、Joy-Con L device-info reply、Switch からの subcommand 応答、neutral report loop、clean close までは trace で確認しました。ただしユーザ目視では、登録自体は Pro Controller として行われ、その後のコントローラーの順番画面は Joy-Con L の SR+SL 入力待ちで止まりました。Joy-Con 固有の pairing button / 登録完了手順、Switch 側の Joy-Con UI 識別、reconnect、入力反映、SDP の細部一致、OS / dongle / firmware をまたぐ互換性は確認済みとして扱わないでください。
+Joy-Con profile の実機互換は未検証です。2026-07-06 の Joy-Con L run では、`Joy-Con (L)` の device name、Joy-Con L device-info reply、Switch からの subcommand 応答、neutral report loop、clean close までは trace で確認しました。ただしユーザ目視では、登録自体は Pro Controller として行われ、その後のコントローラーの順番画面は Joy-Con L の SR+SL 入力待ちで止まりました。Joy-Con profile で Change Grip/Order 画面を進める検証では、接続後に `Button.SR` + `Button.SL` を送信し、最後は neutral に戻してください。Joy-Con 固有の pairing button / 登録完了手順、Switch 側の Joy-Con UI 識別、reconnect、入力反映、SDP の細部一致、OS / dongle / firmware をまたぐ互換性は確認済みとして扱わないでください。
 
 Bumble adapter open、HID advertising、Switch pairing、Switch-facing output report / subcommand handling、periodic input report loop は実機または USB Bluetooth dongle に触れる操作です。Joy-Con profile でこれらを試す場合も、対象 adapter、実行 command、Switch-facing 動作範囲、cleanup plan を明示したうえで、人間の承認を得てから実行してください。
 
