@@ -13,6 +13,7 @@ from bumble.keys import PairingKeys
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
+from swbt.protocol.profile import ProControllerProfile
 from swbt.transport import bumble as bumble_module
 from swbt.transport._bumble_sdp import build_hid_service_records
 from swbt.transport.bumble import BumbleHidTransport
@@ -892,6 +893,7 @@ def test_bumble_initialize_device_configures_json_key_store(
         await bumble_module._default_initialize_device(
             handle,
             device_name="Pro Controller",
+            profile=ProControllerProfile(),
             key_store_path=str(key_store_path),
         )
 
@@ -901,6 +903,56 @@ def test_bumble_initialize_device_configures_json_key_store(
             "sink": handle.sink,
         }
         assert isinstance(fake_device.keystore, bumble_module._CurrentPreviousJsonKeyStore)
+
+    asyncio.run(run())
+
+
+def test_bumble_initialize_device_uses_profile_hid_descriptor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        captured_sdp: dict[str, object] = {}
+        fake_device = FakeBumbleDevice()
+
+        class FakeDeviceFactory:
+            @staticmethod
+            def from_config_with_hci(config: object, source: object, sink: object) -> object:
+                _ = (config, source, sink)
+                return fake_device
+
+        def create_hid_device(device: object) -> FakeHidDevice:
+            assert isinstance(device, FakeBumbleDevice)
+            return FakeHidDevice()
+
+        def build_service_records(
+            hid_descriptor: bytes,
+            *,
+            device_name: str = "Pro Controller",
+        ) -> dict[int, list[object]]:
+            captured_sdp["hid_descriptor"] = hid_descriptor
+            captured_sdp["device_name"] = device_name
+            return {0x00010001: []}
+
+        monkeypatch.setattr(bumble_device_module, "Device", FakeDeviceFactory)
+        monkeypatch.setattr(bumble_hid_module, "Device", create_hid_device)
+        monkeypatch.setattr(bumble_module, "build_hid_service_records", build_service_records)
+
+        profile = ProControllerProfile(hid_report_descriptor=b"\x85\x30\x00")
+        handle = FakeBumbleHandle()
+
+        runtime = await bumble_module._default_initialize_device(
+            handle,
+            device_name="Profile Pad",
+            profile=profile,
+        )
+
+        assert captured_sdp == {
+            "hid_descriptor": b"\x85\x30\x00",
+            "device_name": "Profile Pad",
+        }
+        assert cast("Any", fake_device).sdp_service_records == {0x00010001: []}
+        assert runtime.hid_descriptor_size == 3
+        assert runtime.service_record_count == 1
 
     asyncio.run(run())
 

@@ -1,6 +1,7 @@
 """Default transport factory for SwitchGamepad."""
 
 from swbt.diagnostics import DiagnosticsRecorder
+from swbt.protocol.profile import ControllerProfile
 from swbt.transport.base import HidDeviceTransport
 
 
@@ -8,6 +9,7 @@ def create_default_transport(
     *,
     adapter: str,
     device_name: str,
+    profile: ControllerProfile,
     diagnostics: DiagnosticsRecorder,
     key_store_path: str | None,
 ) -> HidDeviceTransport:
@@ -17,6 +19,7 @@ def create_default_transport(
     return BumbleHidTransport(
         adapter=adapter,
         device_name=device_name,
+        profile=profile,
         diagnostics=diagnostics,
         key_store_path=key_store_path,
     )

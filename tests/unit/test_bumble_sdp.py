@@ -16,3 +16,17 @@ def test_bumble_sdp_builder_preserves_reference_hid_attributes() -> None:
     assert attributes[0x020C].value == 0x0C80
     assert attributes[0x020F].value == 0xFFFF
     assert attributes[0x0210].value == 0xFFFF
+
+
+def test_bumble_sdp_builder_uses_supplied_hid_descriptor() -> None:
+    descriptor = bytes.fromhex("85 30 09 01")
+
+    service_records = build_hid_service_records(descriptor)
+    attributes: dict[int, Any] = {}
+    for attribute in service_records[0x00010001]:
+        typed_attribute = cast("Any", attribute)
+        attributes[typed_attribute.id] = typed_attribute.value
+
+    descriptor_list = attributes[0x0206].value
+    assert descriptor_list[0].value[0].value == 0x22
+    assert descriptor_list[0].value[1].value == descriptor

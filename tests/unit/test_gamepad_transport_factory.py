@@ -5,6 +5,7 @@ import pytest
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.gamepad.transport_factory import create_default_transport
+from swbt.protocol.profile import ProControllerProfile
 
 
 def test_default_transport_factory_passes_resource_config_to_bumble_transport(
@@ -20,6 +21,7 @@ def test_default_transport_factory_passes_resource_config_to_bumble_transport(
             *,
             adapter: str,
             device_name: str,
+            profile: ProControllerProfile,
             key_store_path: str | None,
             diagnostics: object,
         ) -> None:
@@ -27,6 +29,7 @@ def test_default_transport_factory_passes_resource_config_to_bumble_transport(
                 {
                     "adapter": adapter,
                     "device_name": device_name,
+                    "profile": profile,
                     "key_store_path": key_store_path,
                     "diagnostics": diagnostics,
                     "transport": self,
@@ -36,10 +39,12 @@ def test_default_transport_factory_passes_resource_config_to_bumble_transport(
     monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
 
     diagnostics = DiagnosticsRecorder()
+    profile = ProControllerProfile(battery_connection=0x92)
     key_store_path = tmp_path / "keys.json"
     transport = create_default_transport(
         adapter="usb:1",
         device_name="Reference Pad",
+        profile=profile,
         diagnostics=diagnostics,
         key_store_path=str(key_store_path),
     )
@@ -47,6 +52,7 @@ def test_default_transport_factory_passes_resource_config_to_bumble_transport(
     assert captured_config == {
         "adapter": "usb:1",
         "device_name": "Reference Pad",
+        "profile": profile,
         "diagnostics": diagnostics,
         "key_store_path": str(key_store_path),
         "transport": transport,

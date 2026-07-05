@@ -20,15 +20,15 @@ class ReportLoop:
         *,
         transport: HidDeviceTransport,
         state_store: InputStateStore,
+        input_report_builder: InputReportBuilder,
         report_period_us: int = 8000,
-        input_report_builder: InputReportBuilder | None = None,
         diagnostics: DiagnosticsRecorder | None = None,
     ) -> None:
         """Create a report loop helper."""
         self._transport = transport
         self._state_store = state_store
         self._report_period_seconds = report_period_us / 1_000_000
-        self._input_report_builder = input_report_builder or InputReportBuilder()
+        self._input_report_builder = input_report_builder
         self._diagnostics = diagnostics
         self._reply_queue: deque[bytes] = deque()
         self._timer = 0

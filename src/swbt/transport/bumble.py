@@ -10,7 +10,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
-from swbt.protocol.profile import ProControllerProfile
+from swbt.protocol.profile import default_controller_profile
 from swbt.transport._bumble_acl import drain_bumble_acl_queue
 from swbt.transport._bumble_hidp import (
     HID_GET_SET_SUCCESS,
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from bumble.transport.common import TransportSink, TransportSource
 
     from swbt.diagnostics import DiagnosticsRecorder
+    from swbt.protocol.profile import ControllerProfile
     from swbt.transport.base import (
         ConnectedCallback,
         ControlDataCallback,
@@ -166,6 +167,7 @@ class BumbleHidTransport:
         *,
         adapter: str,
         device_name: str = _DEFAULT_DEVICE_NAME,
+        profile: ControllerProfile | None = None,
         key_store_path: str | None = None,
         diagnostics: DiagnosticsRecorder | None = None,
         _open_transport: _OpenTransport | None = None,
@@ -176,6 +178,7 @@ class BumbleHidTransport:
         """Create a Bumble transport for an adapter string."""
         self._adapter = adapter
         self._device_name = device_name
+        self._profile = profile or default_controller_profile()
         self._key_store_path = key_store_path
         self._diagnostics = diagnostics
         self._open_transport = _open_transport or _default_open_transport
@@ -185,6 +188,7 @@ class BumbleHidTransport:
                 return await _default_initialize_device(
                     handle,
                     device_name=self._device_name,
+                    profile=self._profile,
                     key_store_path=self._key_store_path,
                 )
 
@@ -623,12 +627,12 @@ async def _default_initialize_device(
     handle: _BumbleHandle,
     *,
     device_name: str,
+    profile: ControllerProfile,
     key_store_path: str | None = None,
 ) -> _BumbleRuntime:
     from bumble.device import Device, DeviceConfiguration  # noqa: PLC0415
     from bumble.hid import Device as HidDevice  # noqa: PLC0415
 
-    profile = ProControllerProfile()
     config = DeviceConfiguration(
         name=device_name,
         class_of_device=_REFERENCE_CLASS_OF_DEVICE,

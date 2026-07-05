@@ -4,7 +4,7 @@ import platform
 from importlib import metadata
 from io import StringIO
 from pathlib import Path
-from typing import cast
+from typing import Any, Literal, cast
 
 import pytest
 
@@ -15,6 +15,7 @@ from swbt import (
     DiagnosticsConfig,
     IMUFrame,
     InputState,
+    JoyCon,
     Stick,
     SwitchGamepad,
     SwitchGamepadConfig,
@@ -25,7 +26,9 @@ from swbt.errors import (
     ConnectionTimeoutError,
     InvalidInputError,
     InvalidKeyStoreError,
+    UnsupportedInputError,
 )
+from swbt.protocol.profile import JoyConLeftProfile, JoyConRightProfile, ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
 
 
@@ -628,6 +631,92 @@ def test_state_update_apis_do_not_require_connection() -> None:
     asyncio.run(run())
 
 
+def test_joycon_left_press_rejects_unsupported_button_before_commit() -> None:
+    async def run() -> None:
+        pad = SwitchGamepad.from_config(
+            SwitchGamepadConfig(profile=JoyConLeftProfile()),
+            transport=FakeHidTransport(),
+        )
+        await pad.press(Button.L)
+        before = pad.snapshot()
+
+        with pytest.raises(UnsupportedInputError):
+            await pad.press(Button.A)
+
+        assert pad.snapshot() == before
+
+    asyncio.run(run())
+
+
+def test_joycon_right_press_rejects_unsupported_button_before_commit() -> None:
+    async def run() -> None:
+        pad = SwitchGamepad.from_config(
+            SwitchGamepadConfig(profile=JoyConRightProfile()),
+            transport=FakeHidTransport(),
+        )
+        await pad.press(Button.R)
+        before = pad.snapshot()
+
+        with pytest.raises(UnsupportedInputError):
+            await pad.press(Button.DPAD_LEFT)
+
+        assert pad.snapshot() == before
+
+    asyncio.run(run())
+
+
+def test_joycon_left_rejects_right_stick_update_before_commit() -> None:
+    async def run() -> None:
+        pad = SwitchGamepad.from_config(
+            SwitchGamepadConfig(profile=JoyConLeftProfile()),
+            transport=FakeHidTransport(),
+        )
+        await pad.lstick(Stick.up())
+        before = pad.snapshot()
+
+        with pytest.raises(UnsupportedInputError):
+            await pad.rstick(Stick.right())
+
+        assert pad.snapshot() == before
+
+    asyncio.run(run())
+
+
+def test_joycon_right_rejects_left_stick_update_before_commit() -> None:
+    async def run() -> None:
+        pad = SwitchGamepad.from_config(
+            SwitchGamepadConfig(profile=JoyConRightProfile()),
+            transport=FakeHidTransport(),
+        )
+        await pad.rstick(Stick.right())
+        before = pad.snapshot()
+
+        with pytest.raises(UnsupportedInputError):
+            await pad.lstick(Stick.left())
+
+        assert pad.snapshot() == before
+
+    asyncio.run(run())
+
+
+def test_joycon_apply_rejects_unsupported_state_before_commit() -> None:
+    async def run() -> None:
+        pad = SwitchGamepad.from_config(
+            SwitchGamepadConfig(profile=JoyConLeftProfile()),
+            transport=FakeHidTransport(),
+        )
+        await pad.apply(InputState.neutral().with_buttons([Button.L]))
+        before = pad.snapshot()
+        unsupported = InputState.neutral().with_buttons([Button.A])
+
+        with pytest.raises(UnsupportedInputError):
+            await pad.apply(unsupported)
+
+        assert pad.snapshot() == before
+
+    asyncio.run(run())
+
+
 def test_state_update_apis_do_not_send_immediate_interrupt_reports() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
@@ -771,6 +860,112 @@ def test_from_config_output_report_injection_uses_configured_controller_colors()
     asyncio.run(run())
 
 
+def test_from_config_uses_profile_controller_colors_when_colors_are_unspecified() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        config = SwitchGamepadConfig(
+            profile=ProControllerProfile(
+                controller_colors=ControllerColors(
+                    body=0x010203,
+                    buttons=0x040506,
+                    left_grip=0x070809,
+                    right_grip=0x0A0B0C,
+                )
+            ),
+            controller_colors=None,
+            report_period_us=1000,
+        )
+        request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
+
+        async with SwitchGamepad.from_config(config, transport=transport):
+            await transport.connect()
+
+            await transport.inject_interrupt_data(request_controller_colors)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[0] == 0x21
+            assert reply[14] == 0x10
+            assert reply[15:32] == bytes.fromhex(
+                "50 60 00 00 0c 01 02 03 04 05 06 07 08 09 0a 0b 0c"
+            )
+
+    asyncio.run(run())
+
+
+def test_from_config_profile_reaches_periodic_input_report_builder() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        config = SwitchGamepadConfig(
+            profile=ProControllerProfile(battery_connection=0x92),
+            report_period_us=1000,
+        )
+
+        async with SwitchGamepad.from_config(config, transport=transport):
+            await transport.connect()
+
+            report = await transport.wait_for_interrupt_report_id(0x30)
+
+            assert report[0] == 0x30
+            assert report[2] == 0x92
+
+    asyncio.run(run())
+
+
+def test_from_config_joycon_profile_reaches_device_info_reply() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        config = SwitchGamepadConfig(
+            profile=JoyConLeftProfile(),
+            report_period_us=1000,
+        )
+        request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
+
+        async with SwitchGamepad.from_config(config, transport=transport):
+            await transport.connect()
+
+            await transport.inject_interrupt_data(request_device_info)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[0] == 0x21
+            assert reply[14] == 0x02
+            assert reply[15:27] == bytes.fromhex("04 00 01 02 00 00 00 00 00 00 01 01")
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("side", "device_info"),
+    [
+        ("left", "04 00 01 02 00 00 00 00 00 00 01 01"),
+        ("right", "04 00 02 02 00 00 00 00 00 00 01 01"),
+    ],
+)
+def test_joycon_wrapper_reaches_device_info_reply(
+    side: Literal["left", "right"],
+    device_info: str,
+) -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
+
+        async with JoyCon(side, transport=transport, report_period_us=1000):
+            await transport.connect()
+
+            await transport.inject_interrupt_data(request_device_info)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[0] == 0x21
+            assert reply[14] == 0x02
+            assert reply[15:27] == bytes.fromhex(device_info)
+
+    asyncio.run(run())
+
+
+def test_joycon_wrapper_rejects_invalid_side() -> None:
+    with pytest.raises(InvalidInputError):
+        JoyCon(cast("Any", "center"), transport=FakeHidTransport())
+
+
 def test_control_output_report_injection_sends_subcommand_reply() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
@@ -880,6 +1075,40 @@ def test_output_report_rx_and_subcommand_rx_share_packet_id() -> None:
             "packet_id": 0x12,
             "report_id": "0x21",
             "subcommand_id": "0x02",
+        } in events
+
+    asyncio.run(run())
+
+
+def test_output_report_injection_records_subcommand_session_state() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        request_report_mode = bytes.fromhex("01 21 00 01 40 40 00 01 40 40 03 3f")
+
+        async with SwitchGamepad(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=1000,
+        ):
+            await transport.connect()
+            await transport.inject_interrupt_data(request_report_mode)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[13] == 0x80
+            assert reply[14] == 0x03
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+
+        assert {
+            "event": "subcommand_session_state",
+            "imu_enabled": False,
+            "packet_id": 0x21,
+            "report_mode": "0x3f",
+            "report_mode_supported": False,
+            "subcommand_id": "0x03",
+            "unsupported_report_mode": "0x3f",
+            "vibration_enabled": False,
         } in events
 
     asyncio.run(run())
@@ -1601,6 +1830,29 @@ def test_concurrent_press_and_release_preserve_button_state() -> None:
             released_count = len(transport.sent_interrupt_reports)
             released_reports = await transport.wait_for_interrupt_report_count(released_count + 1)
             assert released_reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+    asyncio.run(run())
+
+
+def test_concurrent_press_waiting_on_state_lock_uses_latest_state() -> None:
+    async def run() -> None:
+        pad = SwitchGamepad(transport=FakeHidTransport())
+        state_lock = pad._state_store._lock
+
+        await state_lock.acquire()
+        try:
+            press_left = asyncio.create_task(pad.press(Button.L))
+            press_right = asyncio.create_task(pad.press(Button.R))
+            await asyncio.sleep(0)
+
+            assert press_left.done() is False
+            assert press_right.done() is False
+        finally:
+            state_lock.release()
+
+        await asyncio.gather(press_left, press_right)
+
+        assert pad.snapshot() == InputState.neutral().with_buttons([Button.L, Button.R])
 
     asyncio.run(run())
 

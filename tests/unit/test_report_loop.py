@@ -1,8 +1,16 @@
 import asyncio
+import inspect
 
+from swbt.protocol.input_report import InputReportBuilder
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.fake import FakeHidTransport
+
+
+def test_report_loop_requires_injected_input_report_builder() -> None:
+    signature = inspect.signature(ReportLoop)
+
+    assert signature.parameters["input_report_builder"].default is inspect.Parameter.empty
 
 
 def test_subcommand_reply_uses_shared_timer_sequence() -> None:
@@ -12,6 +20,7 @@ def test_subcommand_reply_uses_shared_timer_sequence() -> None:
         report_loop = ReportLoop(
             transport=transport,
             state_store=InputStateStore(),
+            input_report_builder=InputReportBuilder(),
         )
         reply = bytearray(50)
         reply[0] = 0x21
@@ -38,6 +47,7 @@ def test_subcommand_reply_holds_off_following_periodic_report() -> None:
         report_loop = ReportLoop(
             transport=transport,
             state_store=InputStateStore(),
+            input_report_builder=InputReportBuilder(),
         )
         reply = bytes([0x21, *([0] * 49)])
 
