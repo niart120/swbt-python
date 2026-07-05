@@ -161,13 +161,149 @@ def test_switch_joycon_profile_pairing_records_device_info(
     assert not _contains_event(events, "error")
 
 
+@pytest.mark.hardware
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_switch_joycon_profile_reads_default_controller_colors(
+    side: Literal["left", "right"],
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Record Joy-Con default controller color SPI bytes during a real handshake."""
+    expected_device_name = _expected_device_name(side)
+    expected_device_type = _expected_device_type(side)
+    expected_color_bytes = _expected_default_controller_color_bytes(side)
+    key_store_path = swbt_hardware_artifact_dir / f"joycon-{side}-colors-key-store.json"
+    trace_path = swbt_hardware_artifact_dir / f"joycon-{side}-default-controller-colors.jsonl"
+
+    async def run() -> None:
+        _delete_file_if_exists(key_store_path)
+        with trace_path.open("w", encoding="utf-8") as trace:
+            _record_probe_event(
+                trace,
+                "manual_joycon_profile_checkpoint",
+                expected_controller_color_bytes=expected_color_bytes.hex(),
+                expected_device_name=expected_device_name,
+                expected_device_type=f"0x{expected_device_type:02x}",
+                expected_switch_screen="controller_search_or_change_grip_order",
+                operation="operator_prepare_joycon_default_color_pairing",
+                side=side,
+                wait_seconds=_OPERATOR_WAIT_SECONDS,
+            )
+            sys.stderr.write(
+                "SWBT hardware: Joy-Con default controller color; "
+                f"side={side}; expected_device_name={expected_device_name}; "
+                f"expected_controller_color_bytes={expected_color_bytes.hex()}; "
+                "expected_switch_screen=controller_search_or_change_grip_order; "
+                f"waiting {_OPERATOR_WAIT_SECONDS:.0f}s\n"
+            )
+            sys.stderr.flush()
+            await asyncio.sleep(_OPERATOR_WAIT_SECONDS)
+
+            pad = JoyCon(
+                side,
+                adapter=swbt_bumble_adapter,
+                key_store_path=str(key_store_path),
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            _install_device_info_probe(
+                pad,
+                trace,
+                side=side,
+                expected_controller_color_bytes=expected_color_bytes,
+            )
+            try:
+                await pad.connect(timeout=60.0, allow_pairing=True)
+                await _wait_for_device_info_reply(
+                    trace_path,
+                    expected_device_type=expected_device_type,
+                    timeout_seconds=25.0,
+                )
+                await _wait_for_controller_color_spi_reply(
+                    trace_path,
+                    expected_controller_color_bytes=expected_color_bytes,
+                    timeout_seconds=25.0,
+                )
+                _record_probe_event(
+                    trace,
+                    "manual_joycon_profile_checkpoint",
+                    operation="controller_color_spi_reply_observed",
+                    report_0x21_count=pad.status().report_counters.get(0x21, 0),
+                    report_0x30_count=pad.status().report_counters.get(0x30, 0),
+                    side=side,
+                )
+                await _wait_for_order_input_window(trace_path, timeout_seconds=20.0)
+                await _send_order_buttons(pad, trace, side=side)
+                await asyncio.sleep(_UI_OBSERVATION_HOLD_SECONDS)
+                _record_probe_event(
+                    trace,
+                    "manual_joycon_profile_checkpoint",
+                    hold_seconds=_UI_OBSERVATION_HOLD_SECONDS,
+                    operation="ui_observation_hold_complete",
+                    report_0x21_count=pad.status().report_counters.get(0x21, 0),
+                    report_0x30_count=pad.status().report_counters.get(0x30, 0),
+                    side=side,
+                )
+            finally:
+                await pad.close(neutral=True)
+                _record_probe_event(
+                    trace,
+                    "manual_joycon_profile_cleanup",
+                    connection_state=pad.status().connection_state,
+                    side=side,
+                )
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+
+    assert key_store_path.exists()
+    assert _contains_event(events, "connected", adapter=swbt_bumble_adapter)
+    assert _contains_event(
+        events,
+        "device_info_reply",
+        controller_type=f"0x{expected_device_type:02x}",
+        side=side,
+        tail_bytes="0101",
+    )
+    assert _device_info_address_matches_configured_local_address(events)
+    assert _contains_event(
+        events,
+        "controller_color_spi_reply",
+        controller_color_bytes=expected_color_bytes.hex(),
+        matches_expected_controller_colors=True,
+        side=side,
+    )
+    assert _contains_event(
+        events,
+        "manual_joycon_profile_checkpoint",
+        operation="ui_observation_hold_complete",
+        hold_seconds=_UI_OBSERVATION_HOLD_SECONDS,
+        side=side,
+    )
+    assert _contains_event(
+        events,
+        "manual_joycon_profile_cleanup",
+        connection_state="closed",
+        side=side,
+    )
+    assert not _contains_event(events, "error")
+
+
 class RecordingDeviceInfoResponder(SubcommandResponder):
     """Wrap a responder and record device-info reply bytes for hardware diagnostics."""
 
-    def __init__(self, inner: SubcommandResponder, trace: TextIO, *, side: str) -> None:
+    def __init__(
+        self,
+        inner: SubcommandResponder,
+        trace: TextIO,
+        *,
+        expected_controller_color_bytes: bytes | None = None,
+        side: str,
+    ) -> None:
         """Create a recording wrapper around an existing subcommand responder."""
         self._inner = inner
         self._trace = trace
+        self._expected_controller_color_bytes = expected_controller_color_bytes
         self._side = side
 
     @property
@@ -184,6 +320,8 @@ class RecordingDeviceInfoResponder(SubcommandResponder):
         reply = self._inner.respond(output_report, state=state, timer=timer)
         if output_report.subcommand_id == 0x02:
             self._record_device_info_reply(reply)
+        if output_report.subcommand_id == 0x10:
+            self._record_spi_reply(output_report.subcommand_payload, reply)
         return reply
 
     def _record_device_info_reply(self, reply: bytes) -> None:
@@ -200,12 +338,44 @@ class RecordingDeviceInfoResponder(SubcommandResponder):
             tail_bytes=device_info[10:12].hex(),
         )
 
+    def _record_spi_reply(self, payload: bytes, reply: bytes) -> None:
+        if self._expected_controller_color_bytes is None or len(payload) < 5:
+            return
 
-def _install_device_info_probe(pad: JoyCon, trace: TextIO, *, side: str) -> None:
+        address = int.from_bytes(payload[0:4], "little")
+        size = payload[4]
+        read_data = reply[20 : 20 + size]
+        color_offset = 0x6050 - address
+        if color_offset < 0 or color_offset + 12 > len(read_data):
+            return
+        controller_color_bytes = read_data[color_offset : color_offset + 12]
+        _record_probe_event(
+            self._trace,
+            "controller_color_spi_reply",
+            address=f"0x{address:06x}",
+            controller_color_bytes=controller_color_bytes.hex(),
+            matches_expected_controller_colors=(
+                controller_color_bytes == self._expected_controller_color_bytes
+            ),
+            read_data=read_data.hex(),
+            request_prefix=payload[:5].hex(),
+            side=self._side,
+            size=size,
+        )
+
+
+def _install_device_info_probe(
+    pad: JoyCon,
+    trace: TextIO,
+    *,
+    expected_controller_color_bytes: bytes | None = None,
+    side: str,
+) -> None:
     dispatcher = pad._output_report_dispatcher
     dispatcher.subcommand_responder = RecordingDeviceInfoResponder(
         dispatcher.subcommand_responder,
         trace,
+        expected_controller_color_bytes=expected_controller_color_bytes,
         side=side,
     )
 
@@ -285,6 +455,25 @@ async def _wait_for_order_input_window(trace_path: Path, *, timeout_seconds: flo
             await asyncio.sleep(0.05)
 
 
+async def _wait_for_controller_color_spi_reply(
+    trace_path: Path,
+    *,
+    expected_controller_color_bytes: bytes,
+    timeout_seconds: float,
+) -> None:
+    expected_hex = expected_controller_color_bytes.hex()
+    async with asyncio.timeout(timeout_seconds):
+        while True:
+            if _contains_event(
+                _read_jsonl(trace_path),
+                "controller_color_spi_reply",
+                controller_color_bytes=expected_hex,
+                matches_expected_controller_colors=True,
+            ):
+                return
+            await asyncio.sleep(0.05)
+
+
 async def _wait_for_report_counter(
     pad: JoyCon,
     *,
@@ -321,6 +510,12 @@ def _expected_order_button_bytes(side: str) -> str:
     if side == "left":
         return "000030"
     return "300000"
+
+
+def _expected_default_controller_color_bytes(side: str) -> bytes:
+    if side == "left":
+        return bytes.fromhex("00 b2 ff 32 32 32 00 b2 ff 00 b2 ff")
+    return bytes.fromhex("ff 3b 30 32 32 32 ff 3b 30 ff 3b 30")
 
 
 def _delete_file_if_exists(path: Path) -> None:

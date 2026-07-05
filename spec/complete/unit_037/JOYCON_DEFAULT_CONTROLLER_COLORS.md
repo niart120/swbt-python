@@ -32,6 +32,7 @@ Joy-Con L/R profile の `controller_colors` 既定値を side-specific にし、
 - `JoyConRightProfile.controller_colors` の side-specific default。
 - `VirtualSpiFlash(profile=JoyCon*)` が Joy-Con profile default color block を seed すること。
 - `JoyCon(...)` 経由の fake transport SPI reply が profile default color block を返すこと。
+- 承認後の Joy-Con L hardware probe で、実機 handshake 中の SPI `0x6050` default color reply と user-visible UI color observation を記録すること。
 - 根拠監査 fixture と作業仕様の更新。
 
 ## 3. 対象外
@@ -39,7 +40,9 @@ Joy-Con L/R profile の `controller_colors` 既定値を side-specific にし、
 - 工場出荷 Joy-Con color bytes の確定。
 - 実機から Joy-Con SPI factory data を吸い出すこと。
 - 接続後 `set_color()` や profile mutation API の追加。
-- Joy-Con L/R の controller color 実機 UI 反映確認。
+- Joy-Con R の controller color 実機 UI 反映確認。
+- Joy-Con L controller color UI 反映の自動判定。
+- 別 firmware / adapter での controller color UI 表示保証。
 - Joy-Con R の pairing / input reflection / reconnect 実機検証。
 
 ## 4. 関連 docs
@@ -65,6 +68,7 @@ Joy-Con L/R profile の `controller_colors` 既定値を side-specific にし、
 | SPI color block | `0x6050`-`0x605B`, body / buttons / left grip / right grip | source fact / hardware observation | `spec/complete/unit_028/CONTROLLER_PROFILE_CUSTOMIZATION.md` | existing contract |
 | Joy-Con L default colors | body `0x00B2FF`, buttons `0x323232`, left grip `0x00B2FF`, right grip `0x00B2FF` | implementation fact | `src/swbt/protocol/profile.py`, source-audit fixture | profile-default-policy |
 | Joy-Con R default colors | body `0xFF3B30`, buttons `0x323232`, left grip `0xFF3B30`, right grip `0xFF3B30` | implementation fact | `src/swbt/protocol/profile.py`, source-audit fixture | profile-default-policy |
+| Joy-Con L hardware observation | SPI `0x6050` bytes `00 b2 ff 32 32 32 00 b2 ff 00 b2 ff`; user observed body blue / light blue and buttons black | hardware observation | `spec/hardware-test-log.md` | 2026-07-06 observed |
 | exact factory Joy-Con colors | pending | unverified hypothesis | not audited | do not claim |
 
 ## 6. 振る舞い仕様
@@ -85,6 +89,7 @@ Joy-Con L/R profile の `controller_colors` 既定値を side-specific にし、
 | green | `VirtualSpiFlash(profile=JoyCon*)` が side-specific default color block を seed する | new | unit | no | `tests/unit/test_virtual_spi_flash.py` |
 | green | `JoyCon(...)` が `controller_colors=None` のとき profile default color block を SPI reply に返す | new | integration | no | fake transport |
 | green | source-audit fixture が Joy-Con default color policy を記録する | regression | unit / docs | no | 工場出荷色とは書かない |
+| hardware-pass | Joy-Con L 実機 handshake 中に profile default color block を SPI `0x6050` へ返す | new | hardware | yes | `usb:0` / Switch 2 22.1.0。UI 色は user observation として記録し、自動判定しない |
 
 ## 8. 設計メモ
 
@@ -102,6 +107,8 @@ left / right grip field は単体 Joy-Con UI では未検証だが、SPI color b
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | JoyCon wrapper 経由の SPI reply test |
 | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` | modify | default color policy の根拠分類 |
 | `tests/unit/test_source_audit_fixtures.py` | modify | source-audit fixture coverage |
+| `tests/hardware/test_joycon_profile.py` | modify | Joy-Con L/R default color SPI reply hardware probe |
+| `spec/hardware-test-log.md` | modify | Joy-Con L default color SPI reply と user-visible UI observation の実機記録 |
 | `spec/complete/unit_037/JOYCON_DEFAULT_CONTROLLER_COLORS.md` | add / move | 作業仕様 |
 
 ## 10. 検証
@@ -116,23 +123,30 @@ left / right grip field は単体 Joy-Con UI では未検証だが、SPI color b
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/unit -q` | pass | 333 passed |
 | `uv run pytest tests/integration -q` | pass | 93 passed |
-| `uv run pytest tests/hardware/test_joycon_profile.py --collect-only -q` | pass | 2 tests collected。adapter は開いていない |
+| `uv run ruff format --check tests\hardware\test_joycon_profile.py` | pass | 1 file already formatted |
+| `uv run ruff check tests\hardware\test_joycon_profile.py` | pass | All checks passed |
+| `uv run ty check --no-progress tests\hardware\test_joycon_profile.py` | pass | All checks passed |
+| `uv run pytest tests/hardware/test_joycon_profile.py --collect-only -q` | pass | 4 tests collected。adapter は開いていない |
+| `uv run pytest tests\unit\test_hardware_test_log_docs.py -q` | pass | 3 passed |
+| `git diff --check` | pass | whitespace error なし |
+| `uv run pytest tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_reads_default_controller_colors[left] -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\joycon-left-default-colors-20260706 --log-file build\hardware\joycon-left-default-colors-20260706\pytest-debug.log --log-file-level=DEBUG --basetemp build\pytest-tmp-hardware-joycon-default-colors -q -s` | pass | `1 passed in 24.39s`。SPI `0x6050` bytes `00b2ff32323200b2ff00b2ff`。ユーザは UI 上で body が青色または水色、buttons が黒色に見えると報告した |
 
 ## 11. 実機実行条件
 
 | 項目 | 内容 |
 |---|---|
-| 実機要否 | not required |
-| 承認範囲 | この unit では実機を使わない。Joy-Con color UI 反映を確認する場合は adapter open、HID advertising、pairing、subcommand handling、periodic report loop、cleanup の明示承認が必要 |
-| adapter | not used |
+| 実機要否 | implementation gate としては not required。2026-07-06 に user approval 後、Joy-Con L default color hardware probe を実行済み |
+| 承認範囲 | 実行済み範囲は adapter `usb:0`、USB Bluetooth dongle open、Joy-Con L HID advertising、Switch pairing、HID control / interrupt L2CAP、Device Info reply、SPI `0x6050` controller color read reply、periodic `0x30`、SR+SL hold、neutral cleanup、disconnect request、transport close、adapter release |
+| adapter | `usb:0` |
 | 実行遮断 | 環境変数による遮断は採用しない。明示承認、対象 adapter、command、cleanup plan で管理する |
-| log / artifact | 実機なし |
-| cleanup | 実機なし |
+| log / artifact | `build\hardware\joycon-left-default-colors-20260706\joycon-left-default-controller-colors.jsonl`, `build\hardware\joycon-left-default-colors-20260706\pytest-debug.log`, `build\hardware\joycon-left-default-colors-20260706\joycon-left-colors-key-store.json` |
+| cleanup | trace は `disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete`、`manual_joycon_profile_cleanup connection_state=closed` を記録した |
 
 ## 12. 先送り事項
 
 - Joy-Con L/R の正確な factory controller color bytes は未監査。実機 SPI dump または信頼できる source が得られるまで profile-default-policy として扱う。
-- Joy-Con color UI reflection は未検証。実機で見る場合は `spec/hardware-test-log.md` に条件付き observation として記録する。
+- Joy-Con R default color SPI reply と UI reflection は未検証。
+- Joy-Con L default color UI reflection は Windows / CSR8510 A10 / Switch 2 22.1.0 の user observation として記録済みだが、pytest は自動判定しない。別 firmware / adapter での表示保証には使わない。
 
 ## 13. チェックリスト
 
