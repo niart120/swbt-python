@@ -25,6 +25,7 @@ REQUIRED_ENTRY_IDS = {
     "joycon_device_info_profile",
     "device_info_local_bluetooth_address_wiring",
     "joycon_spi_device_type_values",
+    "joycon_default_controller_color_profile",
     "joycon_standard_button_mapping",
     "joycon_standard_stick_availability",
     "subcommand_report_mode_session_state",
@@ -268,6 +269,21 @@ def test_joycon_spi_device_type_values_are_source_audited() -> None:
     assert "0x6012" in value
     assert "JOYCON_L=0x01" in value
     assert "JOYCON_R=0x02" in value
+
+
+def test_joycon_default_controller_colors_are_recorded() -> None:
+    entry = _entry_by_id("joycon_default_controller_color_profile")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "profile-default-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x6050-0x605B" in value
+    assert "body=0x00B2FF" in value
+    assert "body=0xFF3B30" in value
+    assert "controller_colors overrides" in value
+    assert "not claimed as factory Joy-Con color bytes" in value
 
 
 def test_joycon_standard_button_mapping_is_source_audited() -> None:

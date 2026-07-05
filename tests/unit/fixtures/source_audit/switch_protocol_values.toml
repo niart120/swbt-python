@@ -146,6 +146,19 @@ status = "stable-profile-core"
 handoff = ["unit_030"]
 
 [[entry]]
+id = "joycon_default_controller_color_profile"
+fixture_name = "joycon_default_controller_color_profile"
+area = "protocol"
+value = "Joy-Con L/R profile defaults seed SPI 0x6050-0x605B with side identity colors. Joy-Con L uses body=0x00B2FF, buttons=0x323232, left_grip=0x00B2FF, right_grip=0x00B2FF. Joy-Con R uses body=0xFF3B30, buttons=0x323232, left_grip=0xFF3B30, right_grip=0xFF3B30. Explicit user-supplied controller_colors overrides the profile default. These values reuse swbt-python's existing Joy-Con-ish blue/red defaults and are not claimed as factory Joy-Con color bytes."
+classification = "implementation fact"
+source = [
+    'src\swbt\protocol\profile.py',
+    'spec\complete\unit_028\CONTROLLER_PROFILE_CUSTOMIZATION.md',
+]
+status = "profile-default-policy"
+handoff = ["unit_037"]
+
+[[entry]]
 id = "joycon_standard_button_mapping"
 fixture_name = "joycon_standard_button_mapping"
 area = "protocol"

@@ -47,6 +47,15 @@ def test_virtual_spi_flash_returns_seeded_custom_controller_colors() -> None:
     assert spi.read(0x6050, 12) == bytes.fromhex("11 22 33 44 55 66 77 88 99 aa bb cc")
 
 
+def test_virtual_spi_flash_seeds_joycon_default_controller_colors_from_profile() -> None:
+    assert VirtualSpiFlash(profile=JoyConLeftProfile()).read(0x6050, 12) == bytes.fromhex(
+        "00 b2 ff 32 32 32 00 b2 ff 00 b2 ff"
+    )
+    assert VirtualSpiFlash(profile=JoyConRightProfile()).read(0x6050, 12) == bytes.fromhex(
+        "ff 3b 30 32 32 32 ff 3b 30 ff 3b 30"
+    )
+
+
 def test_virtual_spi_flash_returns_erased_bytes_for_unseeded_address() -> None:
     spi = VirtualSpiFlash()
 

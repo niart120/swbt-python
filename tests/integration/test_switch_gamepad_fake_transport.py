@@ -939,6 +939,39 @@ def test_from_config_uses_profile_controller_colors_when_colors_are_unspecified(
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    ("side", "expected_colors"),
+    [
+        ("left", "00 b2 ff 32 32 32 00 b2 ff 00 b2 ff"),
+        ("right", "ff 3b 30 32 32 32 ff 3b 30 ff 3b 30"),
+    ],
+)
+def test_joycon_uses_side_default_controller_colors_when_colors_are_unspecified(
+    side: Literal["left", "right"],
+    expected_colors: str,
+) -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
+
+        async with JoyCon(
+            side,
+            controller_colors=None,
+            transport=transport,
+            report_period_us=1000,
+        ):
+            await transport.connect()
+
+            await transport.inject_interrupt_data(request_controller_colors)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            assert reply[0] == 0x21
+            assert reply[14] == 0x10
+            assert reply[15:32] == bytes.fromhex("50 60 00 00 0c " + expected_colors)
+
+    asyncio.run(run())
+
+
 def test_from_config_profile_reaches_periodic_input_report_builder() -> None:
     async def run() -> None:
         transport = FakeHidTransport()

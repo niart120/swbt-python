@@ -132,6 +132,24 @@ def test_controller_colors_omitted_grips_keep_their_own_default_colors() -> None
     assert colors.to_spi_bytes() == bytes.fromhex("11 22 33 44 55 66 00 b2 ff ff 3b 30")
 
 
+def test_joycon_profiles_have_side_specific_default_controller_colors() -> None:
+    left = JoyConLeftProfile().controller_colors
+    right = JoyConRightProfile().controller_colors
+
+    assert left == ControllerColors(
+        body=0x00B2FF,
+        buttons=0x323232,
+        left_grip=0x00B2FF,
+        right_grip=0x00B2FF,
+    )
+    assert right == ControllerColors(
+        body=0xFF3B30,
+        buttons=0x323232,
+        left_grip=0xFF3B30,
+        right_grip=0xFF3B30,
+    )
+
+
 def _controller_colors_with_invalid_field(field: str, value: object) -> ControllerColors:
     if field == "body":
         return ControllerColors(body=cast("int", value), buttons=0x445566)
