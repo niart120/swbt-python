@@ -75,7 +75,7 @@
 | todo | `JoyCon("left" / "right")` の profile validation が変わらない | regression | integration | no | existing Joy-Con fake transport tests |
 | todo | `open()` が pairing / advertising を開始しない | regression | unit / integration | no | lifecycle contract |
 | todo | `close(neutral=True)` が trailing neutral と cleanup を維持する | regression | integration | no | unit_014 contract |
-| todo | `import swbt` が Bumble を import しない | regression | unit | no | package import test |
+| green | `import swbt` が Bumble を import しない | regression | unit | no | existing package import boundary test |
 | green | `_StaticTransportFactory` 経由の fake transport 作成で unit test が書ける | new | unit | no | `transport_factory.py` の internal factory として追加 |
 | green | `_BumbleTransportFactory` 経由で default transport を作成できる | new | unit | no | 既存 `create_default_transport()` を包む internal factory |
 
@@ -111,6 +111,7 @@ M1 は public API break の準備であり、互換 API を消す場所ではな
 | `uv run ruff format src\swbt\gamepad\transport_factory.py tests\unit\test_gamepad_transport_factory.py` | pass | 2 files left unchanged |
 | `uv run ruff check src\swbt\gamepad\transport_factory.py tests\unit\test_gamepad_transport_factory.py` | pass | All checks passed |
 | `uv run ty check --no-progress src\swbt\gamepad\transport_factory.py tests\unit\test_gamepad_transport_factory.py` | pass | All checks passed |
+| `uv run pytest tests/unit/test_public_api_boundary.py::test_public_api_import_does_not_import_bumble tests/unit/test_public_api_boundary.py::test_public_api_import_does_not_resolve_bumble -q` | pass | `2 passed`。factory 追加後も public import は Bumble を解決しない |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |
