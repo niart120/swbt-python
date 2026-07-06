@@ -74,7 +74,7 @@
 | green | `SwitchGamepad` の public behavior が runtime 抽出後も変わらない | regression | integration | no | fake transport tests |
 | green | `JoyCon("left" / "right")` の profile validation が変わらない | regression | integration | no | existing Joy-Con fake transport tests |
 | green | `open()` が pairing / advertising を開始しない | regression | unit / integration | no | lifecycle contract |
-| todo | `close(neutral=True)` が trailing neutral と cleanup を維持する | regression | integration | no | unit_014 contract |
+| green | `close(neutral=True)` が trailing neutral と cleanup を維持する | regression | integration | no | unit_014 contract |
 | green | `SwitchGamepad` facade が `ControllerRuntime` を stateful owner として持つ | new | unit | no | public API shape を維持したまま runtime へ委譲 |
 | green | `import swbt` が Bumble を import しない | regression | unit | no | existing package import boundary test |
 | green | `_StaticTransportFactory` 経由の fake transport 作成で unit test が書ける | new | unit | no | `transport_factory.py` の internal factory として追加 |
@@ -125,6 +125,7 @@ M1 は public API break の準備であり、互換 API を消す場所ではな
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -k joycon -q` | pass | `15 passed, 76 deselected`。JoyCon wrapper と unsupported input validation は維持 |
 | `uv run pytest tests\unit\test_public_api_boundary.py tests\unit\test_input_report.py -k joycon -q` | pass | `11 passed, 50 deselected`。JoyCon public boundary と profile packing / validation は維持 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_open_only_does_not_start_advertising -q` | pass | `1 passed`。`open()` は advertising を開始しない |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -k "close and neutral" -q` | pass | `4 passed, 87 deselected`。trailing neutral、best-effort disconnect、host disconnect race の cleanup は維持 |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |
