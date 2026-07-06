@@ -111,7 +111,7 @@ public backend extension API が必要になった場合は、この unit の互
 | `uv run pytest tests\unit\test_package_import.py::test_rearchitecture_target_root_hides_internal_transport_type -q` | red | `HidDeviceTransport` が root public export に残っていた |
 | `uv run pytest tests\unit\test_package_import.py tests\unit\test_public_api_docstrings.py::test_public_value_object_docstrings_describe_attributes_and_factory_returns -q` | pass | `5 passed`。transport extension 型を root public API と public docstring contract から削除 |
 | `uv run ruff check src\swbt\__init__.py tests\unit\test_package_import.py tests\unit\test_public_api_docstrings.py` | pass | `All checks passed!` |
-| `uv run pytest tests\unit\test_public_api_boundary.py::test_public_api_import_does_not_import_bumble tests\unit\test_public_api_boundary.py::test_public_api_import_does_not_resolve_bumble tests\unit\test_public_api_boundary.py::test_only_bumble_transport_module_may_resolve_bumble tests\unit\test_gamepad_transport_factory.py -q` | pass | `6 passed`。public import と default transport factory の Bumble import 遅延を維持 |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_public_api_import_does_not_import_bumble tests\unit\test_public_api_boundary.py::test_public_api_import_does_not_resolve_bumble tests\unit\test_public_api_boundary.py::test_only_bumble_transport_module_may_resolve_bumble tests\unit\test_gamepad_transport_factory.py -q` | pass | `7 passed`。public import と default transport factory の Bumble import 遅延を維持 |
 | `uv run ruff format --check .` | pass | `84 files already formatted` |
 | `uv run ruff check .` | pass | `All checks passed!` |
 | `uv run ty check --no-progress` | pass | `All checks passed!` |
