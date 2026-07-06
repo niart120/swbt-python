@@ -267,7 +267,7 @@ transport=FakeHidTransport
 | M2 | unit_040 | `spec/complete/unit_040/PUBLIC_CONTROLLER_API_MODEL.md` | `SwitchGamepad` abstract interface と public concrete controller API |
 | M3 | unit_041 | `spec/complete/unit_041/CONTROLLER_CONFIG_PROFILE_OWNERSHIP.md` | public config / profile injection cleanup |
 | M4 | unit_042 | `spec/complete/unit_042/INTERNAL_TRANSPORT_FACTORY.md` | public `transport=` removal and internal transport factory |
-| M5 | unit_043 | `spec/wip/unit_043/PROTOCOL_PROFILE_MODULE_SPLIT.md` | profile module split and `ControllerKind` branch localization |
+| M5 | unit_043 | `spec/complete/unit_043/PROTOCOL_PROFILE_MODULE_SPLIT.md` | profile module split and `ControllerKind` branch localization |
 | M6 | unit_044 | `spec/wip/unit_044/REARCHITECTURE_DOCS_RELEASE_MATRIX.md` | docs, examples, hardware matrix, release note |
 
 ## Implementation checklist

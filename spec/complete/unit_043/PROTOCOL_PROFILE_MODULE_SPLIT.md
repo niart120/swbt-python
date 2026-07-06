@@ -14,6 +14,7 @@
 |---|---|---|
 | design note | profile module split と `ControllerKind` 分岐局所化 | `spec/rearchitecture/02-as-is-to-be.md`, `spec/rearchitecture/04-runtime-profile-transport-details.md`, `spec/rearchitecture/05-milestones-implementation.md` |
 | current implementation | `protocol/profile.py` に Pro / Joy-Con profile、descriptor、button map、colors、SDP policy が混在している | `src/swbt/protocol/profile.py` |
+| implementation result | profile 実装を用途別 module に分割し、`protocol/profile.py` は internal compatibility re-export として残した | `src/swbt/protocol/profiles/`, `src/swbt/protocol/buttons.py`, `src/swbt/protocol/descriptors.py`, `src/swbt/protocol/profile.py` |
 | existing tests | profile, input report, virtual SPI, source-audit fixtures が profile behavior を固定している | `tests/unit/test_protocol_profile.py`, `tests/unit/test_input_report.py`, `tests/unit/test_virtual_spi_flash.py` |
 
 ### 1.3 use case
@@ -58,8 +59,8 @@
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required | pending | 既存 bytes の移動だけなら既存 source-audit fixture を維持する。新しい descriptor / byte layout を足す場合は source-audit が必須 |
-| Bumble / transport | not applicable | not applicable | SDP policy value の移動はあるが、Bumble transport behavior は変更しない |
+| Switch HID / report bytes | required | done | 既存 descriptor / button map / device info 値を module 移動した。新しい descriptor / byte layout は追加していない。既存 source-audit fixture と unit tests を維持した |
+| Bumble / transport | not applicable | done | SDP policy value の移動はあるが、Bumble transport behavior は変更していない |
 | OS / driver / adapter | not applicable | not applicable | adapter open や実機接続は行わない |
 
 ## 6. 振る舞い仕様
@@ -76,18 +77,19 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | profile split 後も Pro input report golden tests が通る | regression | unit | no | byte behavior 維持 |
-| todo | Joy-Con L/R unsupported button / stick behavior が変わらない | regression | unit | no | profile capability |
-| todo | virtual SPI flash が各 profile の device info / colors を維持する | regression | unit | no | existing source-audit fixture |
-| todo | `ControllerKind` references が許可範囲に局所化されている | new | unit | no | architecture guardrail |
-| todo | root public API が profile classes を export しない | regression | unit | no | package import test |
-| todo | `protocol/profile.py` を残す場合は internal-only re-export である | characterization | unit | no | 1 PR 限定か即削除を決める |
+| done | profile split 後も Pro input report golden tests が通る | regression | unit | no | `tests/unit/test_input_report.py` |
+| done | Joy-Con L/R unsupported button / stick behavior が変わらない | regression | unit | no | `tests/unit/test_input_report.py` |
+| done | virtual SPI flash が各 profile の device info / colors を維持する | regression | unit | no | `tests/unit/test_virtual_spi_flash.py` |
+| done | `ControllerKind` references が許可範囲に局所化されている | new | unit | no | `tests/unit/test_protocol_profile.py` |
+| done | root public API が profile classes を export しない | regression | unit | no | `tests/unit/test_public_api_boundary.py`, `tests/unit/test_package_import.py` |
+| done | `protocol/profile.py` を残す場合は internal-only re-export である | characterization | unit | no | production imports は split modules を使う |
+| done | public API docstring が Google style で引数名を列挙する | regression | unit | no | `tests/unit/test_public_api_docstrings.py` |
 
 ## 8. 設計メモ
 
 この unit は file size を減らすこと自体が目的ではない。HID descriptor、button map、SDP policy、colors、device info payload の変更理由を分けることが目的である。
 
-`src/swbt/protocol/profile.py` は即削除するか、一時的な internal re-export にする。残す場合でも root public export には戻さない。
+`src/swbt/protocol/profile.py` は internal compatibility re-export として残す。production code は split modules を import し、root public export には profile classes を戻さない。
 
 ## 9. 対象ファイル
 
@@ -98,22 +100,25 @@
 | `src/swbt/protocol/profiles/joycon.py` | add | Joy-Con L/R profiles |
 | `src/swbt/protocol/buttons.py` | add | button maps |
 | `src/swbt/protocol/descriptors.py` | add | HID descriptors |
-| `src/swbt/protocol/sdp.py` | add / optional | SDP policy helpers |
-| `src/swbt/protocol/profile.py` | modify / delete | internal re-export or removal |
+| `src/swbt/protocol/sdp.py` | not added | SDP policy helpers は profile module 内に残した |
+| `src/swbt/protocol/profile.py` | modify | internal re-export |
 | `tests/unit/test_protocol_profile.py` | modify | profile behavior tests |
-| `tests/unit/test_protocol_boundary.py` | modify | dependency / export guardrails |
-| `tests/unit/test_input_report.py` | modify | report regression |
-| `tests/unit/test_virtual_spi_flash.py` | modify | SPI regression |
-| `spec/wip/unit_043/PROTOCOL_PROFILE_MODULE_SPLIT.md` | add | 作業仕様 |
+| `tests/unit/test_public_api_boundary.py` | existing | root export guardrail |
+| `tests/unit/test_public_api_docstrings.py` | modify | public API Google style docstring guardrail |
+| `tests/unit/test_input_report.py` | existing | report regression |
+| `tests/unit/test_virtual_spi_flash.py` | existing | SPI regression |
+| `spec/complete/unit_043/PROTOCOL_PROFILE_MODULE_SPLIT.md` | move | 完了した作業仕様 |
 
 ## 10. 検証
 
 | command | result | notes |
 |---|---|---|
-| `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
-| `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
-| `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |
-| `uv run pytest tests/unit` | not run | 作業仕様作成時点では未実装 |
+| `uv sync --dev` | pass | 依存変更なし |
+| `uv run ruff format --check .` | pass | 90 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit -q` | pass | 354 passed |
+| `uv run pytest tests/integration -q` | pass | 93 passed |
 
 ## 11. 実機実行条件
 
@@ -133,8 +138,8 @@
 
 ## 13. チェックリスト
 
-- [ ] 対象範囲と対象外を確認した
-- [ ] TDD Test List を更新した
-- [ ] 必要な根拠監査を記録した
-- [ ] 実機実行条件を記録した
-- [ ] 検証結果または未実行理由を記録した
+- [x] 対象範囲と対象外を確認した
+- [x] TDD Test List を更新した
+- [x] 必要な根拠監査を記録した
+- [x] 実機実行条件を記録した
+- [x] 検証結果または未実行理由を記録した
