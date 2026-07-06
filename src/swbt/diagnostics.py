@@ -11,6 +11,9 @@ from typing import TextIO
 class DiagnosticsConfig:
     """Diagnostics configuration accepted by concrete gamepads.
 
+    Args:
+        trace_writer: Text stream that receives one JSON Lines diagnostics event per line.
+
     Attributes:
         trace_writer: Text stream that receives one JSON Lines diagnostics event per line.
     """
@@ -40,6 +43,13 @@ class DiagnosticsEvent:
 @dataclass(frozen=True)
 class GamepadStatus:
     """Snapshot of gamepad status exposed by ``SwitchGamepad.status()``.
+
+    Args:
+        connection_state: Current lifecycle state name.
+        report_counters: Sent report counts keyed by numeric report ID.
+        last_subcommand_id: Last observed subcommand ID, if any.
+        raw_rumble: Last raw rumble payload received from the host.
+        last_error: Latest diagnostics error event, if any.
 
     Attributes:
         connection_state: Current lifecycle state name.

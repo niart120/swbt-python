@@ -64,6 +64,19 @@ class _UsbDevice(Protocol):
 class AdapterInfo:
     """USB Bluetooth adapter candidate.
 
+    Args:
+        name: Primary adapter moniker passed to ``ProController(adapter=...)``.
+        aliases: Alternative adapter monikers for the same USB device.
+        vendor_id: USB vendor ID.
+        product_id: USB product ID.
+        manufacturer: USB manufacturer string when available.
+        product: USB product string when available.
+        serial_number: USB serial number when available.
+        bus_number: USB bus number when available.
+        device_address: USB device address when available.
+        port_numbers: USB port path numbers when available.
+        is_bluetooth_hci: Whether the USB device is classified as Bluetooth HCI.
+
     Attributes:
         name: Primary adapter moniker passed to ``ProController(adapter=...)``.
         aliases: Alternative adapter monikers for the same USB device.
