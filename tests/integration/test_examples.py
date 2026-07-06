@@ -8,7 +8,8 @@ from collections.abc import Awaitable
 from pathlib import Path
 from typing import Protocol, cast
 
-from swbt import Button, InputState, ProController, SwitchGamepad
+from swbt import Button, InputState, SwitchGamepad
+from swbt._testing.gamepad import make_pro_controller
 from swbt.transport.fake import FakeHidTransport
 
 EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"
@@ -37,7 +38,7 @@ def test_tap_a_example_can_run_with_fake_transport() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             await transport.connect()
 
             await tap_a_once(pad, duration=0)
