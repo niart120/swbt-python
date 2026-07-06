@@ -76,7 +76,7 @@
 | todo | `open()` が pairing / advertising を開始しない | regression | unit / integration | no | lifecycle contract |
 | todo | `close(neutral=True)` が trailing neutral と cleanup を維持する | regression | integration | no | unit_014 contract |
 | todo | `import swbt` が Bumble を import しない | regression | unit | no | package import test |
-| todo | `_StaticTransportFactory` 経由の fake transport 作成で unit test が書ける | new | unit | no | M4 の前段 |
+| green | `_StaticTransportFactory` 経由の fake transport 作成で unit test が書ける | new | unit | no | `transport_factory.py` の internal factory として追加 |
 
 ## 8. 設計メモ
 
@@ -100,6 +100,11 @@ M1 は public API break の準備であり、互換 API を消す場所ではな
 
 | command | result | notes |
 |---|---|---|
+| `uv run pytest tests/unit/test_gamepad_transport_factory.py::test_static_transport_factory_returns_injected_transport -q` | red | `_StaticTransportFactory` が未実装で import error |
+| `uv run pytest tests/unit/test_gamepad_transport_factory.py::test_static_transport_factory_returns_injected_transport -q` | pass | `1 passed` |
+| `uv run ruff format src\swbt\gamepad\transport_factory.py tests\unit\test_gamepad_transport_factory.py` | pass | 2 files left unchanged |
+| `uv run ruff check src\swbt\gamepad\transport_factory.py tests\unit\test_gamepad_transport_factory.py` | pass | All checks passed |
+| `uv run ty check --no-progress src\swbt\gamepad\transport_factory.py tests\unit\test_gamepad_transport_factory.py` | pass | All checks passed |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |

@@ -4,8 +4,9 @@ from pathlib import Path
 import pytest
 
 from swbt.diagnostics import DiagnosticsRecorder
-from swbt.gamepad.transport_factory import create_default_transport
+from swbt.gamepad.transport_factory import _StaticTransportFactory, create_default_transport
 from swbt.protocol.profile import ProControllerProfile
+from swbt.transport.fake import FakeHidTransport
 
 
 def test_default_transport_factory_passes_resource_config_to_bumble_transport(
@@ -57,3 +58,20 @@ def test_default_transport_factory_passes_resource_config_to_bumble_transport(
         "key_store_path": str(key_store_path),
         "transport": transport,
     }
+
+
+def test_static_transport_factory_returns_injected_transport() -> None:
+    transport = FakeHidTransport()
+    diagnostics = DiagnosticsRecorder()
+    profile = ProControllerProfile()
+    factory = _StaticTransportFactory(transport)
+
+    created_transport = factory.create(
+        adapter="test-adapter",
+        device_name="Reference Pad",
+        profile=profile,
+        diagnostics=diagnostics,
+        key_store_path=None,
+    )
+
+    assert created_transport is transport
