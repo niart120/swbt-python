@@ -77,7 +77,7 @@ public profile injection を消し、controller identity を concrete controller
 | green | concrete controller constructor が `profile` を受け取らない | new | unit | no | signature test |
 | green | concrete controller constructor が `device_name` を受け取らない | new | unit | no | signature test |
 | green | `SwitchGamepadConfig` が root export されない | new | unit | no | package import test |
-| todo | `from_config()` が public path に残っていない | new | unit | no | root / class attribute check |
+| green | `from_config()` が public path に残っていない | new | unit | no | public class attribute は削除し、internal `_from_config()` で regression を維持 |
 | todo | `controller_colors` override が profile default より優先される | regression | unit / integration | no | unit_028 / unit_037 contract |
 | todo | `report_period_us=None` が profile default を使う | regression | unit | no | positive integer validation も維持 |
 | todo | `ConnectionResult` が public 型として必要な値だけを露出する | characterization | unit | no | `BondedPeer` audit |
@@ -110,6 +110,9 @@ profile は identity と protocol fact の束であり、public config ではな
 | `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams tests\unit\test_public_api_docstrings.py::test_concrete_controller_docstrings_describe_constructor_arguments -q` | pass | `2 passed`。`profile` / `device_name` は public constructor から消え、constructor docstring からも消えた |
 | `uv run pytest tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface tests\unit\test_package_import.py::test_rearchitecture_target_root_hides_internal_config_type -q` | red | `SwitchGamepadConfig` が root export に残っていた |
 | `uv run pytest tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface tests\unit\test_package_import.py::test_rearchitecture_target_root_hides_internal_config_type -q` | pass | `2 passed`。`SwitchGamepadConfig` は root / gamepad package export から削除済み |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_controllers_do_not_expose_from_config -q` | red | `ProController.from_config` / `JoyConL.from_config` / `JoyConR.from_config` が public class attribute として残っていた |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_controllers_do_not_expose_from_config tests\unit\test_public_api_boundary.py::test_joycon_from_config_requires_matching_joycon_profile tests\unit\test_public_api_boundary.py::test_joycon_from_config_accepts_matching_joycon_profile tests\unit\test_public_api_docstrings.py::test_concrete_controller_docstrings_describe_constructor_arguments -q` | pass | `4 passed`。public `from_config()` は削除し、internal `_from_config()` の profile validation は維持 |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_from_config_output_report_injection_uses_configured_controller_colors tests\integration\test_switch_gamepad_fake_transport.py::test_from_config_uses_profile_controller_colors_when_colors_are_unspecified tests\integration\test_switch_gamepad_fake_transport.py::test_from_config_profile_reaches_periodic_input_report_builder tests\integration\test_switch_gamepad_fake_transport.py::test_from_config_joycon_profile_reaches_device_info_reply -q` | pass | `4 passed`。internal `_from_config()` 経由で既存 regression を維持 |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |

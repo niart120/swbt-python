@@ -73,7 +73,7 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         )
 
     @classmethod
-    def from_config(
+    def _from_config(
         cls,
         config: SwitchGamepadConfig,
         *,
@@ -376,7 +376,7 @@ class JoyConL(_RuntimeBackedGamepad):
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
 
     @classmethod
-    def from_config(
+    def _from_config(
         cls,
         config: SwitchGamepadConfig,
         *,
@@ -398,7 +398,7 @@ class JoyConL(_RuntimeBackedGamepad):
                 invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
         """
         if config.profile.kind is not ControllerKind.JOYCON_LEFT:
-            msg = "JoyConL.from_config requires a Joy-Con L profile"
+            msg = "JoyConL._from_config requires a Joy-Con L profile"
             raise InvalidInputError(msg)
         gamepad = cls.__new__(cls)
         gamepad._init_from_config(
@@ -448,7 +448,7 @@ class JoyConR(_RuntimeBackedGamepad):
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
 
     @classmethod
-    def from_config(
+    def _from_config(
         cls,
         config: SwitchGamepadConfig,
         *,
@@ -470,7 +470,7 @@ class JoyConR(_RuntimeBackedGamepad):
                 invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
         """
         if config.profile.kind is not ControllerKind.JOYCON_RIGHT:
-            msg = "JoyConR.from_config requires a Joy-Con R profile"
+            msg = "JoyConR._from_config requires a Joy-Con R profile"
             raise InvalidInputError(msg)
         gamepad = cls.__new__(cls)
         gamepad._init_from_config(

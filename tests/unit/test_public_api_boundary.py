@@ -24,9 +24,9 @@ from swbt import (
     SwitchGamepad,
 )
 from swbt.gamepad import ConnectionStatus
-from swbt.gamepad._config import SwitchGamepadConfig
 from swbt.gamepad import core as gamepad_core
 from swbt.gamepad import runtime as gamepad_runtime
+from swbt.gamepad._config import SwitchGamepadConfig
 from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
@@ -216,23 +216,28 @@ def test_joycon_public_constructors_are_thin_switch_gamepad_wrappers() -> None:
 
 def test_joycon_from_config_requires_matching_joycon_profile() -> None:
     with pytest.raises(InvalidInputError):
-        JoyConL.from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
+        JoyConL._from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
 
     with pytest.raises(InvalidInputError):
-        JoyConR.from_config(
+        JoyConR._from_config(
             SwitchGamepadConfig(profile=JoyConLeftProfile()),
             transport=FakeHidTransport(),
         )
 
 
 def test_joycon_from_config_accepts_matching_joycon_profile() -> None:
-    pad = JoyConL.from_config(
+    pad = JoyConL._from_config(
         SwitchGamepadConfig(profile=JoyConLeftProfile()),
         transport=FakeHidTransport(),
     )
 
     assert isinstance(pad, JoyConL)
     assert pad.snapshot() == swbt.InputState.neutral()
+
+
+def test_rearchitecture_target_public_controllers_do_not_expose_from_config() -> None:
+    for controller_cls in (ProController, JoyConL, JoyConR):
+        assert not hasattr(controller_cls, "from_config")
 
 
 def test_connection_methods_do_not_accept_key_store_path() -> None:
@@ -334,7 +339,7 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
         monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
 
         key_store_path = tmp_path / "keys.json"
-        pad = ProController.from_config(
+        pad = ProController._from_config(
             SwitchGamepadConfig(
                 adapter="usb:1",
                 device_name="Reference Pad",
@@ -419,7 +424,7 @@ def test_from_config_uses_profile_device_name_unless_user_overrides(
 
         monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
 
-        pad = ProController.from_config(config)
+        pad = ProController._from_config(config)
         await pad.open()
         await pad.close(neutral=True)
 
@@ -471,7 +476,7 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
     monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
 
     async def run(config: SwitchGamepadConfig) -> int:
-        pad = ProController.from_config(config, transport=FakeHidTransport())
+        pad = ProController._from_config(config, transport=FakeHidTransport())
         await pad.open()
         await pad.close(neutral=False)
         return captured_periods[-1]

@@ -183,22 +183,6 @@ def test_concrete_controller_docstrings_describe_constructor_arguments() -> None
         assert constructor_doc is not None
         assert "device_name" not in constructor_doc
 
-    for factory in (ProController.from_config, JoyConL.from_config, JoyConR.from_config):
-        _assert_doc_contains(
-            factory,
-            "Args:",
-            "config",
-            "diagnostics",
-            "transport",
-            "Returns:",
-            "Raises:",
-            "InvalidInputError",
-        )
-
-    pro_from_config_doc = inspect.getdoc(ProController.from_config)
-    assert pro_from_config_doc is not None
-    assert "_RuntimeBackedGamepad" not in pro_from_config_doc
-
 
 def test_transport_extension_docstrings_describe_public_arguments() -> None:
     expected_method_tokens: tuple[tuple[object, tuple[str, ...]], ...] = (
