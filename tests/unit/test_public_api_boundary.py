@@ -32,6 +32,11 @@ if TYPE_CHECKING:
     from swbt.protocol.profile import ControllerProfile
 
 
+REARCHITECTURE_TARGET_XFAIL_REASON = (
+    "target boundary fixed before implementation; unit_040 makes this green"
+)
+
+
 def test_public_api_import_does_not_import_bumble() -> None:
     code = """
 import sys
@@ -111,6 +116,14 @@ def test_switch_gamepad_signature_does_not_expose_bumble_types() -> None:
     )
 
     assert "bumble" not in annotation_text.lower()
+
+
+@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
+def test_rearchitecture_target_switch_gamepad_is_abstract_interface() -> None:
+    assert inspect.isabstract(SwitchGamepad)
+
+    with pytest.raises(TypeError):
+        SwitchGamepad()
 
 
 def test_switch_gamepad_constructor_accepts_key_store_path() -> None:
