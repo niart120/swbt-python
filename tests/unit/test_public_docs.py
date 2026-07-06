@@ -13,7 +13,9 @@ HARDWARE_DOC = DOCS / "hardware.md"
 AGENT_BRIEF = DOCS / "agent-brief.md"
 REARCHITECTURE_OVERVIEW = ROOT / "spec" / "rearchitecture" / "01-design-change-overview.md"
 REARCHITECTURE_POLICY = ROOT / "spec" / "rearchitecture" / "03-public-api-config-profile.md"
-UNIT_038_SPEC = ROOT / "spec" / "wip" / "unit_038" / "REARCHITECTURE_DECISION_BOUNDARY_TESTS.md"
+UNIT_038_SPEC = (
+    ROOT / "spec" / "complete" / "unit_038" / "REARCHITECTURE_DECISION_BOUNDARY_TESTS.md"
+)
 PUBLIC_DOCS = (DOC_INDEX, API_DOC, USAGE_DOC, HARDWARE_DOC, AGENT_BRIEF)
 
 
