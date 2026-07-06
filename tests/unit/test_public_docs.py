@@ -82,7 +82,7 @@ def test_api_doc_covers_top_level_public_exports_and_methods() -> None:
         "Switch UI で Joy-Con として登録",
         "Joy-Con R、reconnect",
         "`None` は controller profile の既定周期",
-        "`None` は controller profile の既定名",
+        "表示名は concrete controller class が内部 profile から選びます",
         "`HidDeviceTransport`",
         "`local_bluetooth_address()`",
     ):
@@ -306,6 +306,7 @@ def test_public_docs_do_not_carry_stale_or_placeholder_wording() -> None:
         "参照してください",
         "JoyConLeftProfile",
         "JoyConRightProfile",
+        'device_name="Pro Controller"',
     ):
         assert stale_token not in text
 

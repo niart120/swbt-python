@@ -83,7 +83,6 @@ pad = ProController(
     adapter="usb:0",
     key_store_path="switch-bond.json",
     report_period_us=8000,
-    device_name="Pro Controller",
     controller_colors=ControllerColors(
         body=0x323232,
         buttons=0xFFFFFF,
@@ -100,7 +99,7 @@ pad = ProController(
 
 `key_store_path` は default Bumble transport が pairing key を保存する JSON key store path です。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに分けてください。`None` は永続 bond を持たない一時的なコントローラーを意味します。
 
-`report_period_us` は periodic input report の送信周期です。`None` は controller profile の既定周期を使います。`device_name` は HID Device として出す表示名です。`None` は controller profile の既定名を使います。
+`report_period_us` は periodic input report の送信周期です。`None` は controller profile の既定周期を使います。HID Device として出す表示名は concrete controller class が内部 profile から選びます。
 
 `controller_colors` は controller body / buttons / left grip / right grip の固定 profile 色です。`None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使います。各 field は独立した既定値を持ちます。この値は作成時に固定し、`set_color()` や `controller_colors=` setter は提供しません。Switch からの SPI read に対して `0x6050` から body、buttons、left grip、right grip を各 3 bytes の順で返します。
 
