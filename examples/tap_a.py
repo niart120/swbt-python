@@ -9,7 +9,7 @@ import argparse
 import asyncio
 from collections.abc import Sequence
 
-from swbt import Button, SwitchGamepad
+from swbt import Button, ProController, SwitchGamepad
 
 
 async def tap_a_once(pad: SwitchGamepad, *, duration: float = 0.08) -> None:
@@ -43,7 +43,7 @@ async def run(
         duration: Seconds to keep Button A pressed.
         allow_pairing: If ``True``, allow first-time pairing when no bond exists.
     """
-    async with SwitchGamepad(adapter=adapter, key_store_path=key_store_path) as pad:
+    async with ProController(adapter=adapter, key_store_path=key_store_path) as pad:
         await pad.connect(
             timeout=connect_timeout,
             allow_pairing=allow_pairing,

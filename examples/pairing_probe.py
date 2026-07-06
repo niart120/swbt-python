@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO
 
-from swbt import DiagnosticsConfig, SwitchGamepad
+from swbt import DiagnosticsConfig, ProController
 
 
 async def run(
@@ -47,7 +47,7 @@ async def _pair_with_trace(
     trace_writer: TextIO,
 ) -> None:
     diagnostics = DiagnosticsConfig(trace_writer=trace_writer)
-    async with SwitchGamepad(
+    async with ProController(
         adapter=adapter,
         key_store_path=key_store_path,
         diagnostics=diagnostics,

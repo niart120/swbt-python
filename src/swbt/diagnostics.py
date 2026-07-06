@@ -9,7 +9,7 @@ from typing import TextIO
 
 @dataclass(frozen=True)
 class DiagnosticsConfig:
-    """Diagnostics configuration accepted by SwitchGamepad.
+    """Diagnostics configuration accepted by concrete gamepads.
 
     Attributes:
         trace_writer: Text stream that receives one JSON Lines diagnostics event per line.
@@ -39,7 +39,7 @@ class DiagnosticsEvent:
 
 @dataclass(frozen=True)
 class GamepadStatus:
-    """Snapshot of gamepad status exposed by SwitchGamepad.status().
+    """Snapshot of gamepad status exposed by ``SwitchGamepad.status()``.
 
     Attributes:
         connection_state: Current lifecycle state name.

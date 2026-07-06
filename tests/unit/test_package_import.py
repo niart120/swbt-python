@@ -5,7 +5,7 @@ import pytest
 import swbt
 
 REARCHITECTURE_TARGET_XFAIL_REASON = (
-    "target boundary fixed before implementation; unit_040 makes this green"
+    "target boundary fixed before implementation; unit_041 or unit_042 makes this green"
 )
 
 
@@ -28,7 +28,9 @@ def test_package_exports_public_gamepad_surface() -> None:
         "InputState",
         "InvalidInputError",
         "InvalidKeyStoreError",
-        "JoyCon",
+        "JoyConL",
+        "JoyConR",
+        "ProController",
         "Stick",
         "SwbtError",
         "SwitchGamepad",
@@ -39,7 +41,6 @@ def test_package_exports_public_gamepad_surface() -> None:
     )
 
 
-@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
 def test_rearchitecture_target_root_exports_controller_api() -> None:
     public_exports = set(swbt.__all__)
 
@@ -49,8 +50,14 @@ def test_rearchitecture_target_root_exports_controller_api() -> None:
         "ProController",
         "SwitchGamepad",
     }.issubset(public_exports)
+    assert "JoyCon" not in public_exports
+
+
+@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
+def test_rearchitecture_target_root_hides_internal_config_and_transport_types() -> None:
+    public_exports = set(swbt.__all__)
+
     assert {
         "HidDeviceTransport",
-        "JoyCon",
         "SwitchGamepadConfig",
     }.isdisjoint(public_exports)

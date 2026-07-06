@@ -28,7 +28,15 @@ class AdapterDiscoveryError(SwbtError):
         libusb_available: bool | None = None,
         bumble_version: str | None = None,
     ) -> None:
-        """Initialize adapter discovery failure metadata."""
+        """Initialize adapter discovery failure metadata.
+
+        Args:
+            message: Human-readable failure message.
+            platform: Host platform string captured at discovery time.
+            backend: Discovery backend identifier.
+            libusb_available: Whether libusb availability is known at the failure point.
+            bumble_version: Installed Bumble package version when available.
+        """
         super().__init__(message)
         self.platform = platform
         self.backend = backend
@@ -71,7 +79,14 @@ class UnsupportedInputError(InvalidInputError):
         buttons: tuple[str, ...] = (),
         sticks: tuple[str, ...] = (),
     ) -> None:
-        """Initialize unsupported input details."""
+        """Initialize unsupported input details.
+
+        Args:
+            message: Human-readable failure message.
+            profile_kind: Controller profile identity that rejected the input.
+            buttons: Unsupported button names.
+            sticks: Unsupported stick side names.
+        """
         super().__init__(message)
         self.profile_kind = profile_kind
         self.buttons = buttons

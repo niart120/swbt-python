@@ -64,9 +64,9 @@ def test_readme_documents_single_joycon_public_api_and_scope() -> None:
 
     for token in (
         "### 単体 Joy-Con L/R",
-        'JoyCon("left", ...)',
-        'JoyCon("right", ...)',
-        "from swbt import Button, JoyCon, Stick",
+        "JoyConL(...)",
+        "JoyConR(...)",
+        "from swbt import Button, JoyConL, Stick",
         'key_store_path="switch-left-joycon-bond.json"',
         "await left.tap(Button.SR, Button.SL)",
         "`UnsupportedInputError`",
@@ -82,6 +82,8 @@ def test_readme_documents_single_joycon_public_api_and_scope() -> None:
 
     assert "JoyConLeftProfile" not in text
     assert "JoyConRightProfile" not in text
+    assert 'JoyCon("' not in text
+    assert "SwitchGamepad(" not in text
 
 
 def test_readme_links_public_docs_with_https_urls() -> None:

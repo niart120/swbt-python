@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from swbt import DiagnosticsConfig, SwitchGamepad
+from swbt import DiagnosticsConfig, ProController
 
 
 @pytest.mark.bumble
@@ -17,7 +17,7 @@ def test_switch_gamepad_open_only_does_not_start_advertising_on_bumble(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )

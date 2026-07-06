@@ -18,7 +18,9 @@ from swbt import (
     ControllerColors,
     DiagnosticsConfig,
     InvalidInputError,
-    JoyCon,
+    JoyConL,
+    JoyConR,
+    ProController,
     SwitchGamepad,
     SwitchGamepadConfig,
 )
@@ -34,7 +36,7 @@ if TYPE_CHECKING:
 
 
 REARCHITECTURE_TARGET_XFAIL_REASON = (
-    "target boundary fixed before implementation; unit_040 makes this green"
+    "target boundary fixed before implementation; unit_041 or unit_042 makes this green"
 )
 
 
@@ -119,7 +121,6 @@ def test_switch_gamepad_signature_does_not_expose_bumble_types() -> None:
     assert "bumble" not in annotation_text.lower()
 
 
-@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
 def test_rearchitecture_target_switch_gamepad_is_abstract_interface() -> None:
     assert inspect.isabstract(SwitchGamepad)
 
@@ -127,7 +128,6 @@ def test_rearchitecture_target_switch_gamepad_is_abstract_interface() -> None:
         SwitchGamepad()
 
 
-@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
 def test_rearchitecture_target_public_concrete_controllers_share_interface() -> None:
     for controller_name in ("ProController", "JoyConL", "JoyConR"):
         controller_cls = getattr(swbt, controller_name)
@@ -154,23 +154,23 @@ def test_rearchitecture_target_public_controller_constructors_hide_internal_seam
         assert forbidden_parameters.isdisjoint(parameters)
 
 
-def test_switch_gamepad_constructor_accepts_key_store_path() -> None:
-    signature = inspect.signature(SwitchGamepad)
+def test_pro_controller_constructor_accepts_key_store_path() -> None:
+    signature = inspect.signature(ProController)
 
     assert "key_store_path" in signature.parameters
 
 
-def test_switch_gamepad_uses_controller_runtime_owner() -> None:
+def test_pro_controller_uses_controller_runtime_owner() -> None:
     transport = FakeHidTransport()
-    pad = SwitchGamepad(transport=transport)
+    pad = ProController(transport=transport)
 
     assert isinstance(pad._runtime, gamepad_core.ControllerRuntime)
     assert pad._runtime._transport is transport
     assert pad.snapshot() == swbt.InputState.neutral()
 
 
-def test_switch_gamepad_constructor_accepts_controller_colors_config() -> None:
-    constructor_signature = inspect.signature(SwitchGamepad)
+def test_pro_controller_constructor_accepts_controller_colors_config() -> None:
+    constructor_signature = inspect.signature(ProController)
     config_fields = {field.name for field in fields(SwitchGamepadConfig)}
     colors = ControllerColors(body=0x112233, buttons=0x445566)
     config = SwitchGamepadConfig(controller_colors=colors)
@@ -195,29 +195,36 @@ def test_switch_gamepad_config_rejects_invalid_profile() -> None:
         SwitchGamepadConfig(profile=cast("ControllerProfile", object()))
 
 
-def test_joycon_public_constructor_is_thin_switch_gamepad_wrapper() -> None:
-    signature = inspect.signature(JoyCon)
+def test_joycon_public_constructors_are_thin_switch_gamepad_wrappers() -> None:
+    for controller_cls in (JoyConL, JoyConR):
+        signature = inspect.signature(controller_cls)
 
-    assert issubclass(JoyCon, SwitchGamepad)
-    assert "side" in signature.parameters
-    assert "adapter" in signature.parameters
-    assert "key_store_path" in signature.parameters
+        assert issubclass(controller_cls, SwitchGamepad)
+        assert "side" not in signature.parameters
+        assert "adapter" in signature.parameters
+        assert "key_store_path" in signature.parameters
     assert "JoyConLeftProfile" not in swbt.__all__
     assert "JoyConRightProfile" not in swbt.__all__
 
 
-def test_joycon_from_config_requires_joycon_profile() -> None:
+def test_joycon_from_config_requires_matching_joycon_profile() -> None:
     with pytest.raises(InvalidInputError):
-        JoyCon.from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
+        JoyConL.from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
+
+    with pytest.raises(InvalidInputError):
+        JoyConR.from_config(
+            SwitchGamepadConfig(profile=JoyConLeftProfile()),
+            transport=FakeHidTransport(),
+        )
 
 
-def test_joycon_from_config_accepts_joycon_profile() -> None:
-    pad = JoyCon.from_config(
+def test_joycon_from_config_accepts_matching_joycon_profile() -> None:
+    pad = JoyConL.from_config(
         SwitchGamepadConfig(profile=JoyConLeftProfile()),
         transport=FakeHidTransport(),
     )
 
-    assert isinstance(pad, JoyCon)
+    assert isinstance(pad, JoyConL)
     assert pad.snapshot() == swbt.InputState.neutral()
 
 
@@ -238,13 +245,13 @@ def test_connection_status_does_not_include_ambiguous_bond() -> None:
 
 def test_default_transport_requires_explicit_adapter() -> None:
     with pytest.raises(InvalidInputError):
-        SwitchGamepad()
+        ProController()
 
 
 @pytest.mark.parametrize("report_period_us", [0, -1])
 def test_switch_gamepad_rejects_non_positive_report_period(report_period_us: int) -> None:
     with pytest.raises(InvalidInputError):
-        SwitchGamepad(adapter="usb:0", report_period_us=report_period_us)
+        ProController(adapter="usb:0", report_period_us=report_period_us)
 
 
 def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
@@ -320,7 +327,7 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
         monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
 
         key_store_path = tmp_path / "keys.json"
-        pad = SwitchGamepad.from_config(
+        pad = ProController.from_config(
             SwitchGamepadConfig(
                 adapter="usb:1",
                 device_name="Reference Pad",
@@ -405,7 +412,7 @@ def test_from_config_uses_profile_device_name_unless_user_overrides(
 
         monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
 
-        pad = SwitchGamepad.from_config(config)
+        pad = ProController.from_config(config)
         await pad.open()
         await pad.close(neutral=True)
 
@@ -457,7 +464,7 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
     monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
 
     async def run(config: SwitchGamepadConfig) -> int:
-        pad = SwitchGamepad.from_config(config, transport=FakeHidTransport())
+        pad = ProController.from_config(config, transport=FakeHidTransport())
         await pad.open()
         await pad.close(neutral=False)
         return captured_periods[-1]
@@ -580,7 +587,7 @@ def test_default_transport_without_key_store_records_reconnect_limitation(
 
         monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
 
-        pad = SwitchGamepad(
+        pad = ProController(
             adapter="usb:0",
             diagnostics=DiagnosticsConfig(trace_writer=trace),
         )

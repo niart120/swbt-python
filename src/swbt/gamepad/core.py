@@ -1,19 +1,16 @@
 """Public gamepad API."""
 
-from types import TracebackType
-from typing import Literal
-
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
 from swbt.errors import InvalidInputError
 from swbt.gamepad._config import SwitchGamepadConfig
 from swbt.gamepad.connection import ConnectionResult
+from swbt.gamepad.interface import SwitchGamepad
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.runtime import ControllerRuntime
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.profile import (
     ControllerColors,
     ControllerKind,
-    ControllerProfile,
     JoyConLeftProfile,
     JoyConRightProfile,
 )
@@ -21,10 +18,10 @@ from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
 
 
-class SwitchGamepad:
-    """NX-compatible virtual gamepad API.
+class _RuntimeBackedGamepad(SwitchGamepad):
+    """Runtime-backed concrete gamepad base.
 
-    ``SwitchGamepad`` owns the public API surface and delegates stateful
+    The object owns the public API surface and delegates stateful
     controller work to an internal runtime.
     """
 
@@ -85,8 +82,8 @@ class SwitchGamepad:
         *,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
-    ) -> "SwitchGamepad":
-        """Create a gamepad from an explicit resource configuration.
+    ) -> "_RuntimeBackedGamepad":
+        """Create a concrete gamepad from an explicit resource configuration.
 
         Args:
             config: Resource configuration for the gamepad.
@@ -94,7 +91,7 @@ class SwitchGamepad:
             transport: Optional HID transport instance.
 
         Returns:
-            SwitchGamepad: A gamepad configured from ``config``.
+            SwitchGamepad: A concrete gamepad configured from ``config``.
 
         Raises:
             InvalidInputError: ``config`` is invalid or omits ``adapter`` while no
@@ -115,31 +112,6 @@ class SwitchGamepad:
     @property
     def _output_report_dispatcher(self) -> OutputReportDispatcher:
         return self._runtime._output_report_dispatcher
-
-    async def __aenter__(self) -> "SwitchGamepad":
-        """Open the gamepad for an async context manager.
-
-        Returns:
-            SwitchGamepad: This gamepad after resources have been opened.
-        """
-        await self.open()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        """Close the gamepad when leaving an async context manager.
-
-        Args:
-            exc_type: Exception type from the managed block, if one was raised.
-            exc: Exception instance from the managed block, if one was raised.
-            traceback: Traceback from the managed block, if one was raised.
-        """
-        _ = (exc_type, exc, traceback)
-        await self.close(neutral=True)
 
     async def open(self) -> None:
         """Open the configured transport.
@@ -364,12 +336,15 @@ class SwitchGamepad:
         return self._runtime.snapshot()
 
 
-class JoyCon(SwitchGamepad):
-    """Thin SwitchGamepad wrapper for a single Joy-Con profile."""
+class ProController(_RuntimeBackedGamepad):
+    """Runtime-backed Pro Controller-compatible gamepad."""
+
+
+class JoyConL(_RuntimeBackedGamepad):
+    """Runtime-backed Joy-Con L-compatible gamepad."""
 
     def __init__(
         self,
-        side: Literal["left", "right"],
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
@@ -379,10 +354,9 @@ class JoyCon(SwitchGamepad):
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
     ) -> None:
-        """Create a single left or right Joy-Con-compatible SwitchGamepad.
+        """Create a left Joy-Con-compatible gamepad.
 
         Args:
-            side: ``"left"`` for Joy-Con (L) or ``"right"`` for Joy-Con (R).
             adapter: Bumble adapter moniker used when the default transport is created.
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
@@ -394,14 +368,13 @@ class JoyCon(SwitchGamepad):
                 transport is created by the constructor.
 
         Raises:
-            InvalidInputError: ``side`` is not ``"left"`` or ``"right"``, ``adapter``
-                is omitted for the default transport, or ``report_period_us`` is not
-                positive.
+            InvalidInputError: ``adapter`` is omitted for the default transport or
+                ``report_period_us`` is not positive.
         """
         config = SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
-            profile=_joycon_profile(side),
+            profile=JoyConLeftProfile(),
             report_period_us=report_period_us,
             device_name=device_name,
             controller_colors=controller_colors,
@@ -415,19 +388,23 @@ class JoyCon(SwitchGamepad):
         *,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
-    ) -> "JoyCon":
-        """Create a JoyCon from an explicit Joy-Con resource configuration.
+    ) -> "JoyConL":
+        """Create a left Joy-Con from an explicit resource configuration.
 
         Args:
-            config: Resource configuration with a left or right Joy-Con profile.
+            config: Resource configuration whose profile must be Joy-Con L.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance.
 
+        Returns:
+            JoyConL: A left Joy-Con configured from ``config``.
+
         Raises:
-            InvalidInputError: ``config.profile`` is not a Joy-Con profile.
+            InvalidInputError: ``config`` does not contain a Joy-Con L profile, is
+                invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
         """
-        if config.profile.kind not in (ControllerKind.JOYCON_LEFT, ControllerKind.JOYCON_RIGHT):
-            msg = "JoyCon.from_config requires a Joy-Con profile"
+        if config.profile.kind is not ControllerKind.JOYCON_LEFT:
+            msg = "JoyConL.from_config requires a Joy-Con L profile"
             raise InvalidInputError(msg)
         gamepad = cls.__new__(cls)
         gamepad._init_from_config(
@@ -438,13 +415,76 @@ class JoyCon(SwitchGamepad):
         return gamepad
 
 
-def _joycon_profile(side: object) -> ControllerProfile:
-    if not isinstance(side, str):
-        msg = "side must be 'left' or 'right'"
-        raise InvalidInputError(msg)
-    if side == "left":
-        return JoyConLeftProfile()
-    if side == "right":
-        return JoyConRightProfile()
-    msg = "side must be 'left' or 'right'"
-    raise InvalidInputError(msg)
+class JoyConR(_RuntimeBackedGamepad):
+    """Runtime-backed Joy-Con R-compatible gamepad."""
+
+    def __init__(
+        self,
+        *,
+        adapter: str | None = None,
+        key_store_path: str | None = None,
+        report_period_us: int | None = None,
+        device_name: str | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> None:
+        """Create a right Joy-Con-compatible gamepad.
+
+        Args:
+            adapter: Bumble adapter moniker used when the default transport is created.
+                Required unless a custom transport is supplied.
+            key_store_path: Optional path used by the default transport to persist keys.
+            report_period_us: Optional periodic input report interval in microseconds.
+            device_name: Optional HID device name passed to the default transport.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance. When supplied, no Bumble
+                transport is created by the constructor.
+
+        Raises:
+            InvalidInputError: ``adapter`` is omitted for the default transport or
+                ``report_period_us`` is not positive.
+        """
+        config = SwitchGamepadConfig(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            profile=JoyConRightProfile(),
+            report_period_us=report_period_us,
+            device_name=device_name,
+            controller_colors=controller_colors,
+        )
+        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+
+    @classmethod
+    def from_config(
+        cls,
+        config: SwitchGamepadConfig,
+        *,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> "JoyConR":
+        """Create a right Joy-Con from an explicit resource configuration.
+
+        Args:
+            config: Resource configuration whose profile must be Joy-Con R.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance.
+
+        Returns:
+            JoyConR: A right Joy-Con configured from ``config``.
+
+        Raises:
+            InvalidInputError: ``config`` does not contain a Joy-Con R profile, is
+                invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
+        """
+        if config.profile.kind is not ControllerKind.JOYCON_RIGHT:
+            msg = "JoyConR.from_config requires a Joy-Con R profile"
+            raise InvalidInputError(msg)
+        gamepad = cls.__new__(cls)
+        gamepad._init_from_config(
+            config,
+            diagnostics=diagnostics,
+            transport=transport,
+        )
+        return gamepad

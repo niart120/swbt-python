@@ -37,11 +37,11 @@ uv sync --dev
 
 ```python
 import asyncio
-from swbt import Button, SwitchGamepad
+from swbt import Button, ProController
 
 
 async def main() -> None:
-    async with SwitchGamepad(
+    async with ProController(
         adapter="usb:0",
         key_store_path="switch-bond.json",
     ) as pad:
@@ -62,16 +62,15 @@ asyncio.run(main())
 
 ### 単体 Joy-Con L/R
 
-単体 Joy-Con 相当の仮想デバイスは `JoyCon("left", ...)` または `JoyCon("right", ...)` で作ります。接続、入力、`close()` の契約は `SwitchGamepad` と同じです。
+単体 Joy-Con 相当の仮想デバイスは `JoyConL(...)` または `JoyConR(...)` で作ります。接続、入力、`close()` の契約は `SwitchGamepad` interface と同じです。
 
 ```python
 import asyncio
-from swbt import Button, JoyCon, Stick
+from swbt import Button, JoyConL, Stick
 
 
 async def main() -> None:
-    async with JoyCon(
-        "left",
+    async with JoyConL(
         adapter="usb:0",
         key_store_path="switch-left-joycon-bond.json",
     ) as left:

@@ -3,23 +3,22 @@
 Use public imports:
 
 ```python
-from swbt import Button, InputState, Stick, SwitchGamepad
-from swbt import JoyCon
+from swbt import Button, InputState, JoyConL, JoyConR, ProController, Stick, SwitchGamepad
 ```
 
 Prefer this minimal pattern:
 
 ```python
-async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
     await pad.connect(timeout=30.0, allow_pairing=True)
     await pad.tap(Button.A)
     await pad.neutral()
 ```
 
-For a single Joy-Con L/R, use `JoyCon("left", ...)` or `JoyCon("right", ...)`:
+For a single Joy-Con L/R, use `JoyConL(...)` or `JoyConR(...)`:
 
 ```python
-async with JoyCon("left", adapter="usb:0", key_store_path="switch-left-joycon-bond.json") as left:
+async with JoyConL(adapter="usb:0", key_store_path="switch-left-joycon-bond.json") as left:
     await left.connect(timeout=30.0, allow_pairing=True)
     await left.tap(Button.L)
     await left.neutral()
@@ -41,11 +40,12 @@ Rules:
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
 - Use a separate `key_store_path` for Pro Controller, Joy-Con L, and Joy-Con R profiles, even when the target device is the same.
 - Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`: left does not support right stick or A/B/X/Y, right does not support left stick or D-pad.
+- Use `SwitchGamepad` as a shared type annotation only; instantiate `ProController`, `JoyConL`, or `JoyConR`.
 - Do not assume `press()` / `release()` / `lstick()` / `rstick()` / `sticks()` / `imu()` / `neutral()` send immediately.
 - Do not pass tuples or raw tuples to stick APIs.
 - Do not invent `pad.gyro()` or `pad.accel()`.
 - Do not invent `hold()`, `sequence()`, `send_current_input()`, fluent builder APIs, or macro helpers.
 - Do not invent `JoyConPair`; paired left/right Joy-Con support is not implemented.
-- Do not show low-level Joy-Con profile classes in user-facing examples.
+- Do not show low-level Joy-Con profile classes or the removed side-string Joy-Con wrapper in user-facing examples.
 - Do not import internal modules unless writing tests or custom transport code.
 - Do not present Joy-Con real-device compatibility, exact SDP parity, Linux, macOS, other dongles, other firmware, or pairing-free incoming bond reuse as confirmed.

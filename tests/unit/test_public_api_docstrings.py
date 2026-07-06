@@ -5,12 +5,17 @@ import inspect
 from swbt import (
     AdapterDiscoveryError,
     AdapterInfo,
+    BondedPeer,
     ControllerColors,
     DiagnosticsConfig,
+    DisconnectRequestResult,
     GamepadStatus,
+    HidDeviceTransport,
     IMUFrame,
     InputState,
-    JoyCon,
+    JoyConL,
+    JoyConR,
+    ProController,
     Stick,
     SwitchGamepad,
     SwitchGamepadConfig,
@@ -30,6 +35,8 @@ def _assert_doc_contains(obj: object, *tokens: str) -> None:
 def test_public_value_object_docstrings_describe_attributes_and_factory_returns() -> None:
     for cls, attributes in (
         (ConnectionResult, ("route", "status", "peer_address", "peer_count")),
+        (DisconnectRequestResult, ("status", "channels", "reason", "error_type", "message")),
+        (BondedPeer, ("address",)),
         (
             AdapterInfo,
             (
@@ -95,8 +102,61 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
 
 
 def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors() -> None:
+    _assert_doc_contains(SwitchGamepad, "abstract", "ProController", "JoyConL", "JoyConR")
+
+    expected_method_tokens: tuple[tuple[object, tuple[str, ...]], ...] = (
+        (SwitchGamepad.__aenter__, ("Returns:", "SwitchGamepad")),
+        (SwitchGamepad.__aexit__, ("Args:", "exc_type", "exc", "traceback")),
+        (SwitchGamepad.open, ("Open", "transport", "Raises:")),
+        (
+            SwitchGamepad.pair,
+            ("pairing", "connection", "Args:", "timeout", "Raises:"),
+        ),
+        (SwitchGamepad.reconnect, ("Reconnect", "bonded peer", "Args:", "timeout", "Raises:")),
+        (
+            SwitchGamepad.try_reconnect,
+            ("Try", "bonded peer", "Args:", "timeout", "Returns:", "ConnectionResult"),
+        ),
+        (
+            SwitchGamepad.connect,
+            ("Connect", "pairing fallback", "Args:", "timeout", "allow_pairing", "Raises:"),
+        ),
+        (
+            SwitchGamepad.try_connect,
+            (
+                "Try",
+                "pairing fallback",
+                "Args:",
+                "timeout",
+                "allow_pairing",
+                "Returns:",
+                "ConnectionResult",
+            ),
+        ),
+        (SwitchGamepad.close, ("Close", "transport", "Args:", "neutral")),
+        (SwitchGamepad.press, ("buttons", "input state", "Args:", "buttons")),
+        (SwitchGamepad.apply, ("input state", "Args:", "state")),
+        (SwitchGamepad.sticks, ("stick positions", "Args:", "left", "right")),
+        (SwitchGamepad.lstick, ("left stick", "Args:", "stick")),
+        (SwitchGamepad.rstick, ("right stick", "Args:", "stick")),
+        (SwitchGamepad.imu, ("IMU", "Args:", "frames")),
+        (SwitchGamepad.release, ("buttons", "input state", "Args:", "buttons")),
+        (SwitchGamepad.neutral, ("InputState.neutral()", "without immediate transmission")),
+        (
+            SwitchGamepad.tap,
+            ("connected button action", "Args:", "buttons", "duration", "Raises:"),
+        ),
+        (SwitchGamepad.status, ("gamepad status", "Returns:", "GamepadStatus")),
+        (SwitchGamepad.snapshot, ("input state", "Returns:", "InputState")),
+    )
+
+    for method, tokens in expected_method_tokens:
+        _assert_doc_contains(method, *tokens)
+
+
+def test_concrete_controller_docstrings_describe_constructor_arguments() -> None:
     _assert_doc_contains(
-        SwitchGamepad.__init__,
+        ProController.__init__,
         "Args:",
         "adapter",
         "key_store_path",
@@ -105,57 +165,64 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         "controller_colors",
         "diagnostics",
         "transport",
+        "Raises:",
+        "InvalidInputError",
     )
 
+    for controller_cls in (JoyConL, JoyConR):
+        _assert_doc_contains(
+            controller_cls.__init__,
+            "Args:",
+            "adapter",
+            "key_store_path",
+            "report_period_us",
+            "device_name",
+            "controller_colors",
+            "diagnostics",
+            "transport",
+            "Raises:",
+            "InvalidInputError",
+        )
+
+    for factory in (ProController.from_config, JoyConL.from_config, JoyConR.from_config):
+        _assert_doc_contains(
+            factory,
+            "Args:",
+            "config",
+            "diagnostics",
+            "transport",
+            "Returns:",
+            "Raises:",
+            "InvalidInputError",
+        )
+
+    pro_from_config_doc = inspect.getdoc(ProController.from_config)
+    assert pro_from_config_doc is not None
+    assert "_RuntimeBackedGamepad" not in pro_from_config_doc
+
+
+def test_transport_extension_docstrings_describe_public_arguments() -> None:
     expected_method_tokens: tuple[tuple[object, tuple[str, ...]], ...] = (
-        (SwitchGamepad.__aenter__, ("Returns:", "SwitchGamepad")),
-        (SwitchGamepad.open, ("Raises:", "TransportOpenError")),
-        (SwitchGamepad.from_config, ("Args:", "config", "Returns:", "SwitchGamepad")),
+        (HidDeviceTransport.open, ("Open", "Raises:")),
+        (HidDeviceTransport.start_advertising, ("host-discoverable", "Raises:")),
+        (HidDeviceTransport.close, ("Close", "transport resources")),
+        (HidDeviceTransport.request_disconnect, ("Returns:", "DisconnectRequestResult")),
+        (HidDeviceTransport.local_bluetooth_address, ("Returns:", "bytes | None")),
         (
-            SwitchGamepad.pair,
-            ("Args:", "timeout", "Raises:", "ConnectionTimeoutError"),
-        ),
-        (SwitchGamepad.reconnect, ("Args:", "timeout", "Raises:", "ConnectionFailedError")),
-        (SwitchGamepad.try_reconnect, ("Args:", "timeout", "Returns:", "ConnectionResult")),
-        (
-            SwitchGamepad.connect,
-            ("Args:", "timeout", "allow_pairing", "Raises:", "ConnectionFailedError"),
+            HidDeviceTransport.list_bonded_peers,
+            ("Returns:", "BondedPeer", "Raises:", "InvalidKeyStoreError"),
         ),
         (
-            SwitchGamepad.try_connect,
-            ("Args:", "timeout", "allow_pairing", "Returns:", "ConnectionResult"),
+            HidDeviceTransport.connect_bonded_peer,
+            ("Args:", "peer_address", "connect_timeout", "Raises:"),
         ),
-        (SwitchGamepad.close, ("Args:", "neutral")),
-        (SwitchGamepad.press, ("Args:", "buttons", "does not send")),
-        (SwitchGamepad.apply, ("Args:", "state", "does not send")),
-        (SwitchGamepad.sticks, ("Args:", "left", "right", "does not send")),
-        (SwitchGamepad.lstick, ("Args:", "stick", "left stick", "does not send")),
-        (SwitchGamepad.rstick, ("Args:", "stick", "right stick", "does not send")),
-        (SwitchGamepad.imu, ("Args:", "frames", "IMU", "does not send")),
-        (SwitchGamepad.release, ("Args:", "buttons", "does not send")),
-        (SwitchGamepad.neutral, ("InputState.neutral()", "without immediate transmission")),
-        (
-            SwitchGamepad.tap,
-            ("Args:", "buttons", "duration", "Raises:", "ClosedError", "immediate", "preserving"),
-        ),
-        (SwitchGamepad.status, ("Returns:", "GamepadStatus")),
-        (SwitchGamepad.snapshot, ("Returns:", "InputState")),
+        (HidDeviceTransport.send_interrupt, ("Args:", "payload", "Raises:")),
+        (HidDeviceTransport.send_control, ("Args:", "payload", "Raises:")),
+        (HidDeviceTransport.on_interrupt_data, ("Args:", "callback")),
+        (HidDeviceTransport.on_control_data, ("Args:", "callback")),
+        (HidDeviceTransport.on_connected, ("Args:", "callback")),
+        (HidDeviceTransport.on_disconnected, ("Args:", "callback")),
     )
 
     for method, tokens in expected_method_tokens:
         _assert_doc_contains(method, *tokens)
-
-
-def test_joycon_docstring_describes_side_and_switch_gamepad_contract() -> None:
-    _assert_doc_contains(
-        JoyCon.__init__,
-        "Args:",
-        "side",
-        '"left"',
-        '"right"',
-        "adapter",
-        "key_store_path",
-        "transport",
-        "Raises:",
-        "InvalidInputError",
-    )

@@ -101,7 +101,7 @@ for info in list_adapters():
     print(info.name, info.aliases)
 ```
 
-`info.name` は `SwitchGamepad(adapter=info.name)` に渡す値です。`list_adapters()` は専用 USB Bluetooth dongle 候補を列挙します。対象機器本体や周辺 Bluetooth host は列挙しません。
+`info.name` は `ProController(adapter=info.name)` など concrete controller の `adapter` に渡す値です。`list_adapters()` は専用 USB Bluetooth dongle 候補を列挙します。対象機器本体や周辺 Bluetooth host は列挙しません。
 
 CLI から確認する場合は `swbt-probe adapters --json` を使います。
 
@@ -115,7 +115,7 @@ swbt-probe adapters --json
 
 ## Pairing And Reconnect
 
-`key_store_path` は pairing 情報を保存する JSON key store path です。保存済み bond を使う場合は `SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json")` のように指定します。
+`key_store_path` は pairing 情報を保存する JSON key store path です。保存済み bond を使う場合は `ProController(adapter="usb:0", key_store_path="switch-bond.json")` のように指定します。
 
 ### Profile-specific Key Stores
 

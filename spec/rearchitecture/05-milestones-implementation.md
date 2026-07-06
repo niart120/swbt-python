@@ -77,7 +77,7 @@ Files:
 
 ```text
 src/swbt/gamepad/interface.py
-src/swbt/gamepad/controllers.py
+src/swbt/gamepad/core.py
 src/swbt/gamepad/__init__.py
 src/swbt/__init__.py
 tests/unit/test_public_api_boundary.py
@@ -86,7 +86,7 @@ tests/unit/test_public_api_boundary.py
 Work items:
 
 - `src/swbt/gamepad/interface.py` に abstract `SwitchGamepad` を追加する。
-- `src/swbt/gamepad/controllers.py` に `ProController`、`JoyConL`、`JoyConR`、private `_RuntimeBackedGamepad` を追加する。
+- `src/swbt/gamepad/core.py` に `ProController`、`JoyConL`、`JoyConR`、private `_RuntimeBackedGamepad` を追加する。
 - Root export から `JoyCon` を削除する。
 - Root export から `SwitchGamepadConfig` を削除する。
 - Root export から `HidDeviceTransport` を削除する。
@@ -264,7 +264,7 @@ transport=FakeHidTransport
 |---|---|---|---|
 | M0 | unit_038 | `spec/complete/unit_038/REARCHITECTURE_DECISION_BOUNDARY_TESTS.md` | decision freeze と target public boundary tests |
 | M1 | unit_039 | `spec/complete/unit_039/CONTROLLER_RUNTIME_EXTRACTION.md` | behavior-preserving runtime extraction |
-| M2 | unit_040 | `spec/wip/unit_040/PUBLIC_CONTROLLER_API_MODEL.md` | `SwitchGamepad` abstract interface と public concrete controller API |
+| M2 | unit_040 | `spec/complete/unit_040/PUBLIC_CONTROLLER_API_MODEL.md` | `SwitchGamepad` abstract interface と public concrete controller API |
 | M3 | unit_041 | `spec/wip/unit_041/CONTROLLER_CONFIG_PROFILE_OWNERSHIP.md` | public config / profile injection cleanup |
 | M4 | unit_042 | `spec/wip/unit_042/INTERNAL_TRANSPORT_FACTORY.md` | public `transport=` removal and internal transport factory |
 | M5 | unit_043 | `spec/wip/unit_043/PROTOCOL_PROFILE_MODULE_SPLIT.md` | profile module split and `ControllerKind` branch localization |

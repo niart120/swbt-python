@@ -6,7 +6,7 @@ from typing import Any, TextIO
 
 import pytest
 
-from swbt import ControllerColors, DiagnosticsConfig, InputState, SwitchGamepad
+from swbt import ControllerColors, DiagnosticsConfig, InputState, ProController
 from swbt.protocol.output_report import OutputReport
 from swbt.protocol.subcommand import SubcommandResponder
 
@@ -62,7 +62,7 @@ def test_switch_reads_sentinel_controller_color_profile(
             )
             sys.stderr.flush()
 
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 controller_colors=expected_colors,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -166,7 +166,7 @@ def test_switch_reads_sentinel_controller_color_profile_with_zero_tail_byte(
             )
             sys.stderr.flush()
 
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 controller_colors=expected_colors,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -277,7 +277,7 @@ def test_switch_reads_sentinel_controller_color_profile_with_device_info_address
             )
             sys.stderr.flush()
 
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 controller_colors=expected_colors,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -390,7 +390,7 @@ def test_switch_reads_sentinel_controller_color_profile_with_device_info_tail_0x
             )
             sys.stderr.flush()
 
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 controller_colors=expected_colors,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -565,7 +565,7 @@ class RecordingSubcommandResponder(SubcommandResponder):
 
 
 def _install_spi_probe(
-    pad: SwitchGamepad,
+    pad: ProController,
     trace: TextIO,
     *,
     controller_color_tail_byte: int | None = None,

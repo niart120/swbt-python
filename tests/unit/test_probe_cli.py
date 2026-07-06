@@ -227,7 +227,7 @@ def test_swbt_probe_pair_writes_trace_with_injected_gamepad(
             self._trace_writer.write(json.dumps({"event": event}, sort_keys=True))
             self._trace_writer.write("\n")
 
-    monkeypatch.setattr(probe_module, "SwitchGamepad", FakeGamepad)
+    monkeypatch.setattr(probe_module, "ProController", FakeGamepad)
 
     trace_path = tmp_path / "pair-trace.jsonl"
     exit_code = probe_module.main(

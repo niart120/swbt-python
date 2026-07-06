@@ -5,7 +5,7 @@ from typing import Any, TextIO
 
 import pytest
 
-from swbt import Button, DiagnosticsConfig, InputState, SwitchGamepad
+from swbt import Button, DiagnosticsConfig, InputState, ProController
 
 
 @pytest.mark.hardware
@@ -22,7 +22,7 @@ def test_switch_close_requests_disconnect_after_neutral(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
@@ -92,7 +92,7 @@ def test_switch_close_after_full_handshake_and_a_exit_for_manual_ui_confirmation
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
@@ -256,7 +256,7 @@ async def _wait_for_full_handshake(trace_path: Path, *, timeout_seconds: float) 
 
 
 async def _wait_for_report_counter(
-    pad: SwitchGamepad,
+    pad: ProController,
     *,
     report_id: int,
     minimum_count: int,
