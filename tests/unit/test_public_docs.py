@@ -11,6 +11,11 @@ API_DOC = DOCS / "api.md"
 USAGE_DOC = DOCS / "usage.md"
 HARDWARE_DOC = DOCS / "hardware.md"
 AGENT_BRIEF = DOCS / "agent-brief.md"
+REARCHITECTURE_OVERVIEW = ROOT / "spec" / "rearchitecture" / "01-design-change-overview.md"
+REARCHITECTURE_POLICY = ROOT / "spec" / "rearchitecture" / "03-public-api-config-profile.md"
+UNIT_038_SPEC = (
+    ROOT / "spec" / "complete" / "unit_038" / "REARCHITECTURE_DECISION_BOUNDARY_TESTS.md"
+)
 PUBLIC_DOCS = (DOC_INDEX, API_DOC, USAGE_DOC, HARDWARE_DOC, AGENT_BRIEF)
 
 
@@ -298,3 +303,17 @@ def test_public_docs_do_not_carry_stale_or_placeholder_wording() -> None:
         "JoyConRightProfile",
     ):
         assert stale_token not in text
+
+
+def test_rearchitecture_records_transport_removal_as_breaking_change() -> None:
+    api_text = _read(API_DOC)
+    overview_text = _read(REARCHITECTURE_OVERVIEW)
+    policy_text = _read(REARCHITECTURE_POLICY)
+    unit_text = _read(UNIT_038_SPEC)
+
+    assert "`HidDeviceTransport` は custom transport 用の public extension point" in api_text
+    assert "この変更は breaking change とする" in overview_text
+    assert "test / power user 用に `transport=` を残す" in overview_text
+    assert "Public constructor からは消す" in overview_text
+    assert "custom transport が削除対象の breaking API" in unit_text
+    assert "transport=FakeHidTransport()    internal tests only" in policy_text

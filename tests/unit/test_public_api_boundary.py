@@ -32,6 +32,11 @@ if TYPE_CHECKING:
     from swbt.protocol.profile import ControllerProfile
 
 
+REARCHITECTURE_TARGET_XFAIL_REASON = (
+    "target boundary fixed before implementation; unit_040 makes this green"
+)
+
+
 def test_public_api_import_does_not_import_bumble() -> None:
     code = """
 import sys
@@ -111,6 +116,41 @@ def test_switch_gamepad_signature_does_not_expose_bumble_types() -> None:
     )
 
     assert "bumble" not in annotation_text.lower()
+
+
+@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
+def test_rearchitecture_target_switch_gamepad_is_abstract_interface() -> None:
+    assert inspect.isabstract(SwitchGamepad)
+
+    with pytest.raises(TypeError):
+        SwitchGamepad()
+
+
+@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
+def test_rearchitecture_target_public_concrete_controllers_share_interface() -> None:
+    for controller_name in ("ProController", "JoyConL", "JoyConR"):
+        controller_cls = getattr(swbt, controller_name)
+
+        assert issubclass(controller_cls, SwitchGamepad)
+
+
+@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
+def test_rearchitecture_target_public_controller_constructors_hide_internal_seams() -> None:
+    expected_parameters = {
+        "adapter",
+        "controller_colors",
+        "diagnostics",
+        "key_store_path",
+        "report_period_us",
+    }
+    forbidden_parameters = {"device_name", "profile", "transport"}
+
+    for controller_name in ("ProController", "JoyConL", "JoyConR"):
+        controller_cls = getattr(swbt, controller_name)
+        parameters = set(inspect.signature(controller_cls).parameters)
+
+        assert expected_parameters.issubset(parameters)
+        assert forbidden_parameters.isdisjoint(parameters)
 
 
 def test_switch_gamepad_constructor_accepts_key_store_path() -> None:
