@@ -1,4 +1,6 @@
 import importlib
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,31 @@ from swbt.gamepad.transport_factory import (
 )
 from swbt.protocol.profile import ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
+
+
+def test_importing_transport_factory_does_not_import_bumble() -> None:
+    code = """
+import sys
+
+import swbt.gamepad.transport_factory
+
+imported_bumble_modules = [
+    module_name
+    for module_name in sys.modules
+    if module_name == "bumble" or module_name.startswith("bumble.")
+]
+if imported_bumble_modules:
+    raise AssertionError(imported_bumble_modules)
+"""
+
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_default_transport_factory_passes_resource_config_to_bumble_transport(

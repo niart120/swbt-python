@@ -1,6 +1,7 @@
 import asyncio
 import json
 import platform
+from collections.abc import Callable
 from importlib import metadata
 from io import StringIO
 from pathlib import Path
@@ -21,6 +22,7 @@ from swbt import (
     Stick,
     SwitchGamepad,
 )
+from swbt._testing.gamepad import make_joycon_l, make_joycon_r, make_pro_controller
 from swbt.errors import (
     ClosedError,
     ConnectionFailedError,
@@ -34,10 +36,10 @@ from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
 
 
-def _joycon_class(side: Literal["left", "right"]) -> type[JoyConL] | type[JoyConR]:
+def _joycon_class(side: Literal["left", "right"]) -> Callable[..., JoyConL | JoyConR]:
     if side == "left":
-        return JoyConL
-    return JoyConR
+        return make_joycon_l
+    return make_joycon_r
 
 
 def _imu_frame_bytes(frame: IMUFrame) -> bytes:
@@ -60,7 +62,7 @@ def test_async_context_opens_and_closes_fake_transport() -> None:
 
         assert transport.is_open is False
 
-        async with ProController(transport=transport):
+        async with make_pro_controller(transport=transport):
             assert transport.is_open is True
             assert transport.open_count == 1
             assert transport.close_count == 0
@@ -81,7 +83,7 @@ def test_pair_starts_advertising_and_waits_for_fake_connection() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             pairing = asyncio.create_task(pad.pair(timeout=1.0))
             await asyncio.sleep(0)
 
@@ -108,7 +110,7 @@ def test_incoming_connection_trace_does_not_use_active_reconnect_events() -> Non
         trace = StringIO()
         transport = FakeHidTransport(bonded_peer_addresses=("01:02:03:04:05:06",))
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
@@ -135,7 +137,7 @@ def test_incoming_connection_trace_does_not_use_active_reconnect_events() -> Non
 def test_open_only_does_not_start_advertising() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        pad = ProController(transport=transport)
+        pad = make_pro_controller(transport=transport)
 
         await pad.open()
 
@@ -153,7 +155,7 @@ def test_key_store_path_is_recorded_in_run_metadata(tmp_path: Path) -> None:
         trace = StringIO()
         transport = FakeHidTransport()
         key_store_path = tmp_path / "keys.json"
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             key_store_path=str(key_store_path),
             transport=transport,
@@ -192,7 +194,7 @@ def test_key_store_previous_generation_is_recorded_in_run_metadata(tmp_path: Pat
             ),
             encoding="utf-8",
         )
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             key_store_path=str(key_store_path),
             transport=transport,
@@ -221,7 +223,7 @@ def test_try_reconnect_with_injected_transport_skips_default_key_store_warning()
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         )
@@ -241,7 +243,7 @@ def test_injected_transport_is_not_reconfigured_by_switch_gamepad() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(
+        async with make_pro_controller(
             key_store_path="configured-for-metadata.json",
             transport=transport,
         ) as pad:
@@ -258,7 +260,7 @@ def test_async_context_exception_requests_disconnect_and_reraises() -> None:
         """Exception raised inside the gamepad context."""
 
     async def raise_inside_context(transport: FakeHidTransport) -> None:
-        async with ProController(transport=transport):
+        async with make_pro_controller(transport=transport):
             await transport.connect()
             raise ExpectedError
 
@@ -284,7 +286,7 @@ def test_press_buttons_are_reflected_in_periodic_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.press(Button.L, Button.R)
 
@@ -302,7 +304,7 @@ def test_release_buttons_clears_next_periodic_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
 
             await pad.press(Button.L, Button.R)
@@ -322,7 +324,7 @@ def test_release_only_clears_requested_buttons_in_next_periodic_report() -> None
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
 
             await pad.press(Button.A, Button.L, Button.R)
@@ -343,7 +345,7 @@ def test_apply_updates_snapshot_and_next_periodic_report() -> None:
         transport = FakeHidTransport()
         state = InputState.neutral().with_buttons([Button.X])
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.apply(state)
 
@@ -368,7 +370,7 @@ def test_apply_reflects_left_and_right_sticks_in_next_periodic_report() -> None:
             right_stick=Stick.normalized(x=-1.0, y=1.0),
         )
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.apply(state)
 
@@ -389,7 +391,7 @@ def test_sticks_left_updates_only_left_stick_and_preserves_buttons_and_right_sti
         initial = InputState.neutral().with_buttons([Button.A]).with_sticks(right_stick=right_stick)
         left_stick = Stick.normalized(x=1.0, y=-1.0)
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.apply(initial)
 
@@ -415,7 +417,7 @@ def test_sticks_right_updates_only_right_stick_and_preserves_buttons_and_left_st
         initial = InputState.neutral().with_buttons([Button.B]).with_sticks(left_stick=left_stick)
         right_stick = Stick.normalized(x=-1.0, y=1.0)
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.apply(initial)
 
@@ -440,7 +442,7 @@ def test_sticks_updates_left_and_right_in_same_committed_state() -> None:
         left_stick = Stick.normalized(x=1.0, y=-1.0)
         right_stick = Stick.normalized(x=-1.0, y=1.0)
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
 
             await pad.sticks(left=left_stick, right=right_stick)
@@ -467,7 +469,7 @@ def test_lstick_updates_only_left_stick_and_preserves_buttons_and_right_stick() 
         initial = InputState.neutral().with_buttons([Button.A]).with_sticks(right_stick=right_stick)
         left_stick = Stick.up()
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.apply(initial)
 
@@ -493,7 +495,7 @@ def test_rstick_updates_only_right_stick_and_preserves_buttons_and_left_stick() 
         initial = InputState.neutral().with_buttons([Button.B]).with_sticks(left_stick=left_stick)
         right_stick = Stick.down()
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.apply(initial)
 
@@ -516,7 +518,7 @@ def test_sticks_rejects_tuple_inputs() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             with pytest.raises(InvalidInputError):
                 await pad.sticks(left=cast("Stick", (0.0, 1.0)))
 
@@ -530,7 +532,7 @@ def test_lstick_and_rstick_reject_tuple_inputs() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             with pytest.raises(InvalidInputError):
                 await pad.lstick(cast("Stick", (0.0, 1.0)))
 
@@ -555,7 +557,7 @@ def test_imu_updates_repeat_frame_and_preserves_buttons_and_sticks() -> None:
         )
         frame = IMUFrame.raw(accel=(1, -2, 4096), gyro=(100, -100, 0))
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.apply(initial)
 
@@ -584,7 +586,7 @@ def test_imu_updates_three_frames_in_order() -> None:
             IMUFrame.gyro(140, 0, 0),
         )
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
 
             await pad.imu(*frames)
@@ -602,7 +604,7 @@ def test_imu_rejects_invalid_frame_counts_and_types() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             with pytest.raises(InvalidInputError):
                 await pad.imu()
 
@@ -620,7 +622,7 @@ def test_imu_rejects_invalid_frame_counts_and_types() -> None:
 
 def test_state_update_apis_do_not_require_connection() -> None:
     async def run() -> None:
-        pad = ProController(transport=FakeHidTransport())
+        pad = make_pro_controller(transport=FakeHidTransport())
         left_stick = Stick.normalized(x=0.0, y=1.0)
         right_stick = Stick.normalized(x=1.0, y=0.0)
         state = InputState.neutral().with_buttons([Button.X])
@@ -641,7 +643,7 @@ def test_state_update_apis_do_not_require_connection() -> None:
 
 def test_joycon_left_press_rejects_unsupported_button_before_commit() -> None:
     async def run() -> None:
-        pad = JoyConL(transport=FakeHidTransport())
+        pad = make_joycon_l(transport=FakeHidTransport())
         await pad.press(Button.L)
         before = pad.snapshot()
 
@@ -655,7 +657,7 @@ def test_joycon_left_press_rejects_unsupported_button_before_commit() -> None:
 
 def test_joycon_right_press_rejects_unsupported_button_before_commit() -> None:
     async def run() -> None:
-        pad = JoyConR(transport=FakeHidTransport())
+        pad = make_joycon_r(transport=FakeHidTransport())
         await pad.press(Button.R)
         before = pad.snapshot()
 
@@ -669,7 +671,7 @@ def test_joycon_right_press_rejects_unsupported_button_before_commit() -> None:
 
 def test_joycon_left_rejects_right_stick_update_before_commit() -> None:
     async def run() -> None:
-        pad = JoyConL(transport=FakeHidTransport())
+        pad = make_joycon_l(transport=FakeHidTransport())
         await pad.lstick(Stick.up())
         before = pad.snapshot()
 
@@ -683,7 +685,7 @@ def test_joycon_left_rejects_right_stick_update_before_commit() -> None:
 
 def test_joycon_right_rejects_left_stick_update_before_commit() -> None:
     async def run() -> None:
-        pad = JoyConR(transport=FakeHidTransport())
+        pad = make_joycon_r(transport=FakeHidTransport())
         await pad.rstick(Stick.right())
         before = pad.snapshot()
 
@@ -697,7 +699,7 @@ def test_joycon_right_rejects_left_stick_update_before_commit() -> None:
 
 def test_joycon_apply_rejects_unsupported_state_before_commit() -> None:
     async def run() -> None:
-        pad = JoyConL(transport=FakeHidTransport())
+        pad = make_joycon_l(transport=FakeHidTransport())
         await pad.apply(InputState.neutral().with_buttons([Button.L]))
         before = pad.snapshot()
         unsupported = InputState.neutral().with_buttons([Button.A])
@@ -714,7 +716,7 @@ def test_state_update_apis_do_not_send_immediate_interrupt_reports() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport, report_period_us=60_000_000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=60_000_000) as pad:
             await transport.connect()
             report_count = len(transport.sent_interrupt_reports)
 
@@ -737,7 +739,7 @@ def test_neutral_updates_snapshot_and_clears_next_periodic_report() -> None:
         transport = FakeHidTransport()
         pressed = InputState.neutral().with_buttons([Button.A])
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.apply(pressed)
             pressed_count = len(transport.sent_interrupt_reports)
@@ -759,7 +761,7 @@ def test_output_report_injection_sends_subcommand_reply() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with ProController(transport=transport, report_period_us=1000):
+        async with make_pro_controller(transport=transport, report_period_us=1000):
             await transport.connect()
 
             await transport.inject_interrupt_data(request_device_info)
@@ -776,7 +778,7 @@ def test_output_report_injection_uses_transport_bluetooth_address_for_device_inf
         transport = FakeHidTransport(local_bluetooth_address=bytes.fromhex("00 1b dc f9 9f 7d"))
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with ProController(transport=transport, report_period_us=1000):
+        async with make_pro_controller(transport=transport, report_period_us=1000):
             await transport.connect()
 
             await transport.inject_interrupt_data(request_device_info)
@@ -799,7 +801,7 @@ def test_pair_refreshes_transport_bluetooth_address_after_advertising_for_device
         transport = AdvertisingAddressTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             pairing = asyncio.create_task(pad.pair(timeout=1.0))
             await asyncio.sleep(0)
 
@@ -823,7 +825,7 @@ def test_output_report_injection_uses_configured_controller_colors() -> None:
         transport = FakeHidTransport()
         request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
 
-        async with ProController(
+        async with make_pro_controller(
             controller_colors=ControllerColors(
                 body=0x112233,
                 buttons=0x445566,
@@ -852,7 +854,7 @@ def test_output_report_injection_uses_default_controller_colors_when_none() -> N
         transport = FakeHidTransport()
         request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
 
-        async with ProController(
+        async with make_pro_controller(
             controller_colors=None,
             transport=transport,
             report_period_us=1000,
@@ -1112,7 +1114,7 @@ def test_control_output_report_injection_sends_subcommand_reply() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with ProController(transport=transport, report_period_us=1000):
+        async with make_pro_controller(transport=transport, report_period_us=1000):
             await transport.connect()
 
             await transport.inject_control_data(request_device_info)
@@ -1129,7 +1131,7 @@ def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with ProController(transport=transport, report_period_us=100_000):
+        async with make_pro_controller(transport=transport, report_period_us=100_000):
             await transport.connect()
 
             start_count = len(transport.sent_interrupt_reports)
@@ -1148,7 +1150,7 @@ def test_report_tx_counter_distinguishes_0x21_and_0x30() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
             report_period_us=1000,
@@ -1188,7 +1190,7 @@ def test_output_report_rx_and_subcommand_rx_share_packet_id() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 12 00 00 00 00 00 00 00 00 02")
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
             report_period_us=1000,
@@ -1227,7 +1229,7 @@ def test_output_report_injection_records_subcommand_session_state() -> None:
         transport = FakeHidTransport()
         request_report_mode = bytes.fromhex("01 21 00 01 40 40 00 01 40 40 03 3f")
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
             report_period_us=1000,
@@ -1261,7 +1263,7 @@ def test_status_returns_report_counters_last_subcommand_and_raw_rumble() -> None
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 2a 10 11 12 13 14 15 16 17 02")
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.tap(Button.A, duration=0)
 
@@ -1280,7 +1282,7 @@ def test_status_returns_report_counters_last_subcommand_and_raw_rumble() -> None
 def test_close_with_neutral_records_trailing_neutral_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        pad = ProController(transport=transport, report_period_us=100_000)
+        pad = make_pro_controller(transport=transport, report_period_us=100_000)
 
         await pad.open()
         await transport.connect()
@@ -1297,7 +1299,7 @@ def test_close_with_neutral_records_trailing_neutral_report() -> None:
 def test_connected_close_requests_disconnect_after_trailing_neutral() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        pad = ProController(transport=transport, report_period_us=100_000)
+        pad = make_pro_controller(transport=transport, report_period_us=100_000)
 
         await pad.open()
         await transport.connect()
@@ -1324,7 +1326,7 @@ def test_close_waits_for_disconnect_request_closed_event_once() -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport(disconnect_request_auto_complete=False)
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
             report_period_us=100_000,
@@ -1370,7 +1372,7 @@ def test_close_request_disconnected_callback_leaves_final_close_to_user_close() 
             disconnect_request_auto_complete=False,
             close_wait=close_wait,
         )
-        pad = ProController(transport=transport, report_period_us=100_000)
+        pad = make_pro_controller(transport=transport, report_period_us=100_000)
 
         await pad.open()
         await transport.connect()
@@ -1414,7 +1416,7 @@ def test_close_request_timeout_records_terminal_state_and_closes_transport(
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport(disconnect_request_auto_complete=False)
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
             report_period_us=100_000,
@@ -1453,7 +1455,7 @@ def test_close_without_connection_records_disconnect_unavailable() -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         )
@@ -1478,7 +1480,7 @@ def test_close_when_transport_already_closed_records_disconnect_unavailable() ->
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         )
@@ -1506,7 +1508,7 @@ def test_close_request_failure_records_failure_and_closes_transport() -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport(disconnect_request_error=RuntimeError("request failed"))
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         )
@@ -1534,7 +1536,7 @@ def test_close_treats_trailing_neutral_send_failure_as_best_effort() -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport(send_interrupt_error=RuntimeError("neutral failed"))
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
             report_period_us=100_000,
@@ -1563,7 +1565,7 @@ def test_close_treats_trailing_neutral_send_failure_as_best_effort() -> None:
 def test_host_disconnect_racing_user_close_closes_once_and_neutralizes_state() -> None:
     async def run() -> None:
         transport = FakeHidTransport(disconnect_request_auto_complete=False)
-        pad = ProController(transport=transport, report_period_us=100_000)
+        pad = make_pro_controller(transport=transport, report_period_us=100_000)
 
         await pad.open()
         await transport.connect()
@@ -1592,7 +1594,7 @@ def test_fake_l2cap_channels_must_both_open_before_connection_is_complete() -> N
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             await transport.open_l2cap_channel("control")
             await asyncio.sleep(0)
 
@@ -1615,7 +1617,7 @@ def test_disconnect_callback_neutralizes_state_and_stops_report_loop() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
             await pad.press(Button.A)
             await transport.wait_for_interrupt_report_id(0x30)
@@ -1639,7 +1641,7 @@ def test_disconnect_with_reconnect_disabled_records_closed_terminal_state() -> N
         trace = StringIO()
         transport = FakeHidTransport(bonded_peer_addresses=("01:02:03:04:05:06",))
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
             report_period_us=1000,
@@ -1667,7 +1669,7 @@ def test_pair_timeout_records_advertising_failure_position_in_trace() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
@@ -1707,7 +1709,7 @@ def test_reconnect_records_bonded_peer_selection_without_advertising(
         trace = StringIO()
         transport = FakeHidTransport(bonded_peer_addresses=peer_addresses)
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
@@ -1747,7 +1749,7 @@ def test_try_reconnect_raises_invalid_key_store_for_multiple_current_peers() -> 
             bonded_peer_addresses=("01:02:03:04:05:06", "0a:0b:0c:0d:0e:0f"),
         )
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             with pytest.raises(InvalidKeyStoreError):
                 await pad.try_reconnect(timeout=0.1)
 
@@ -1762,7 +1764,7 @@ def test_connect_prefers_active_reconnect_when_one_bond_exists() -> None:
         peer_address = "01:02:03:04:05:06"
         transport = FakeHidTransport(bonded_peer_addresses=(peer_address,))
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
@@ -1787,7 +1789,7 @@ def test_try_connect_returns_pairing_result_when_no_bond_and_allowed() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
@@ -1821,7 +1823,7 @@ def test_connect_raises_when_no_bond_and_pairing_not_allowed() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             with pytest.raises(ConnectionFailedError):
                 await pad.connect(timeout=0.1)
 
@@ -1842,7 +1844,7 @@ def test_reconnect_raises_when_reconnect_does_not_connect(
     async def run() -> None:
         transport = FakeHidTransport(bonded_peer_addresses=peer_addresses)
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             with pytest.raises(ConnectionFailedError):
                 await pad.reconnect(timeout=0.1)
 
@@ -1900,7 +1902,7 @@ def test_active_reconnect_failure_records_reason_without_advertising(
             active_reconnect_error=active_reconnect_error,
         )
 
-        async with ProController(
+        async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
@@ -1933,7 +1935,7 @@ def test_active_reconnect_task_cancellation_propagates() -> None:
             active_reconnect_auto_connect=False,
         )
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             reconnect_task = asyncio.create_task(pad.try_reconnect(timeout=None))
             for _ in range(5):
                 if "active_reconnect" in transport.events:
@@ -1952,7 +1954,7 @@ def test_concurrent_press_and_release_preserve_button_state() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport, report_period_us=1000) as pad:
+        async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
 
             await asyncio.gather(
@@ -1978,7 +1980,7 @@ def test_concurrent_press_and_release_preserve_button_state() -> None:
 
 def test_concurrent_press_waiting_on_state_lock_uses_latest_state() -> None:
     async def run() -> None:
-        pad = ProController(transport=FakeHidTransport())
+        pad = make_pro_controller(transport=FakeHidTransport())
         state_lock = pad._state_store._lock
 
         await state_lock.acquire()
@@ -2003,7 +2005,7 @@ def test_callback_exception_is_recorded_and_close_cleans_up() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
         unsupported_subcommand = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 ff")
-        pad = ProController(transport=transport)
+        pad = make_pro_controller(transport=transport)
 
         await pad.open()
         await transport.connect()
@@ -2027,7 +2029,7 @@ def test_callback_exception_is_recorded_in_trace_and_status() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
         unsupported_subcommand = bytes.fromhex("01 2a 00 00 00 00 00 00 00 00 ff 01 02")
-        pad = ProController(
+        pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         )
@@ -2065,7 +2067,7 @@ def test_tap_button_a_records_press_and_release_reports() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             await transport.connect()
 
             await pad.tap(Button.A, duration=0)
@@ -2084,7 +2086,7 @@ def test_tap_releases_only_tapped_button_and_preserves_held_buttons() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             await transport.connect()
             await pad.press(Button.ZL)
 
@@ -2103,7 +2105,7 @@ def test_tap_before_connection_does_not_leave_pressed_state() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             with pytest.raises(ClosedError):
                 await pad.tap(Button.A, duration=0)
 
@@ -2116,7 +2118,7 @@ def test_tap_send_failure_releases_pressed_state() -> None:
     async def run() -> None:
         transport = FakeHidTransport(send_interrupt_error=RuntimeError("send failed"))
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             await transport.connect()
 
             with pytest.raises(RuntimeError, match="send failed"):
@@ -2131,7 +2133,7 @@ def test_fake_connected_callback_sets_connected_status() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
 
-        async with ProController(transport=transport) as pad:
+        async with make_pro_controller(transport=transport) as pad:
             await transport.connect()
 
             assert pad.status().connection_state == "connected"

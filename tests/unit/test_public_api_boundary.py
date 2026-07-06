@@ -143,7 +143,7 @@ def test_rearchitecture_target_public_controller_constructors_hide_config_identi
         "key_store_path",
         "report_period_us",
     }
-    forbidden_parameters = {"device_name", "profile"}
+    forbidden_parameters = {"device_name", "profile", "transport"}
 
     for controller_name in ("ProController", "JoyConL", "JoyConR"):
         controller_cls = getattr(swbt, controller_name)
@@ -153,7 +153,6 @@ def test_rearchitecture_target_public_controller_constructors_hide_config_identi
         assert forbidden_parameters.isdisjoint(parameters)
 
 
-@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
 def test_rearchitecture_target_public_controller_constructors_hide_transport_seam() -> None:
     for controller_name in ("ProController", "JoyConL", "JoyConR"):
         controller_cls = getattr(swbt, controller_name)
@@ -169,7 +168,7 @@ def test_pro_controller_constructor_accepts_key_store_path() -> None:
 
 def test_pro_controller_uses_controller_runtime_owner() -> None:
     transport = FakeHidTransport()
-    pad = ProController(transport=transport)
+    pad = ProController._from_config(SwitchGamepadConfig(), transport=transport)
 
     assert isinstance(pad._runtime, gamepad_core.ControllerRuntime)
     assert pad._runtime._transport is transport
@@ -545,7 +544,7 @@ def test_public_constructor_uses_profile_default_report_period(
     monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
 
     async def run() -> int:
-        pad = ProController(transport=FakeHidTransport())
+        pad = ProController._from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
         await pad.open()
         await pad.close(neutral=False)
         return captured_periods[-1]

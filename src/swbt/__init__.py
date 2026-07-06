@@ -22,12 +22,10 @@ from swbt.gamepad import (
 )
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.profile import ControllerColors
-from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 
 __all__ = (
     "AdapterDiscoveryError",
     "AdapterInfo",
-    "BondedPeer",
     "Button",
     "ClosedError",
     "ConnectionFailedError",
@@ -35,9 +33,7 @@ __all__ = (
     "ConnectionTimeoutError",
     "ControllerColors",
     "DiagnosticsConfig",
-    "DisconnectRequestResult",
     "GamepadStatus",
-    "HidDeviceTransport",
     "IMUFrame",
     "InputState",
     "InvalidInputError",

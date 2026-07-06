@@ -83,13 +83,21 @@ def test_api_doc_covers_top_level_public_exports_and_methods() -> None:
         "Joy-Con R、reconnect",
         "`None` は controller profile の既定周期",
         "表示名は concrete controller class が内部 profile から選びます",
-        "`HidDeviceTransport`",
-        "`local_bluetooth_address()`",
     ):
         assert token in text
 
     assert "set_input" not in text
-    assert "Bumble 型を public API に露出" in text
+    assert "Bumble 型や transport protocol を public API に露出" in text
+    for stale_token in (
+        "`HidDeviceTransport` | custom transport",
+        "`BondedPeer` | transport",
+        "`DisconnectRequestResult` | remote disconnect request",
+        "## Transport Extension Point",
+        "custom transport は",
+        "concrete controller の `transport=...`",
+        "custom transport を注入",
+    ):
+        assert stale_token not in text
 
 
 def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() -> None:
@@ -317,7 +325,8 @@ def test_rearchitecture_records_transport_removal_as_breaking_change() -> None:
     policy_text = _read(REARCHITECTURE_POLICY)
     unit_text = _read(UNIT_038_SPEC)
 
-    assert "`HidDeviceTransport` は custom transport 用の public extension point" in api_text
+    assert "`HidDeviceTransport` は custom transport 用の public extension point" not in api_text
+    assert "## Transport Extension Point" not in api_text
     assert "この変更は breaking change とする" in overview_text
     assert "test / power user 用に `transport=` を残す" in overview_text
     assert "Public constructor からは消す" in overview_text
