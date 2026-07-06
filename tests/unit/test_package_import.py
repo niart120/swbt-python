@@ -4,7 +4,6 @@ import pytest
 
 import swbt
 
-
 REARCHITECTURE_TARGET_XFAIL_REASON = (
     "target boundary fixed before implementation; unit_040 makes this green"
 )
