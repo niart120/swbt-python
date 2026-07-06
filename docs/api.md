@@ -31,7 +31,6 @@ from swbt import (
 | `ProController` | Pro Controller 相当の concrete controller |
 | `JoyConL` | 単体 Joy-Con L 相当の concrete controller |
 | `JoyConR` | 単体 Joy-Con R 相当の concrete controller |
-| `SwitchGamepadConfig` | `from_config()` 用の resource 設定 |
 | `ControllerColors` | controller body / buttons / left grip / right grip の固定 profile 色 |
 | `ConnectionResult` | `try_connect()` / `try_reconnect()` の結果 |
 | `Button` | 対応する各種ボタン |
@@ -104,26 +103,6 @@ pad = ProController(
 `report_period_us` は periodic input report の送信周期です。`None` は controller profile の既定周期を使います。`device_name` は HID Device として出す表示名です。`None` は controller profile の既定名を使います。
 
 `controller_colors` は controller body / buttons / left grip / right grip の固定 profile 色です。`None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使います。各 field は独立した既定値を持ちます。この値は作成時に固定し、`set_color()` や `controller_colors=` setter は提供しません。Switch からの SPI read に対して `0x6050` から body、buttons、left grip、right grip を各 3 bytes の順で返します。
-
-`SwitchGamepadConfig` は同じ resource 設定を値として保持します。
-
-```python
-config = SwitchGamepadConfig(
-    adapter="usb:0",
-    key_store_path="switch-bond.json",
-    report_period_us=8000,
-    device_name="Pro Controller",
-    controller_colors=ControllerColors(
-        body=0x112233,
-        buttons=0x445566,
-        left_grip=0x778899,
-        right_grip=0xAABBCC,
-    ),
-)
-pad = ProController.from_config(config)
-```
-
-`ProController.from_config(config)` は Pro Controller profile の controller を返します。`JoyConL.from_config(config)` と `JoyConR.from_config(config)` は、`config.profile` が左右の profile と一致する場合だけ受け付けます。
 
 ### Resource Scope
 

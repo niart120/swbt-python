@@ -22,9 +22,9 @@ from swbt import (
     JoyConR,
     ProController,
     SwitchGamepad,
-    SwitchGamepadConfig,
 )
 from swbt.gamepad import ConnectionStatus
+from swbt.gamepad._config import SwitchGamepadConfig
 from swbt.gamepad import core as gamepad_core
 from swbt.gamepad import runtime as gamepad_runtime
 from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile

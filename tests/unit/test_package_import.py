@@ -34,7 +34,6 @@ def test_package_exports_public_gamepad_surface() -> None:
         "Stick",
         "SwbtError",
         "SwitchGamepad",
-        "SwitchGamepadConfig",
         "TransportOpenError",
         "UnsupportedInputError",
         "list_adapters",
@@ -54,10 +53,13 @@ def test_rearchitecture_target_root_exports_controller_api() -> None:
 
 
 @pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
-def test_rearchitecture_target_root_hides_internal_config_and_transport_types() -> None:
+def test_rearchitecture_target_root_hides_internal_transport_type() -> None:
     public_exports = set(swbt.__all__)
 
-    assert {
-        "HidDeviceTransport",
-        "SwitchGamepadConfig",
-    }.isdisjoint(public_exports)
+    assert "HidDeviceTransport" not in public_exports
+
+
+def test_rearchitecture_target_root_hides_internal_config_type() -> None:
+    public_exports = set(swbt.__all__)
+
+    assert "SwitchGamepadConfig" not in public_exports

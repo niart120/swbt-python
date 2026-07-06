@@ -18,7 +18,6 @@ from swbt import (
     ProController,
     Stick,
     SwitchGamepad,
-    SwitchGamepadConfig,
     list_adapters,
 )
 from swbt.gamepad import ConnectionResult
@@ -52,10 +51,6 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         (
             AdapterDiscoveryError,
             ("platform", "backend", "libusb_available", "bumble_version"),
-        ),
-        (
-            SwitchGamepadConfig,
-            ("adapter", "key_store_path", "report_period_us", "device_name", "controller_colors"),
         ),
         (DiagnosticsConfig, ("trace_writer",)),
         (

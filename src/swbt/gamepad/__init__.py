@@ -7,7 +7,6 @@ from swbt.gamepad.core import (
     JoyConR,
     ProController,
     SwitchGamepad,
-    SwitchGamepadConfig,
 )
 
 __all__ = (
@@ -18,5 +17,4 @@ __all__ = (
     "JoyConR",
     "ProController",
     "SwitchGamepad",
-    "SwitchGamepadConfig",
 )

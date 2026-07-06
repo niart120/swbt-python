@@ -20,7 +20,6 @@ from swbt import (
     ProController,
     Stick,
     SwitchGamepad,
-    SwitchGamepadConfig,
 )
 from swbt.errors import (
     ClosedError,
@@ -30,6 +29,7 @@ from swbt.errors import (
     InvalidKeyStoreError,
     UnsupportedInputError,
 )
+from swbt.gamepad._config import SwitchGamepadConfig
 from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
 

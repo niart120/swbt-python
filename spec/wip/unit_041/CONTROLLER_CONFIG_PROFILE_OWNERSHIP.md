@@ -76,7 +76,7 @@ public profile injection を消し、controller identity を concrete controller
 |---|---|---|---|---|---|
 | green | concrete controller constructor が `profile` を受け取らない | new | unit | no | signature test |
 | green | concrete controller constructor が `device_name` を受け取らない | new | unit | no | signature test |
-| todo | `SwitchGamepadConfig` が root export されない | new | unit | no | package import test |
+| green | `SwitchGamepadConfig` が root export されない | new | unit | no | package import test |
 | todo | `from_config()` が public path に残っていない | new | unit | no | root / class attribute check |
 | todo | `controller_colors` override が profile default より優先される | regression | unit / integration | no | unit_028 / unit_037 contract |
 | todo | `report_period_us=None` が profile default を使う | regression | unit | no | positive integer validation も維持 |
@@ -108,6 +108,8 @@ profile は identity と protocol fact の束であり、public config ではな
 |---|---|---|
 | `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams tests\unit\test_public_api_docstrings.py::test_concrete_controller_docstrings_describe_constructor_arguments -q` | red | `device_name` が public constructor signature と constructor docstring に残っていた |
 | `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams tests\unit\test_public_api_docstrings.py::test_concrete_controller_docstrings_describe_constructor_arguments -q` | pass | `2 passed`。`profile` / `device_name` は public constructor から消え、constructor docstring からも消えた |
+| `uv run pytest tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface tests\unit\test_package_import.py::test_rearchitecture_target_root_hides_internal_config_type -q` | red | `SwitchGamepadConfig` が root export に残っていた |
+| `uv run pytest tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface tests\unit\test_package_import.py::test_rearchitecture_target_root_hides_internal_config_type -q` | pass | `2 passed`。`SwitchGamepadConfig` は root / gamepad package export から削除済み |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |
