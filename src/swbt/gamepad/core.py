@@ -36,23 +36,18 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
     ) -> None:
         """Create a gamepad object.
 
         Args:
-            adapter: Bumble adapter moniker used when the default transport is created.
-                Required unless a custom transport is supplied.
-            key_store_path: Optional path used by the default transport to persist keys.
+            adapter: Bumble adapter moniker used for the Bluetooth backend.
+            key_store_path: Optional path used by the Bluetooth backend to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
-            transport: Optional HID transport instance. When supplied, no Bumble
-                transport is created by the constructor.
 
         Raises:
-            InvalidInputError: ``adapter`` is omitted for the default transport or
-                ``report_period_us`` is not positive.
+            InvalidInputError: ``adapter`` is omitted or ``report_period_us`` is not positive.
         """
         config = self._controller_spec.build_config(
             adapter=adapter,
@@ -60,7 +55,7 @@ class _RuntimeBackedGamepad(SwitchGamepad):
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )
-        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+        self._init_from_config(config, diagnostics=diagnostics, transport=None)
 
     def _init_from_config(
         self,
@@ -355,23 +350,18 @@ class JoyConL(_RuntimeBackedGamepad):
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
     ) -> None:
         """Create a left Joy-Con-compatible gamepad.
 
         Args:
-            adapter: Bumble adapter moniker used when the default transport is created.
-                Required unless a custom transport is supplied.
-            key_store_path: Optional path used by the default transport to persist keys.
+            adapter: Bumble adapter moniker used for the Bluetooth backend.
+            key_store_path: Optional path used by the Bluetooth backend to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
-            transport: Optional HID transport instance. When supplied, no Bumble
-                transport is created by the constructor.
 
         Raises:
-            InvalidInputError: ``adapter`` is omitted for the default transport or
-                ``report_period_us`` is not positive.
+            InvalidInputError: ``adapter`` is omitted or ``report_period_us`` is not positive.
         """
         config = self._controller_spec.build_config(
             adapter=adapter,
@@ -379,7 +369,7 @@ class JoyConL(_RuntimeBackedGamepad):
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )
-        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+        self._init_from_config(config, diagnostics=diagnostics, transport=None)
 
     @classmethod
     def _from_config(
@@ -428,23 +418,18 @@ class JoyConR(_RuntimeBackedGamepad):
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
     ) -> None:
         """Create a right Joy-Con-compatible gamepad.
 
         Args:
-            adapter: Bumble adapter moniker used when the default transport is created.
-                Required unless a custom transport is supplied.
-            key_store_path: Optional path used by the default transport to persist keys.
+            adapter: Bumble adapter moniker used for the Bluetooth backend.
+            key_store_path: Optional path used by the Bluetooth backend to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
-            transport: Optional HID transport instance. When supplied, no Bumble
-                transport is created by the constructor.
 
         Raises:
-            InvalidInputError: ``adapter`` is omitted for the default transport or
-                ``report_period_us`` is not positive.
+            InvalidInputError: ``adapter`` is omitted or ``report_period_us`` is not positive.
         """
         config = self._controller_spec.build_config(
             adapter=adapter,
@@ -452,7 +437,7 @@ class JoyConR(_RuntimeBackedGamepad):
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )
-        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+        self._init_from_config(config, diagnostics=diagnostics, transport=None)
 
     @classmethod
     def _from_config(

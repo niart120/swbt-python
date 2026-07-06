@@ -180,13 +180,14 @@ def test_concrete_controller_docstrings_describe_constructor_arguments() -> None
         "report_period_us",
         "controller_colors",
         "diagnostics",
-        "transport",
         "Raises:",
         "InvalidInputError",
     )
     pro_constructor_doc = inspect.getdoc(ProController.__init__)
     assert pro_constructor_doc is not None
     assert "device_name" not in pro_constructor_doc
+    assert "transport:" not in pro_constructor_doc
+    assert "Optional HID transport instance" not in pro_constructor_doc
 
     for controller_cls in (JoyConL, JoyConR):
         _assert_doc_contains(
@@ -197,13 +198,14 @@ def test_concrete_controller_docstrings_describe_constructor_arguments() -> None
             "report_period_us",
             "controller_colors",
             "diagnostics",
-            "transport",
             "Raises:",
             "InvalidInputError",
         )
         constructor_doc = inspect.getdoc(controller_cls.__init__)
         assert constructor_doc is not None
         assert "device_name" not in constructor_doc
+        assert "transport:" not in constructor_doc
+        assert "Optional HID transport instance" not in constructor_doc
 
 
 def test_transport_extension_docstrings_describe_public_arguments() -> None:
