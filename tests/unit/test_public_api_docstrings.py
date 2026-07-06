@@ -18,6 +18,7 @@ from swbt import (
     ProController,
     Stick,
     SwitchGamepad,
+    UnsupportedInputError,
     list_adapters,
 )
 from swbt.gamepad import ConnectionResult
@@ -68,7 +69,7 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         (InputState, ("buttons", "left_stick", "right_stick", "imu_frames")),
         (ControllerColors, ("body", "buttons", "left_grip", "right_grip")),
     ):
-        _assert_doc_contains(cls, "Attributes:", *attributes)
+        _assert_doc_contains(cls, "Args:", "Attributes:", *attributes)
 
     for factory in (
         list_adapters,
@@ -90,10 +91,31 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         InputState.with_imu,
         InputState.with_gyro,
         InputState.with_accel,
+        ControllerColors.to_spi_bytes,
     ):
         _assert_doc_contains(factory, "Returns:")
 
     _assert_doc_contains(list_adapters, "Raises:", "AdapterDiscoveryError")
+
+
+def test_public_error_docstrings_describe_constructor_arguments() -> None:
+    _assert_doc_contains(
+        AdapterDiscoveryError.__init__,
+        "Args:",
+        "message",
+        "platform",
+        "backend",
+        "libusb_available",
+        "bumble_version",
+    )
+    _assert_doc_contains(
+        UnsupportedInputError.__init__,
+        "Args:",
+        "message",
+        "profile_kind",
+        "buttons",
+        "sticks",
+    )
 
 
 def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors() -> None:

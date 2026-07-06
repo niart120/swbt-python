@@ -81,6 +81,7 @@ public profile injection を消し、controller identity を concrete controller
 | green | `controller_colors` override が profile default より優先される | regression | unit / integration | no | unit_028 / unit_037 contract |
 | green | `report_period_us=None` が profile default を使う | regression | unit | no | positive integer validation も維持 |
 | green | `ConnectionResult` が public 型として必要な値だけを露出する | characterization | unit | no | `BondedPeer` は `HidDeviceTransport` が残る unit_042 まで public transport type として維持 |
+| green | public API docstring が Google style で引数と戻り値を説明する | new | unit | no | `swbt.__all__` から見える値オブジェクト、公開例外、transport extension を対象にする |
 
 ## 8. 設計メモ
 
@@ -98,7 +99,9 @@ profile は identity と protocol fact の束であり、public config ではな
 | `src/swbt/__init__.py` | modify | root exports |
 | `tests/unit/test_public_api_boundary.py` | modify | config/profile boundary tests |
 | `tests/unit/test_package_import.py` | modify | root export tests |
+| `tests/unit/test_public_api_docstrings.py` | modify | public API docstring contract |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | controller_colors / period regression |
+| `src/swbt/adapter_discovery.py`, `src/swbt/diagnostics.py`, `src/swbt/errors.py`, `src/swbt/gamepad/connection.py`, `src/swbt/input.py`, `src/swbt/protocol/profile.py`, `src/swbt/transport/base.py` | modify | public value object / error docstrings |
 | `docs/api.md` | modify | config/profile migration |
 | `spec/complete/unit_041/CONTROLLER_CONFIG_PROFILE_OWNERSHIP.md` | move | 完了した作業仕様 |
 
@@ -119,11 +122,12 @@ profile は identity と protocol fact の束であり、public config ではな
 | `uv run pytest tests\unit\test_protocol_profile.py::test_pro_controller_profile_direct_construction_is_limited_to_profile_factory tests\unit\test_public_api_boundary.py::test_concrete_controller_classes_own_internal_controller_specs -q` | pass | `2 passed`。Pro Controller profile は `default_controller_profile()` 経由で spec に渡す |
 | `uv run pytest tests\unit\test_public_docs.py::test_public_docs_do_not_carry_stale_or_placeholder_wording tests\unit\test_public_api_docstrings.py::test_concrete_controller_docstrings_describe_constructor_arguments tests\unit\test_public_api_docstrings.py::test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors tests\unit\test_public_api_docstrings.py::test_transport_extension_docstrings_describe_public_arguments -q` | pass | `4 passed`。public docs と public API docstring から stale `device_name` constructor seam を除去済み |
 | `uv run pytest tests\unit\test_public_docs.py::test_api_doc_covers_top_level_public_exports_and_methods tests\unit\test_public_docs.py::test_public_docs_do_not_carry_stale_or_placeholder_wording -q` | pass | `2 passed`。public API docs の constructor 例と説明も `device_name` なしに更新 |
+| `uv run pytest tests\unit\test_public_api_docstrings.py tests\unit\test_public_docs.py::test_api_doc_covers_top_level_public_exports_and_methods tests\unit\test_public_docs.py::test_public_docs_do_not_carry_stale_or_placeholder_wording -q` | pass | `7 passed`。public value object の constructor 引数、公開例外 constructor、`ControllerColors.to_spi_bytes()` の戻り値を Google style docstring で確認 |
 | `uv sync --dev` | pass | `Resolved 53 packages`, `Checked 41 packages` |
 | `uv run ruff format --check .` | pass | `82 files already formatted` |
 | `uv run ruff check .` | pass | `All checks passed!` |
 | `uv run ty check --no-progress` | pass | `All checks passed!` |
-| `uv run pytest tests/unit -q` | pass | `347 passed, 2 xfailed`。残る xfail は unit_042 の transport seam |
+| `uv run pytest tests/unit -q` | pass | `348 passed, 2 xfailed`。残る xfail は unit_042 の transport seam |
 | `uv run pytest tests/integration -q` | pass | `93 passed` |
 | `uv run pytest tests\unit\test_package_import.py::test_rearchitecture_target_root_hides_internal_transport_type -q` | xfail | `1 xfailed`。理由を unit_042 に更新 |
 

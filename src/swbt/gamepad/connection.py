@@ -30,6 +30,12 @@ PairWithTimeout = Callable[[float | None], Awaitable[None]]
 class ConnectionResult:
     """Result of an explicit connection strategy.
 
+    Args:
+        route: Connection path that produced the result.
+        status: Outcome of the connection attempt.
+        peer_address: Address of the bonded peer used for reconnect, when one was selected.
+        peer_count: Number of bonded peers observed while selecting a reconnect target.
+
     Attributes:
         route: Connection path that produced the result.
         status: Outcome of the connection attempt.

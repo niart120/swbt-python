@@ -15,6 +15,13 @@ DisconnectRequestStatus = Literal["requested", "unavailable", "failed"]
 class DisconnectRequestResult:
     """Result of a best-effort remote HID disconnect request.
 
+    Args:
+        status: Outcome of the remote disconnect request.
+        channels: Transport channels that accepted the request.
+        reason: Optional stable reason for an unavailable or failed request.
+        error_type: Exception type name for a failed request.
+        message: Human-readable failure detail.
+
     Attributes:
         status: Outcome of the remote disconnect request.
         channels: Transport channels that accepted the request.
@@ -33,6 +40,9 @@ class DisconnectRequestResult:
 @dataclass(frozen=True)
 class BondedPeer:
     """Peer address discovered from a transport key store.
+
+    Args:
+        address: Bluetooth address of the bonded peer.
 
     Attributes:
         address: Bluetooth address of the bonded peer.

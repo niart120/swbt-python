@@ -278,6 +278,12 @@ JOYCON_RIGHT_BUTTON_BITS: ButtonBitMap = MappingProxyType(
 class ControllerColors:
     """Controller body, button, and grip colors stored in virtual SPI.
 
+    Args:
+        body: Body color as a 24-bit RGB integer.
+        buttons: Button color as a 24-bit RGB integer.
+        left_grip: Left grip color as a 24-bit RGB integer.
+        right_grip: Right grip color as a 24-bit RGB integer.
+
     Attributes:
         body: Body color as a 24-bit RGB integer.
         buttons: Button color as a 24-bit RGB integer.
@@ -298,7 +304,12 @@ class ControllerColors:
         self._validate_rgb("right_grip", self.right_grip)
 
     def to_spi_bytes(self) -> bytes:
-        """Return body, button, and grip colors in Switch SPI RGB order."""
+        """Return body, button, and grip colors in Switch SPI RGB order.
+
+        Returns:
+            bytes: Four RGB colors encoded as 12 bytes in body, buttons, left grip,
+                right grip order.
+        """
         return (
             self.body.to_bytes(3, "big")
             + self.buttons.to_bytes(3, "big")

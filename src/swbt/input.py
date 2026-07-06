@@ -40,6 +40,10 @@ class Button(Enum):
 class Stick:
     """12-bit raw stick position.
 
+    Args:
+        x: Horizontal raw axis value in the inclusive ``0..4095`` range.
+        y: Vertical raw axis value in the inclusive ``0..4095`` range.
+
     Attributes:
         x: Horizontal raw axis value in the inclusive ``0..4095`` range.
         y: Vertical raw axis value in the inclusive ``0..4095`` range.
@@ -208,6 +212,14 @@ class Stick:
 @dataclass(frozen=True)
 class IMUFrame:
     """One 6-axis IMU frame.
+
+    Args:
+        accel_x: Accelerometer X-axis raw value.
+        accel_y: Accelerometer Y-axis raw value.
+        accel_z: Accelerometer Z-axis raw value.
+        gyro_x: Gyroscope X-axis raw value.
+        gyro_y: Gyroscope Y-axis raw value.
+        gyro_z: Gyroscope Z-axis raw value.
 
     Attributes:
         accel_x: Accelerometer X-axis raw value.
@@ -385,6 +397,12 @@ class IMUFrame:
 @dataclass(frozen=True)
 class InputState:
     """Immutable controller input state.
+
+    Args:
+        buttons: Pressed buttons represented as an immutable set.
+        left_stick: Current left stick position.
+        right_stick: Current right stick position.
+        imu_frames: Three IMU frames included in the next input report.
 
     Attributes:
         buttons: Pressed buttons represented as an immutable set.

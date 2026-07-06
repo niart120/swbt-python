@@ -12,6 +12,13 @@ class TransportOpenError(SwbtError):
 class AdapterDiscoveryError(SwbtError):
     """Raised when no-open adapter discovery cannot enumerate USB devices.
 
+    Args:
+        message: Human-readable failure message.
+        platform: Host platform string captured at discovery time.
+        backend: Discovery backend identifier.
+        libusb_available: Whether libusb availability is known at the failure point.
+        bumble_version: Installed Bumble package version when available.
+
     Attributes:
         platform: Host platform string captured at discovery time.
         backend: Discovery backend identifier.
