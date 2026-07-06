@@ -126,7 +126,6 @@ def test_rearchitecture_target_switch_gamepad_is_abstract_interface() -> None:
         SwitchGamepad()
 
 
-@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
 def test_rearchitecture_target_public_concrete_controllers_share_interface() -> None:
     for controller_name in ("ProController", "JoyConL", "JoyConR"):
         controller_cls = getattr(swbt, controller_name)

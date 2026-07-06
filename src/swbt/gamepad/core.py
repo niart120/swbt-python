@@ -343,6 +343,90 @@ class ProController(_RuntimeBackedGamepad):
     """Runtime-backed Pro Controller-compatible gamepad."""
 
 
+class JoyConL(_RuntimeBackedGamepad):
+    """Runtime-backed Joy-Con L-compatible gamepad."""
+
+    def __init__(
+        self,
+        *,
+        adapter: str | None = None,
+        key_store_path: str | None = None,
+        report_period_us: int | None = None,
+        device_name: str | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> None:
+        """Create a left Joy-Con-compatible gamepad.
+
+        Args:
+            adapter: Bumble adapter moniker used when the default transport is created.
+                Required unless a custom transport is supplied.
+            key_store_path: Optional path used by the default transport to persist keys.
+            report_period_us: Optional periodic input report interval in microseconds.
+            device_name: Optional HID device name passed to the default transport.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance. When supplied, no Bumble
+                transport is created by the constructor.
+
+        Raises:
+            InvalidInputError: ``adapter`` is omitted for the default transport or
+                ``report_period_us`` is not positive.
+        """
+        config = SwitchGamepadConfig(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            profile=JoyConLeftProfile(),
+            report_period_us=report_period_us,
+            device_name=device_name,
+            controller_colors=controller_colors,
+        )
+        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+
+
+class JoyConR(_RuntimeBackedGamepad):
+    """Runtime-backed Joy-Con R-compatible gamepad."""
+
+    def __init__(
+        self,
+        *,
+        adapter: str | None = None,
+        key_store_path: str | None = None,
+        report_period_us: int | None = None,
+        device_name: str | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> None:
+        """Create a right Joy-Con-compatible gamepad.
+
+        Args:
+            adapter: Bumble adapter moniker used when the default transport is created.
+                Required unless a custom transport is supplied.
+            key_store_path: Optional path used by the default transport to persist keys.
+            report_period_us: Optional periodic input report interval in microseconds.
+            device_name: Optional HID device name passed to the default transport.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance. When supplied, no Bumble
+                transport is created by the constructor.
+
+        Raises:
+            InvalidInputError: ``adapter`` is omitted for the default transport or
+                ``report_period_us`` is not positive.
+        """
+        config = SwitchGamepadConfig(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            profile=JoyConRightProfile(),
+            report_period_us=report_period_us,
+            device_name=device_name,
+            controller_colors=controller_colors,
+        )
+        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+
+
 class JoyCon(_RuntimeBackedGamepad):
     """Thin SwitchGamepad wrapper for a single Joy-Con profile."""
 

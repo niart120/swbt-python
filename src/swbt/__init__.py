@@ -13,7 +13,15 @@ from swbt.errors import (
     TransportOpenError,
     UnsupportedInputError,
 )
-from swbt.gamepad import ConnectionResult, JoyCon, SwitchGamepad, SwitchGamepadConfig
+from swbt.gamepad import (
+    ConnectionResult,
+    JoyCon,
+    JoyConL,
+    JoyConR,
+    ProController,
+    SwitchGamepad,
+    SwitchGamepadConfig,
+)
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.profile import ControllerColors
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
@@ -37,6 +45,9 @@ __all__ = (
     "InvalidInputError",
     "InvalidKeyStoreError",
     "JoyCon",
+    "JoyConL",
+    "JoyConR",
+    "ProController",
     "Stick",
     "SwbtError",
     "SwitchGamepad",
