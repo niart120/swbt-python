@@ -72,7 +72,7 @@
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
 | green | `SwitchGamepad` の public behavior が runtime 抽出後も変わらない | regression | integration | no | fake transport tests |
-| todo | `JoyCon("left" / "right")` の profile validation が変わらない | regression | integration | no | existing Joy-Con fake transport tests |
+| green | `JoyCon("left" / "right")` の profile validation が変わらない | regression | integration | no | existing Joy-Con fake transport tests |
 | todo | `open()` が pairing / advertising を開始しない | regression | unit / integration | no | lifecycle contract |
 | todo | `close(neutral=True)` が trailing neutral と cleanup を維持する | regression | integration | no | unit_014 contract |
 | green | `SwitchGamepad` facade が `ControllerRuntime` を stateful owner として持つ | new | unit | no | public API shape を維持したまま runtime へ委譲 |
@@ -122,6 +122,8 @@ M1 は public API break の準備であり、互換 API を消す場所ではな
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_async_context_opens_and_closes_fake_transport tests\integration\test_switch_gamepad_fake_transport.py::test_open_only_does_not_start_advertising tests\integration\test_switch_gamepad_fake_transport.py::test_pair_starts_advertising_and_waits_for_fake_connection -q` | pass | `3 passed` |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | `91 passed`。runtime owner 化後も fake transport 経由の `SwitchGamepad` public behavior は既存 regression 範囲で維持 |
 | `uv run pytest tests\unit\test_public_api_boundary.py -q` | pass | `25 passed, 3 xfailed`。unit_040 で green にする target boundary xfail は継続 |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -k joycon -q` | pass | `15 passed, 76 deselected`。JoyCon wrapper と unsupported input validation は維持 |
+| `uv run pytest tests\unit\test_public_api_boundary.py tests\unit\test_input_report.py -k joycon -q` | pass | `11 passed, 50 deselected`。JoyCon public boundary と profile packing / validation は維持 |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |
