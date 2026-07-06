@@ -91,8 +91,8 @@ M1 は public API break の準備であり、互換 API を消す場所ではな
 | path | change | 内容 |
 |---|---|---|
 | `src/swbt/gamepad/runtime.py` | add | `ControllerRuntime` |
-| `src/swbt/gamepad/_config.py` | add | `_RuntimeConfig` と runtime builder の前段 |
-| `src/swbt/gamepad/_transport_factory.py` | add | internal transport factory |
+| `src/swbt/gamepad/_config.py` | add | public 互換 `SwitchGamepadConfig` と internal `_RuntimeConfig` |
+| `src/swbt/gamepad/transport_factory.py` | modify | internal transport factory |
 | `src/swbt/gamepad/core.py` | modify | public facade から runtime へ委譲 |
 | `tests/unit/test_gamepad_connection_workflow.py` | modify | runtime owner の regression |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | behavior preservation |
@@ -126,11 +126,16 @@ M1 は public API break の準備であり、互換 API を消す場所ではな
 | `uv run pytest tests\unit\test_public_api_boundary.py tests\unit\test_input_report.py -k joycon -q` | pass | `11 passed, 50 deselected`。JoyCon public boundary と profile packing / validation は維持 |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_open_only_does_not_start_advertising -q` | pass | `1 passed`。`open()` は advertising を開始しない |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -k "close and neutral" -q` | pass | `4 passed, 87 deselected`。trailing neutral、best-effort disconnect、host disconnect race の cleanup は維持 |
-| `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
-| `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
-| `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |
-| `uv run pytest tests/unit` | not run | 作業仕様作成時点では未実装 |
-| `uv run pytest tests/integration` | not run | 作業仕様作成時点では未実装 |
+| `uv run ruff check src\swbt\gamepad\core.py src\swbt\gamepad\runtime.py src\swbt\gamepad\_config.py src\swbt\gamepad\constants.py src\swbt\gamepad\__init__.py tests\unit\test_public_api_boundary.py` | pass | All checks passed。green 後 refactor で public facade、runtime、config を分割 |
+| `uv run ty check --no-progress src\swbt\gamepad\core.py src\swbt\gamepad\runtime.py src\swbt\gamepad\_config.py src\swbt\gamepad\__init__.py tests\unit\test_public_api_boundary.py` | pass | All checks passed |
+| `uv run pytest tests\unit\test_public_api_boundary.py tests\unit\test_package_import.py tests\unit\test_gamepad_transport_factory.py -q` | pass | `29 passed, 4 xfailed` |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py -q` | pass | `91 passed` |
+| `uv sync --dev` | pass | Resolved 53 packages / Checked 41 packages |
+| `uv run ruff format --check .` | pass | 81 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit -q` | pass | `337 passed, 4 xfailed` |
+| `uv run pytest tests/integration -q` | pass | `93 passed` |
 
 ## 11. 実機実行条件
 

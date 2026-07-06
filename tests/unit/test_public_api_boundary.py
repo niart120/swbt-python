@@ -24,6 +24,7 @@ from swbt import (
 )
 from swbt.gamepad import ConnectionStatus
 from swbt.gamepad import core as gamepad_core
+from swbt.gamepad import runtime as gamepad_runtime
 from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
@@ -453,7 +454,7 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
         async def stop(self) -> None:
             return None
 
-    monkeypatch.setattr(gamepad_core, "ReportLoop", SpyReportLoop)
+    monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
 
     async def run(config: SwitchGamepadConfig) -> int:
         pad = SwitchGamepad.from_config(config, transport=FakeHidTransport())
