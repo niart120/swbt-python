@@ -1,0 +1,10 @@
+# Optional fragment for mkdocs.yml if these architecture notes should be published.
+# Do not add this fragment when the notes are kept as maintainer-only design material.
+
+- Rearchitecture:
+    - Overview: rearchitecture/README.md
+    - Design Change Overview: rearchitecture/01-design-change-overview.md
+    - As-is / To-be: rearchitecture/02-as-is-to-be.md
+    - Public API / Config / Profile: rearchitecture/03-public-api-config-profile.md
+    - Runtime / Profile / Transport Details: rearchitecture/04-runtime-profile-transport-details.md
+    - Milestones / Implementation Checklist: rearchitecture/05-milestones-implementation.md
