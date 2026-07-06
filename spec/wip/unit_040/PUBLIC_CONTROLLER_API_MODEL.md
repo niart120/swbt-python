@@ -74,8 +74,8 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 |---|---|---|---|---|---|
 | green | `SwitchGamepad` は abstract interface として直接生成できない | new | unit | no | unit_038 target test を green にする |
 | green | `ProController`, `JoyConL`, `JoyConR` が root export される | new | unit | no | package import test |
-| todo | `JoyCon` が root export されない | new | unit | no | compatibility alias は残さない |
-| todo | `JoyConL` / `JoyConR` に invalid side error path がない | new | unit | no | class selection で identity 固定 |
+| green | `JoyCon` が root export されない | new | unit | no | compatibility alias は残さない |
+| green | `JoyConL` / `JoyConR` に invalid side error path がない | new | unit | no | class selection で identity 固定 |
 | todo | README / docs の通常例が new API を使う | regression | docs | no | migration section の旧 API 例は例外 |
 
 ## 8. 設計メモ
@@ -110,6 +110,8 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 | `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_concrete_controllers_share_interface -q` | red | root export に `ProController` がなく AttributeError |
 | `uv run pytest tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface -q` | red | `swbt.__all__` が new concrete controllers を含んでいない |
 | `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_concrete_controllers_share_interface tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface -q` | pass | `2 passed`。`ProController`, `JoyConL`, `JoyConR` は root export 済み |
+| `uv run pytest tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface tests\unit\test_package_import.py::test_rearchitecture_target_root_exports_controller_api -q` | pass | `2 passed`。`JoyCon` は root export から削除済み |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_joycon_concrete_classes_have_no_invalid_side_path -q` | pass | `1 passed`。左右 identity は `JoyConL` / `JoyConR` class selection で固定 |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |

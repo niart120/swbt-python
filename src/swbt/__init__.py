@@ -15,7 +15,6 @@ from swbt.errors import (
 )
 from swbt.gamepad import (
     ConnectionResult,
-    JoyCon,
     JoyConL,
     JoyConR,
     ProController,
@@ -44,7 +43,6 @@ __all__ = (
     "InputState",
     "InvalidInputError",
     "InvalidKeyStoreError",
-    "JoyCon",
     "JoyConL",
     "JoyConR",
     "ProController",

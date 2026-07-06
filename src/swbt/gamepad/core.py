@@ -1,9 +1,6 @@
 """Public gamepad API."""
 
-from typing import Literal
-
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
-from swbt.errors import InvalidInputError
 from swbt.gamepad._config import SwitchGamepadConfig
 from swbt.gamepad.connection import ConnectionResult
 from swbt.gamepad.interface import SwitchGamepad
@@ -12,8 +9,6 @@ from swbt.gamepad.runtime import ControllerRuntime
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.profile import (
     ControllerColors,
-    ControllerKind,
-    ControllerProfile,
     JoyConLeftProfile,
     JoyConRightProfile,
 )
@@ -425,89 +420,3 @@ class JoyConR(_RuntimeBackedGamepad):
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
-
-
-class JoyCon(_RuntimeBackedGamepad):
-    """Thin SwitchGamepad wrapper for a single Joy-Con profile."""
-
-    def __init__(
-        self,
-        side: Literal["left", "right"],
-        *,
-        adapter: str | None = None,
-        key_store_path: str | None = None,
-        report_period_us: int | None = None,
-        device_name: str | None = None,
-        controller_colors: ControllerColors | None = None,
-        diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
-    ) -> None:
-        """Create a single left or right Joy-Con-compatible SwitchGamepad.
-
-        Args:
-            side: ``"left"`` for Joy-Con (L) or ``"right"`` for Joy-Con (R).
-            adapter: Bumble adapter moniker used when the default transport is created.
-                Required unless a custom transport is supplied.
-            key_store_path: Optional path used by the default transport to persist keys.
-            report_period_us: Optional periodic input report interval in microseconds.
-            device_name: Optional HID device name passed to the default transport.
-            controller_colors: Optional fixed controller body, button, and grip colors.
-            diagnostics: Optional diagnostics configuration for trace output.
-            transport: Optional HID transport instance. When supplied, no Bumble
-                transport is created by the constructor.
-
-        Raises:
-            InvalidInputError: ``side`` is not ``"left"`` or ``"right"``, ``adapter``
-                is omitted for the default transport, or ``report_period_us`` is not
-                positive.
-        """
-        config = SwitchGamepadConfig(
-            adapter=adapter,
-            key_store_path=key_store_path,
-            profile=_joycon_profile(side),
-            report_period_us=report_period_us,
-            device_name=device_name,
-            controller_colors=controller_colors,
-        )
-        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
-
-    @classmethod
-    def from_config(
-        cls,
-        config: SwitchGamepadConfig,
-        *,
-        diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
-    ) -> "JoyCon":
-        """Create a JoyCon from an explicit Joy-Con resource configuration.
-
-        Args:
-            config: Resource configuration with a left or right Joy-Con profile.
-            diagnostics: Optional diagnostics configuration for trace output.
-            transport: Optional HID transport instance.
-
-        Raises:
-            InvalidInputError: ``config.profile`` is not a Joy-Con profile.
-        """
-        if config.profile.kind not in (ControllerKind.JOYCON_LEFT, ControllerKind.JOYCON_RIGHT):
-            msg = "JoyCon.from_config requires a Joy-Con profile"
-            raise InvalidInputError(msg)
-        gamepad = cls.__new__(cls)
-        gamepad._init_from_config(
-            config,
-            diagnostics=diagnostics,
-            transport=transport,
-        )
-        return gamepad
-
-
-def _joycon_profile(side: object) -> ControllerProfile:
-    if not isinstance(side, str):
-        msg = "side must be 'left' or 'right'"
-        raise InvalidInputError(msg)
-    if side == "left":
-        return JoyConLeftProfile()
-    if side == "right":
-        return JoyConRightProfile()
-    msg = "side must be 'left' or 'right'"
-    raise InvalidInputError(msg)

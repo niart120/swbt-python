@@ -3,7 +3,6 @@
 from swbt.gamepad.connection import ConnectionResult, ConnectionStatus
 from swbt.gamepad.constants import DISCONNECT_REQUEST_TIMEOUT_SECONDS
 from swbt.gamepad.core import (
-    JoyCon,
     JoyConL,
     JoyConR,
     ProController,
@@ -15,7 +14,6 @@ __all__ = (
     "DISCONNECT_REQUEST_TIMEOUT_SECONDS",
     "ConnectionResult",
     "ConnectionStatus",
-    "JoyCon",
     "JoyConL",
     "JoyConR",
     "ProController",
