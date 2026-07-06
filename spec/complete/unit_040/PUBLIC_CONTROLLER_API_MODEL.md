@@ -99,8 +99,11 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 | `README.md` | modify | basic usage examples |
 | `docs/api.md` | modify | public API docs |
 | `docs/usage.md` | modify | usage guide |
+| `docs/hardware.md` | modify | adapter / key store 例 |
+| `docs/agent-brief.md` | modify | agent 向け API 使用例 |
 | `examples/` | modify | controller creation examples |
-| `spec/wip/unit_040/PUBLIC_CONTROLLER_API_MODEL.md` | add | 作業仕様 |
+| `src/swbt/transport/base.py` | modify | public transport extension point の docstring |
+| `spec/complete/unit_040/PUBLIC_CONTROLLER_API_MODEL.md` | move | 完了した作業仕様 |
 
 ## 10. 検証
 
@@ -115,6 +118,7 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 | `uv run pytest tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface tests\unit\test_package_import.py::test_rearchitecture_target_root_exports_controller_api -q` | pass | `2 passed`。`JoyCon` は root export から削除済み |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_joycon_concrete_classes_have_no_invalid_side_path -q` | pass | `1 passed`。左右 identity は `JoyConL` / `JoyConR` class selection で固定 |
 | `uv run pytest tests\unit\test_public_api_docstrings.py tests\unit\test_public_docs.py tests\unit\test_readme_docs.py -q` | pass | `18 passed`。Google style docstring と public docs の新 API 例を確認 |
+| `uv sync --dev` | pass | `Resolved 53 packages`, `Checked 41 packages` |
 | `uv run ruff format --check .` | pass | `82 files already formatted` |
 | `uv run ruff check .` | pass | `All checks passed!` |
 | `uv run ty check --no-progress` | pass | `All checks passed!` |
