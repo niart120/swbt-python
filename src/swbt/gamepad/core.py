@@ -80,12 +80,11 @@ class SwitchGamepadConfig:
             raise InvalidInputError(msg)
 
 
-class SwitchGamepad:
-    """NX-compatible virtual gamepad API.
+class ControllerRuntime:
+    """Stateful NX-compatible virtual gamepad runtime.
 
-    The object owns the input state, report loop, diagnostics recorder, and HID
-    transport lifetime. Entering the async context opens resources only; callers
-    choose the connection strategy with ``connect()``, ``pair()``, or ``reconnect()``.
+    The runtime owns the input state, report loop, diagnostics recorder, and HID
+    transport lifetime.
     """
 
     def __init__(
@@ -182,30 +181,30 @@ class SwitchGamepad:
         *,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
-    ) -> "SwitchGamepad":
-        """Create a gamepad from an explicit resource configuration.
+    ) -> "ControllerRuntime":
+        """Create a runtime from an explicit resource configuration.
 
         Args:
-            config: Resource configuration for the gamepad.
+            config: Resource configuration for the runtime.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance.
 
         Returns:
-            SwitchGamepad: A gamepad configured from ``config``.
+            ControllerRuntime: A runtime configured from ``config``.
         """
-        gamepad = cls.__new__(cls)
-        gamepad._init_from_config(
+        runtime = cls.__new__(cls)
+        runtime._init_from_config(
             config,
             diagnostics=diagnostics,
             transport=transport,
         )
-        return gamepad
+        return runtime
 
-    async def __aenter__(self) -> "SwitchGamepad":
-        """Open the gamepad for an async context manager.
+    async def __aenter__(self) -> "ControllerRuntime":
+        """Open the runtime for an async context manager.
 
         Returns:
-            SwitchGamepad: This gamepad after resources have been opened.
+            ControllerRuntime: This runtime after resources have been opened.
         """
         await self.open()
         return self
@@ -787,6 +786,345 @@ class SwitchGamepad:
                 key_store_path=self._config.key_store_path,
             )
         return self._transport
+
+
+class SwitchGamepad:
+    """NX-compatible virtual gamepad API.
+
+    ``SwitchGamepad`` owns the public API surface and delegates stateful
+    controller work to an internal runtime.
+    """
+
+    def __init__(
+        self,
+        *,
+        adapter: str | None = None,
+        key_store_path: str | None = None,
+        report_period_us: int | None = None,
+        device_name: str | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> None:
+        """Create a gamepad object.
+
+        Args:
+            adapter: Bumble adapter moniker used when the default transport is created.
+                Required unless a custom transport is supplied.
+            key_store_path: Optional path used by the default transport to persist keys.
+            report_period_us: Optional periodic input report interval in microseconds.
+            device_name: Optional HID device name passed to the default transport.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance. When supplied, no Bumble
+                transport is created by the constructor.
+
+        Raises:
+            InvalidInputError: ``adapter`` is omitted for the default transport or
+                ``report_period_us`` is not positive.
+        """
+        config = SwitchGamepadConfig(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            report_period_us=report_period_us,
+            device_name=device_name,
+            controller_colors=controller_colors,
+        )
+        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+
+    def _init_from_config(
+        self,
+        config: SwitchGamepadConfig,
+        *,
+        diagnostics: DiagnosticsConfig | None,
+        transport: HidDeviceTransport | None,
+    ) -> None:
+        self._runtime = ControllerRuntime.from_config(
+            config,
+            diagnostics=diagnostics,
+            transport=transport,
+        )
+
+    @classmethod
+    def from_config(
+        cls,
+        config: SwitchGamepadConfig,
+        *,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> "SwitchGamepad":
+        """Create a gamepad from an explicit resource configuration.
+
+        Args:
+            config: Resource configuration for the gamepad.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance.
+
+        Returns:
+            SwitchGamepad: A gamepad configured from ``config``.
+
+        Raises:
+            InvalidInputError: ``config`` is invalid or omits ``adapter`` while no
+                custom ``transport`` is supplied.
+        """
+        gamepad = cls.__new__(cls)
+        gamepad._init_from_config(
+            config,
+            diagnostics=diagnostics,
+            transport=transport,
+        )
+        return gamepad
+
+    @property
+    def _state_store(self) -> InputStateStore:
+        return self._runtime._state_store
+
+    async def __aenter__(self) -> "SwitchGamepad":
+        """Open the gamepad for an async context manager.
+
+        Returns:
+            SwitchGamepad: This gamepad after resources have been opened.
+        """
+        await self.open()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Close the gamepad when leaving an async context manager.
+
+        Args:
+            exc_type: Exception type from the managed block, if one was raised.
+            exc: Exception instance from the managed block, if one was raised.
+            traceback: Traceback from the managed block, if one was raised.
+        """
+        _ = (exc_type, exc, traceback)
+        await self.close(neutral=True)
+
+    async def open(self) -> None:
+        """Open the configured transport.
+
+        Opening prepares transport callbacks, diagnostics metadata, and the report
+        loop. It does not start HID advertising, pairing, or active reconnect.
+
+        Raises:
+            TransportOpenError: Raised by the transport when the adapter cannot be opened.
+            Exception: Propagates unexpected transport open failures after cleanup.
+        """
+        await self._runtime.open()
+
+    async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
+        """Start pairing advertising and wait for a host connection.
+
+        Args:
+            timeout: Maximum seconds to wait for a connection. ``None`` waits until
+                the host connects.
+
+        Raises:
+            ConnectionTimeoutError: The timeout elapsed before a connection completed.
+            ClosedError: The transport was unavailable after opening.
+        """
+        await self._runtime.pair(timeout=timeout)
+
+    async def reconnect(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
+        """Reconnect with exactly one bonded peer and raise on failure.
+
+        Args:
+            timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
+                the transport default.
+
+        Raises:
+            ConnectionFailedError: No single bonded peer was available or reconnect failed.
+            ConnectionTimeoutError: The active reconnect attempt timed out.
+        """
+        await self._runtime.reconnect(timeout=timeout)
+
+    async def try_reconnect(
+        self,
+        timeout: float | None = None,  # noqa: ASYNC109
+    ) -> ConnectionResult:
+        """Try active reconnect with exactly one bonded peer.
+
+        Args:
+            timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
+                the transport default.
+
+        Returns:
+            ConnectionResult: Reconnect route, status, selected peer, and peer count.
+        """
+        return await self._runtime.try_reconnect(timeout=timeout)
+
+    async def connect(
+        self,
+        *,
+        timeout: float | None = None,  # noqa: ASYNC109
+        allow_pairing: bool = False,
+    ) -> None:
+        """Connect using bonded reconnect first, then optional pairing fallback.
+
+        Args:
+            timeout: Maximum seconds for each connection attempt. ``None`` uses the
+                lower layer default.
+            allow_pairing: If ``True``, run pairing when no bonded peer is available.
+
+        Raises:
+            ConnectionFailedError: The connection attempt finished without connecting.
+            ConnectionTimeoutError: The connection attempt timed out.
+        """
+        await self._runtime.connect(timeout=timeout, allow_pairing=allow_pairing)
+
+    async def try_connect(
+        self,
+        *,
+        timeout: float | None = None,  # noqa: ASYNC109
+        allow_pairing: bool = False,
+    ) -> ConnectionResult:
+        """Try bonded reconnect first, then optional pairing fallback.
+
+        Args:
+            timeout: Maximum seconds for each connection attempt. ``None`` uses the
+                lower layer default.
+            allow_pairing: If ``True``, run pairing when no bonded peer is available.
+
+        Returns:
+            ConnectionResult: Route and status chosen by reconnect or pairing fallback.
+        """
+        return await self._runtime.try_connect(
+            timeout=timeout,
+            allow_pairing=allow_pairing,
+        )
+
+    async def close(self, *, neutral: bool = True) -> None:
+        """Close the transport and leave the gamepad in a closed state.
+
+        Args:
+            neutral: If ``True``, send a trailing neutral report before disconnect
+                when a connection is active.
+        """
+        await self._runtime.close(neutral=neutral)
+
+    async def press(self, *buttons: Button) -> None:
+        """Add buttons to the current input state.
+
+        Args:
+            buttons: Buttons to add to the current button set.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        await self._runtime.press(*buttons)
+
+    async def apply(self, state: InputState) -> None:
+        """Replace the current input state without immediate transmission.
+
+        Args:
+            state: Complete input state to commit.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        await self._runtime.apply(state)
+
+    async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
+        """Replace one or both stick positions without immediate transmission.
+
+        Args:
+            left: Optional replacement for the left stick.
+            right: Optional replacement for the right stick.
+
+        Raises:
+            InvalidInputError: ``left`` or ``right`` is not a ``Stick``.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        await self._runtime.sticks(left=left, right=right)
+
+    async def lstick(self, stick: Stick) -> None:
+        """Replace the left stick position without immediate transmission.
+
+        Args:
+            stick: Replacement for the left stick.
+
+        Raises:
+            InvalidInputError: ``stick`` is not a ``Stick``.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        await self._runtime.lstick(stick)
+
+    async def rstick(self, stick: Stick) -> None:
+        """Replace the right stick position without immediate transmission.
+
+        Args:
+            stick: Replacement for the right stick.
+
+        Raises:
+            InvalidInputError: ``stick`` is not a ``Stick``.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        await self._runtime.rstick(stick)
+
+    async def imu(self, *frames: IMUFrame) -> None:
+        """Replace IMU frames without immediate transmission.
+
+        Args:
+            frames: One ``IMUFrame`` to repeat across all three IMU slots, or exactly
+                three frames to store in order.
+
+        Raises:
+            InvalidInputError: The frame count is not one or three, or any value is
+                not an ``IMUFrame``.
+
+        This updates local IMU state only and does not send an immediate input report.
+        """
+        await self._runtime.imu(*frames)
+
+    async def release(self, *buttons: Button) -> None:
+        """Remove buttons from the current input state.
+
+        Args:
+            buttons: Buttons to remove from the current button set.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        await self._runtime.release(*buttons)
+
+    async def neutral(self) -> None:
+        """Return local input state to ``InputState.neutral()`` without immediate transmission."""
+        await self._runtime.neutral()
+
+    async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
+        """Send a short connected button action.
+
+        Args:
+            buttons: Buttons to press for the tap.
+            duration: Seconds to keep the buttons pressed before release.
+
+        Raises:
+            ClosedError: The gamepad is not open and cannot send input reports.
+
+        The tap sends immediate press and release input reports. The release step
+        removes only the buttons supplied to this call, preserving other held buttons.
+        """
+        await self._runtime.tap(*buttons, duration=duration)
+
+    def status(self) -> GamepadStatus:
+        """Return the current gamepad status.
+
+        Returns:
+            GamepadStatus: Connection state, report counters, rumble bytes, and last error.
+        """
+        return self._runtime.status()
+
+    def snapshot(self) -> InputState:
+        """Return the latest committed input state.
+
+        Returns:
+            InputState: Immutable snapshot of the current input state.
+        """
+        return self._runtime.snapshot()
 
 
 class JoyCon(SwitchGamepad):

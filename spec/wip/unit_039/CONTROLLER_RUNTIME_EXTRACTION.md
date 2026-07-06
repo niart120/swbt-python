@@ -75,6 +75,7 @@
 | todo | `JoyCon("left" / "right")` の profile validation が変わらない | regression | integration | no | existing Joy-Con fake transport tests |
 | todo | `open()` が pairing / advertising を開始しない | regression | unit / integration | no | lifecycle contract |
 | todo | `close(neutral=True)` が trailing neutral と cleanup を維持する | regression | integration | no | unit_014 contract |
+| green | `SwitchGamepad` facade が `ControllerRuntime` を stateful owner として持つ | new | unit | no | public API shape を維持したまま runtime へ委譲 |
 | green | `import swbt` が Bumble を import しない | regression | unit | no | existing package import boundary test |
 | green | `_StaticTransportFactory` 経由の fake transport 作成で unit test が書ける | new | unit | no | `transport_factory.py` の internal factory として追加 |
 | green | `_BumbleTransportFactory` 経由で default transport を作成できる | new | unit | no | 既存 `create_default_transport()` を包む internal factory |
@@ -112,6 +113,13 @@ M1 は public API break の準備であり、互換 API を消す場所ではな
 | `uv run ruff check src\swbt\gamepad\transport_factory.py tests\unit\test_gamepad_transport_factory.py` | pass | All checks passed |
 | `uv run ty check --no-progress src\swbt\gamepad\transport_factory.py tests\unit\test_gamepad_transport_factory.py` | pass | All checks passed |
 | `uv run pytest tests/unit/test_public_api_boundary.py::test_public_api_import_does_not_import_bumble tests/unit/test_public_api_boundary.py::test_public_api_import_does_not_resolve_bumble -q` | pass | `2 passed`。factory 追加後も public import は Bumble を解決しない |
+| `uv run pytest tests/unit/test_public_api_boundary.py::test_switch_gamepad_uses_controller_runtime_owner -q` | red | `ControllerRuntime` が未実装 |
+| `uv run pytest tests/unit/test_public_api_boundary.py::test_switch_gamepad_uses_controller_runtime_owner -q` | pass | `1 passed`。public API facade が runtime owner へ委譲 |
+| `uv run ruff format --check src\swbt\gamepad\core.py tests\unit\test_public_api_boundary.py` | pass | 2 files already formatted |
+| `uv run ruff check src\swbt\gamepad\core.py tests\unit\test_public_api_boundary.py` | pass | All checks passed |
+| `uv run ty check --no-progress src\swbt\gamepad\core.py tests\unit\test_public_api_boundary.py` | pass | All checks passed |
+| `uv run pytest tests\unit\test_public_api_boundary.py tests\unit\test_package_import.py tests\unit\test_gamepad_transport_factory.py -q` | pass | `29 passed, 4 xfailed` |
+| `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_async_context_opens_and_closes_fake_transport tests\integration\test_switch_gamepad_fake_transport.py::test_open_only_does_not_start_advertising tests\integration\test_switch_gamepad_fake_transport.py::test_pair_starts_advertising_and_waits_for_fake_connection -q` | pass | `3 passed` |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |

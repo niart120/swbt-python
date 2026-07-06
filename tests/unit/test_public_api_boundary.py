@@ -159,6 +159,15 @@ def test_switch_gamepad_constructor_accepts_key_store_path() -> None:
     assert "key_store_path" in signature.parameters
 
 
+def test_switch_gamepad_uses_controller_runtime_owner() -> None:
+    transport = FakeHidTransport()
+    pad = SwitchGamepad(transport=transport)
+
+    assert isinstance(pad._runtime, gamepad_core.ControllerRuntime)
+    assert pad._runtime._transport is transport
+    assert pad.snapshot() == swbt.InputState.neutral()
+
+
 def test_switch_gamepad_constructor_accepts_controller_colors_config() -> None:
     constructor_signature = inspect.signature(SwitchGamepad)
     config_fields = {field.name for field in fields(SwitchGamepadConfig)}
