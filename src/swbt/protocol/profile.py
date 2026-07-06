@@ -20,17 +20,17 @@ from swbt.protocol.profiles.pro_controller import (
 )
 
 __all__ = (
+    "JOYCON_LEFT_BUTTON_BITS",
+    "JOYCON_RIGHT_BUTTON_BITS",
+    "PRO_CONTROLLER_BUTTON_BITS",
+    "SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR",
     "ButtonBitMap",
     "ControllerColors",
     "ControllerKind",
     "ControllerProfile",
     "HidSdpPolicy",
-    "JOYCON_LEFT_BUTTON_BITS",
-    "JOYCON_RIGHT_BUTTON_BITS",
     "JoyConLeftProfile",
     "JoyConRightProfile",
-    "PRO_CONTROLLER_BUTTON_BITS",
     "ProControllerProfile",
-    "SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR",
     "default_controller_profile",
 )

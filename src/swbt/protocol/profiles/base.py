@@ -5,7 +5,7 @@ from enum import Enum
 
 from swbt.errors import InvalidInputError, UnsupportedInputError
 from swbt.input import Button, InputState, Stick
-from swbt.protocol.buttons import ButtonBitMap, PRO_CONTROLLER_BUTTON_BITS
+from swbt.protocol.buttons import PRO_CONTROLLER_BUTTON_BITS, ButtonBitMap
 from swbt.protocol.descriptors import SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
 
 

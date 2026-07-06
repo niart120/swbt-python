@@ -5,6 +5,8 @@ from typing import cast
 import pytest
 
 from swbt.errors import InvalidInputError
+from swbt.protocol import descriptors as split_descriptors
+from swbt.protocol.buttons import PRO_CONTROLLER_BUTTON_BITS
 from swbt.protocol.profile import (
     SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR,
     ControllerColors,
@@ -13,28 +15,31 @@ from swbt.protocol.profile import (
     JoyConRightProfile,
     ProControllerProfile,
 )
+from swbt.protocol.profiles.base import ControllerKind as SplitControllerKind
+from swbt.protocol.profiles.joycon import (
+    JoyConLeftProfile as SplitJoyConLeftProfile,
+)
+from swbt.protocol.profiles.joycon import (
+    JoyConRightProfile as SplitJoyConRightProfile,
+)
+from swbt.protocol.profiles.pro_controller import (
+    ProControllerProfile as SplitProControllerProfile,
+)
+from swbt.protocol.profiles.pro_controller import (
+    default_controller_profile as split_default_controller_profile,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_protocol_profile_implementation_is_split_by_profile_concern() -> None:
-    from swbt.protocol.buttons import PRO_CONTROLLER_BUTTON_BITS
-    from swbt.protocol.descriptors import SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR as descriptor
-    from swbt.protocol.profiles.base import ControllerKind as SplitControllerKind
-    from swbt.protocol.profiles.joycon import (
-        JoyConLeftProfile as SplitJoyConLeftProfile,
-        JoyConRightProfile as SplitJoyConRightProfile,
-    )
-    from swbt.protocol.profiles.pro_controller import (
-        ProControllerProfile as SplitProControllerProfile,
-        default_controller_profile as split_default_controller_profile,
-    )
-
     assert SplitControllerKind is ControllerKind
     assert SplitProControllerProfile is ProControllerProfile
     assert SplitJoyConLeftProfile is JoyConLeftProfile
     assert SplitJoyConRightProfile is JoyConRightProfile
-    assert descriptor is SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
+    assert split_descriptors.SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR is (
+        SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
+    )
     assert ProControllerProfile().button_bits is PRO_CONTROLLER_BUTTON_BITS
     assert split_default_controller_profile().__class__ is ProControllerProfile
 

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from swbt.protocol.buttons import ButtonBitMap, PRO_CONTROLLER_BUTTON_BITS
+from swbt.protocol.buttons import PRO_CONTROLLER_BUTTON_BITS, ButtonBitMap
 from swbt.protocol.profiles.base import ControllerKind, ControllerProfile
 
 
