@@ -5,12 +5,9 @@ import inspect
 from swbt import (
     AdapterDiscoveryError,
     AdapterInfo,
-    BondedPeer,
     ControllerColors,
     DiagnosticsConfig,
-    DisconnectRequestResult,
     GamepadStatus,
-    HidDeviceTransport,
     IMUFrame,
     InputState,
     JoyConL,
@@ -35,8 +32,6 @@ def _assert_doc_contains(obj: object, *tokens: str) -> None:
 def test_public_value_object_docstrings_describe_attributes_and_factory_returns() -> None:
     for cls, attributes in (
         (ConnectionResult, ("route", "status", "peer_address", "peer_count")),
-        (DisconnectRequestResult, ("status", "channels", "reason", "error_type", "message")),
-        (BondedPeer, ("address",)),
         (
             AdapterInfo,
             (
@@ -206,30 +201,3 @@ def test_concrete_controller_docstrings_describe_constructor_arguments() -> None
         assert "device_name" not in constructor_doc
         assert "transport:" not in constructor_doc
         assert "Optional HID transport instance" not in constructor_doc
-
-
-def test_transport_extension_docstrings_describe_public_arguments() -> None:
-    expected_method_tokens: tuple[tuple[object, tuple[str, ...]], ...] = (
-        (HidDeviceTransport.open, ("Open", "Raises:")),
-        (HidDeviceTransport.start_advertising, ("host-discoverable", "Raises:")),
-        (HidDeviceTransport.close, ("Close", "transport resources")),
-        (HidDeviceTransport.request_disconnect, ("Returns:", "DisconnectRequestResult")),
-        (HidDeviceTransport.local_bluetooth_address, ("Returns:", "bytes | None")),
-        (
-            HidDeviceTransport.list_bonded_peers,
-            ("Returns:", "BondedPeer", "Raises:", "InvalidKeyStoreError"),
-        ),
-        (
-            HidDeviceTransport.connect_bonded_peer,
-            ("Args:", "peer_address", "connect_timeout", "Raises:"),
-        ),
-        (HidDeviceTransport.send_interrupt, ("Args:", "payload", "Raises:")),
-        (HidDeviceTransport.send_control, ("Args:", "payload", "Raises:")),
-        (HidDeviceTransport.on_interrupt_data, ("Args:", "callback")),
-        (HidDeviceTransport.on_control_data, ("Args:", "callback")),
-        (HidDeviceTransport.on_connected, ("Args:", "callback")),
-        (HidDeviceTransport.on_disconnected, ("Args:", "callback")),
-    )
-
-    for method, tokens in expected_method_tokens:
-        _assert_doc_contains(method, *tokens)
