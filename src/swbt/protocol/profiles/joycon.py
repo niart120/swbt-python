@@ -14,6 +14,8 @@ from swbt.protocol.profiles.base import (
     HidSdpPolicy,
 )
 
+_JOYCON_IMU_ENABLE_MODE = 0x02
+
 
 def _joycontrol_hid_sdp_policy() -> HidSdpPolicy:
     return HidSdpPolicy(
@@ -61,6 +63,7 @@ class JoyConLeftProfile(ControllerProfile):
     hid_sdp_policy: HidSdpPolicy = field(default_factory=_joycontrol_hid_sdp_policy)
     controller_colors: ControllerColors = field(default_factory=_joycon_left_controller_colors)
     button_bits: ButtonBitMap = field(default_factory=lambda: JOYCON_LEFT_BUTTON_BITS)
+    imu_enable_modes: tuple[int, ...] = (0x00, 0x01, _JOYCON_IMU_ENABLE_MODE)
     supports_left_stick: bool = True
     supports_right_stick: bool = False
 
@@ -76,5 +79,6 @@ class JoyConRightProfile(ControllerProfile):
     hid_sdp_policy: HidSdpPolicy = field(default_factory=_joycontrol_hid_sdp_policy)
     controller_colors: ControllerColors = field(default_factory=_joycon_right_controller_colors)
     button_bits: ButtonBitMap = field(default_factory=lambda: JOYCON_RIGHT_BUTTON_BITS)
+    imu_enable_modes: tuple[int, ...] = (0x00, 0x01, _JOYCON_IMU_ENABLE_MODE)
     supports_left_stick: bool = False
     supports_right_stick: bool = True

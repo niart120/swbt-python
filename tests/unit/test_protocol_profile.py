@@ -38,6 +38,24 @@ def test_protocol_profile_implementation_is_split_by_profile_concern() -> None:
     assert split_default_controller_profile().__class__ is ProControllerProfile
 
 
+def test_controller_kind_branching_stays_localized_to_profiles_and_gamepad_classes() -> None:
+    allowed_paths = {
+        "src/swbt/gamepad/core.py",
+        "src/swbt/protocol/profiles/base.py",
+        "src/swbt/protocol/profiles/joycon.py",
+        "src/swbt/protocol/profiles/pro_controller.py",
+    }
+    offenders = []
+
+    for path in (ROOT / "src" / "swbt").rglob("*.py"):
+        relative_path = path.relative_to(ROOT).as_posix()
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if "ControllerKind." in line and relative_path not in allowed_paths:
+                offenders.append(f"{relative_path}:{line_number}")
+
+    assert offenders == []
+
+
 def test_pro_controller_hid_descriptor_is_203_bytes() -> None:
     descriptor = ProControllerProfile().hid_report_descriptor
 

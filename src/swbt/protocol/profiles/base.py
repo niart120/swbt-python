@@ -127,6 +127,7 @@ class ControllerProfile:
     hid_sdp_policy: HidSdpPolicy = field(default_factory=HidSdpPolicy)
     controller_colors: ControllerColors = field(default_factory=ControllerColors)
     button_bits: ButtonBitMap = field(default_factory=lambda: PRO_CONTROLLER_BUTTON_BITS)
+    imu_enable_modes: tuple[int, ...] = (0x00, 0x01)
     supports_left_stick: bool = True
     supports_right_stick: bool = True
 
