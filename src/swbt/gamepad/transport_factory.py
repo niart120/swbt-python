@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from swbt.diagnostics import DiagnosticsRecorder
-from swbt.protocol.profile import ControllerProfile
+from swbt.protocol.profiles.base import ControllerProfile
 from swbt.transport.base import HidDeviceTransport
 
 

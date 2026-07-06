@@ -1,7 +1,8 @@
 """Input report builders."""
 
 from swbt.input import InputState, Stick
-from swbt.protocol.profile import ControllerProfile, default_controller_profile
+from swbt.protocol.profiles.base import ControllerProfile
+from swbt.protocol.profiles.pro_controller import default_controller_profile
 
 
 class InputReportBuilder:

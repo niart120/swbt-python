@@ -6,13 +6,13 @@ from swbt.errors import ProtocolError
 from swbt.input import InputState
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport
-from swbt.protocol.profile import ControllerKind, ControllerProfile, default_controller_profile
+from swbt.protocol.profiles.base import ControllerProfile
+from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.protocol.spi import VirtualSpiFlash
 
 SIMPLE_ACK_SUBCOMMANDS = {0x08, 0x30}
 SESSION_STATE_SUBCOMMANDS = frozenset({0x03, 0x40, 0x48})
 SUPPORTED_INPUT_REPORT_MODE = 0x30
-JOYCON_IMU_ENABLE_MODE = 0x02
 DEFAULT_DEVICE_INFO_BLUETOOTH_ADDRESS = b"\x00\x00\x00\x00\x00\x00"
 TRIGGER_BUTTONS_ELAPSED_DATA = bytes.fromhex("2c 01 2c 01 00 00 00 00 00 00 00 00 00 00")
 MCU_CONFIG_DATA = bytes.fromhex(
@@ -122,7 +122,7 @@ class SubcommandResponder:
         return b""
 
     def _set_imu_enabled(self, payload: bytes) -> bytes:
-        imu_mode = _imu_enable_payload(payload, self._profile.kind)
+        imu_mode = _imu_enable_payload(payload, self._profile.imu_enable_modes)
         self._session_state.imu_mode = imu_mode
         self._session_state.imu_enabled = imu_mode != 0x00
         return b""
@@ -177,14 +177,9 @@ def _enable_payload(payload: bytes, subcommand_name: str) -> bool:
     return value == 0x01
 
 
-def _imu_enable_payload(payload: bytes, profile_kind: ControllerKind) -> int:
+def _imu_enable_payload(payload: bytes, accepted_modes: tuple[int, ...]) -> int:
     value = _first_payload_byte(payload, "enable IMU")
-    if value in (0x00, 0x01):
-        return value
-    if value == JOYCON_IMU_ENABLE_MODE and profile_kind in (
-        ControllerKind.JOYCON_LEFT,
-        ControllerKind.JOYCON_RIGHT,
-    ):
+    if value in accepted_modes:
         return value
     msg = "enable IMU subcommand argument must be 0x00 or 0x01"
     raise ProtocolError(msg)

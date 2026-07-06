@@ -1,7 +1,10 @@
 """Public API docstring contract tests."""
 
 import inspect
+from collections.abc import Callable
+from dataclasses import fields, is_dataclass
 
+import swbt
 from swbt import (
     AdapterDiscoveryError,
     AdapterInfo,
@@ -21,12 +24,49 @@ from swbt import (
 from swbt.gamepad import ConnectionResult
 
 
+def _explicit_parameters(callable_obj: Callable[..., object]) -> tuple[str, ...]:
+    return tuple(
+        parameter.name
+        for parameter in inspect.signature(callable_obj).parameters.values()
+        if parameter.name not in {"self", "cls"}
+        and parameter.kind
+        not in {
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        }
+    )
+
+
 def _assert_doc_contains(obj: object, *tokens: str) -> None:
     doc = inspect.getdoc(obj)
 
     assert doc is not None
     missing = [token for token in tokens if token not in doc]
     assert not missing, f"{obj!r} docstring is missing: {missing}"
+
+
+def test_root_public_api_docstrings_list_google_style_arguments() -> None:
+    for public_name in swbt.__all__:
+        public_obj = getattr(swbt, public_name)
+
+        if is_dataclass(public_obj):
+            _assert_doc_contains(
+                public_obj,
+                "Args:",
+                *(field.name for field in fields(public_obj)),
+            )
+            continue
+
+        if inspect.isfunction(public_obj):
+            parameters = _explicit_parameters(public_obj)
+            if parameters:
+                _assert_doc_contains(public_obj, "Args:", *parameters)
+            continue
+
+        if inspect.isclass(public_obj):
+            parameters = _explicit_parameters(public_obj.__init__)
+            if parameters:
+                _assert_doc_contains(public_obj.__init__, "Args:", *parameters)
 
 
 def test_public_value_object_docstrings_describe_attributes_and_factory_returns() -> None:

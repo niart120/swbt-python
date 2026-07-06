@@ -1,9 +1,12 @@
+import re
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 from swbt.errors import InvalidInputError
+from swbt.protocol import descriptors as split_descriptors
+from swbt.protocol.buttons import PRO_CONTROLLER_BUTTON_BITS
 from swbt.protocol.profile import (
     SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR,
     ControllerColors,
@@ -12,8 +15,65 @@ from swbt.protocol.profile import (
     JoyConRightProfile,
     ProControllerProfile,
 )
+from swbt.protocol.profiles.base import ControllerKind as SplitControllerKind
+from swbt.protocol.profiles.joycon import (
+    JoyConLeftProfile as SplitJoyConLeftProfile,
+)
+from swbt.protocol.profiles.joycon import (
+    JoyConRightProfile as SplitJoyConRightProfile,
+)
+from swbt.protocol.profiles.pro_controller import (
+    ProControllerProfile as SplitProControllerProfile,
+)
+from swbt.protocol.profiles.pro_controller import (
+    default_controller_profile as split_default_controller_profile,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_protocol_profile_implementation_is_split_by_profile_concern() -> None:
+    assert SplitControllerKind is ControllerKind
+    assert SplitProControllerProfile is ProControllerProfile
+    assert SplitJoyConLeftProfile is JoyConLeftProfile
+    assert SplitJoyConRightProfile is JoyConRightProfile
+    assert split_descriptors.SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR is (
+        SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
+    )
+    assert ProControllerProfile().button_bits is PRO_CONTROLLER_BUTTON_BITS
+    assert split_default_controller_profile().__class__ is ProControllerProfile
+
+
+def test_controller_kind_branching_stays_localized_to_profiles_and_gamepad_classes() -> None:
+    allowed_paths = {
+        "src/swbt/gamepad/core.py",
+        "src/swbt/protocol/profiles/base.py",
+        "src/swbt/protocol/profiles/joycon.py",
+        "src/swbt/protocol/profiles/pro_controller.py",
+    }
+    offenders = []
+
+    for path in (ROOT / "src" / "swbt").rglob("*.py"):
+        relative_path = path.relative_to(ROOT).as_posix()
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if "ControllerKind." in line and relative_path not in allowed_paths:
+                offenders.append(f"{relative_path}:{line_number}")
+
+    assert offenders == []
+
+
+def test_production_profile_imports_use_split_modules() -> None:
+    legacy_profile_import = re.compile(r"(?:from|import) swbt\.protocol\.profile(?:\s|$)")
+    offenders = []
+
+    for path in (ROOT / "src" / "swbt").rglob("*.py"):
+        relative_path = path.relative_to(ROOT).as_posix()
+        if relative_path == "src/swbt/protocol/profile.py":
+            continue
+        if legacy_profile_import.search(path.read_text(encoding="utf-8")):
+            offenders.append(relative_path)
+
+    assert offenders == []
 
 
 def test_pro_controller_hid_descriptor_is_203_bytes() -> None:
@@ -93,9 +153,13 @@ def test_controller_profile_rejects_invalid_default_report_period(value: object)
 
 def test_pro_controller_profile_direct_construction_is_limited_to_profile_factory() -> None:
     direct_construction_sites = []
+    allowed_paths = {
+        ROOT / "src" / "swbt" / "protocol" / "profile.py",
+        ROOT / "src" / "swbt" / "protocol" / "profiles" / "pro_controller.py",
+    }
 
     for path in (ROOT / "src" / "swbt").rglob("*.py"):
-        if path == ROOT / "src" / "swbt" / "protocol" / "profile.py":
+        if path in allowed_paths:
             continue
         for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if "ProControllerProfile(" in line:

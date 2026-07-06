@@ -10,7 +10,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from swbt.errors import ClosedError, TransportOpenError
-from swbt.protocol.profile import default_controller_profile
+from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.transport._bumble_acl import drain_bumble_acl_queue
 from swbt.transport._bumble_hidp import (
     HID_GET_SET_SUCCESS,
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from bumble.transport.common import TransportSink, TransportSource
 
     from swbt.diagnostics import DiagnosticsRecorder
-    from swbt.protocol.profile import ControllerProfile
+    from swbt.protocol.profiles.base import ControllerProfile
     from swbt.transport.base import (
         ConnectedCallback,
         ControlDataCallback,

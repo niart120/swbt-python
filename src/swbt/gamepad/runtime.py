@@ -25,7 +25,7 @@ from swbt.gamepad.transport_factory import (
 )
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.input_report import InputReportBuilder
-from swbt.protocol.profile import ControllerColors
+from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.subcommand import SubcommandResponder
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore

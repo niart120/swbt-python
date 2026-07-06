@@ -3,11 +3,8 @@
 from dataclasses import dataclass, field
 
 from swbt.errors import InvalidInputError
-from swbt.protocol.profile import (
-    ControllerColors,
-    ControllerProfile,
-    default_controller_profile,
-)
+from swbt.protocol.profiles.base import ControllerColors, ControllerProfile
+from swbt.protocol.profiles.pro_controller import default_controller_profile
 
 
 @dataclass(frozen=True)

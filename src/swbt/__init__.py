@@ -21,7 +21,7 @@ from swbt.gamepad import (
     SwitchGamepad,
 )
 from swbt.input import Button, IMUFrame, InputState, Stick
-from swbt.protocol.profile import ControllerColors
+from swbt.protocol.profiles.base import ControllerColors
 
 __all__ = (
     "AdapterDiscoveryError",
