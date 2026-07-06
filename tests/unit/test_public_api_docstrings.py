@@ -18,7 +18,6 @@ from swbt import (
     ProController,
     Stick,
     SwitchGamepad,
-    SwitchGamepadConfig,
     list_adapters,
 )
 from swbt.gamepad import ConnectionResult
@@ -52,10 +51,6 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         (
             AdapterDiscoveryError,
             ("platform", "backend", "libusb_available", "bumble_version"),
-        ),
-        (
-            SwitchGamepadConfig,
-            ("adapter", "key_store_path", "report_period_us", "device_name", "controller_colors"),
         ),
         (DiagnosticsConfig, ("trace_writer",)),
         (
@@ -161,13 +156,15 @@ def test_concrete_controller_docstrings_describe_constructor_arguments() -> None
         "adapter",
         "key_store_path",
         "report_period_us",
-        "device_name",
         "controller_colors",
         "diagnostics",
         "transport",
         "Raises:",
         "InvalidInputError",
     )
+    pro_constructor_doc = inspect.getdoc(ProController.__init__)
+    assert pro_constructor_doc is not None
+    assert "device_name" not in pro_constructor_doc
 
     for controller_cls in (JoyConL, JoyConR):
         _assert_doc_contains(
@@ -176,29 +173,15 @@ def test_concrete_controller_docstrings_describe_constructor_arguments() -> None
             "adapter",
             "key_store_path",
             "report_period_us",
-            "device_name",
             "controller_colors",
             "diagnostics",
             "transport",
             "Raises:",
             "InvalidInputError",
         )
-
-    for factory in (ProController.from_config, JoyConL.from_config, JoyConR.from_config):
-        _assert_doc_contains(
-            factory,
-            "Args:",
-            "config",
-            "diagnostics",
-            "transport",
-            "Returns:",
-            "Raises:",
-            "InvalidInputError",
-        )
-
-    pro_from_config_doc = inspect.getdoc(ProController.from_config)
-    assert pro_from_config_doc is not None
-    assert "_RuntimeBackedGamepad" not in pro_from_config_doc
+        constructor_doc = inspect.getdoc(controller_cls.__init__)
+        assert constructor_doc is not None
+        assert "device_name" not in constructor_doc
 
 
 def test_transport_extension_docstrings_describe_public_arguments() -> None:

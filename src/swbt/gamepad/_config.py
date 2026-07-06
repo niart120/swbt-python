@@ -54,6 +54,30 @@ class SwitchGamepadConfig:
 
 
 @dataclass(frozen=True)
+class _ControllerSpec:
+    """Internal controller identity selected by a concrete controller class."""
+
+    profile: ControllerProfile
+
+    def build_config(
+        self,
+        *,
+        adapter: str | None,
+        key_store_path: str | None,
+        report_period_us: int | None,
+        controller_colors: ControllerColors | None,
+    ) -> SwitchGamepadConfig:
+        """Create internal construction config from public constructor options."""
+        return SwitchGamepadConfig(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            profile=self.profile,
+            report_period_us=report_period_us,
+            controller_colors=controller_colors,
+        )
+
+
+@dataclass(frozen=True)
 class _RuntimeConfig:
     """Normalized internal configuration for ControllerRuntime."""
 

@@ -22,12 +22,12 @@ from swbt import (
     JoyConR,
     ProController,
     SwitchGamepad,
-    SwitchGamepadConfig,
 )
-from swbt.gamepad import ConnectionStatus
+from swbt.gamepad import ConnectionResult, ConnectionStatus
 from swbt.gamepad import core as gamepad_core
 from swbt.gamepad import runtime as gamepad_runtime
-from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
+from swbt.gamepad._config import SwitchGamepadConfig
+from swbt.protocol.profile import JoyConLeftProfile, JoyConRightProfile, ProControllerProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
 
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 REARCHITECTURE_TARGET_XFAIL_REASON = (
-    "target boundary fixed before implementation; unit_041 or unit_042 makes this green"
+    "target boundary fixed before implementation; unit_042 makes this green"
 )
 
 
@@ -135,8 +135,7 @@ def test_rearchitecture_target_public_concrete_controllers_share_interface() -> 
         assert issubclass(controller_cls, SwitchGamepad)
 
 
-@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
-def test_rearchitecture_target_public_controller_constructors_hide_internal_seams() -> None:
+def test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams() -> None:
     expected_parameters = {
         "adapter",
         "controller_colors",
@@ -144,7 +143,7 @@ def test_rearchitecture_target_public_controller_constructors_hide_internal_seam
         "key_store_path",
         "report_period_us",
     }
-    forbidden_parameters = {"device_name", "profile", "transport"}
+    forbidden_parameters = {"device_name", "profile"}
 
     for controller_name in ("ProController", "JoyConL", "JoyConR"):
         controller_cls = getattr(swbt, controller_name)
@@ -152,6 +151,14 @@ def test_rearchitecture_target_public_controller_constructors_hide_internal_seam
 
         assert expected_parameters.issubset(parameters)
         assert forbidden_parameters.isdisjoint(parameters)
+
+
+@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
+def test_rearchitecture_target_public_controller_constructors_hide_transport_seam() -> None:
+    for controller_name in ("ProController", "JoyConL", "JoyConR"):
+        controller_cls = getattr(swbt, controller_name)
+
+        assert "transport" not in inspect.signature(controller_cls).parameters
 
 
 def test_pro_controller_constructor_accepts_key_store_path() -> None:
@@ -207,25 +214,36 @@ def test_joycon_public_constructors_are_thin_switch_gamepad_wrappers() -> None:
     assert "JoyConRightProfile" not in swbt.__all__
 
 
+def test_concrete_controller_classes_own_internal_controller_specs() -> None:
+    assert isinstance(ProController._controller_spec.profile, ProControllerProfile)
+    assert isinstance(JoyConL._controller_spec.profile, JoyConLeftProfile)
+    assert isinstance(JoyConR._controller_spec.profile, JoyConRightProfile)
+
+
 def test_joycon_from_config_requires_matching_joycon_profile() -> None:
     with pytest.raises(InvalidInputError):
-        JoyConL.from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
+        JoyConL._from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
 
     with pytest.raises(InvalidInputError):
-        JoyConR.from_config(
+        JoyConR._from_config(
             SwitchGamepadConfig(profile=JoyConLeftProfile()),
             transport=FakeHidTransport(),
         )
 
 
 def test_joycon_from_config_accepts_matching_joycon_profile() -> None:
-    pad = JoyConL.from_config(
+    pad = JoyConL._from_config(
         SwitchGamepadConfig(profile=JoyConLeftProfile()),
         transport=FakeHidTransport(),
     )
 
     assert isinstance(pad, JoyConL)
     assert pad.snapshot() == swbt.InputState.neutral()
+
+
+def test_rearchitecture_target_public_controllers_do_not_expose_from_config() -> None:
+    for controller_cls in (ProController, JoyConL, JoyConR):
+        assert not hasattr(controller_cls, "from_config")
 
 
 def test_connection_methods_do_not_accept_key_store_path() -> None:
@@ -241,6 +259,20 @@ def test_connection_methods_do_not_accept_key_store_path() -> None:
 
 def test_connection_status_does_not_include_ambiguous_bond() -> None:
     assert "ambiguous_bond" not in get_args(ConnectionStatus)
+
+
+def test_connection_result_exposes_plain_reconnect_values_without_bonded_peer() -> None:
+    field_names = {field.name for field in fields(ConnectionResult)}
+    result = ConnectionResult(
+        route="active_reconnect",
+        status="connected",
+        peer_address="aa:bb:cc:dd:ee:ff",
+        peer_count=1,
+    )
+
+    assert field_names == {"route", "status", "peer_address", "peer_count"}
+    assert result.peer_address == "aa:bb:cc:dd:ee:ff"
+    assert result.peer_count == 1
 
 
 def test_default_transport_requires_explicit_adapter() -> None:
@@ -327,7 +359,7 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
         monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
 
         key_store_path = tmp_path / "keys.json"
-        pad = ProController.from_config(
+        pad = ProController._from_config(
             SwitchGamepadConfig(
                 adapter="usb:1",
                 device_name="Reference Pad",
@@ -412,7 +444,7 @@ def test_from_config_uses_profile_device_name_unless_user_overrides(
 
         monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
 
-        pad = ProController.from_config(config)
+        pad = ProController._from_config(config)
         await pad.open()
         await pad.close(neutral=True)
 
@@ -464,7 +496,7 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
     monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
 
     async def run(config: SwitchGamepadConfig) -> int:
-        pad = ProController.from_config(config, transport=FakeHidTransport())
+        pad = ProController._from_config(config, transport=FakeHidTransport())
         await pad.open()
         await pad.close(neutral=False)
         return captured_periods[-1]
@@ -487,6 +519,40 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
 
     assert profile_default_period == 12_345
     assert explicit_period == 8000
+
+
+def test_public_constructor_uses_profile_default_report_period(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_periods: list[int] = []
+
+    class SpyReportLoop:
+        def __init__(
+            self,
+            *,
+            transport: object,
+            state_store: object,
+            report_period_us: int,
+            input_report_builder: object | None = None,
+            diagnostics: object | None = None,
+        ) -> None:
+            _ = (transport, state_store, input_report_builder, diagnostics)
+            captured_periods.append(report_period_us)
+
+        async def stop(self) -> None:
+            return None
+
+    monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
+
+    async def run() -> int:
+        pad = ProController(transport=FakeHidTransport())
+        await pad.open()
+        await pad.close(neutral=False)
+        return captured_periods[-1]
+
+    report_period_us = asyncio.run(run())
+
+    assert report_period_us == ProControllerProfile().default_report_period_us
 
 
 def test_hid_transport_disconnect_request_boundary_uses_plain_types() -> None:

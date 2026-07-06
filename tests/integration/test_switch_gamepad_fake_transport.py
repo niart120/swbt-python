@@ -20,7 +20,6 @@ from swbt import (
     ProController,
     Stick,
     SwitchGamepad,
-    SwitchGamepadConfig,
 )
 from swbt.errors import (
     ClosedError,
@@ -30,6 +29,7 @@ from swbt.errors import (
     InvalidKeyStoreError,
     UnsupportedInputError,
 )
+from swbt.gamepad._config import SwitchGamepadConfig
 from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
 
@@ -885,7 +885,7 @@ def test_from_config_output_report_injection_uses_configured_controller_colors()
         )
         request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
 
-        async with ProController.from_config(config, transport=transport):
+        async with ProController._from_config(config, transport=transport):
             await transport.connect()
 
             await transport.inject_interrupt_data(request_controller_colors)
@@ -917,7 +917,7 @@ def test_from_config_uses_profile_controller_colors_when_colors_are_unspecified(
         )
         request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
 
-        async with ProController.from_config(config, transport=transport):
+        async with ProController._from_config(config, transport=transport):
             await transport.connect()
 
             await transport.inject_interrupt_data(request_controller_colors)
@@ -972,7 +972,7 @@ def test_from_config_profile_reaches_periodic_input_report_builder() -> None:
             report_period_us=1000,
         )
 
-        async with ProController.from_config(config, transport=transport):
+        async with ProController._from_config(config, transport=transport):
             await transport.connect()
 
             report = await transport.wait_for_interrupt_report_id(0x30)
@@ -992,7 +992,7 @@ def test_from_config_joycon_profile_reaches_device_info_reply() -> None:
         )
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with JoyConL.from_config(config, transport=transport):
+        async with JoyConL._from_config(config, transport=transport):
             await transport.connect()
 
             await transport.inject_interrupt_data(request_device_info)

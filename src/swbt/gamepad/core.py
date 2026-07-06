@@ -2,7 +2,7 @@
 
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
 from swbt.errors import InvalidInputError
-from swbt.gamepad._config import SwitchGamepadConfig
+from swbt.gamepad._config import SwitchGamepadConfig, _ControllerSpec
 from swbt.gamepad.connection import ConnectionResult
 from swbt.gamepad.interface import SwitchGamepad
 from swbt.gamepad.output import OutputReportDispatcher
@@ -13,6 +13,7 @@ from swbt.protocol.profile import (
     ControllerKind,
     JoyConLeftProfile,
     JoyConRightProfile,
+    default_controller_profile,
 )
 from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
@@ -25,13 +26,14 @@ class _RuntimeBackedGamepad(SwitchGamepad):
     controller work to an internal runtime.
     """
 
+    _controller_spec = _ControllerSpec(profile=default_controller_profile())
+
     def __init__(
         self,
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
         report_period_us: int | None = None,
-        device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
@@ -43,7 +45,6 @@ class _RuntimeBackedGamepad(SwitchGamepad):
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
-            device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance. When supplied, no Bumble
@@ -53,11 +54,10 @@ class _RuntimeBackedGamepad(SwitchGamepad):
             InvalidInputError: ``adapter`` is omitted for the default transport or
                 ``report_period_us`` is not positive.
         """
-        config = SwitchGamepadConfig(
+        config = self._controller_spec.build_config(
             adapter=adapter,
             key_store_path=key_store_path,
             report_period_us=report_period_us,
-            device_name=device_name,
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
@@ -76,7 +76,7 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         )
 
     @classmethod
-    def from_config(
+    def _from_config(
         cls,
         config: SwitchGamepadConfig,
         *,
@@ -339,9 +339,13 @@ class _RuntimeBackedGamepad(SwitchGamepad):
 class ProController(_RuntimeBackedGamepad):
     """Runtime-backed Pro Controller-compatible gamepad."""
 
+    _controller_spec = _ControllerSpec(profile=default_controller_profile())
+
 
 class JoyConL(_RuntimeBackedGamepad):
     """Runtime-backed Joy-Con L-compatible gamepad."""
+
+    _controller_spec = _ControllerSpec(profile=JoyConLeftProfile())
 
     def __init__(
         self,
@@ -349,7 +353,6 @@ class JoyConL(_RuntimeBackedGamepad):
         adapter: str | None = None,
         key_store_path: str | None = None,
         report_period_us: int | None = None,
-        device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
@@ -361,7 +364,6 @@ class JoyConL(_RuntimeBackedGamepad):
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
-            device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance. When supplied, no Bumble
@@ -371,18 +373,16 @@ class JoyConL(_RuntimeBackedGamepad):
             InvalidInputError: ``adapter`` is omitted for the default transport or
                 ``report_period_us`` is not positive.
         """
-        config = SwitchGamepadConfig(
+        config = self._controller_spec.build_config(
             adapter=adapter,
             key_store_path=key_store_path,
-            profile=JoyConLeftProfile(),
             report_period_us=report_period_us,
-            device_name=device_name,
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
 
     @classmethod
-    def from_config(
+    def _from_config(
         cls,
         config: SwitchGamepadConfig,
         *,
@@ -404,7 +404,7 @@ class JoyConL(_RuntimeBackedGamepad):
                 invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
         """
         if config.profile.kind is not ControllerKind.JOYCON_LEFT:
-            msg = "JoyConL.from_config requires a Joy-Con L profile"
+            msg = "JoyConL._from_config requires a Joy-Con L profile"
             raise InvalidInputError(msg)
         gamepad = cls.__new__(cls)
         gamepad._init_from_config(
@@ -418,13 +418,14 @@ class JoyConL(_RuntimeBackedGamepad):
 class JoyConR(_RuntimeBackedGamepad):
     """Runtime-backed Joy-Con R-compatible gamepad."""
 
+    _controller_spec = _ControllerSpec(profile=JoyConRightProfile())
+
     def __init__(
         self,
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
         report_period_us: int | None = None,
-        device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
@@ -436,7 +437,6 @@ class JoyConR(_RuntimeBackedGamepad):
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
-            device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance. When supplied, no Bumble
@@ -446,18 +446,16 @@ class JoyConR(_RuntimeBackedGamepad):
             InvalidInputError: ``adapter`` is omitted for the default transport or
                 ``report_period_us`` is not positive.
         """
-        config = SwitchGamepadConfig(
+        config = self._controller_spec.build_config(
             adapter=adapter,
             key_store_path=key_store_path,
-            profile=JoyConRightProfile(),
             report_period_us=report_period_us,
-            device_name=device_name,
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
 
     @classmethod
-    def from_config(
+    def _from_config(
         cls,
         config: SwitchGamepadConfig,
         *,
@@ -479,7 +477,7 @@ class JoyConR(_RuntimeBackedGamepad):
                 invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
         """
         if config.profile.kind is not ControllerKind.JOYCON_RIGHT:
-            msg = "JoyConR.from_config requires a Joy-Con R profile"
+            msg = "JoyConR._from_config requires a Joy-Con R profile"
             raise InvalidInputError(msg)
         gamepad = cls.__new__(cls)
         gamepad._init_from_config(

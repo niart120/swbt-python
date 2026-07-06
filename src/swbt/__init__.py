@@ -19,7 +19,6 @@ from swbt.gamepad import (
     JoyConR,
     ProController,
     SwitchGamepad,
-    SwitchGamepadConfig,
 )
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.profile import ControllerColors
@@ -49,7 +48,6 @@ __all__ = (
     "Stick",
     "SwbtError",
     "SwitchGamepad",
-    "SwitchGamepadConfig",
     "TransportOpenError",
     "UnsupportedInputError",
     "list_adapters",
