@@ -258,6 +258,18 @@ transport=FakeHidTransport
 
 この順序の理由は、M1 で挙動変更なしの移植に閉じ、M2 以降で breaking change と docs 更新を扱うためである。M3〜M5 は必要なら PR をさらに小さく分割する。
 
+## Work unit mapping
+
+| milestone | unit | path | scope |
+|---|---|---|---|
+| M0 | unit_038 | `spec/wip/unit_038/REARCHITECTURE_DECISION_BOUNDARY_TESTS.md` | decision freeze と target public boundary tests |
+| M1 | unit_039 | `spec/wip/unit_039/CONTROLLER_RUNTIME_EXTRACTION.md` | behavior-preserving runtime extraction |
+| M2 | unit_040 | `spec/wip/unit_040/PUBLIC_CONTROLLER_API_MODEL.md` | `SwitchGamepad` abstract interface と public concrete controller API |
+| M3 | unit_041 | `spec/wip/unit_041/CONTROLLER_CONFIG_PROFILE_OWNERSHIP.md` | public config / profile injection cleanup |
+| M4 | unit_042 | `spec/wip/unit_042/INTERNAL_TRANSPORT_FACTORY.md` | public `transport=` removal and internal transport factory |
+| M5 | unit_043 | `spec/wip/unit_043/PROTOCOL_PROFILE_MODULE_SPLIT.md` | profile module split and `ControllerKind` branch localization |
+| M6 | unit_044 | `spec/wip/unit_044/REARCHITECTURE_DOCS_RELEASE_MATRIX.md` | docs, examples, hardware matrix, release note |
+
 ## Implementation checklist
 
 ### 実装前
