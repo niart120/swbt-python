@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import cast
 
@@ -52,6 +53,20 @@ def test_controller_kind_branching_stays_localized_to_profiles_and_gamepad_class
         for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if "ControllerKind." in line and relative_path not in allowed_paths:
                 offenders.append(f"{relative_path}:{line_number}")
+
+    assert offenders == []
+
+
+def test_production_profile_imports_use_split_modules() -> None:
+    legacy_profile_import = re.compile(r"(?:from|import) swbt\.protocol\.profile(?:\s|$)")
+    offenders = []
+
+    for path in (ROOT / "src" / "swbt").rglob("*.py"):
+        relative_path = path.relative_to(ROOT).as_posix()
+        if relative_path == "src/swbt/protocol/profile.py":
+            continue
+        if legacy_profile_import.search(path.read_text(encoding="utf-8")):
+            offenders.append(relative_path)
 
     assert offenders == []
 

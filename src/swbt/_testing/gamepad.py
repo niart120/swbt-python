@@ -4,7 +4,7 @@ from typing import cast
 
 from swbt import ControllerColors, DiagnosticsConfig, JoyConL, JoyConR, ProController
 from swbt.gamepad._config import SwitchGamepadConfig
-from swbt.protocol.profile import JoyConLeftProfile, JoyConRightProfile
+from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.transport.base import HidDeviceTransport
 
 

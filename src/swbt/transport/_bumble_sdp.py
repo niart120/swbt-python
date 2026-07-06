@@ -1,6 +1,6 @@
 """SDP service record builder for Bumble HID transport."""
 
-from swbt.protocol.profile import HidSdpPolicy
+from swbt.protocol.profiles.base import HidSdpPolicy
 from swbt.transport._bumble_hidp import HID_CONTROL_PSM, HID_INTERRUPT_PSM
 
 _HID_SERVICE_RECORD_HANDLE = 0x00010001

@@ -8,13 +8,9 @@ from swbt.gamepad.interface import SwitchGamepad
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.runtime import ControllerRuntime
 from swbt.input import Button, IMUFrame, InputState, Stick
-from swbt.protocol.profile import (
-    ControllerColors,
-    ControllerKind,
-    JoyConLeftProfile,
-    JoyConRightProfile,
-    default_controller_profile,
-)
+from swbt.protocol.profiles.base import ControllerColors, ControllerKind
+from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
+from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
 

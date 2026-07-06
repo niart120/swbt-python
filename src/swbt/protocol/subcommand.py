@@ -6,7 +6,8 @@ from swbt.errors import ProtocolError
 from swbt.input import InputState
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport
-from swbt.protocol.profile import ControllerProfile, default_controller_profile
+from swbt.protocol.profiles.base import ControllerProfile
+from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.protocol.spi import VirtualSpiFlash
 
 SIMPLE_ACK_SUBCOMMANDS = {0x08, 0x30}

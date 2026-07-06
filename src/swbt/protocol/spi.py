@@ -1,7 +1,8 @@
 """Virtual SPI flash."""
 
 from swbt.errors import ProtocolError
-from swbt.protocol.profile import ControllerProfile, default_controller_profile
+from swbt.protocol.profiles.base import ControllerProfile
+from swbt.protocol.profiles.pro_controller import default_controller_profile
 
 
 class VirtualSpiFlash:
