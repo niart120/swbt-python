@@ -72,7 +72,7 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | `SwitchGamepad` は abstract interface として直接生成できない | new | unit | no | unit_038 target test を green にする |
+| green | `SwitchGamepad` は abstract interface として直接生成できない | new | unit | no | unit_038 target test を green にする |
 | todo | `ProController`, `JoyConL`, `JoyConR` が root export される | new | unit | no | package import test |
 | todo | `JoyCon` が root export されない | new | unit | no | compatibility alias は残さない |
 | todo | `JoyConL` / `JoyConR` に invalid side error path がない | new | unit | no | class selection で identity 固定 |
@@ -104,6 +104,9 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 
 | command | result | notes |
 |---|---|---|
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_switch_gamepad_is_abstract_interface -q` | red | `SwitchGamepad` が concrete class のままで `inspect.isabstract(SwitchGamepad)` が false |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_switch_gamepad_is_abstract_interface -q` | pass | `1 passed`。`SwitchGamepad()` は abstract interface として `TypeError` になる |
+| `uv run ty check --no-progress src\swbt\gamepad\interface.py src\swbt\gamepad\core.py tests\unit\test_public_api_boundary.py` | fail | 既存 tests が old concrete `SwitchGamepad` 生成を参照している。後続 concrete controller item で更新する |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |

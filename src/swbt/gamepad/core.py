@@ -1,12 +1,12 @@
 """Public gamepad API."""
 
-from types import TracebackType
 from typing import Literal
 
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
 from swbt.errors import InvalidInputError
 from swbt.gamepad._config import SwitchGamepadConfig
 from swbt.gamepad.connection import ConnectionResult
+from swbt.gamepad.interface import SwitchGamepad
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.runtime import ControllerRuntime
 from swbt.input import Button, IMUFrame, InputState, Stick
@@ -21,10 +21,10 @@ from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
 
 
-class SwitchGamepad:
-    """NX-compatible virtual gamepad API.
+class _RuntimeBackedGamepad(SwitchGamepad):
+    """Runtime-backed concrete gamepad base.
 
-    ``SwitchGamepad`` owns the public API surface and delegates stateful
+    The object owns the public API surface and delegates stateful
     controller work to an internal runtime.
     """
 
@@ -85,7 +85,7 @@ class SwitchGamepad:
         *,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
-    ) -> "SwitchGamepad":
+    ) -> "_RuntimeBackedGamepad":
         """Create a gamepad from an explicit resource configuration.
 
         Args:
@@ -94,7 +94,7 @@ class SwitchGamepad:
             transport: Optional HID transport instance.
 
         Returns:
-            SwitchGamepad: A gamepad configured from ``config``.
+            _RuntimeBackedGamepad: A gamepad configured from ``config``.
 
         Raises:
             InvalidInputError: ``config`` is invalid or omits ``adapter`` while no
@@ -115,31 +115,6 @@ class SwitchGamepad:
     @property
     def _output_report_dispatcher(self) -> OutputReportDispatcher:
         return self._runtime._output_report_dispatcher
-
-    async def __aenter__(self) -> "SwitchGamepad":
-        """Open the gamepad for an async context manager.
-
-        Returns:
-            SwitchGamepad: This gamepad after resources have been opened.
-        """
-        await self.open()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        """Close the gamepad when leaving an async context manager.
-
-        Args:
-            exc_type: Exception type from the managed block, if one was raised.
-            exc: Exception instance from the managed block, if one was raised.
-            traceback: Traceback from the managed block, if one was raised.
-        """
-        _ = (exc_type, exc, traceback)
-        await self.close(neutral=True)
 
     async def open(self) -> None:
         """Open the configured transport.
@@ -364,7 +339,11 @@ class SwitchGamepad:
         return self._runtime.snapshot()
 
 
-class JoyCon(SwitchGamepad):
+class ProController(_RuntimeBackedGamepad):
+    """Runtime-backed Pro Controller-compatible gamepad."""
+
+
+class JoyCon(_RuntimeBackedGamepad):
     """Thin SwitchGamepad wrapper for a single Joy-Con profile."""
 
     def __init__(

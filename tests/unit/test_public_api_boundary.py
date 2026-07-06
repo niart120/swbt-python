@@ -119,7 +119,6 @@ def test_switch_gamepad_signature_does_not_expose_bumble_types() -> None:
     assert "bumble" not in annotation_text.lower()
 
 
-@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
 def test_rearchitecture_target_switch_gamepad_is_abstract_interface() -> None:
     assert inspect.isabstract(SwitchGamepad)
 
