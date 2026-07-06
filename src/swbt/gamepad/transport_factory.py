@@ -37,6 +37,26 @@ class _StaticTransportFactory:
         return self.transport
 
 
+@dataclass(frozen=True)
+class _BumbleTransportFactory:
+    def create(
+        self,
+        *,
+        adapter: str,
+        device_name: str,
+        profile: ControllerProfile,
+        diagnostics: DiagnosticsRecorder,
+        key_store_path: str | None,
+    ) -> HidDeviceTransport:
+        return create_default_transport(
+            adapter=adapter,
+            device_name=device_name,
+            profile=profile,
+            diagnostics=diagnostics,
+            key_store_path=key_store_path,
+        )
+
+
 def create_default_transport(
     *,
     adapter: str,
