@@ -1,0 +1,24 @@
+"""Pro Controller-compatible protocol profile."""
+
+from dataclasses import dataclass, field
+
+from swbt.protocol.buttons import ButtonBitMap, PRO_CONTROLLER_BUTTON_BITS
+from swbt.protocol.profiles.base import ControllerKind, ControllerProfile
+
+
+@dataclass(frozen=True)
+class ProControllerProfile(ControllerProfile):
+    """Protocol defaults for a Pro Controller compatible report shape."""
+
+    kind: ControllerKind = ControllerKind.PRO_CONTROLLER
+    device_name: str = "Pro Controller"
+    device_type: int = 0x03
+    device_info_tail: bytes = b"\x03\x02"
+    button_bits: ButtonBitMap = field(default_factory=lambda: PRO_CONTROLLER_BUTTON_BITS)
+    supports_left_stick: bool = True
+    supports_right_stick: bool = True
+
+
+def default_controller_profile() -> ProControllerProfile:
+    """Return the default Pro Controller compatible profile."""
+    return ProControllerProfile()
