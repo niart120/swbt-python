@@ -134,6 +134,25 @@ def test_rearchitecture_target_public_concrete_controllers_share_interface() -> 
         assert issubclass(controller_cls, SwitchGamepad)
 
 
+@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
+def test_rearchitecture_target_public_controller_constructors_hide_internal_seams() -> None:
+    expected_parameters = {
+        "adapter",
+        "controller_colors",
+        "diagnostics",
+        "key_store_path",
+        "report_period_us",
+    }
+    forbidden_parameters = {"device_name", "profile", "transport"}
+
+    for controller_name in ("ProController", "JoyConL", "JoyConR"):
+        controller_cls = getattr(swbt, controller_name)
+        parameters = set(inspect.signature(controller_cls).parameters)
+
+        assert expected_parameters.issubset(parameters)
+        assert forbidden_parameters.isdisjoint(parameters)
+
+
 def test_switch_gamepad_constructor_accepts_key_store_path() -> None:
     signature = inspect.signature(SwitchGamepad)
 
