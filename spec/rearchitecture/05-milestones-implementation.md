@@ -263,7 +263,7 @@ transport=FakeHidTransport
 | milestone | unit | path | scope |
 |---|---|---|---|
 | M0 | unit_038 | `spec/complete/unit_038/REARCHITECTURE_DECISION_BOUNDARY_TESTS.md` | decision freeze と target public boundary tests |
-| M1 | unit_039 | `spec/wip/unit_039/CONTROLLER_RUNTIME_EXTRACTION.md` | behavior-preserving runtime extraction |
+| M1 | unit_039 | `spec/complete/unit_039/CONTROLLER_RUNTIME_EXTRACTION.md` | behavior-preserving runtime extraction |
 | M2 | unit_040 | `spec/wip/unit_040/PUBLIC_CONTROLLER_API_MODEL.md` | `SwitchGamepad` abstract interface と public concrete controller API |
 | M3 | unit_041 | `spec/wip/unit_041/CONTROLLER_CONFIG_PROFILE_OWNERSHIP.md` | public config / profile injection cleanup |
 | M4 | unit_042 | `spec/wip/unit_042/INTERNAL_TRANSPORT_FACTORY.md` | public `transport=` removal and internal transport factory |

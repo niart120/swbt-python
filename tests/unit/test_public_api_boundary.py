@@ -24,6 +24,7 @@ from swbt import (
 )
 from swbt.gamepad import ConnectionStatus
 from swbt.gamepad import core as gamepad_core
+from swbt.gamepad import runtime as gamepad_runtime
 from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
@@ -157,6 +158,15 @@ def test_switch_gamepad_constructor_accepts_key_store_path() -> None:
     signature = inspect.signature(SwitchGamepad)
 
     assert "key_store_path" in signature.parameters
+
+
+def test_switch_gamepad_uses_controller_runtime_owner() -> None:
+    transport = FakeHidTransport()
+    pad = SwitchGamepad(transport=transport)
+
+    assert isinstance(pad._runtime, gamepad_core.ControllerRuntime)
+    assert pad._runtime._transport is transport
+    assert pad.snapshot() == swbt.InputState.neutral()
 
 
 def test_switch_gamepad_constructor_accepts_controller_colors_config() -> None:
@@ -444,7 +454,7 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
         async def stop(self) -> None:
             return None
 
-    monkeypatch.setattr(gamepad_core, "ReportLoop", SpyReportLoop)
+    monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
 
     async def run(config: SwitchGamepadConfig) -> int:
         pad = SwitchGamepad.from_config(config, transport=FakeHidTransport())
