@@ -129,6 +129,14 @@ key store は controller profile ごとに分けてください。Pro Controller
 
 同じ profile でも、接続先の対象機器を分ける場合は key store も分けます。1 つの key store は「1 つの対象機器」と「1 つの controller profile」の組み合わせに固定してください。
 
+## Controller Profile Verification Matrix
+
+| Controller profile | Status | Verified scope | Not verified | Key store |
+|---|---|---|---|---|
+| Pro Controller | verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で pairing、reconnect、Button A / D-pad / left stick / right stick、neutral cleanup を確認。macOS 15.7.7 / CSR8510 A10 でも pairing、active reconnect、Button 入力、neutral cleanup を確認 | Linux、CSR8510 A10 以外の dongle、別 firmware、pairing-free incoming bond reuse | Use a separate `key_store_path` for each target device and controller profile |
+| Joy-Con L | limited observation | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con L device name、device-info reply、subcommand 応答、SR+SL registration のユーザ目視を記録 | reconnect / normal input reflection、SDP の細部一致、OS / dongle / firmware をまたぐ互換性 | Use a separate `key_store_path` from Pro Controller and Joy-Con R |
+| Joy-Con R | not verified | unit tests と fake transport integration で profile selection と unsupported input を確認 | pairing、reconnect / normal input reflection、Switch UI 登録、OS / dongle / firmware をまたぐ互換性 | Use a separate `key_store_path` from Pro Controller and Joy-Con L |
+
 Joy-Con profile の実機互換は限定的な観測です。2026-07-06 の Joy-Con L run では、`Joy-Con (L)` の device name、Joy-Con L device-info reply、Switch からの subcommand 応答、neutral report loop、clean close を trace で確認しました。SDP policy 反映後の retest では、Joy-Con L の観測済み初期 sequence `0x02` / `0x08` / `0x10` / `0x03` / `0x04` / `0x40` / `0x30` / `0x48` に返信した後、`Button.SR` + `Button.SL` を約 5 秒間押下状態で periodic report に乗せ、ユーザ目視では Switch UI で Joy-Con として登録されました。Joy-Con 固有の reconnect、通常入力反映、Joy-Con R、SDP の細部一致、OS / dongle / firmware をまたぐ互換性は確認済みとして扱わないでください。
 
 Bumble adapter open、HID advertising、Switch pairing、Switch-facing output report / subcommand handling、periodic input report loop は実機または USB Bluetooth dongle に触れる操作です。Joy-Con profile でこれらを試す場合も、対象 adapter、実行 command、Switch-facing 動作範囲、cleanup plan を明示したうえで、人間の承認を得てから実行してください。

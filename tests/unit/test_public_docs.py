@@ -243,6 +243,23 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
     assert "保証" in text
 
 
+def test_hardware_doc_has_controller_profile_verification_matrix() -> None:
+    text = _read(HARDWARE_DOC)
+
+    for token in (
+        "## Controller Profile Verification Matrix",
+        "| Controller profile | Status | Verified scope | Not verified | Key store |",
+        "| Pro Controller | verified",
+        "| Joy-Con L | limited observation",
+        "| Joy-Con R | not verified",
+        "Button A / D-pad / left stick / right stick",
+        "SR+SL registration",
+        "reconnect / normal input reflection",
+        "Use a separate `key_store_path`",
+    ):
+        assert token in text
+
+
 def test_agent_brief_keeps_generation_on_implemented_public_api() -> None:
     text = _read(AGENT_BRIEF)
 
