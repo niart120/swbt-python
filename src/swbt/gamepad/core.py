@@ -31,7 +31,6 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         adapter: str | None = None,
         key_store_path: str | None = None,
         report_period_us: int | None = None,
-        device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
@@ -43,7 +42,6 @@ class _RuntimeBackedGamepad(SwitchGamepad):
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
-            device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance. When supplied, no Bumble
@@ -57,7 +55,6 @@ class _RuntimeBackedGamepad(SwitchGamepad):
             adapter=adapter,
             key_store_path=key_store_path,
             report_period_us=report_period_us,
-            device_name=device_name,
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
@@ -349,7 +346,6 @@ class JoyConL(_RuntimeBackedGamepad):
         adapter: str | None = None,
         key_store_path: str | None = None,
         report_period_us: int | None = None,
-        device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
@@ -361,7 +357,6 @@ class JoyConL(_RuntimeBackedGamepad):
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
-            device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance. When supplied, no Bumble
@@ -376,7 +371,6 @@ class JoyConL(_RuntimeBackedGamepad):
             key_store_path=key_store_path,
             profile=JoyConLeftProfile(),
             report_period_us=report_period_us,
-            device_name=device_name,
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
@@ -424,7 +418,6 @@ class JoyConR(_RuntimeBackedGamepad):
         adapter: str | None = None,
         key_store_path: str | None = None,
         report_period_us: int | None = None,
-        device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
@@ -436,7 +429,6 @@ class JoyConR(_RuntimeBackedGamepad):
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
-            device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
             transport: Optional HID transport instance. When supplied, no Bumble
@@ -451,7 +443,6 @@ class JoyConR(_RuntimeBackedGamepad):
             key_store_path=key_store_path,
             profile=JoyConRightProfile(),
             report_period_us=report_period_us,
-            device_name=device_name,
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)

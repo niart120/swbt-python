@@ -74,8 +74,8 @@ public profile injection を消し、controller identity を concrete controller
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | concrete controller constructor が `profile` を受け取らない | new | unit | no | signature test |
-| todo | concrete controller constructor が `device_name` を受け取らない | new | unit | no | signature test |
+| green | concrete controller constructor が `profile` を受け取らない | new | unit | no | signature test |
+| green | concrete controller constructor が `device_name` を受け取らない | new | unit | no | signature test |
 | todo | `SwitchGamepadConfig` が root export されない | new | unit | no | package import test |
 | todo | `from_config()` が public path に残っていない | new | unit | no | root / class attribute check |
 | todo | `controller_colors` override が profile default より優先される | regression | unit / integration | no | unit_028 / unit_037 contract |
@@ -93,7 +93,7 @@ profile は identity と protocol fact の束であり、public config ではな
 | path | change | 内容 |
 |---|---|---|
 | `src/swbt/gamepad/_config.py` | modify | `_ControllerSpec`, `_RuntimeConfig`, `_build_runtime()` |
-| `src/swbt/gamepad/controllers.py` | modify | concrete class が spec を選ぶ |
+| `src/swbt/gamepad/core.py` | modify | concrete class が spec を選ぶ |
 | `src/swbt/gamepad/__init__.py` | modify | `SwitchGamepadConfig` export removal |
 | `src/swbt/__init__.py` | modify | root exports |
 | `tests/unit/test_public_api_boundary.py` | modify | config/profile boundary tests |
@@ -106,6 +106,8 @@ profile は identity と protocol fact の束であり、public config ではな
 
 | command | result | notes |
 |---|---|---|
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams tests\unit\test_public_api_docstrings.py::test_concrete_controller_docstrings_describe_constructor_arguments -q` | red | `device_name` が public constructor signature と constructor docstring に残っていた |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams tests\unit\test_public_api_docstrings.py::test_concrete_controller_docstrings_describe_constructor_arguments -q` | pass | `2 passed`。`profile` / `device_name` は public constructor から消え、constructor docstring からも消えた |
 | `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
 | `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |

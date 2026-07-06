@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 REARCHITECTURE_TARGET_XFAIL_REASON = (
-    "target boundary fixed before implementation; unit_041 or unit_042 makes this green"
+    "target boundary fixed before implementation; unit_042 makes this green"
 )
 
 
@@ -135,8 +135,7 @@ def test_rearchitecture_target_public_concrete_controllers_share_interface() -> 
         assert issubclass(controller_cls, SwitchGamepad)
 
 
-@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
-def test_rearchitecture_target_public_controller_constructors_hide_internal_seams() -> None:
+def test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams() -> None:
     expected_parameters = {
         "adapter",
         "controller_colors",
@@ -144,7 +143,7 @@ def test_rearchitecture_target_public_controller_constructors_hide_internal_seam
         "key_store_path",
         "report_period_us",
     }
-    forbidden_parameters = {"device_name", "profile", "transport"}
+    forbidden_parameters = {"device_name", "profile"}
 
     for controller_name in ("ProController", "JoyConL", "JoyConR"):
         controller_cls = getattr(swbt, controller_name)
@@ -152,6 +151,14 @@ def test_rearchitecture_target_public_controller_constructors_hide_internal_seam
 
         assert expected_parameters.issubset(parameters)
         assert forbidden_parameters.isdisjoint(parameters)
+
+
+@pytest.mark.xfail(reason=REARCHITECTURE_TARGET_XFAIL_REASON, strict=True)
+def test_rearchitecture_target_public_controller_constructors_hide_transport_seam() -> None:
+    for controller_name in ("ProController", "JoyConL", "JoyConR"):
+        controller_cls = getattr(swbt, controller_name)
+
+        assert "transport" not in inspect.signature(controller_cls).parameters
 
 
 def test_pro_controller_constructor_accepts_key_store_path() -> None:

@@ -161,13 +161,15 @@ def test_concrete_controller_docstrings_describe_constructor_arguments() -> None
         "adapter",
         "key_store_path",
         "report_period_us",
-        "device_name",
         "controller_colors",
         "diagnostics",
         "transport",
         "Raises:",
         "InvalidInputError",
     )
+    pro_constructor_doc = inspect.getdoc(ProController.__init__)
+    assert pro_constructor_doc is not None
+    assert "device_name" not in pro_constructor_doc
 
     for controller_cls in (JoyConL, JoyConR):
         _assert_doc_contains(
@@ -176,13 +178,15 @@ def test_concrete_controller_docstrings_describe_constructor_arguments() -> None
             "adapter",
             "key_store_path",
             "report_period_us",
-            "device_name",
             "controller_colors",
             "diagnostics",
             "transport",
             "Raises:",
             "InvalidInputError",
         )
+        constructor_doc = inspect.getdoc(controller_cls.__init__)
+        assert constructor_doc is not None
+        assert "device_name" not in constructor_doc
 
     for factory in (ProController.from_config, JoyConL.from_config, JoyConR.from_config):
         _assert_doc_contains(
