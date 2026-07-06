@@ -27,7 +27,7 @@ from swbt.gamepad import ConnectionResult, ConnectionStatus
 from swbt.gamepad import core as gamepad_core
 from swbt.gamepad import runtime as gamepad_runtime
 from swbt.gamepad._config import SwitchGamepadConfig
-from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
+from swbt.protocol.profile import JoyConLeftProfile, JoyConRightProfile, ProControllerProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
 
@@ -212,6 +212,12 @@ def test_joycon_public_constructors_are_thin_switch_gamepad_wrappers() -> None:
         assert "key_store_path" in signature.parameters
     assert "JoyConLeftProfile" not in swbt.__all__
     assert "JoyConRightProfile" not in swbt.__all__
+
+
+def test_concrete_controller_classes_own_internal_controller_specs() -> None:
+    assert isinstance(ProController._controller_spec.profile, ProControllerProfile)
+    assert isinstance(JoyConL._controller_spec.profile, JoyConLeftProfile)
+    assert isinstance(JoyConR._controller_spec.profile, JoyConRightProfile)
 
 
 def test_joycon_from_config_requires_matching_joycon_profile() -> None:

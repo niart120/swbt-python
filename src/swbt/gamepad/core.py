@@ -2,7 +2,7 @@
 
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
 from swbt.errors import InvalidInputError
-from swbt.gamepad._config import SwitchGamepadConfig
+from swbt.gamepad._config import SwitchGamepadConfig, _ControllerSpec
 from swbt.gamepad.connection import ConnectionResult
 from swbt.gamepad.interface import SwitchGamepad
 from swbt.gamepad.output import OutputReportDispatcher
@@ -13,6 +13,7 @@ from swbt.protocol.profile import (
     ControllerKind,
     JoyConLeftProfile,
     JoyConRightProfile,
+    default_controller_profile,
 )
 from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
@@ -24,6 +25,8 @@ class _RuntimeBackedGamepad(SwitchGamepad):
     The object owns the public API surface and delegates stateful
     controller work to an internal runtime.
     """
+
+    _controller_spec = _ControllerSpec(profile=default_controller_profile())
 
     def __init__(
         self,
@@ -51,7 +54,7 @@ class _RuntimeBackedGamepad(SwitchGamepad):
             InvalidInputError: ``adapter`` is omitted for the default transport or
                 ``report_period_us`` is not positive.
         """
-        config = SwitchGamepadConfig(
+        config = self._controller_spec.build_config(
             adapter=adapter,
             key_store_path=key_store_path,
             report_period_us=report_period_us,
@@ -336,9 +339,13 @@ class _RuntimeBackedGamepad(SwitchGamepad):
 class ProController(_RuntimeBackedGamepad):
     """Runtime-backed Pro Controller-compatible gamepad."""
 
+    _controller_spec = _ControllerSpec(profile=default_controller_profile())
+
 
 class JoyConL(_RuntimeBackedGamepad):
     """Runtime-backed Joy-Con L-compatible gamepad."""
+
+    _controller_spec = _ControllerSpec(profile=JoyConLeftProfile())
 
     def __init__(
         self,
@@ -366,10 +373,9 @@ class JoyConL(_RuntimeBackedGamepad):
             InvalidInputError: ``adapter`` is omitted for the default transport or
                 ``report_period_us`` is not positive.
         """
-        config = SwitchGamepadConfig(
+        config = self._controller_spec.build_config(
             adapter=adapter,
             key_store_path=key_store_path,
-            profile=JoyConLeftProfile(),
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )
@@ -412,6 +418,8 @@ class JoyConL(_RuntimeBackedGamepad):
 class JoyConR(_RuntimeBackedGamepad):
     """Runtime-backed Joy-Con R-compatible gamepad."""
 
+    _controller_spec = _ControllerSpec(profile=JoyConRightProfile())
+
     def __init__(
         self,
         *,
@@ -438,10 +446,9 @@ class JoyConR(_RuntimeBackedGamepad):
             InvalidInputError: ``adapter`` is omitted for the default transport or
                 ``report_period_us`` is not positive.
         """
-        config = SwitchGamepadConfig(
+        config = self._controller_spec.build_config(
             adapter=adapter,
             key_store_path=key_store_path,
-            profile=JoyConRightProfile(),
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )

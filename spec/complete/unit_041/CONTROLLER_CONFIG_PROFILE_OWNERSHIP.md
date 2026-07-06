@@ -100,7 +100,7 @@ profile は identity と protocol fact の束であり、public config ではな
 | `tests/unit/test_package_import.py` | modify | root export tests |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | controller_colors / period regression |
 | `docs/api.md` | modify | config/profile migration |
-| `spec/wip/unit_041/CONTROLLER_CONFIG_PROFILE_OWNERSHIP.md` | add | 作業仕様 |
+| `spec/complete/unit_041/CONTROLLER_CONFIG_PROFILE_OWNERSHIP.md` | move | 完了した作業仕様 |
 
 ## 10. 検証
 
@@ -115,11 +115,15 @@ profile は identity と protocol fact の束であり、public config ではな
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_from_config_output_report_injection_uses_configured_controller_colors tests\integration\test_switch_gamepad_fake_transport.py::test_from_config_uses_profile_controller_colors_when_colors_are_unspecified tests\integration\test_switch_gamepad_fake_transport.py::test_from_config_profile_reaches_periodic_input_report_builder tests\integration\test_switch_gamepad_fake_transport.py::test_from_config_joycon_profile_reaches_device_info_reply -q` | pass | `4 passed`。internal `_from_config()` 経由で既存 regression を維持 |
 | `uv run pytest tests\unit\test_public_api_boundary.py::test_public_constructor_uses_profile_default_report_period tests\unit\test_public_api_boundary.py::test_switch_gamepad_rejects_non_positive_report_period tests\integration\test_switch_gamepad_fake_transport.py::test_output_report_injection_uses_configured_controller_colors -q` | pass | `4 passed`。public constructor の default period、positive validation、controller color override を確認 |
 | `uv run pytest tests\unit\test_public_api_boundary.py::test_connection_result_exposes_plain_reconnect_values_without_bonded_peer -q` | pass | `1 passed`。`ConnectionResult` は `route`, `status`, `peer_address`, `peer_count` の plain fields のみ |
-| `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
-| `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
-| `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |
-| `uv run pytest tests/unit` | not run | 作業仕様作成時点では未実装 |
-| `uv run pytest tests/integration` | not run | 作業仕様作成時点では未実装 |
+| `uv run pytest tests\unit\test_public_api_boundary.py::test_concrete_controller_classes_own_internal_controller_specs tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams tests\unit\test_public_api_boundary.py::test_public_constructor_uses_profile_default_report_period tests\integration\test_switch_gamepad_fake_transport.py::test_joycon_uses_side_default_controller_colors_when_colors_are_unspecified -q` | pass | `5 passed`。concrete class が `_ControllerSpec` で profile を内部所有することを確認 |
+| `uv run pytest tests\unit\test_protocol_profile.py::test_pro_controller_profile_direct_construction_is_limited_to_profile_factory tests\unit\test_public_api_boundary.py::test_concrete_controller_classes_own_internal_controller_specs -q` | pass | `2 passed`。Pro Controller profile は `default_controller_profile()` 経由で spec に渡す |
+| `uv sync --dev` | pass | `Resolved 53 packages`, `Checked 41 packages` |
+| `uv run ruff format --check .` | pass | `82 files already formatted` |
+| `uv run ruff check .` | pass | `All checks passed!` |
+| `uv run ty check --no-progress` | pass | `All checks passed!` |
+| `uv run pytest tests/unit -q` | pass | `347 passed, 2 xfailed`。残る xfail は unit_042 の transport seam |
+| `uv run pytest tests/integration -q` | pass | `93 passed` |
+| `uv run pytest tests\unit\test_package_import.py::test_rearchitecture_target_root_hides_internal_transport_type -q` | xfail | `1 xfailed`。理由を unit_042 に更新 |
 
 ## 11. 実機実行条件
 
@@ -139,8 +143,8 @@ profile は identity と protocol fact の束であり、public config ではな
 
 ## 13. チェックリスト
 
-- [ ] 対象範囲と対象外を確認した
-- [ ] TDD Test List を更新した
-- [ ] 必要な根拠監査を記録した
-- [ ] 実機実行条件を記録した
-- [ ] 検証結果または未実行理由を記録した
+- [x] 対象範囲と対象外を確認した
+- [x] TDD Test List を更新した
+- [x] 必要な根拠監査を記録した
+- [x] 実機実行条件を記録した
+- [x] 検証結果または未実行理由を記録した
