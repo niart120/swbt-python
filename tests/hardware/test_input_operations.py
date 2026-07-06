@@ -7,7 +7,7 @@ from typing import Any, Literal, TextIO
 
 import pytest
 
-from swbt import Button, DiagnosticsConfig, InputState, Stick, SwitchGamepad
+from swbt import Button, DiagnosticsConfig, InputState, ProController, Stick
 from swbt.protocol.input_report import InputReportBuilder
 
 _OPERATOR_WAIT_SECONDS = 5.0
@@ -33,7 +33,7 @@ def test_switch_input_operation_sequence_for_manual_reflection(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
@@ -119,7 +119,7 @@ def test_switch_input_after_full_handshake_for_manual_reflection(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
@@ -210,7 +210,7 @@ def test_switch_input_semantics_pairing_writes_fresh_key_store(
                 expected_switch_screen="controller_search_or_change_grip_order",
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -285,7 +285,7 @@ def test_switch_button_check_after_active_reconnect_for_manual_reflection(
                 expected_switch_screen="input_device_check_button_operation_selection",
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -385,7 +385,7 @@ def test_switch_button_check_separate_l_r_after_active_reconnect_for_manual_refl
                 expected_switch_screen="input_device_check_button_operation_selection",
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -512,7 +512,7 @@ def test_switch_button_check_dpad_after_active_reconnect_for_manual_reflection(
                 expected_switch_screen="input_device_check_button_operation_selection",
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -635,7 +635,7 @@ def test_switch_stick_calibration_after_active_reconnect_for_manual_reflection(
                 stick=stick_name,
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -766,7 +766,7 @@ async def _wait_for_full_handshake(trace_path: Path, *, timeout_seconds: float) 
 
 
 async def _wait_for_report_counter(
-    pad: SwitchGamepad,
+    pad: ProController,
     *,
     report_id: int,
     minimum_count: int,
@@ -785,7 +785,7 @@ async def _wait_for_report_counter(
     raise TimeoutError(msg)
 
 
-async def _active_reconnect_for_input_check(pad: SwitchGamepad, trace: TextIO) -> None:
+async def _active_reconnect_for_input_check(pad: ProController, trace: TextIO) -> None:
     result = await pad.try_reconnect(timeout=60.0)
     _record_probe_event(
         trace,
@@ -800,7 +800,7 @@ async def _active_reconnect_for_input_check(pad: SwitchGamepad, trace: TextIO) -
 
 
 async def _hold_buttons_and_record(
-    pad: SwitchGamepad,
+    pad: ProController,
     trace: TextIO,
     *,
     buttons: tuple[Button, ...],
@@ -832,12 +832,12 @@ async def _hold_buttons_and_record(
     await pad.release(*buttons)
 
 
-def _current_button_bytes(pad: SwitchGamepad) -> str:
+def _current_button_bytes(pad: ProController) -> str:
     report = InputReportBuilder().build_0x30(pad.snapshot())
     return report[3:6].hex()
 
 
-def _record_handshake_checkpoint(pad: SwitchGamepad, trace: TextIO) -> None:
+def _record_handshake_checkpoint(pad: ProController, trace: TextIO) -> None:
     _record_probe_event(
         trace,
         "manual_input_checkpoint",
@@ -849,7 +849,7 @@ def _record_handshake_checkpoint(pad: SwitchGamepad, trace: TextIO) -> None:
 
 
 async def _send_neutral_and_record(
-    pad: SwitchGamepad,
+    pad: ProController,
     trace: TextIO,
     *,
     operation: str,
@@ -874,7 +874,7 @@ async def _send_neutral_and_record(
 
 
 async def _send_stick_circle(
-    pad: SwitchGamepad,
+    pad: ProController,
     *,
     stick_name: Literal["left", "right"],
 ) -> None:

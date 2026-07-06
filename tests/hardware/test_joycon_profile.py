@@ -6,7 +6,7 @@ from typing import Any, Literal, TextIO
 
 import pytest
 
-from swbt import Button, DiagnosticsConfig, InputState, JoyCon
+from swbt import Button, DiagnosticsConfig, InputState, JoyConL, JoyConR
 from swbt.protocol.output_report import OutputReport
 from swbt.protocol.subcommand import SubcommandResponder, SubcommandSessionState
 
@@ -15,6 +15,12 @@ _ORDER_BUTTON_HOLD_SECONDS = 5.0
 _ORDER_BUTTON_MIN_REPORT_COUNT = 30
 _NEUTRAL_REPORT_HOLD_COUNT = 8
 _UI_OBSERVATION_HOLD_SECONDS = 10.0
+
+
+def _joycon_class(side: Literal["left", "right"]) -> type[JoyConL] | type[JoyConR]:
+    if side == "left":
+        return JoyConL
+    return JoyConR
 
 
 @pytest.mark.hardware
@@ -58,8 +64,7 @@ def test_switch_joycon_profile_pairing_records_device_info(
             sys.stderr.flush()
             await asyncio.sleep(_OPERATOR_WAIT_SECONDS)
 
-            pad = JoyCon(
-                side,
+            pad = _joycon_class(side)(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -199,8 +204,7 @@ def test_switch_joycon_profile_reads_default_controller_colors(
             sys.stderr.flush()
             await asyncio.sleep(_OPERATOR_WAIT_SECONDS)
 
-            pad = JoyCon(
-                side,
+            pad = _joycon_class(side)(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -365,7 +369,7 @@ class RecordingDeviceInfoResponder(SubcommandResponder):
 
 
 def _install_device_info_probe(
-    pad: JoyCon,
+    pad: JoyConL | JoyConR,
     trace: TextIO,
     *,
     expected_controller_color_bytes: bytes | None = None,
@@ -380,7 +384,7 @@ def _install_device_info_probe(
     )
 
 
-async def _send_order_buttons(pad: JoyCon, trace: TextIO, *, side: str) -> None:
+async def _send_order_buttons(pad: JoyConL | JoyConR, trace: TextIO, *, side: str) -> None:
     await pad.press(Button.SR, Button.SL)
     report_0x30_count_before = pad.status().report_counters.get(0x30, 0)
     _record_probe_event(
@@ -475,7 +479,7 @@ async def _wait_for_controller_color_spi_reply(
 
 
 async def _wait_for_report_counter(
-    pad: JoyCon,
+    pad: JoyConL | JoyConR,
     *,
     report_id: int,
     minimum_count: int,

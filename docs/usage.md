@@ -8,11 +8,11 @@
 
 ```python
 import asyncio
-from swbt import Button, SwitchGamepad
+from swbt import Button, ProController
 
 
 async def main() -> None:
-    async with SwitchGamepad(
+    async with ProController(
         adapter="usb:0",
         key_store_path="switch-bond.json",
     ) as pad:
@@ -31,7 +31,7 @@ asyncio.run(main())
 ### First-Run Pairing Or Reconnect Fallback
 
 ```python
-async with SwitchGamepad(
+async with ProController(
     adapter="usb:0",
     key_store_path="switch-bond.json",
 ) as pad:
@@ -43,7 +43,7 @@ async with SwitchGamepad(
 ### Pairing Only
 
 ```python
-async with SwitchGamepad(
+async with ProController(
     adapter="usb:0",
     key_store_path="switch-bond.json",
 ) as pad:
@@ -55,7 +55,7 @@ async with SwitchGamepad(
 ### Reconnect Only
 
 ```python
-async with SwitchGamepad(
+async with ProController(
     adapter="usb:0",
     key_store_path="switch-bond.json",
 ) as pad:
@@ -67,7 +67,7 @@ async with SwitchGamepad(
 ### Handling Result Values
 
 ```python
-async with SwitchGamepad(
+async with ProController(
     adapter="usb:0",
     key_store_path="switch-bond.json",
 ) as pad:
@@ -77,7 +77,7 @@ async with SwitchGamepad(
 ```
 
 ```python
-async with SwitchGamepad(
+async with ProController(
     adapter="usb:0",
     key_store_path="switch-bond.json",
 ) as pad:
@@ -91,11 +91,11 @@ async with SwitchGamepad(
 ### Separate Key Stores By Target Device And Profile
 
 ```python
-first = SwitchGamepad(
+first = ProController(
     adapter="usb:0",
     key_store_path="switch-2-fw-22-1-0.json",
 )
-second = SwitchGamepad(
+second = ProController(
     adapter="usb:0",
     key_store_path="other-switch.json",
 )
@@ -105,18 +105,17 @@ second = SwitchGamepad(
 
 ## Single Joy-Con L/R
 
-単体 Joy-Con 相当の仮想デバイスは `JoyCon("left", ...)` または `JoyCon("right", ...)` で作ります。`JoyCon` は `SwitchGamepad` の薄い wrapper で、`connect()`、`pair()`、`reconnect()`、入力 API、`close(neutral=True)` の契約は同じです。
+単体 Joy-Con 相当の仮想デバイスは `JoyConL(...)` または `JoyConR(...)` で作ります。どちらも `SwitchGamepad` interface を満たし、`connect()`、`pair()`、`reconnect()`、入力 API、`close(neutral=True)` の契約は同じです。
 
 ### Left Joy-Con
 
 ```python
 import asyncio
-from swbt import Button, JoyCon, Stick
+from swbt import Button, JoyConL, Stick
 
 
 async def main() -> None:
-    async with JoyCon(
-        "left",
+    async with JoyConL(
         adapter="usb:0",
         key_store_path="switch-left-joycon-bond.json",
     ) as left:
@@ -136,12 +135,11 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from swbt import Button, JoyCon, Stick
+from swbt import Button, JoyConR, Stick
 
 
 async def main() -> None:
-    async with JoyCon(
-        "right",
+    async with JoyConR(
         adapter="usb:0",
         key_store_path="switch-right-joycon-bond.json",
     ) as right:
@@ -161,10 +159,9 @@ asyncio.run(main())
 片側 Joy-Con が持たない button や stick は `UnsupportedInputError` になります。
 
 ```python
-from swbt import Button, JoyCon, Stick, UnsupportedInputError
+from swbt import Button, JoyConL, Stick, UnsupportedInputError
 
-async with JoyCon(
-    "left",
+async with JoyConL(
     adapter="usb:0",
     key_store_path="switch-left-joycon-bond.json",
 ) as left:
@@ -181,7 +178,7 @@ async with JoyCon(
 
 `InputState` + `apply()` でも同じ検査を行います。左 Joy-Con に right stick、右 Joy-Con に left stick や D-pad を含めると `UnsupportedInputError` です。
 
-Change Grip/Order 画面で単体 Joy-Con として順番登録する場合は、接続後に `await joycon.tap(Button.SR, Button.SL)` のように SR+SL を送ります。
+Change Grip/Order 画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送ります。
 
 左右ペアの `JoyConPair` は未実装です。左右を 1 つの controller として扱う API は別 issue の範囲です。
 
@@ -348,10 +345,10 @@ await pad.close(neutral=True)
 
 ```python
 from pathlib import Path
-from swbt import DiagnosticsConfig, SwitchGamepad
+from swbt import DiagnosticsConfig, ProController
 
 with Path("trace.jsonl").open("w", encoding="utf-8") as trace:
-    async with SwitchGamepad(
+    async with ProController(
         adapter="usb:0",
         key_store_path="switch-bond.json",
         diagnostics=DiagnosticsConfig(trace_writer=trace),

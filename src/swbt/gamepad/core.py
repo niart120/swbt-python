@@ -1,6 +1,7 @@
 """Public gamepad API."""
 
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
+from swbt.errors import InvalidInputError
 from swbt.gamepad._config import SwitchGamepadConfig
 from swbt.gamepad.connection import ConnectionResult
 from swbt.gamepad.interface import SwitchGamepad
@@ -9,6 +10,7 @@ from swbt.gamepad.runtime import ControllerRuntime
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.profile import (
     ControllerColors,
+    ControllerKind,
     JoyConLeftProfile,
     JoyConRightProfile,
 )
@@ -81,7 +83,7 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
     ) -> "_RuntimeBackedGamepad":
-        """Create a gamepad from an explicit resource configuration.
+        """Create a concrete gamepad from an explicit resource configuration.
 
         Args:
             config: Resource configuration for the gamepad.
@@ -89,7 +91,7 @@ class _RuntimeBackedGamepad(SwitchGamepad):
             transport: Optional HID transport instance.
 
         Returns:
-            _RuntimeBackedGamepad: A gamepad configured from ``config``.
+            SwitchGamepad: A concrete gamepad configured from ``config``.
 
         Raises:
             InvalidInputError: ``config`` is invalid or omits ``adapter`` while no
@@ -379,6 +381,39 @@ class JoyConL(_RuntimeBackedGamepad):
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
 
+    @classmethod
+    def from_config(
+        cls,
+        config: SwitchGamepadConfig,
+        *,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> "JoyConL":
+        """Create a left Joy-Con from an explicit resource configuration.
+
+        Args:
+            config: Resource configuration whose profile must be Joy-Con L.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance.
+
+        Returns:
+            JoyConL: A left Joy-Con configured from ``config``.
+
+        Raises:
+            InvalidInputError: ``config`` does not contain a Joy-Con L profile, is
+                invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
+        """
+        if config.profile.kind is not ControllerKind.JOYCON_LEFT:
+            msg = "JoyConL.from_config requires a Joy-Con L profile"
+            raise InvalidInputError(msg)
+        gamepad = cls.__new__(cls)
+        gamepad._init_from_config(
+            config,
+            diagnostics=diagnostics,
+            transport=transport,
+        )
+        return gamepad
+
 
 class JoyConR(_RuntimeBackedGamepad):
     """Runtime-backed Joy-Con R-compatible gamepad."""
@@ -420,3 +455,36 @@ class JoyConR(_RuntimeBackedGamepad):
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=transport)
+
+    @classmethod
+    def from_config(
+        cls,
+        config: SwitchGamepadConfig,
+        *,
+        diagnostics: DiagnosticsConfig | None = None,
+        transport: HidDeviceTransport | None = None,
+    ) -> "JoyConR":
+        """Create a right Joy-Con from an explicit resource configuration.
+
+        Args:
+            config: Resource configuration whose profile must be Joy-Con R.
+            diagnostics: Optional diagnostics configuration for trace output.
+            transport: Optional HID transport instance.
+
+        Returns:
+            JoyConR: A right Joy-Con configured from ``config``.
+
+        Raises:
+            InvalidInputError: ``config`` does not contain a Joy-Con R profile, is
+                invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
+        """
+        if config.profile.kind is not ControllerKind.JOYCON_RIGHT:
+            msg = "JoyConR.from_config requires a Joy-Con R profile"
+            raise InvalidInputError(msg)
+        gamepad = cls.__new__(cls)
+        gamepad._init_from_config(
+            config,
+            diagnostics=diagnostics,
+            transport=transport,
+        )
+        return gamepad

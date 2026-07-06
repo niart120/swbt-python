@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from swbt import AdapterDiscoveryError, AdapterInfo, DiagnosticsConfig, SwitchGamepad, list_adapters
+from swbt import AdapterDiscoveryError, AdapterInfo, DiagnosticsConfig, ProController, list_adapters
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -155,7 +155,7 @@ async def _run_pair_probe(
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     with trace_path.open("w", encoding="utf-8") as trace_writer:
         diagnostics = DiagnosticsConfig(trace_writer=trace_writer)
-        async with SwitchGamepad(
+        async with ProController(
             adapter=adapter,
             key_store_path=key_store_path,
             diagnostics=diagnostics,

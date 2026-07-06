@@ -65,7 +65,7 @@ class AdapterInfo:
     """USB Bluetooth adapter candidate.
 
     Attributes:
-        name: Primary adapter moniker passed to ``SwitchGamepad(adapter=...)``.
+        name: Primary adapter moniker passed to ``ProController(adapter=...)``.
         aliases: Alternative adapter monikers for the same USB device.
         vendor_id: USB vendor ID.
         product_id: USB product ID.

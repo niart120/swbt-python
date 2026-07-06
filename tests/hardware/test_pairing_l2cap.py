@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from swbt import DiagnosticsConfig, SwitchGamepad
+from swbt import DiagnosticsConfig, ProController
 
 
 @pytest.mark.hardware
@@ -18,7 +18,7 @@ def test_switch_pairing_l2cap_records_diagnostics(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
@@ -69,7 +69,7 @@ def test_switch_subcommand_sequence_gets_0x21_replies(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
@@ -102,7 +102,7 @@ def test_switch_subcommand_observation_window_replies_to_all_observed_commands(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = SwitchGamepad(
+            pad = ProController(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )

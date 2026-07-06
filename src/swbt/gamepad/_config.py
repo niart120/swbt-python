@@ -12,7 +12,7 @@ from swbt.protocol.profile import (
 
 @dataclass(frozen=True)
 class SwitchGamepadConfig:
-    """Configuration used to construct a SwitchGamepad.
+    """Configuration used to construct a concrete gamepad.
 
     Attributes:
         adapter: Bumble adapter moniker, such as ``"usb:0"``.

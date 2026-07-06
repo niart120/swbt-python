@@ -27,10 +27,11 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 ## 2. 対象範囲
 
 - `src/swbt/gamepad/interface.py` への abstract `SwitchGamepad` 追加。
-- `src/swbt/gamepad/controllers.py` への `ProController`, `JoyConL`, `JoyConR`, private `_RuntimeBackedGamepad` 追加。
+- `src/swbt/gamepad/core.py` への `ProController`, `JoyConL`, `JoyConR`, private `_RuntimeBackedGamepad` 追加。
 - root export の新 API への切り替え。
 - `JoyCon` root export の削除。
 - README / docs / examples の controller 作成例の新 API への切り替え。
+- public API docstring を Google style で引数、戻り値、例外まで記述する。
 - public boundary tests の新 API への更新。
 
 ## 3. 対象外
@@ -76,7 +77,8 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 | green | `ProController`, `JoyConL`, `JoyConR` が root export される | new | unit | no | package import test |
 | green | `JoyCon` が root export されない | new | unit | no | compatibility alias は残さない |
 | green | `JoyConL` / `JoyConR` に invalid side error path がない | new | unit | no | class selection で identity 固定 |
-| todo | README / docs の通常例が new API を使う | regression | docs | no | migration section の旧 API 例は例外 |
+| green | README / docs の通常例が new API を使う | regression | docs | no | migration section の旧 API 例は例外 |
+| green | public API docstring が Google style で公開引数を説明する | regression | unit | no | `SwitchGamepad` interface、concrete controller、transport extension point |
 
 ## 8. 設計メモ
 
@@ -89,7 +91,7 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 | path | change | 内容 |
 |---|---|---|
 | `src/swbt/gamepad/interface.py` | add | abstract `SwitchGamepad` |
-| `src/swbt/gamepad/controllers.py` | add | `ProController`, `JoyConL`, `JoyConR`, `_RuntimeBackedGamepad` |
+| `src/swbt/gamepad/core.py` | modify | `ProController`, `JoyConL`, `JoyConR`, `_RuntimeBackedGamepad` |
 | `src/swbt/gamepad/__init__.py` | modify | gamepad package exports |
 | `src/swbt/__init__.py` | modify | root exports |
 | `tests/unit/test_public_api_boundary.py` | modify | public class model tests |
@@ -112,11 +114,12 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 | `uv run pytest tests\unit\test_public_api_boundary.py::test_rearchitecture_target_public_concrete_controllers_share_interface tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface -q` | pass | `2 passed`。`ProController`, `JoyConL`, `JoyConR` は root export 済み |
 | `uv run pytest tests\unit\test_package_import.py::test_package_exports_public_gamepad_surface tests\unit\test_package_import.py::test_rearchitecture_target_root_exports_controller_api -q` | pass | `2 passed`。`JoyCon` は root export から削除済み |
 | `uv run pytest tests\integration\test_switch_gamepad_fake_transport.py::test_joycon_concrete_classes_have_no_invalid_side_path -q` | pass | `1 passed`。左右 identity は `JoyConL` / `JoyConR` class selection で固定 |
-| `uv run ruff format --check .` | not run | 作業仕様作成時点では未実装 |
-| `uv run ruff check .` | not run | 作業仕様作成時点では未実装 |
-| `uv run ty check --no-progress` | not run | 作業仕様作成時点では未実装 |
-| `uv run pytest tests/unit` | not run | 作業仕様作成時点では未実装 |
-| `uv run pytest tests/integration` | not run | 作業仕様作成時点では未実装 |
+| `uv run pytest tests\unit\test_public_api_docstrings.py tests\unit\test_public_docs.py tests\unit\test_readme_docs.py -q` | pass | `18 passed`。Google style docstring と public docs の新 API 例を確認 |
+| `uv run ruff format --check .` | pass | `82 files already formatted` |
+| `uv run ruff check .` | pass | `All checks passed!` |
+| `uv run ty check --no-progress` | pass | `All checks passed!` |
+| `uv run pytest tests\unit -q` | pass | `341 passed, 2 xfailed`。残る xfail は unit_041 / unit_042 の内部 seam 隠蔽対象 |
+| `uv run pytest tests\integration -q` | pass | `93 passed` |
 
 ## 11. 実機実行条件
 
@@ -136,8 +139,8 @@ public class model を `SwitchGamepad` direct construction から、`SwitchGamep
 
 ## 13. チェックリスト
 
-- [ ] 対象範囲と対象外を確認した
-- [ ] TDD Test List を更新した
-- [ ] 必要な根拠監査を記録した
-- [ ] 実機実行条件を記録した
-- [ ] 検証結果または未実行理由を記録した
+- [x] 対象範囲と対象外を確認した
+- [x] TDD Test List を更新した
+- [x] 必要な根拠監査を記録した
+- [x] 実機実行条件を記録した
+- [x] 検証結果または未実行理由を記録した
