@@ -47,5 +47,5 @@ Rules:
 - Do not invent `hold()`, `sequence()`, `send_current_input()`, fluent builder APIs, or macro helpers.
 - Do not invent `JoyConPair`; paired left/right Joy-Con support is not implemented.
 - Do not show low-level Joy-Con profile classes or the removed side-string Joy-Con wrapper in user-facing examples.
-- Do not import internal modules unless writing tests or custom transport code.
+- Do not import internal modules unless writing swbt's own tests.
 - Do not present Joy-Con real-device compatibility, exact SDP parity, Linux, macOS, other dongles, other firmware, or pairing-free incoming bond reuse as confirmed.
