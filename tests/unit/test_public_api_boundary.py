@@ -23,7 +23,7 @@ from swbt import (
     ProController,
     SwitchGamepad,
 )
-from swbt.gamepad import ConnectionStatus
+from swbt.gamepad import ConnectionResult, ConnectionStatus
 from swbt.gamepad import core as gamepad_core
 from swbt.gamepad import runtime as gamepad_runtime
 from swbt.gamepad._config import SwitchGamepadConfig
@@ -253,6 +253,20 @@ def test_connection_methods_do_not_accept_key_store_path() -> None:
 
 def test_connection_status_does_not_include_ambiguous_bond() -> None:
     assert "ambiguous_bond" not in get_args(ConnectionStatus)
+
+
+def test_connection_result_exposes_plain_reconnect_values_without_bonded_peer() -> None:
+    field_names = {field.name for field in fields(ConnectionResult)}
+    result = ConnectionResult(
+        route="active_reconnect",
+        status="connected",
+        peer_address="aa:bb:cc:dd:ee:ff",
+        peer_count=1,
+    )
+
+    assert field_names == {"route", "status", "peer_address", "peer_count"}
+    assert result.peer_address == "aa:bb:cc:dd:ee:ff"
+    assert result.peer_count == 1
 
 
 def test_default_transport_requires_explicit_adapter() -> None:
@@ -499,6 +513,40 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
 
     assert profile_default_period == 12_345
     assert explicit_period == 8000
+
+
+def test_public_constructor_uses_profile_default_report_period(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_periods: list[int] = []
+
+    class SpyReportLoop:
+        def __init__(
+            self,
+            *,
+            transport: object,
+            state_store: object,
+            report_period_us: int,
+            input_report_builder: object | None = None,
+            diagnostics: object | None = None,
+        ) -> None:
+            _ = (transport, state_store, input_report_builder, diagnostics)
+            captured_periods.append(report_period_us)
+
+        async def stop(self) -> None:
+            return None
+
+    monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
+
+    async def run() -> int:
+        pad = ProController(transport=FakeHidTransport())
+        await pad.open()
+        await pad.close(neutral=False)
+        return captured_periods[-1]
+
+    report_period_us = asyncio.run(run())
+
+    assert report_period_us == ProControllerProfile().default_report_period_us
 
 
 def test_hid_transport_disconnect_request_boundary_uses_plain_types() -> None:
