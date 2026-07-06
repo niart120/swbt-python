@@ -96,7 +96,7 @@ M1 は public API break の準備であり、互換 API を消す場所ではな
 | `src/swbt/gamepad/core.py` | modify | public facade から runtime へ委譲 |
 | `tests/unit/test_gamepad_connection_workflow.py` | modify | runtime owner の regression |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | behavior preservation |
-| `spec/wip/unit_039/CONTROLLER_RUNTIME_EXTRACTION.md` | add | 作業仕様 |
+| `spec/complete/unit_039/CONTROLLER_RUNTIME_EXTRACTION.md` | add | 作業仕様 |
 
 ## 10. 検証
 
@@ -155,8 +155,8 @@ M1 は public API break の準備であり、互換 API を消す場所ではな
 
 ## 13. チェックリスト
 
-- [ ] 対象範囲と対象外を確認した
-- [ ] TDD Test List を更新した
-- [ ] 必要な根拠監査を記録した
-- [ ] 実機実行条件を記録した
-- [ ] 検証結果または未実行理由を記録した
+- [x] 対象範囲と対象外を確認した
+- [x] TDD Test List を更新した
+- [x] 必要な根拠監査を記録した
+- [x] 実機実行条件を記録した
+- [x] 検証結果または未実行理由を記録した
