@@ -3,7 +3,7 @@ import pytest
 from swbt.errors import UnsupportedInputError
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.input_report import InputReportBuilder
-from swbt.protocol.profile import JoyConLeftProfile, JoyConRightProfile
+from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 
 
 def test_neutral_0x30_report_has_report_id_and_49_byte_length() -> None:

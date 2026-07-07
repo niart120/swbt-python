@@ -32,7 +32,8 @@ from swbt.errors import (
     UnsupportedInputError,
 )
 from swbt.gamepad._config import _SwitchGamepadConfig
-from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
+from swbt.protocol.profiles.joycon import JoyConLeftProfile
+from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
 
 

@@ -153,7 +153,10 @@ swbt/
     subcommand.py
     spi.py
     rumble.py
-    profile.py
+    profiles/
+      base.py
+      pro_controller.py
+      joycon.py
 
   transport/
     __init__.py
@@ -181,7 +184,9 @@ swbt/
 | `swbt.protocol.subcommand` | subcommand reply 生成 |
 | `swbt.protocol.spi` | virtual SPI flash |
 | `swbt.protocol.rumble` | raw rumble state |
-| `swbt.protocol.profile` | Controller profile、Pro Controller / Joy-Con L/R の固定 identity 情報 |
+| `swbt.protocol.profiles.base` | Controller profile の共通型、controller kind、色、SDP policy |
+| `swbt.protocol.profiles.pro_controller` | Pro Controller の固定 identity 情報 |
+| `swbt.protocol.profiles.joycon` | Joy-Con L/R の固定 identity 情報 |
 | `swbt.transport.base` | transport protocol 定義 |
 | `swbt.transport.bumble` | Bumble transport 実装 |
 | `swbt.transport.fake` | テスト用 transport |

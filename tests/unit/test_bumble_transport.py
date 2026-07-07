@@ -14,7 +14,8 @@ from bumble.keys import PairingKeys
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
-from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
+from swbt.protocol.profiles.joycon import JoyConLeftProfile
+from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport import bumble as bumble_module
 from swbt.transport._bumble_sdp import build_hid_service_records
 from swbt.transport.bumble import BumbleHidTransport

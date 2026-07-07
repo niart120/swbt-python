@@ -153,7 +153,7 @@ Bumble の HID Device helper を利用する。GET_REPORT、SET_REPORT、GET_PRO
 
 Switch が Pro Controller 相当の HID Device として認識できるよう、SDP record を設定する。
 
-SDP record は `swbt.protocol.profile.ControllerProfile` から descriptor 情報を受け取る形にし、Bumble 固有の record 構築は `BumbleHidTransport` に閉じる。Joy-Con 固有 HID descriptor は別 unit の source-audit 対象であり、未監査 bytes を SDP fixture にしない。
+SDP record は `swbt.protocol.profiles.base.ControllerProfile` から descriptor 情報を受け取る形にし、Bumble 固有の record 構築は `BumbleHidTransport` に閉じる。Joy-Con 固有 HID descriptor は別 unit の source-audit 対象であり、未監査 bytes を SDP fixture にしない。
 
 ### 3.6 HID descriptor
 

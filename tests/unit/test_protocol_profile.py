@@ -5,43 +5,25 @@ from typing import cast
 import pytest
 
 from swbt.errors import InvalidInputError
-from swbt.protocol import descriptors as split_descriptors
 from swbt.protocol.buttons import PRO_CONTROLLER_BUTTON_BITS
-from swbt.protocol.profile import (
-    SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR,
-    ControllerColors,
-    ControllerKind,
-    JoyConLeftProfile,
-    JoyConRightProfile,
+from swbt.protocol.descriptors import SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
+from swbt.protocol.profiles.base import ControllerColors, ControllerKind
+from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
+from swbt.protocol.profiles.pro_controller import (
     ProControllerProfile,
-)
-from swbt.protocol.profiles.base import ControllerKind as SplitControllerKind
-from swbt.protocol.profiles.joycon import (
-    JoyConLeftProfile as SplitJoyConLeftProfile,
-)
-from swbt.protocol.profiles.joycon import (
-    JoyConRightProfile as SplitJoyConRightProfile,
-)
-from swbt.protocol.profiles.pro_controller import (
-    ProControllerProfile as SplitProControllerProfile,
-)
-from swbt.protocol.profiles.pro_controller import (
-    default_controller_profile as split_default_controller_profile,
+    default_controller_profile,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_protocol_profile_implementation_is_split_by_profile_concern() -> None:
-    assert SplitControllerKind is ControllerKind
-    assert SplitProControllerProfile is ProControllerProfile
-    assert SplitJoyConLeftProfile is JoyConLeftProfile
-    assert SplitJoyConRightProfile is JoyConRightProfile
-    assert split_descriptors.SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR is (
-        SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
-    )
+    assert ControllerKind.__module__ == "swbt.protocol.profiles.base"
+    assert ProControllerProfile.__module__ == "swbt.protocol.profiles.pro_controller"
+    assert JoyConLeftProfile.__module__ == "swbt.protocol.profiles.joycon"
+    assert JoyConRightProfile.__module__ == "swbt.protocol.profiles.joycon"
     assert ProControllerProfile().button_bits is PRO_CONTROLLER_BUTTON_BITS
-    assert split_default_controller_profile().__class__ is ProControllerProfile
+    assert default_controller_profile().__class__ is ProControllerProfile
 
 
 def test_controller_kind_branching_stays_localized_to_profiles_and_gamepad_classes() -> None:
@@ -68,8 +50,6 @@ def test_production_profile_imports_use_split_modules() -> None:
 
     for path in (ROOT / "src" / "swbt").rglob("*.py"):
         relative_path = path.relative_to(ROOT).as_posix()
-        if relative_path == "src/swbt/protocol/profile.py":
-            continue
         if legacy_profile_import.search(path.read_text(encoding="utf-8")):
             offenders.append(relative_path)
 
@@ -154,7 +134,6 @@ def test_controller_profile_rejects_invalid_default_report_period(value: object)
 def test_pro_controller_profile_direct_construction_is_limited_to_profile_factory() -> None:
     direct_construction_sites = []
     allowed_paths = {
-        ROOT / "src" / "swbt" / "protocol" / "profile.py",
         ROOT / "src" / "swbt" / "protocol" / "profiles" / "pro_controller.py",
     }
 

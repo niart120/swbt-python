@@ -1,6 +1,7 @@
 import asyncio
 import builtins
 import importlib
+import importlib.util
 import inspect
 import json
 import pkgutil
@@ -28,12 +29,13 @@ from swbt.gamepad import _config as gamepad_config
 from swbt.gamepad import core as gamepad_core
 from swbt.gamepad import runtime as gamepad_runtime
 from swbt.gamepad._config import _SwitchGamepadConfig
-from swbt.protocol.profile import JoyConLeftProfile, JoyConRightProfile, ProControllerProfile
+from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
+from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
 
 if TYPE_CHECKING:
-    from swbt.protocol.profile import ControllerProfile
+    from swbt.protocol.profiles.base import ControllerProfile
 
 
 REARCHITECTURE_TARGET_XFAIL_REASON = (
@@ -223,6 +225,10 @@ def test_concrete_controller_classes_own_internal_controller_specs() -> None:
     assert isinstance(ProController._controller_spec.profile, ProControllerProfile)
     assert isinstance(JoyConL._controller_spec.profile, JoyConLeftProfile)
     assert isinstance(JoyConR._controller_spec.profile, JoyConRightProfile)
+
+
+def test_legacy_protocol_profile_module_is_removed() -> None:
+    assert importlib.util.find_spec("swbt.protocol.profile") is None
 
 
 @pytest.mark.parametrize(
