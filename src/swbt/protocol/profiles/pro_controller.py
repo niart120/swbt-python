@@ -15,6 +15,7 @@ class ProControllerProfile(ControllerProfile):
     device_type: int = 0x03
     device_info_tail: bytes = b"\x03\x02"
     button_bits: ButtonBitMap = field(default_factory=lambda: PRO_CONTROLLER_BUTTON_BITS)
+    imu_enable_modes: tuple[int, ...] = (0x00, 0x01, 0x02)
     supports_left_stick: bool = True
     supports_right_stick: bool = True
 

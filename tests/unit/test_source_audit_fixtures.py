@@ -30,6 +30,9 @@ REQUIRED_ENTRY_IDS = {
     "joycon_standard_stick_availability",
     "subcommand_report_mode_session_state",
     "subcommand_imu_vibration_enable_state",
+    "subcommand_nfc_ir_mcu_state",
+    "subcommand_nfc_ir_mcu_state_ack_policy",
+    "pro_controller_imu_enable_mode_02_observation",
     "profile_aware_bumble_sdp_boundary",
     "joycontrol_sdp_record_policy",
     "spi_flash_boundary_and_seed_map",
@@ -341,6 +344,36 @@ def test_subcommand_imu_vibration_enable_state_is_source_audited() -> None:
     assert "SubcommandSessionState" in value
 
 
+def test_subcommand_nfc_ir_mcu_state_is_source_audited() -> None:
+    entry = _entry_by_id("subcommand_nfc_ir_mcu_state")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "session-state-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x22" in value
+    assert "NFC/IR MCU state" in value
+    assert "0x00" in value
+    assert "0x01" in value
+    assert "0x02" in value
+
+
+def test_subcommand_nfc_ir_mcu_state_ack_policy_is_recorded() -> None:
+    entry = _entry_by_id("subcommand_nfc_ir_mcu_state_ack_policy")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "implementation-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x22" in value
+    assert "ACK-compatible" in value
+    assert "0x80" in value
+    assert "reply-to 0x22" in value
+    assert "does not model" in value
+
+
 def test_joycon_imu_enable_mode_02_is_hardware_observed() -> None:
     entry = _entry_by_id("joycon_imu_enable_mode_02")
 
@@ -355,6 +388,26 @@ def test_joycon_imu_enable_mode_02_is_hardware_observed() -> None:
     assert "Joy-Con profiles" in value
     assert "Pro Controller" in value
     assert "SR+SL" in value
+
+
+def test_pro_controller_imu_enable_mode_02_observation_is_hardware_observed() -> None:
+    entry = _entry_by_id("pro_controller_imu_enable_mode_02_observation")
+
+    assert entry["classification"] == "hardware observation"
+    assert entry["status"] == "hardware-observed-only"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "ProController P2 hardware reruns" in value
+    assert "device_name=Pro Controller" in value
+    assert "class_of_device=0x002508" in value
+    assert "ProCon toast" in value
+    assert "0x40" in value
+    assert "0x02" in value
+    assert "a2010400014040000140404002" in value
+    assert "hardware-observed compatibility mode" in value
+    assert "SubcommandSessionState.imu_mode" in value
+    assert "does not supersede the 0x00/0x01 source fact" in value
 
 
 def test_profile_aware_bumble_sdp_boundary_is_source_audited() -> None:

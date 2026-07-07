@@ -209,10 +209,36 @@ status = "session-state-policy"
 handoff = ["unit_032"]
 
 [[entry]]
+id = "subcommand_nfc_ir_mcu_state"
+fixture_name = "subcommand_0x22_nfc_ir_mcu_state"
+area = "protocol"
+value = "Subcommand 0x22 Set NFC/IR MCU state takes one argument byte: 0x00 suspend, 0x01 resume, 0x02 resume for update."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
+]
+status = "session-state-policy"
+handoff = ["unit_046"]
+
+[[entry]]
+id = "subcommand_nfc_ir_mcu_state_ack_policy"
+fixture_name = "subcommand_0x22_nfc_ir_mcu_state_ack_policy"
+area = "protocol"
+value = "swbt-python ACK-compatible handling for subcommand 0x22 accepts first argument byte 0x00, 0x01, or 0x02 and replies with ACK 0x80 and reply-to 0x22 with no data. It does not model NFC/IR MCU semantic state."
+classification = "implementation fact"
+source = [
+    'src\swbt\protocol\subcommand.py',
+    'tests\unit\test_subcommand_responder.py',
+    'tests\unit\fixtures\source_audit\switch_protocol_values.toml',
+]
+status = "implementation-policy"
+handoff = ["unit_046"]
+
+[[entry]]
 id = "joycon_imu_enable_mode_02"
 fixture_name = "joycon_imu_enable_mode_02"
 area = "protocol"
-value = "Joy-Con (L) hardware runs on Windows 11 / CSR8510 A10 / WinUSB / Bumble 0.0.230 observed subcommand 0x40 Enable IMU with first payload byte 0x02 during pairing handshake. swbt-python accepts 0x02 only for Joy-Con profiles, records it as SubcommandSessionState.imu_mode, and treats it as IMU enabled for session-state diagnostics. The later SR+SL-after-observed-window run completed pairing, but the Switch toast still identified the registration as Pro Controller while the controller order screen treated it as Joy-Con L. The trace still used local Bluetooth address 00:1B:DC:F9:9F:7D on-air but zero bytes in the 0x02 Device Info payload. This is hardware-observed only and does not change the Pro Controller 0x00/0x01 source fact."
+value = "Joy-Con (L) hardware runs on Windows 11 / CSR8510 A10 / WinUSB / Bumble 0.0.230 observed subcommand 0x40 Enable IMU with first payload byte 0x02 during pairing handshake. swbt-python accepts 0x02 for Joy-Con profiles, records it as SubcommandSessionState.imu_mode, and treats it as IMU enabled for session-state diagnostics. The later SR+SL-after-observed-window run completed pairing, but the Switch toast still identified the registration as Pro Controller while the controller order screen treated it as Joy-Con L. The trace still used local Bluetooth address 00:1B:DC:F9:9F:7D on-air but zero bytes in the 0x02 Device Info payload. This is hardware-observed only and does not change the Pro Controller 0x00/0x01 source fact. ProController 0x02 compatibility is tracked separately by pro_controller_imu_enable_mode_02_observation."
 classification = "hardware observation"
 source = [
     'spec\hardware-test-log.md',
@@ -226,6 +252,24 @@ source = [
 status = "hardware-observed-only"
 condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB; Bumble 0.0.230; Python 3.13.5; adapter usb:0; Switch model/firmware not re-recorded in this run; controller search or change grip order screen; 2026-07-06 Joy-Con L hardware run"
 handoff = ["joycon-profile-hardware"]
+
+[[entry]]
+id = "pro_controller_imu_enable_mode_02_observation"
+fixture_name = "pro_controller_imu_enable_mode_02_observation"
+area = "protocol"
+value = "ProController P2 hardware reruns observed subcommand 0x40 Enable IMU with first payload byte 0x02 after Bumble initialized device_name=Pro Controller and class_of_device=0x002508. The rerun after deleting Switch-side connection information showed user-visible ProCon toast and ProCon pairing, but still produced repeated 0x40 payload 0x02 and ProtocolError before the implementation change. Debug log raw HID interrupt PDU includes a2010400014040000140404002... for the first failed 0x40. swbt-python now accepts 0x02 for ProControllerProfile as a hardware-observed compatibility mode, records it as SubcommandSessionState.imu_mode, and treats it as IMU enabled for session-state diagnostics. This entry is hardware-observed only, does not supersede the 0x00/0x01 source fact, and does not prove cross-firmware behavior."
+classification = "hardware observation"
+source = [
+    'spec\hardware-test-log.md',
+    'spec\wip\unit_046\HARDWARE_PROFILE_TEST_SCENARIOS.md',
+    'build\hardware\profile-regression-20260707\pro\subcommand-observation-window.jsonl',
+    'build\hardware\profile-regression-20260707\pro\p2-subcommand-window-pytest-debug.log',
+    'build\hardware\profile-regression-20260707\pro-p2-after-clear\subcommand-observation-window.jsonl',
+    'build\hardware\profile-regression-20260707\pro-p2-after-clear\p2-subcommand-window-after-clear-pytest-debug.log',
+]
+status = "hardware-observed-only"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB expected from previous Windows runs; Bumble 0.0.230; Python 3.13.5; adapter usb:0; Switch 2 firmware 22.1.0; controller search or change grip order screen; branch test/hardware-test-scenarios at commit 3c3aead plus 2026-07-07 P2 rerun after deleting Switch-side connection information"
+handoff = ["unit_046"]
 
 [[entry]]
 id = "profile_aware_bumble_sdp_boundary"

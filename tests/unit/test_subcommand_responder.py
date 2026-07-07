@@ -142,12 +142,16 @@ def test_joycon_enable_imu_mode_0x02_updates_session_state() -> None:
     assert session_state.imu_enabled is True
 
 
-def test_pro_controller_rejects_joycon_imu_mode_0x02() -> None:
-    with pytest.raises(ProtocolError):
-        SubcommandResponder().respond(
-            _subcommand_report(0x40, payload=b"\x02"),
-            state=InputState.neutral(),
-        )
+def test_pro_controller_enable_imu_mode_0x02_updates_session_state() -> None:
+    session_state = SubcommandSessionState()
+    responder = SubcommandResponder(session_state=session_state)
+
+    reply = responder.respond(_subcommand_report(0x40, payload=b"\x02"), state=InputState.neutral())
+
+    assert reply[13] == 0x80
+    assert reply[14] == 0x40
+    assert session_state.imu_mode == 0x02
+    assert session_state.imu_enabled is True
 
 
 def test_enable_vibration_updates_session_state() -> None:
@@ -209,6 +213,20 @@ def test_mcu_config_subcommand_builds_config_reply() -> None:
         "00 00 00 00 00 00 00 00 00 00 00 00 00 c8"
     )
     assert reply[49] == 0x00
+
+
+@pytest.mark.parametrize("mode", [0x00, 0x01, 0x02])
+def test_set_nfc_ir_mcu_state_acknowledges_supported_modes(mode: int) -> None:
+    reply = _reply(0x22, payload=bytes((mode,)))
+
+    assert reply[13] == 0x80
+    assert reply[14] == 0x22
+    assert reply[15:] == bytes(35)
+
+
+def test_set_nfc_ir_mcu_state_rejects_unknown_mode() -> None:
+    with pytest.raises(ProtocolError, match="NFC/IR MCU state"):
+        _reply(0x22, payload=b"\x03")
 
 
 def test_unsupported_subcommand_error_keeps_diagnostic_fields() -> None:
