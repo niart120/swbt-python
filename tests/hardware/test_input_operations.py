@@ -363,13 +363,13 @@ def test_switch_button_check_after_active_reconnect_for_manual_reflection(
 
 
 @pytest.mark.hardware
-def test_switch_button_check_separate_l_r_after_active_reconnect_for_manual_reflection(
+def test_switch_button_check_lr_and_dpad_after_active_reconnect_for_manual_reflection(
     swbt_bumble_adapter: str,
     swbt_hardware_artifact_dir: Path,
 ) -> None:
-    """Send R-only, L-only, then L+R as separate button check observations."""
+    """Send LR and D-pad button check observations in one active reconnect run."""
     key_store_path = _input_semantics_key_store_path(swbt_hardware_artifact_dir)
-    trace_path = swbt_hardware_artifact_dir / "active-reconnect-button-check-lr-split.jsonl"
+    trace_path = swbt_hardware_artifact_dir / "active-reconnect-button-check-lr-dpad.jsonl"
     if not key_store_path.exists():
         pytest.skip(
             "input semantics key store is missing; run "
@@ -381,7 +381,7 @@ def test_switch_button_check_separate_l_r_after_active_reconnect_for_manual_refl
         with trace_path.open("w", encoding="utf-8") as trace:
             await _wait_for_operator_condition(
                 trace,
-                operation="operator_prepare_button_check_lr_split_selection",
+                operation="operator_prepare_button_check_lr_dpad_selection",
                 expected_switch_screen="input_device_check_button_operation_selection",
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
@@ -398,14 +398,14 @@ def test_switch_button_check_separate_l_r_after_active_reconnect_for_manual_refl
                 _record_probe_event(
                     trace,
                     "manual_input_checkpoint",
-                    operation="button_check_lr_split_enter_with_a_start",
+                    operation="button_check_lr_dpad_enter_with_a_start",
                 )
                 await pad.tap(Button.A, duration=0.35)
                 await asyncio.sleep(0.75)
                 _record_probe_event(
                     trace,
                     "manual_input_checkpoint",
-                    operation="button_check_lr_split_enter_with_a_complete",
+                    operation="button_check_lr_dpad_enter_with_a_complete",
                     report_0x30_count=pad.status().report_counters.get(0x30, 0),
                 )
 
@@ -442,98 +442,7 @@ def test_switch_button_check_separate_l_r_after_active_reconnect_for_manual_refl
                 await _send_neutral_and_record(
                     pad,
                     trace,
-                    operation="button_check_lr_split_neutral_complete",
-                )
-            finally:
-                await pad.close(neutral=True)
-
-    asyncio.run(run())
-
-    events = _read_jsonl(trace_path)
-
-    assert _contains_active_reconnect_success(events)
-    assert _contains_full_handshake(events)
-    assert _contains_event(events, "manual_input_checkpoint", operation="handshake_complete")
-    assert _contains_event(
-        events,
-        "manual_input_checkpoint",
-        operation="button_check_lr_split_enter_with_a_complete",
-    )
-    assert _contains_event(
-        events,
-        "manual_input_checkpoint",
-        operation="hold_r_only_reports_sent",
-        expected_button_bytes="400000",
-    )
-    assert _contains_event(
-        events,
-        "manual_input_checkpoint",
-        operation="hold_l_only_reports_sent",
-        expected_button_bytes="000040",
-    )
-    assert _contains_event(
-        events,
-        "manual_input_checkpoint",
-        operation="hold_lr_together_reports_sent",
-        expected_button_bytes="400040",
-    )
-    assert _contains_event(
-        events,
-        "manual_input_checkpoint",
-        operation="button_check_lr_split_neutral_complete",
-    )
-    assert _count_events(events, "report_tx", report_id="0x30") >= 10
-    assert not _contains_event(events, "classic_pairing")
-    assert not _contains_event(events, "key_store_update")
-    assert not _contains_event(events, "advertising_start")
-    assert not _contains_event(events, "error")
-
-
-@pytest.mark.hardware
-def test_switch_button_check_dpad_after_active_reconnect_for_manual_reflection(
-    swbt_bumble_adapter: str,
-    swbt_hardware_artifact_dir: Path,
-) -> None:
-    """Send each D-pad direction as a separate button check observation."""
-    key_store_path = _input_semantics_key_store_path(swbt_hardware_artifact_dir)
-    trace_path = swbt_hardware_artifact_dir / "active-reconnect-button-check-dpad.jsonl"
-    if not key_store_path.exists():
-        pytest.skip(
-            "input semantics key store is missing; run "
-            "test_switch_input_semantics_pairing_writes_fresh_key_store first "
-            "with the same --swbt-hardware-artifact-dir"
-        )
-
-    async def run() -> None:
-        with trace_path.open("w", encoding="utf-8") as trace:
-            await _wait_for_operator_condition(
-                trace,
-                operation="operator_prepare_button_check_dpad_selection",
-                expected_switch_screen="input_device_check_button_operation_selection",
-                wait_seconds=_OPERATOR_WAIT_SECONDS,
-            )
-            pad = ProController(
-                adapter=swbt_bumble_adapter,
-                key_store_path=str(key_store_path),
-                diagnostics=DiagnosticsConfig(trace_writer=trace),
-            )
-            try:
-                await _active_reconnect_for_input_check(pad, trace)
-                await _wait_for_full_handshake(trace_path, timeout_seconds=20.0)
-                _record_handshake_checkpoint(pad, trace)
-
-                _record_probe_event(
-                    trace,
-                    "manual_input_checkpoint",
-                    operation="button_check_dpad_enter_with_a_start",
-                )
-                await pad.tap(Button.A, duration=0.35)
-                await asyncio.sleep(0.75)
-                _record_probe_event(
-                    trace,
-                    "manual_input_checkpoint",
-                    operation="button_check_dpad_enter_with_a_complete",
-                    report_0x30_count=pad.status().report_counters.get(0x30, 0),
+                    operation="button_check_after_lr_together_neutral_complete",
                 )
 
                 for direction, button in (
@@ -566,7 +475,30 @@ def test_switch_button_check_dpad_after_active_reconnect_for_manual_reflection(
     assert _contains_event(
         events,
         "manual_input_checkpoint",
-        operation="button_check_dpad_enter_with_a_complete",
+        operation="button_check_lr_dpad_enter_with_a_complete",
+    )
+    assert _contains_event(
+        events,
+        "manual_input_checkpoint",
+        operation="hold_r_only_reports_sent",
+        expected_button_bytes="400000",
+    )
+    assert _contains_event(
+        events,
+        "manual_input_checkpoint",
+        operation="hold_l_only_reports_sent",
+        expected_button_bytes="000040",
+    )
+    assert _contains_event(
+        events,
+        "manual_input_checkpoint",
+        operation="hold_lr_together_reports_sent",
+        expected_button_bytes="400040",
+    )
+    assert _contains_event(
+        events,
+        "manual_input_checkpoint",
+        operation="button_check_after_lr_together_neutral_complete",
     )
     assert _contains_event(
         events,
