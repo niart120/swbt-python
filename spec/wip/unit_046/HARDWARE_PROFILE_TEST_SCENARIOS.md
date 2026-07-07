@@ -12,7 +12,7 @@
 - Joy-Con L は次点として、単体 Joy-Con profile の登録と色 SPI まで見る。
 - Joy-Con R は 1 シナリオだけ実行し、未検証範囲を広げすぎない。
 
-この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0、Pro Controller P1/P2/P3/P4/P5/P6/P7、Joy-Con L L1/L2 を実行済みである。Joy-Con L L2 は既定色診断 run を補助観測として残し、主シナリオを利用者指定色の確認へ差し替えて pass した。Joy-Con R R1 は初回実行済みだが、pytest は `0x22` NFC/IR MCU state 未対応による `unsupported_subcommand` で observed-fail である。ユーザ目視では赤 body / 青 buttons の Joy-Con (R) として登録された。H1/H2 は未実行である。P4 は当初 LR split だけで実行したが、D-pad と同じ画面で連続実行できるため LR + D-pad 統合シナリオとして再実装し、再実行済みである。
+この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0、Pro Controller P1/P2/P3/P4/P5/P6/P7、Joy-Con L L1/L2、Joy-Con R R1 を実行済みである。Joy-Con L L2 は既定色診断 run を補助観測として残し、主シナリオを利用者指定色の確認へ差し替えて pass した。Joy-Con R R1 は初回 pytest が `0x22` NFC/IR MCU state 未対応による `unsupported_subcommand` で observed-fail になり、`0x22` ACK 互換処理後の rerun は pass した。R1 初回のユーザ目視は赤 body / 青 buttons、rerun のユーザ目視は赤 body / グレー buttons である。どちらも UI 目視観測であり、専用 SPI color scenario の pass 条件にはしない。H1/H2 は未実行である。P4 は当初 LR split だけで実行したが、D-pad と同じ画面で連続実行できるため LR + D-pad 統合シナリオとして再実装し、再実行済みである。
 
 ### 1.2 起点 / source
 
@@ -103,7 +103,7 @@
 未解決事項:
 
 - `0x22` が Joy-Con R で繰り返される条件は未確定。
-- `0x22` ACK 互換処理後の R1 hardware rerun は未実行。
+- `0x22` ACK 互換処理後の R1 hardware rerun は pass。別 firmware、別 dongle、別 OS で同じ `0x22` sequence になるかは未検証。
 - NFC、IR camera、MCU firmware update の意味実装は今回扱わない。
 
 ## 6. 振る舞い仕様
@@ -175,9 +175,9 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | green | L1-L2 の Joy-Con L 次点シナリオを実行し、limited observation を更新する | characterization | hardware | yes | L1 は接続情報削除後の rerun で pass。初回 L1 は on-wire Joy-Con L だが Pro Controller toast。L2 は利用者指定色 scenario に差し替えて pass。既定色 run は補助観測として扱う。normal input reflection へ拡張しない |
 | green | R1 初回の Joy-Con R 最小シナリオを実行し、`0x22` failure と UI 登録観測を記録する | characterization | hardware | yes | pytest は `unsupported_subcommand: 0x22` で observed-fail。trace は Joy-Con R identity / Device Info / SR+SL / cleanup を記録。ユーザ目視では赤 body / 青 buttons の Joy-Con (R) として登録された |
 | green | `0x22` NFC/IR MCU state を source-audit fixture と unit test で固定し、ACK 互換処理を追加する | regression | unit | no | `test_set_nfc_ir_mcu_state_acknowledges_supported_modes`。MCU semantic state は実装しない |
-| todo | R1 を `0x22` 修正後に再実行し、pytest failure が解消したか確認する | characterization | hardware | yes | Switch 側を controller search / change grip order に戻したうえで個別承認後に実行 |
+| green | R1 を `0x22` 修正後に再実行し、pytest failure が解消したか確認する | characterization | hardware | yes | `1 passed in 24.45s`。trace は `0x22` 2 件への reply、Joy-Con R Device Info、SR+SL、cleanup、`error` なしを記録。ユーザ目視では赤 body / グレー buttons の pairing を確認 |
 | deferred | Joy-Con L/R の normal input reflection test を追加する | new | hardware | yes | 今回は既存 node で profile identity と registration を確認する |
-| deferred | Joy-Con R controller color SPI / UI reflection を専用シナリオで確認する | characterization | hardware | yes | R1 初回で赤 body / 青 buttons は目視されたが、R1 の合否条件にはしない。SPI read と UI color を狙う検証は別 unit 候補 |
+| deferred | Joy-Con R controller color SPI / UI reflection を専用シナリオで確認する | characterization | hardware | yes | R1 初回で赤 body / 青 buttons、rerun で赤 body / グレー buttons が目視されたが、R1 の合否条件にはしない。SPI read と UI color を狙う検証は別 unit 候補 |
 
 ## 8. 設計メモ
 
@@ -244,6 +244,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | `uv run ruff format --check src\swbt\protocol\subcommand.py tests\unit\test_subcommand_responder.py tests\unit\test_source_audit_fixtures.py` | pass | `3 files already formatted` |
 | `uv run ruff check src\swbt\protocol\subcommand.py tests\unit\test_subcommand_responder.py tests\unit\test_source_audit_fixtures.py` | pass | `All checks passed!` |
 | `uv run pytest tests\unit -q` | pass | `368 passed in 1.29s`。`0x22` 修正後の full unit |
+| `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_pairing_records_device_info[right]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-r-after-0x22-ack --log-file build\hardware\profile-regression-20260707\joycon-r-after-0x22-ack\r1-joycon-right-profile-pairing-after-0x22-ack-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 24.45s`。trace は Joy-Con R Device Info `04000202001bdcf99f7d0101`、`0x22` 2 件への `0x21` reply、SR+SL `300000`、neutral、`transport_close_complete`、`error` なしを記録。ユーザ目視では赤 body / グレー buttons の pairing を確認 |
 | `uv run pytest -m bumble` | not run | adapter open は承認対象。この unit では実行しない |
 | `uv run pytest -m hardware` | not run | Switch-facing 操作は承認対象。この unit では実行しない |
 
@@ -251,7 +252,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 
 | 項目 | 内容 |
 |---|---|
-| 実機要否 | 実行時は required。H0 / P1-P7 / L1/L2 は実行済み。R1 初回は observed-fail で、`0x22` 修正後 rerun は未実行。未実行シナリオは個別承認後に実行する |
+| 実機要否 | 実行時は required。H0 / P1-P7 / L1/L2 / R1 は実行済み。H1/H2 など未実行シナリオは個別承認後に実行する |
 | 承認範囲 | 実行前に H1/H2/P/L/R のどの scenario を実行するか、adapter open、HID advertising、pairing、report loop、input operation、cleanup の範囲を明示する |
 | adapter | 実行時に `swbt-probe adapters --json` と人間確認で決める。過去観測では `usb:0` / CSR8510 A10 / WinUSB が使われている |
 | 対象機器 | 実行時に Switch model / firmware と Switch 側画面を記録する |
@@ -262,7 +263,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 ## 12. 先送り事項
 
 - Joy-Con L/R の normal input reflection test 追加は、今回の実行結果を見て別 unit 化する。
-- Joy-Con R controller color SPI / UI reflection は、R1 初回の目視色だけでは完了扱いにしない。専用 SPI / UI color シナリオにするかは、`0x22` 修正後の R1 rerun 結果を見て判断する。
+- Joy-Con R controller color SPI / UI reflection は、R1 の目視色だけでは完了扱いにしない。専用 SPI / UI color シナリオにするかは別 unit で判断する。
 - Pro Controller P2 の `0x40` mode `0x02` は ProController 互換 mode として受け入れる実装に変更し、P2 retest は pass。別 firmware、別 dongle、別 OS での一般化はしない。
 - Joy-Con R R1 初回で観測した repeated `0x22` payload `0x01` は ACK 互換処理に留める。NFC/IR MCU の意味実装はしない。
 - Linux、macOS、別 dongle、別 firmware は今回扱わない。
@@ -287,4 +288,4 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 - [x] L2 の default-color 補助観測と custom-color pass、ユーザ目視結果を `spec/hardware-test-log.md` に記録した
 - [x] R1 初回実行の `0x22` failure とユーザ目視登録結果を `spec/hardware-test-log.md` に記録した
 - [x] `0x22` NFC/IR MCU state の source-audit fixture と unit test を追加した
-- [ ] `0x22` 修正後に R1 を再実行して pass / fail を記録する
+- [x] `0x22` 修正後に R1 を再実行して pass / fail とユーザ目視結果を記録した
