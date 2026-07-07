@@ -8,7 +8,7 @@ from swbt.gamepad.interface import SwitchGamepad
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.runtime import ControllerRuntime
 from swbt.input import Button, IMUFrame, InputState, Stick
-from swbt.protocol.profiles.base import ControllerColors, ControllerKind
+from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.state_store import InputStateStore
@@ -88,6 +88,10 @@ class _RuntimeBackedGamepad(SwitchGamepad):
             InvalidInputError: ``config`` is invalid or omits ``adapter`` while no
                 custom ``transport`` is supplied.
         """
+        expected_kind = cls._controller_spec.profile.kind
+        if config.profile.kind is not expected_kind:
+            msg = f"{cls.__name__}._from_config requires a {expected_kind.value} profile"
+            raise InvalidInputError(msg)
         gamepad = cls.__new__(cls)
         gamepad._init_from_config(
             config,
@@ -367,39 +371,6 @@ class JoyConL(_RuntimeBackedGamepad):
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=None)
 
-    @classmethod
-    def _from_config(
-        cls,
-        config: SwitchGamepadConfig,
-        *,
-        diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
-    ) -> "JoyConL":
-        """Create a left Joy-Con from an explicit resource configuration.
-
-        Args:
-            config: Resource configuration whose profile must be Joy-Con L.
-            diagnostics: Optional diagnostics configuration for trace output.
-            transport: Optional HID transport instance.
-
-        Returns:
-            JoyConL: A left Joy-Con configured from ``config``.
-
-        Raises:
-            InvalidInputError: ``config`` does not contain a Joy-Con L profile, is
-                invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
-        """
-        if config.profile.kind is not ControllerKind.JOYCON_LEFT:
-            msg = "JoyConL._from_config requires a Joy-Con L profile"
-            raise InvalidInputError(msg)
-        gamepad = cls.__new__(cls)
-        gamepad._init_from_config(
-            config,
-            diagnostics=diagnostics,
-            transport=transport,
-        )
-        return gamepad
-
 
 class JoyConR(_RuntimeBackedGamepad):
     """Runtime-backed Joy-Con R-compatible gamepad."""
@@ -434,36 +405,3 @@ class JoyConR(_RuntimeBackedGamepad):
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=None)
-
-    @classmethod
-    def _from_config(
-        cls,
-        config: SwitchGamepadConfig,
-        *,
-        diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
-    ) -> "JoyConR":
-        """Create a right Joy-Con from an explicit resource configuration.
-
-        Args:
-            config: Resource configuration whose profile must be Joy-Con R.
-            diagnostics: Optional diagnostics configuration for trace output.
-            transport: Optional HID transport instance.
-
-        Returns:
-            JoyConR: A right Joy-Con configured from ``config``.
-
-        Raises:
-            InvalidInputError: ``config`` does not contain a Joy-Con R profile, is
-                invalid, or omits ``adapter`` while no custom ``transport`` is supplied.
-        """
-        if config.profile.kind is not ControllerKind.JOYCON_RIGHT:
-            msg = "JoyConR._from_config requires a Joy-Con R profile"
-            raise InvalidInputError(msg)
-        gamepad = cls.__new__(cls)
-        gamepad._init_from_config(
-            config,
-            diagnostics=diagnostics,
-            transport=transport,
-        )
-        return gamepad

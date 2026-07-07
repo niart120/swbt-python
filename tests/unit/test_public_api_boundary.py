@@ -219,13 +219,22 @@ def test_concrete_controller_classes_own_internal_controller_specs() -> None:
     assert isinstance(JoyConR._controller_spec.profile, JoyConRightProfile)
 
 
-def test_joycon_from_config_requires_matching_joycon_profile() -> None:
+@pytest.mark.parametrize(
+    ("controller_cls", "profile"),
+    [
+        (ProController, JoyConLeftProfile()),
+        (ProController, JoyConRightProfile()),
+        (JoyConL, ProControllerProfile()),
+        (JoyConR, JoyConLeftProfile()),
+    ],
+)
+def test_from_config_rejects_mismatched_controller_profile(
+    controller_cls: type[ProController | JoyConL | JoyConR],
+    profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
+) -> None:
     with pytest.raises(InvalidInputError):
-        JoyConL._from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
-
-    with pytest.raises(InvalidInputError):
-        JoyConR._from_config(
-            SwitchGamepadConfig(profile=JoyConLeftProfile()),
+        controller_cls._from_config(
+            SwitchGamepadConfig(profile=profile),
             transport=FakeHidTransport(),
         )
 
