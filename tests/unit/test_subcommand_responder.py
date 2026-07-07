@@ -1,5 +1,6 @@
 import pytest
 
+from swbt.errors import ProtocolError
 from swbt.input import InputState
 from swbt.protocol.output_report import OutputReport, OutputReportParser
 from swbt.protocol.profiles.base import ControllerColors
@@ -212,6 +213,20 @@ def test_mcu_config_subcommand_builds_config_reply() -> None:
         "00 00 00 00 00 00 00 00 00 00 00 00 00 c8"
     )
     assert reply[49] == 0x00
+
+
+@pytest.mark.parametrize("mode", [0x00, 0x01, 0x02])
+def test_set_nfc_ir_mcu_state_acknowledges_supported_modes(mode: int) -> None:
+    reply = _reply(0x22, payload=bytes((mode,)))
+
+    assert reply[13] == 0x80
+    assert reply[14] == 0x22
+    assert reply[15:] == bytes(35)
+
+
+def test_set_nfc_ir_mcu_state_rejects_unknown_mode() -> None:
+    with pytest.raises(ProtocolError, match="NFC/IR MCU state"):
+        _reply(0x22, payload=b"\x03")
 
 
 def test_unsupported_subcommand_error_keeps_diagnostic_fields() -> None:

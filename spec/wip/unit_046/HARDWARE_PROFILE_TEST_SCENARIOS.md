@@ -12,7 +12,7 @@
 - Joy-Con L は次点として、単体 Joy-Con profile の登録と色 SPI まで見る。
 - Joy-Con R は 1 シナリオだけ実行し、未検証範囲を広げすぎない。
 
-この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0、Pro Controller P1/P2/P3/P4/P5/P6/P7、Joy-Con L L1/L2 を実行済みである。Joy-Con L L2 は既定色診断 run を補助観測として残し、主シナリオを利用者指定色の確認へ差し替えて pass した。Joy-Con R、H1/H2 は未実行である。P4 は当初 LR split だけで実行したが、D-pad と同じ画面で連続実行できるため LR + D-pad 統合シナリオとして再実装し、再実行済みである。
+この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0、Pro Controller P1/P2/P3/P4/P5/P6/P7、Joy-Con L L1/L2 を実行済みである。Joy-Con L L2 は既定色診断 run を補助観測として残し、主シナリオを利用者指定色の確認へ差し替えて pass した。Joy-Con R R1 は初回実行済みだが、pytest は `0x22` NFC/IR MCU state 未対応による `unsupported_subcommand` で observed-fail である。ユーザ目視では赤 body / 青 buttons の Joy-Con (R) として登録された。H1/H2 は未実行である。P4 は当初 LR split だけで実行したが、D-pad と同じ画面で連続実行できるため LR + D-pad 統合シナリオとして再実装し、再実行済みである。
 
 ### 1.2 起点 / source
 
@@ -25,7 +25,7 @@
 | public API policy | 現在の concrete controller class は `ProController`、`JoyConL`、`JoyConR` | `spec/rearchitecture/03-public-api-config-profile.md` |
 | hardware tests | 実行可能な pytest node と artifact fixture | `tests/hardware/` |
 | hardware-harness | adapter open、advertising、pairing、report loop、hardware marker の承認境界 | `.agents/skills/hardware-harness/SKILL.md` |
-| source-audit fixture | `0x40` Enable IMU payload `0x02` の ProController 実機観測を条件付き hardware observation として追加 | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` |
+| source-audit fixture | `0x40` Enable IMU payload `0x02` の ProController 実機観測と、`0x22` NFC/IR MCU state source fact / ACK policy を追加 | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` |
 
 ### 1.3 use case
 
@@ -73,9 +73,9 @@
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | required for P2 follow-up | done | P2 rerun 後に `0x40` Enable IMU payload `0x02` の ProController 実機観測を source-audit fixture へ条件付き hardware observation として追加した。source fact `0x00/0x01` は上書きしない |
+| Switch HID / report bytes | required for P2/R1 follow-up | done for P2 and R1 local fix | P2 rerun 後に `0x40` Enable IMU payload `0x02` の ProController 実機観測を source-audit fixture へ条件付き hardware observation として追加した。R1 初回後に `0x22` NFC/IR MCU state source fact を追加し、ACK 互換処理を unit test で固定した |
 | Bumble / transport | required for execution plan | done | adapter open、HID advertising、pairing、report loop は `hardware-harness` の承認対象として明記した |
-| OS / driver / adapter | required for execution plan | done for P1/P2/P3 | Windows、CSR8510 A10、`usb:0`、Python 3.13.5、Bumble 0.0.230 を P1/P2/P3 実行結果として `spec/hardware-test-log.md` に記録した。driver は過去 Windows run から WinUSB expected として扱い、この run では再列挙していない |
+| OS / driver / adapter | required for execution plan | done for executed scenarios | Windows、CSR8510 A10、`usb:0`、Python 3.13.5、Bumble 0.0.230 を実行済み scenario の結果として `spec/hardware-test-log.md` に記録した。driver は過去 Windows run から WinUSB expected として扱い、この run では再列挙していない |
 
 ### 5.1 P2 `0x40` mode `0x02` 監査
 
@@ -91,6 +91,20 @@
 - Switch 2 firmware 22.1.0 が ProController pairing / initialization 中にも `0x40` mode `0x02` を送る条件は未確定。
 - `0x02` は ProController でも `imu_mode=0x02` として session state に記録し、IMU enabled として diagnostics に出す。IMU frame の意味実装はしない。
 - 別 firmware、別 dongle、別 OS で同じ `0x40` mode `0x02` が出るかは未検証。
+
+### 5.2 R1 `0x22` NFC/IR MCU state 監査
+
+| 項目 | 値 | 根拠分類 | source | status |
+|---|---:|---|---|---|
+| `0x22` NFC/IR MCU state source fact | `0x00` suspend / `0x01` resume / `0x02` resume for update | source fact | `subcommand_nfc_ir_mcu_state` fixture、dekuNukem Nintendo Switch reverse engineering notes | stable session-state policy。source fact として維持 |
+| Joy-Con R R1 initial run | repeated `0x22` payload first byte `0x01` | hardware observation | `build\hardware\profile-regression-20260707\joycon-r\joycon-right-profile-pairing.jsonl` | Windows / CSR8510 A10 / Switch 2 22.1.0 条件付き観測。初回 pytest は `unsupported_subcommand` で observed-fail |
+| current `0x22` policy | ACK `0x80`、reply-to `0x22`、data なし | implementation fact | `subcommand_nfc_ir_mcu_state_ack_policy` fixture、`src\swbt\protocol\subcommand.py`、`tests\unit\test_subcommand_responder.py` | ACK 互換のみ。NFC/IR MCU state を public API や session state として公開しない |
+
+未解決事項:
+
+- `0x22` が Joy-Con R で繰り返される条件は未確定。
+- `0x22` ACK 互換処理後の R1 hardware rerun は未実行。
+- NFC、IR camera、MCU firmware update の意味実装は今回扱わない。
 
 ## 6. 振る舞い仕様
 
@@ -159,9 +173,11 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | green | P2 の `0x40` mode `0x02` を source-audit fixture に条件付き観測として記録する | characterization | local | no | `pro_controller_imu_enable_mode_02_observation` を追加。source fact `0x00/0x01` は上書きしない |
 | green | ProController が `0x40` mode `0x02` を ACK し、session state に記録する | regression | unit | no | `test_pro_controller_enable_imu_mode_0x02_updates_session_state`。cross-firmware guarantee と IMU frame 実装は対象外 |
 | green | L1-L2 の Joy-Con L 次点シナリオを実行し、limited observation を更新する | characterization | hardware | yes | L1 は接続情報削除後の rerun で pass。初回 L1 は on-wire Joy-Con L だが Pro Controller toast。L2 は利用者指定色 scenario に差し替えて pass。既定色 run は補助観測として扱う。normal input reflection へ拡張しない |
-| todo | R1 の Joy-Con R 最小シナリオを実行し、結果を not verified から更新するか判断する | characterization | hardware | yes | 1 本だけ実行 |
+| green | R1 初回の Joy-Con R 最小シナリオを実行し、`0x22` failure と UI 登録観測を記録する | characterization | hardware | yes | pytest は `unsupported_subcommand: 0x22` で observed-fail。trace は Joy-Con R identity / Device Info / SR+SL / cleanup を記録。ユーザ目視では赤 body / 青 buttons の Joy-Con (R) として登録された |
+| green | `0x22` NFC/IR MCU state を source-audit fixture と unit test で固定し、ACK 互換処理を追加する | regression | unit | no | `test_set_nfc_ir_mcu_state_acknowledges_supported_modes`。MCU semantic state は実装しない |
+| todo | R1 を `0x22` 修正後に再実行し、pytest failure が解消したか確認する | characterization | hardware | yes | Switch 側を controller search / change grip order に戻したうえで個別承認後に実行 |
 | deferred | Joy-Con L/R の normal input reflection test を追加する | new | hardware | yes | 今回は既存 node で profile identity と registration を確認する |
-| deferred | Joy-Con R default color SPI / UI reflection を確認する | characterization | hardware | yes | R1 の結果後に判断する |
+| deferred | Joy-Con R controller color SPI / UI reflection を専用シナリオで確認する | characterization | hardware | yes | R1 初回で赤 body / 青 buttons は目視されたが、R1 の合否条件にはしない。SPI read と UI color を狙う検証は別 unit 候補 |
 
 ## 8. 設計メモ
 
@@ -179,6 +195,10 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 |---|---|---|
 | `spec/wip/unit_046/HARDWARE_PROFILE_TEST_SCENARIOS.md` | update | 実機テストシナリオ整理と P1-P7 / L1 実行記録 |
 | `spec/hardware-test-log.md` | update | P1-P7 / L1/L2 実機観測、L2 default-color 補助観測、P4 統合再実行、artifact、cleanup 記録 |
+| `src/swbt/protocol/subcommand.py` | update | `0x22` NFC/IR MCU state の ACK 互換処理を追加 |
+| `tests/unit/test_subcommand_responder.py` | update | `0x22` ACK 互換処理の unit test を追加 |
+| `tests/unit/fixtures/source_audit/switch_protocol_values.toml` | update | `0x22` source fact と ACK policy を fixture に追加 |
+| `tests/unit/test_source_audit_fixtures.py` | update | `0x22` source-audit fixture の検証を追加 |
 | `tests/hardware/test_input_operations.py` | update | P4/P5 を LR + D-pad の統合 P4 hardware test に変更 |
 | `tests/hardware/test_joycon_profile.py` | update | Joy-Con L L2 用の custom controller color hardware test を追加 |
 
@@ -218,6 +238,12 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_pairing_records_device_info[left]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-l-after-clear --log-file build\hardware\profile-regression-20260707\joycon-l-after-clear\l1-joycon-left-profile-pairing-after-clear-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | Switch 側接続情報削除後。`1 passed in 24.50s`。trace は Joy-Con L discovery / Device Info / SR+SL / neutral / cleanup を記録し、`error` なし。ユーザ目視では青色 Joy-Con (L) として認識され、toast も正常 |
 | `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_reads_default_controller_colors[left]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-l-l2-colors --log-file build\hardware\profile-regression-20260707\joycon-l-l2-colors\l2-joycon-left-default-colors-pytest-debug.log --log-file-level=DEBUG -q -s` | superseded-pass | `1 passed in 24.43s`。SPI `0x6050` bytes は既定値 `00b2ff32323200b2ff00b2ff` と一致。ユーザ目視では L1 と同様の色として認識されたため、L2 主シナリオから外し、利用者指定色の確認に差し替える |
 | `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_left_profile_reads_custom_controller_colors' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-l-l2-custom-colors --log-file build\hardware\profile-regression-20260707\joycon-l-l2-custom-colors\l2-joycon-left-custom-colors-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 24.58s`。trace は Joy-Con L Device Info `04000102001bdcf99f7d0101`、custom SPI `0x6050` bytes `ff00000000ffff00ffff8000`、SR+SL `000030`、neutral、`transport_close_complete`、`error` なしを記録。ユーザ目視では赤 body / 青 buttons を確認 |
+| `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_pairing_records_device_info[right]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-r --log-file build\hardware\profile-regression-20260707\joycon-r\r1-joycon-right-profile-pairing-pytest-debug.log --log-file-level=DEBUG -q -s` | observed-fail | `1 failed in 24.45s`。trace は Joy-Con R Device Info `04000202001bdcf99f7d0101`、SR+SL `300000`、neutral、cleanup を記録したが、repeated `0x22` payload `01...` が `UnsupportedSubcommandError` になった。ユーザ目視では赤 body / 青 buttons の Joy-Con (R) として登録された |
+| `uv run pytest tests\unit\test_subcommand_responder.py -q` | red | `4 failed, 21 passed`。`0x22` ACK 互換 test 追加直後は `UnsupportedSubcommandError` で失敗 |
+| `uv run pytest tests\unit\test_subcommand_responder.py tests\unit\test_source_audit_fixtures.py -q` | pass | `49 passed in 0.16s`。`0x22` source-audit fixture と ACK 互換処理を確認 |
+| `uv run ruff format --check src\swbt\protocol\subcommand.py tests\unit\test_subcommand_responder.py tests\unit\test_source_audit_fixtures.py` | pass | `3 files already formatted` |
+| `uv run ruff check src\swbt\protocol\subcommand.py tests\unit\test_subcommand_responder.py tests\unit\test_source_audit_fixtures.py` | pass | `All checks passed!` |
+| `uv run pytest tests\unit -q` | pass | `368 passed in 1.29s`。`0x22` 修正後の full unit |
 | `uv run pytest -m bumble` | not run | adapter open は承認対象。この unit では実行しない |
 | `uv run pytest -m hardware` | not run | Switch-facing 操作は承認対象。この unit では実行しない |
 
@@ -225,7 +251,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 
 | 項目 | 内容 |
 |---|---|
-| 実機要否 | 実行時は required。H0 / P1-P7 / L1/L2 は実行済み。未実行シナリオは個別承認後に実行する |
+| 実機要否 | 実行時は required。H0 / P1-P7 / L1/L2 は実行済み。R1 初回は observed-fail で、`0x22` 修正後 rerun は未実行。未実行シナリオは個別承認後に実行する |
 | 承認範囲 | 実行前に H1/H2/P/L/R のどの scenario を実行するか、adapter open、HID advertising、pairing、report loop、input operation、cleanup の範囲を明示する |
 | adapter | 実行時に `swbt-probe adapters --json` と人間確認で決める。過去観測では `usb:0` / CSR8510 A10 / WinUSB が使われている |
 | 対象機器 | 実行時に Switch model / firmware と Switch 側画面を記録する |
@@ -236,8 +262,9 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 ## 12. 先送り事項
 
 - Joy-Con L/R の normal input reflection test 追加は、今回の実行結果を見て別 unit 化する。
-- Joy-Con R default color SPI / UI reflection は、R1 の identity / registration 結果後に判断する。
+- Joy-Con R controller color SPI / UI reflection は、R1 初回の目視色だけでは完了扱いにしない。専用 SPI / UI color シナリオにするかは、`0x22` 修正後の R1 rerun 結果を見て判断する。
 - Pro Controller P2 の `0x40` mode `0x02` は ProController 互換 mode として受け入れる実装に変更し、P2 retest は pass。別 firmware、別 dongle、別 OS での一般化はしない。
+- Joy-Con R R1 初回で観測した repeated `0x22` payload `0x01` は ACK 互換処理に留める。NFC/IR MCU の意味実装はしない。
 - Linux、macOS、別 dongle、別 firmware は今回扱わない。
 - hardware runner 化は今回扱わない。
 
@@ -258,3 +285,6 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 - [x] P7 の実機実行結果、A exit / close trace、ユーザ目視結果を `spec/hardware-test-log.md` に記録した
 - [x] L1 の初回実行、Switch 側接続情報削除後 rerun、ユーザ目視結果を `spec/hardware-test-log.md` に記録した
 - [x] L2 の default-color 補助観測と custom-color pass、ユーザ目視結果を `spec/hardware-test-log.md` に記録した
+- [x] R1 初回実行の `0x22` failure とユーザ目視登録結果を `spec/hardware-test-log.md` に記録した
+- [x] `0x22` NFC/IR MCU state の source-audit fixture と unit test を追加した
+- [ ] `0x22` 修正後に R1 を再実行して pass / fail を記録する

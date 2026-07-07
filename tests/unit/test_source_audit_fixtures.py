@@ -30,6 +30,8 @@ REQUIRED_ENTRY_IDS = {
     "joycon_standard_stick_availability",
     "subcommand_report_mode_session_state",
     "subcommand_imu_vibration_enable_state",
+    "subcommand_nfc_ir_mcu_state",
+    "subcommand_nfc_ir_mcu_state_ack_policy",
     "pro_controller_imu_enable_mode_02_observation",
     "profile_aware_bumble_sdp_boundary",
     "joycontrol_sdp_record_policy",
@@ -340,6 +342,36 @@ def test_subcommand_imu_vibration_enable_state_is_source_audited() -> None:
     assert "0x00" in value
     assert "0x01" in value
     assert "SubcommandSessionState" in value
+
+
+def test_subcommand_nfc_ir_mcu_state_is_source_audited() -> None:
+    entry = _entry_by_id("subcommand_nfc_ir_mcu_state")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "session-state-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x22" in value
+    assert "NFC/IR MCU state" in value
+    assert "0x00" in value
+    assert "0x01" in value
+    assert "0x02" in value
+
+
+def test_subcommand_nfc_ir_mcu_state_ack_policy_is_recorded() -> None:
+    entry = _entry_by_id("subcommand_nfc_ir_mcu_state_ack_policy")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "implementation-policy"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x22" in value
+    assert "ACK-compatible" in value
+    assert "0x80" in value
+    assert "reply-to 0x22" in value
+    assert "does not model" in value
 
 
 def test_joycon_imu_enable_mode_02_is_hardware_observed() -> None:

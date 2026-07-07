@@ -209,6 +209,32 @@ status = "session-state-policy"
 handoff = ["unit_032"]
 
 [[entry]]
+id = "subcommand_nfc_ir_mcu_state"
+fixture_name = "subcommand_0x22_nfc_ir_mcu_state"
+area = "protocol"
+value = "Subcommand 0x22 Set NFC/IR MCU state takes one argument byte: 0x00 suspend, 0x01 resume, 0x02 resume for update."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
+]
+status = "session-state-policy"
+handoff = ["unit_046"]
+
+[[entry]]
+id = "subcommand_nfc_ir_mcu_state_ack_policy"
+fixture_name = "subcommand_0x22_nfc_ir_mcu_state_ack_policy"
+area = "protocol"
+value = "swbt-python ACK-compatible handling for subcommand 0x22 accepts first argument byte 0x00, 0x01, or 0x02 and replies with ACK 0x80 and reply-to 0x22 with no data. It does not model NFC/IR MCU semantic state."
+classification = "implementation fact"
+source = [
+    'src\swbt\protocol\subcommand.py',
+    'tests\unit\test_subcommand_responder.py',
+    'tests\unit\fixtures\source_audit\switch_protocol_values.toml',
+]
+status = "implementation-policy"
+handoff = ["unit_046"]
+
+[[entry]]
 id = "joycon_imu_enable_mode_02"
 fixture_name = "joycon_imu_enable_mode_02"
 area = "protocol"

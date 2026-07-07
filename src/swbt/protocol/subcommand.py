@@ -110,6 +110,8 @@ class SubcommandResponder:
             return 0x90, self._spi_read_reply_data(output_report.subcommand_payload)
         if subcommand_id == 0x21:
             return 0xA0, MCU_CONFIG_DATA
+        if subcommand_id == 0x22:
+            return 0x80, _nfc_ir_mcu_state_payload(output_report.subcommand_payload)
         raise UnsupportedSubcommandError(subcommand_id, output_report.subcommand_payload)
 
     def _set_input_report_mode(self, payload: bytes) -> bytes:
@@ -182,4 +184,12 @@ def _imu_enable_payload(payload: bytes, accepted_modes: tuple[int, ...]) -> int:
     if value in accepted_modes:
         return value
     msg = "enable IMU subcommand argument must be 0x00 or 0x01"
+    raise ProtocolError(msg)
+
+
+def _nfc_ir_mcu_state_payload(payload: bytes) -> bytes:
+    value = _first_payload_byte(payload, "set NFC/IR MCU state")
+    if value in (0x00, 0x01, 0x02):
+        return b""
+    msg = "set NFC/IR MCU state subcommand argument must be 0x00, 0x01, or 0x02"
     raise ProtocolError(msg)
