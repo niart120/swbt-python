@@ -13,7 +13,7 @@
 - Joy-Con R を薄く実行した理由は、未検証だからではなく、Pro Controller / Joy-Con L で確認済みの経路を R でも重複確認する価値が低いためである。
 - Joy-Con happy path は、side-specific button map と有効な片側 stick を追加シナリオとして設計する。
 
-この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0/H1/H2、Pro Controller P1/P2/P3/P4/P5/P6/P7、Joy-Con L L1/L2/L3/L4、Joy-Con R R1 を実行済みである。Joy-Con L L2 は既定色診断 run を補助観測として残し、主シナリオを利用者指定色の確認へ差し替えて pass した。Joy-Con R R1 は初回 pytest が `0x22` NFC/IR MCU state 未対応による `unsupported_subcommand` で observed-fail になり、`0x22` ACK 互換処理後の rerun は pass した。R1 初回のユーザ目視は赤 body / 青 buttons、rerun のユーザ目視は赤 body / グレー buttons である。どちらも UI 目視観測であり、専用 SPI color scenario の pass 条件にはしない。P4 は当初 LR split だけで実行したが、D-pad と同じ画面で連続実行できるため LR + D-pad 統合シナリオとして再実装し、再実行済みである。L3 は D-pad 入力の UI 目視まで pass、L4 は Switch UI が横持ち Joy-Con のスティック補正を拒否したため hold 観測までの条件付き pass とする。R2/R3 は追加設計であり、まだ実装・実行していない。
+この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0/H1/H2、Pro Controller P1/P2/P3/P4/P5/P6/P7、Joy-Con L L1/L2/L3/L4、Joy-Con R R1/R2/R3/R4 を実行済みである。Joy-Con L L2 は既定色診断 run を補助観測として残し、主シナリオを利用者指定色の確認へ差し替えて pass した。Joy-Con R R1 は初回 pytest が `0x22` NFC/IR MCU state 未対応による `unsupported_subcommand` で observed-fail になり、`0x22` ACK 互換処理後の rerun は pass した。R1 初回のユーザ目視は赤 body / 青 buttons、rerun のユーザ目視は赤 body / グレー buttons である。どちらも UI 目視観測であり、専用 SPI color scenario の pass 条件にはしない。P4 は当初 LR split だけで実行したが、D-pad と同じ画面で連続実行できるため LR + D-pad 統合シナリオとして再実装し、再実行済みである。L3 は D-pad 入力の UI 目視まで pass、L4 は Switch UI が横持ち Joy-Con のスティック補正を拒否したため hold 観測までの条件付き pass とする。R2 は ABXY 入力の UI 目視まで pass、R3 は L4 と同じ横持ち制約により right stick hold までの条件付き pass、R4 は custom color SPI と UI 目視まで pass とする。
 
 ### 1.2 起点 / source
 
@@ -34,26 +34,25 @@
 |---|---|---|---|
 | maintainer | 実機テスト前の計画 | どの profile をどの順で実行するかが分かる | 実機操作は別途明示承認を取る |
 | developer | Pro Controller regression | pairing、full handshake、active reconnect、button / D-pad / stick、neutral cleanup を再確認できる | Switch UI の人間目視を log に残す |
-| developer | Joy-Con L profile / happy path check | Joy-Con L device name / device-info、SR+SL registration、利用者指定色の SPI reply、D-pad、left stick を確認する計画が分かる | D-pad / left stick は追加設計。実装・実行は別承認 |
-| developer | Joy-Con R targeted check | Joy-Con R device name / device-info / SR+SL registration、ABXY、right stick を確認する計画が分かる | Pro Controller / Joy-Con L と重複する確認は増やさない |
+| developer | Joy-Con L profile / happy path check | Joy-Con L device name / device-info、SR+SL registration、利用者指定色の SPI reply、D-pad、left stick を確認する計画が分かる | stick は Switch UI の横持ち制約を条件付き pass として扱う |
+| developer | Joy-Con R 重点確認 | Joy-Con R device name / device-info / SR+SL registration、ABXY、right stick、custom color SPI / UI を確認する計画が分かる | Pro Controller / Joy-Con L と重複する確認は増やさない |
 
 ## 2. 対象範囲
 
 - `docs/hardware.md`、`spec/hardware-test-log.md`、`tests/hardware/` から現時点の実機検証状態を読み、テストシナリオへ落とす。
-- 共有 preflight、Pro Controller 主経路、Joy-Con L 次点、Joy-Con R 1 シナリオの実行順を定義する。
+- 共有 preflight、Pro Controller 主経路、Joy-Con L 次点、Joy-Con R 重点シナリオの実行順を定義する。
 - 各シナリオの既存 pytest node、Switch 側の起動条件、観測対象、承認範囲、cleanup を記録する。
 - profile ごとに artifact dir と key store を分ける方針を記録する。
 - 承認済みの H0 / Pro Controller 主経路について、実行結果と artifact を追記する。
 - Joy-Con happy path として、Joy-Con L の D-pad / left stick、Joy-Con R の ABXY / right stick を追加設計する。
+- R1 の UI 色観測と専用 SPI color scenario を分け、Joy-Con R custom color を R4 として確認する。
 - 実行していない hardware marker test を not run として扱う。
 
 ## 3. 対象外
 
 - 会話で承認されていない実機テストの実行。
 - 会話で承認されていない Bumble adapter open、HID advertising、Switch pairing、report loop、input report 送信。
-- R2/R3 の新しい hardware pytest 実装と実行。
 - Joy-Con 横持ち状態で Switch のスティック補正 UI を完了させること。
-- Joy-Con R の controller color 実機確認。
 - Linux、macOS、CSR8510 A10 以外の dongle、別 firmware の検証。
 
 ## 4. 関連 docs
@@ -116,7 +115,7 @@
 |---|---:|---|---|
 | Pro Controller | 主経路 | verified 範囲が広く、回帰の基準になる。実機入力、active reconnect、neutral cleanup まで確認済み | preflight 後に pairing、subcommand、active reconnect input、close を実行する |
 | Joy-Con L | 次点 | limited observation があり、単体 Joy-Con profile の継続検証価値が高い。D-pad と left stick は Joy-Con L 固有の happy path として追加価値がある | 実行済みは device-info / SR+SL registration と custom color SPI。追加設計は D-pad / left stick |
-| Joy-Con R | 最小から targeted へ変更 | Pro Controller / Joy-Con L と重複する確認は価値が低い。一方で ABXY と right stick は Joy-Con R 固有の happy path として見る価値がある | 実行済みは device-info / SR+SL registration。追加設計は ABXY / right stick |
+| Joy-Con R | 最小から重点確認へ変更 | Pro Controller / Joy-Con L と重複する確認は価値が低い。一方で ABXY、right stick、右 Joy-Con custom color は Joy-Con R 固有の重点シナリオとして見る価値がある | 実行済みは device-info / SR+SL registration、ABXY、right stick、custom color |
 
 ### 6.2 共有 preflight
 
@@ -151,22 +150,23 @@ Joy-Con L は `build\hardware\profile-regression-20260707\joycon-l` のような
 | L3 | `tests/hardware/test_joycon_profile.py::test_switch_joycon_left_button_check_dpad_after_reconnect_for_manual_reflection` | 入力デバイスの動作チェック > ボタンの動作チェック画面。Joy-Con L profile には Button A がないため画面 entry は人間操作で行う | Joy-Con L の active reconnect、D-pad up / right / down / left、各入力後 neutral。期待 button bytes は up `000002`、right `000004`、down `000001`、left `000008` | pytest pass、trace、人間目視 |
 | L4 | `tests/hardware/test_joycon_profile.py::test_switch_joycon_left_stick_calibration_after_reconnect_for_manual_reflection` | スティックの補正画面。Joy-Con L profile には Button A がないため画面 entry は人間操作で行う | Joy-Con L の active reconnect、left stick hold、circle、neutral。right stick は Joy-Con L profile では無効なため送らない | 条件付き pass。pytest は trace / cleanup pass。ユーザ目視では hold を確認したが、Switch UI は横持ち Joy-Con のため補正を拒否した |
 
-### 6.5 Joy-Con R targeted scenarios
+### 6.5 Joy-Con R 重点シナリオ
 
-Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような dedicated artifact dir を使う。R1 は identity / registration の最小確認として実行済みである。追加シナリオは Pro Controller / Joy-Con L と重複する全面確認ではなく、Joy-Con R 固有の ABXY と right stick に絞る。
+Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような dedicated artifact dir を使う。R1 は identity / registration の最小確認として実行済みである。追加シナリオは Pro Controller / Joy-Con L と重複する全面確認ではなく、Joy-Con R 固有の ABXY、right stick、custom color に絞る。
 
 | id | command / node | Switch 起動条件 | 観測対象 | 判定 |
 |---|---|---|---|---|
 | R1 | `tests/hardware/test_joycon_profile.py::test_switch_joycon_profile_pairing_records_device_info[right]` | controller search / change grip order | `Joy-Con (R)` device name、Device Info type `0x02`、address bytes、SR+SL order input、clean close | pytest pass、trace、人間目視 |
-| R2 | 未実装。候補名 `test_switch_joycon_right_button_check_abxy_after_reconnect_for_manual_reflection` | 入力デバイスの動作チェック > ボタンの動作チェック選択直前 | Joy-Con R の active reconnect、A entry、Y / X / B / A、各入力後 neutral。期待 button bytes は current implementation fact として Y `010000`、X `020000`、B `040000`、A `080000` | pytest pass、trace、人間目視 |
-| R3 | 未実装。候補名 `test_switch_joycon_right_stick_calibration_after_reconnect_for_manual_reflection` | スティックの補正画面 | Joy-Con R の active reconnect、right stick hold、circle、neutral。left stick は Joy-Con R profile では無効なため送らない | L4 と同じ横持ち Joy-Con UI 制約が出る可能性が高い。実行時は full calibration ではなく hold / input report reflection を主判定にする |
+| R2 | `tests/hardware/test_joycon_profile.py::test_switch_joycon_right_button_check_abxy_after_reconnect_for_manual_reflection` | 入力デバイスの動作チェック > ボタンの動作チェック選択直前 | Joy-Con R の active reconnect、A entry、Y / X / B / A、各入力後 neutral。期待 button bytes は source fact / implementation fact として Y `010000`、X `020000`、B `040000`、A `080000` | pytest pass、trace、人間目視 |
+| R3 | `tests/hardware/test_joycon_profile.py::test_switch_joycon_right_stick_calibration_after_reconnect_for_manual_reflection` | スティックの補正画面 | Joy-Con R の active reconnect、right stick hold、circle、neutral。left stick は Joy-Con R profile では無効なため送らない | 条件付き pass。pytest は trace / cleanup pass。Switch UI は横持ち Joy-Con のため補正を拒否した |
+| R4 | `tests/hardware/test_joycon_profile.py::test_switch_joycon_right_profile_reads_custom_controller_colors` | controller search / change grip order | Joy-Con R 利用者指定色 SPI `0x6050` reply、SR+SL order input、UI hold。期待色は body 緑 `0x00ff00`、buttons 紫 `0x8000ff` | pytest pass、trace、人間目視 |
 
 ### 6.6 記録と判定
 
 - pytest pass は trace checkpoint と cleanup の成立を示す。Switch UI 反映は自動判定しない。
 - 人間目視が必要な scenario は、`spec/hardware-test-log.md` に UI 観測を別項目として記録する。
 - `ConnectionTimeoutError`、`unsupported_subcommand`、`error`、neutral 後の入力残りは failure として記録し、原因を断定しない。
-- Joy-Con L/R の button / stick reflection は L3/L4/R2/R3 の追加シナリオで扱う。L1/L2/R1 の成功だけでは通常入力の成功扱いにしない。
+- Joy-Con L/R の button / stick reflection は L3/L4/R2/R3 の追加シナリオで扱う。L1/L2/R1/R4 の成功だけでは通常入力の成功扱いにしない。
 - SL/SR は L1/R1 の order input で確認済みとし、追加 happy path では D-pad、ABXY、有効な片側 stick を優先する。
 - Joy-Con profile が持たない反対側 stick を hardware happy path で入力しない。反対側 stick の拒否または中立維持は protocol / unit layer で確認する。
 - 片側 Joy-Con のスティック補正画面は、横持ち Joy-Con に対して「横持ちだと補正できません」と拒否することがある。この場合、pytest pass と hold / report 目視を条件付き pass とし、補正 UI の完了を pass 条件にしない。
@@ -187,19 +187,20 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | green | R1 を `0x22` 修正後に再実行し、pytest failure が解消したか確認する | characterization | hardware | yes | `1 passed in 24.45s`。trace は `0x22` 2 件への reply、Joy-Con R Device Info、SR+SL、cleanup、`error` なしを記録。ユーザ目視では赤 body / グレー buttons の pairing を確認 |
 | green | L3 Joy-Con L button check で D-pad up / right / down / left を確認する | new | hardware | yes | `1 passed in 20.67s`。初期ペアリングで L3 用 key store を作成後、active reconnect で D-pad up `000002`、right `000004`、down `000001`、left `000008` を送信。ユーザは Switch UI で上右下左の順に押されたことを目視確認した |
 | conditional-pass | L4 Joy-Con L stick calibration で left stick hold / circle を確認する | new | hardware | yes | `1 passed in 15.62s`。trace は active reconnect、handshake、left stick hold 120 reports、32 step circle、neutral、cleanup を記録。ユーザは hold を確認したが、Switch UI は横持ち Joy-Con のため補正を拒否した。full calibration UI 完了ではなく hold までの条件付き pass とする |
-| todo | R2 Joy-Con R button check で Y / X / B / A を確認する | new | hardware | yes | button map byte3 の潜在バグを狙う。Switch button check screen、active reconnect、neutral cleanup、人間目視が必要。実行前に `hardware-harness` 承認を取る |
-| todo | R3 Joy-Con R stick calibration で right stick hold / circle を確認する | new | hardware | yes | Joy-Con R の有効 stick だけを送る。left stick は protocol / unit layer の拒否または中立維持に任せる。L4 と同じ横持ち Joy-Con UI 制約が想定されるため、補正完了ではなく hold / input report reflection を主判定にする |
-| deferred | Joy-Con R controller color SPI / UI reflection を専用シナリオで確認する | characterization | hardware | yes | R1 初回で赤 body / 青 buttons、rerun で赤 body / グレー buttons が目視されたが、R1 の合否条件にはしない。SPI read と UI color を狙う検証は別 unit 候補 |
+| green | R2 Joy-Con R button check で Y / X / B / A を確認する | new | hardware | yes | R2 用 fresh pairing 後、active reconnect で A entry、Y `010000`、X `020000`、B `040000`、A `080000`、各 neutral を送信。初回は画面遷移 precondition が外れて observed-partial、rerun は `1 passed in 7.29s` かつユーザ目視で期待どおりの入力を確認 |
+| conditional-pass | R3 Joy-Con R stick calibration で right stick hold / circle を確認する | new | hardware | yes | `1 passed in 10.38s`。trace は active reconnect、handshake、right stick hold 120 reports、32 step circle、neutral、cleanup を記録。ユーザは横持ち Joy-Con では補正が通らないことを期待どおり確認。full calibration UI 完了ではなく hold までの条件付き pass |
+| green | R4 Joy-Con R custom color SPI / UI reflection を専用シナリオで確認する | characterization | hardware | yes | `1 passed in 24.43s`。SPI `0x6050` bytes `00ff008000ff00ffffffff00`、body 緑、buttons 紫を確認。R1 の色目視とは別 scenario として pass |
 
 ## 8. 設計メモ
 
 - Pro Controller は既に verified 範囲が広いため、実機環境の健全性確認と regression baseline を兼ねる。Joy-Con に進む前に Pro Controller 主経路を通す。
 - P4 は LR split と D-pad の起動条件が同じで、同じ button check screen で連続確認できる。別々の active reconnect に分ける価値が低いため統合する。
 - Joy-Con L は過去に limited observation があるため、Joy-Con profile の継続観測として L1 と L2 を実行する価値がある。L2 は L1 と同じ見え方になる既定色ではなく、`controller_colors` 明示指定が profile default より優先されることを実機で見る。
-- Joy-Con R を R1 の 1 本に絞った理由は、未知だから検証を避けるためではない。identity / registration、SR+SL、subcommand 応答は R1 で見ており、Pro Controller / Joy-Con L で既に見た経路を R で重複確認する価値が低かったためである。
+- 当初 Joy-Con R を R1 の 1 本に絞った理由は、未知だから検証を避けるためではない。identity / registration、SR+SL、subcommand 応答は R1 で見ており、Pro Controller / Joy-Con L で既に見た経路を R で重複確認する価値が低かったためである。その後、button map と有効 stick と利用者指定色は左右差が潜在バグになり得るため、R2/R3/R4 を happy path 補強として追加した。
 - Joy-Con の追加 happy path は、左右で byte 面が分かれる button map と有効 stick に絞る。Joy-Con L は D-pad と left stick、Joy-Con R は ABXY と right stick を見る。
 - SL/SR は L1/R1 の SR+SL order input で確認済みとする。追加 happy path では SL/SR を再確認せず、潜在バグになりやすい ABXY / D-pad と stick path を優先する。
 - Joy-Con stick scenario は Switch の補正 UI 完了を狙うのではなく、有効 stick 側の report 送信と目視可能な hold を狙う。片側 Joy-Con の横持ち制約で補正 UI に入れない場合は device/UI 制約として扱う。
+- R4 は R1 の registration 中に見えた色とは分ける。R4 では `controller_colors` 明示指定、SPI `0x6050` bytes、人間目視の body / buttons を揃えて確認する。
 - key store は profile ごとに分ける。同じ Switch でも Pro Controller、Joy-Con L、Joy-Con R の key store を共有しない。
 - L3/L4/R2/R3 は active reconnect を前提に設計する。reconnect 自体を Joy-Con の主張として検証するのではなく、Switch UI の対象画面へ進めるための手段として使う。
 - artifact dir は `build\hardware\profile-regression-20260707\...` 形式にし、profile ごとの trace、pytest log、key store を混ぜない。
@@ -209,14 +210,14 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 
 | path | change | 内容 |
 |---|---|---|
-| `spec/wip/unit_046/HARDWARE_PROFILE_TEST_SCENARIOS.md` | update | 実機テストシナリオ整理、P1-P7 / L1 実行記録、Joy-Con R を薄くした理由の修正、L3/L4/R2/R3 の追加設計 |
-| `spec/hardware-test-log.md` | update | P1-P7 / L1/L2 実機観測、L2 default-color 補助観測、P4 統合再実行、artifact、cleanup 記録 |
+| `spec/wip/unit_046/HARDWARE_PROFILE_TEST_SCENARIOS.md` | update | 実機テストシナリオ整理、P1-P7 / L1-L4 / R1-R4 実行記録、Joy-Con R を薄くした理由の修正、Joy-Con happy path 補強設計 |
+| `spec/hardware-test-log.md` | update | P1-P7 / L1-L4 / R1-R4 実機観測、L2 default-color 補助観測、P4 統合再実行、artifact、cleanup 記録 |
 | `src/swbt/protocol/subcommand.py` | update | `0x22` NFC/IR MCU state の ACK 互換処理を追加 |
 | `tests/unit/test_subcommand_responder.py` | update | `0x22` ACK 互換処理の unit test を追加 |
 | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` | update | `0x22` source fact と ACK policy を fixture に追加 |
 | `tests/unit/test_source_audit_fixtures.py` | update | `0x22` source-audit fixture の検証を追加 |
 | `tests/hardware/test_input_operations.py` | update | P4/P5 を LR + D-pad の統合 P4 hardware test に変更 |
-| `tests/hardware/test_joycon_profile.py` | update | Joy-Con L L2 用の custom controller color hardware test、L3 D-pad button check hardware test、L4 left stick hold / circle hardware test を追加。L3/L4 の画面準備待ちは記録だけにし、固定 sleep は入れない |
+| `tests/hardware/test_joycon_profile.py` | update | Joy-Con L L2 用の custom controller color hardware test、L3 D-pad button check hardware test、L4 left stick hold / circle hardware test、R2 ABXY button check、R3 right stick hold / circle、R4 Joy-Con R custom color hardware test を追加。L3/L4/R2/R3 の画面準備待ちは記録だけにし、固定 sleep は入れない |
 
 ## 10. 検証
 
@@ -278,6 +279,16 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | `uv run ruff check tests\hardware\test_joycon_profile.py` | pass | `All checks passed!` |
 | `uv run ty check --no-progress` | pass | `All checks passed!`。L4 実装後 |
 | `uv run pytest tests\hardware\test_joycon_profile.py::test_switch_joycon_left_stick_calibration_after_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-l-l4 --log-file build\hardware\profile-regression-20260707\joycon-l-l4\l4-joycon-left-stick-calibration-pytest-debug.log --log-file-level=DEBUG -q -s` | conditional-pass | `1 passed in 15.62s`。trace は active reconnect、handshake、left stick hold `hold_report_count=120`、circle `steps=32` / `step_seconds=0.15`、neutral、cleanup を記録。ユーザ目視では hold を確認したが、Switch UI は横持ち Joy-Con のため補正を拒否した |
+| `uv run pytest --collect-only tests\hardware\test_joycon_profile.py -q` | pass | R2/R3/R4 実装後。10 tests collected。adapter は開いていない |
+| `uv run ruff format --check tests\hardware\test_joycon_profile.py` | pass | `1 file already formatted` |
+| `uv run ruff check tests\hardware\test_joycon_profile.py` | pass | `All checks passed!` |
+| `uv run ty check --no-progress` | pass | `All checks passed!`。R2/R3/R4 実装後 |
+| `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_pairing_records_device_info[right]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-r-r2 --log-file build\hardware\profile-regression-20260707\joycon-r-r2\r2-joycon-right-initial-pairing-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 24.37s`。R2 用 fresh key store 作成。Device Info `0x02`、SR+SL `300000`、cleanup を記録 |
+| `uv run pytest tests\hardware\test_joycon_profile.py::test_switch_joycon_right_button_check_abxy_after_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-r-r2 --log-file build\hardware\profile-regression-20260707\joycon-r-r2\r2-joycon-right-button-check-abxy-pytest-debug.log --log-file-level=DEBUG -q -s` | observed-partial | `1 passed in 7.80s`。trace は active reconnect、A entry、Y/X/B/A、neutral、cleanup を記録したが、ユーザ目視では画面遷移に入っていなかったため UI pass ではない |
+| `uv run pytest tests\hardware\test_joycon_profile.py::test_switch_joycon_right_button_check_abxy_after_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-r-r2-rerun2 --log-file build\hardware\profile-regression-20260707\joycon-r-r2-rerun2\r2-joycon-right-button-check-abxy-rerun2-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 7.29s`。trace は active reconnect、A entry、Y `010000`、X `020000`、B `040000`、A `080000`、各 neutral、cleanup を記録。ユーザ目視では入力として期待どおりだった |
+| `uv run pytest tests\hardware\test_joycon_profile.py::test_switch_joycon_right_stick_calibration_after_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-r-r3 --log-file build\hardware\profile-regression-20260707\joycon-r-r3\r3-joycon-right-stick-calibration-pytest-debug.log --log-file-level=DEBUG -q -s` | conditional-pass | `1 passed in 10.38s`。trace は active reconnect、right stick hold 120 reports、32 step circle、neutral、cleanup を記録。ユーザ目視では横持ち Joy-Con では補正が通らないことを確認した |
+| `uv run pytest tests\hardware\test_joycon_profile.py::test_switch_joycon_right_profile_reads_custom_controller_colors -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-r-r4-custom-colors --log-file build\hardware\profile-regression-20260707\joycon-r-r4-custom-colors\r4-joycon-right-custom-colors-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 24.43s`。trace は custom SPI `0x6050` bytes `00ff008000ff00ffffffff00`、SR+SL `300000`、cleanup を記録。ユーザ目視では body 緑 / buttons 紫を確認 |
+| `git diff --check` | pass | R2/R3/R4 実装と記録差分に whitespace error なし |
 | `uv run pytest -m bumble` | not run | adapter open は承認対象。この unit では実行しない |
 | `uv run pytest -m hardware` | not run | Switch-facing 操作は承認対象。この unit では実行しない |
 
@@ -285,7 +296,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 
 | 項目 | 内容 |
 |---|---|
-| 実機要否 | 実行時は required。H0/H1/H2 / P1-P7 / L1/L2/L3/L4 / R1 は実行済み。L4 は hold 観測までの条件付き pass。追加の未実行シナリオは個別承認後に実行する |
+| 実機要否 | 実行時は required。H0/H1/H2 / P1-P7 / L1/L2/L3/L4 / R1/R2/R3/R4 は実行済み。L4/R3 は hold 観測までの条件付き pass |
 | 承認範囲 | 実行前に H1/H2/P/L/R のどの scenario を実行するか、adapter open、HID advertising、pairing、report loop、input operation、cleanup の範囲を明示する |
 | adapter | 実行時に `swbt-probe adapters --json` と人間確認で決める。過去観測では `usb:0` / CSR8510 A10 / WinUSB が使われている |
 | 対象機器 | 実行時に Switch model / firmware と Switch 側画面を記録する |
@@ -295,9 +306,8 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 
 ## 12. 先送り事項
 
-- R2/R3 の hardware pytest 実装と実行は次の作業に送る。追加設計はこの仕様に記録済みであり、実行時は個別に `hardware-harness` 承認を取る。
 - L4 は left stick hold まで条件付き pass。横持ち Joy-Con に対する Switch 補正 UI の拒否は device/UI 制約として扱い、full calibration UI 完了は今回の完了条件にしない。
-- Joy-Con R controller color SPI / UI reflection は、R1 の目視色だけでは完了扱いにしない。専用 SPI / UI color シナリオにするかは別 unit で判断する。
+- R3 は right stick hold まで条件付き pass。横持ち Joy-Con に対する Switch 補正 UI の拒否は device/UI 制約として扱い、full calibration UI 完了は今回の完了条件にしない。
 - Pro Controller P2 の `0x40` mode `0x02` は ProController 互換 mode として受け入れる実装に変更し、P2 retest は pass。別 firmware、別 dongle、別 OS での一般化はしない。
 - Joy-Con R R1 初回で観測した repeated `0x22` payload `0x01` は ACK 互換処理に留める。NFC/IR MCU の意味実装はしない。
 - Linux、macOS、別 dongle、別 firmware は今回扱わない。
@@ -329,3 +339,6 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 - [x] Joy-Con happy path として L3 D-pad、L4 left stick、R2 ABXY、R3 right stick を追加設計した
 - [x] L3 の Joy-Con L D-pad hardware test を実装し、実機 pass とユーザ目視結果を記録した
 - [x] L4 の Joy-Con L left stick hardware test を実装し、hold までの条件付き pass と横持ち Joy-Con UI 制約を記録した
+- [x] R2 の Joy-Con R ABXY hardware test を実装し、rerun の実機 pass とユーザ目視結果を記録した
+- [x] R3 の Joy-Con R right stick hardware test を実装し、hold までの条件付き pass と横持ち Joy-Con UI 制約を記録した
+- [x] R4 の Joy-Con R custom color hardware test を実装し、SPI reply と body 緑 / buttons 紫のユーザ目視結果を記録した
