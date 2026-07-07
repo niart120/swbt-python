@@ -12,7 +12,7 @@
 - Joy-Con L は次点として、単体 Joy-Con profile の登録と色 SPI まで見る。
 - Joy-Con R は 1 シナリオだけ実行し、未検証範囲を広げすぎない。
 
-この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0、Pro Controller P1/P2/P3/P4/P5/P6/P7、Joy-Con L L1 を実行済みで、Joy-Con L L2、Joy-Con R、H1/H2 は未実行である。P4 は当初 LR split だけで実行したが、D-pad と同じ画面で連続実行できるため LR + D-pad 統合シナリオとして再実装し、再実行済みである。
+この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0、Pro Controller P1/P2/P3/P4/P5/P6/P7、Joy-Con L L1 を実行済みである。Joy-Con L L2 は既定色診断 run を実施済みだが、主シナリオを利用者指定色の確認へ差し替え中である。Joy-Con R、H1/H2 は未実行である。P4 は当初 LR split だけで実行したが、D-pad と同じ画面で連続実行できるため LR + D-pad 統合シナリオとして再実装し、再実行済みである。
 
 ### 1.2 起点 / source
 
@@ -33,7 +33,7 @@
 |---|---|---|---|
 | maintainer | 実機テスト前の計画 | どの profile をどの順で実行するかが分かる | 実機操作は別途明示承認を取る |
 | developer | Pro Controller regression | pairing、full handshake、active reconnect、button / D-pad / stick、neutral cleanup を再確認できる | Switch UI の人間目視を log に残す |
-| developer | Joy-Con L profile check | Joy-Con L device name / device-info、SR+SL registration、default color SPI を確認できる | normal input reflection と reconnect は完了扱いにしない |
+| developer | Joy-Con L profile check | Joy-Con L device name / device-info、SR+SL registration、利用者指定色の SPI reply を確認できる | normal input reflection と reconnect は完了扱いにしない |
 | developer | Joy-Con R minimum check | Joy-Con R device name / device-info / SR+SL registration を 1 本だけ確認できる | 色、reconnect、通常入力は先送りする |
 
 ## 2. 対象範囲
@@ -49,7 +49,7 @@
 
 - 会話で承認されていない実機テストの実行。
 - 会話で承認されていない Bumble adapter open、HID advertising、Switch pairing、report loop、input report 送信。
-- 新しい hardware pytest の実装。
+- L2 の利用者指定色確認以外の新しい hardware pytest の実装。
 - Joy-Con L/R の通常入力反映テスト追加。
 - Joy-Con R の controller color 実機確認。
 - Linux、macOS、CSR8510 A10 以外の dongle、別 firmware の検証。
@@ -99,7 +99,7 @@
 | profile | 重み | 理由 | 今回の実行単位 |
 |---|---:|---|---|
 | Pro Controller | 主経路 | verified 範囲が広く、回帰の基準になる。実機入力、active reconnect、neutral cleanup まで確認済み | preflight 後に pairing、subcommand、active reconnect input、close を実行する |
-| Joy-Con L | 次点 | limited observation があり、単体 Joy-Con profile の継続検証価値が高い | device-info / SR+SL registration と default color SPI の 2 本 |
+| Joy-Con L | 次点 | limited observation があり、単体 Joy-Con profile の継続検証価値が高い | device-info / SR+SL registration と custom color SPI の 2 本 |
 | Joy-Con R | 最小 | 実機未検証のため、最初から網羅しない | device-info / SR+SL registration の 1 本 |
 
 ### 6.2 共有 preflight
@@ -131,7 +131,7 @@ Joy-Con L は `build\hardware\profile-regression-20260707\joycon-l` のような
 | id | command / node | Switch 起動条件 | 観測対象 | 判定 |
 |---|---|---|---|---|
 | L1 | `tests/hardware/test_joycon_profile.py::test_switch_joycon_profile_pairing_records_device_info[left]` | controller search / change grip order | `Joy-Con (L)` device name、Device Info type `0x01`、address bytes、SR+SL order input、clean close | pytest pass、trace、人間目視 |
-| L2 | `tests/hardware/test_joycon_profile.py::test_switch_joycon_profile_reads_default_controller_colors[left]` | controller search / change grip order | Joy-Con L default color SPI `0x6050` reply、SR+SL order input、UI hold | pytest pass、trace、人間目視 |
+| L2 | `tests/hardware/test_joycon_profile.py::test_switch_joycon_left_profile_reads_custom_controller_colors` | controller search / change grip order | Joy-Con L 利用者指定色 SPI `0x6050` reply、SR+SL order input、UI hold | pytest pass、trace、人間目視 |
 
 ### 6.5 Joy-Con R 1 シナリオ
 
@@ -158,7 +158,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | green | P1-P7 の Pro Controller 主経路を順に実行し、trace と目視結果を記録する | regression | hardware | yes | P1 は pass。P2 は `0x40` mode `0x02` 受け入れ修正後に pass。P3 は input semantics 用 key store 作成まで pass。P4 は LR + D-pad 統合 button check を pass。P5 は left stick hold/circle を pass。P6 は right stick hold/circle を pass。P7 は A exit / disconnect close path を pass |
 | green | P2 の `0x40` mode `0x02` を source-audit fixture に条件付き観測として記録する | characterization | local | no | `pro_controller_imu_enable_mode_02_observation` を追加。source fact `0x00/0x01` は上書きしない |
 | green | ProController が `0x40` mode `0x02` を ACK し、session state に記録する | regression | unit | no | `test_pro_controller_enable_imu_mode_0x02_updates_session_state`。cross-firmware guarantee と IMU frame 実装は対象外 |
-| observed-partial | L1-L2 の Joy-Con L 次点シナリオを実行し、limited observation を更新する | characterization | hardware | yes | L1 は接続情報削除後の rerun で pass。初回 L1 は on-wire Joy-Con L だが Pro Controller toast。L2 は未実行。normal input reflection へ拡張しない |
+| observed-partial | L1-L2 の Joy-Con L 次点シナリオを実行し、limited observation を更新する | characterization | hardware | yes | L1 は接続情報削除後の rerun で pass。初回 L1 は on-wire Joy-Con L だが Pro Controller toast。L2 は利用者指定色 scenario へ差し替え中。既定色 run は補助観測として扱う。normal input reflection へ拡張しない |
 | todo | R1 の Joy-Con R 最小シナリオを実行し、結果を not verified から更新するか判断する | characterization | hardware | yes | 1 本だけ実行 |
 | deferred | Joy-Con L/R の normal input reflection test を追加する | new | hardware | yes | 今回は既存 node で profile identity と registration を確認する |
 | deferred | Joy-Con R default color SPI / UI reflection を確認する | characterization | hardware | yes | R1 の結果後に判断する |
@@ -167,7 +167,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 
 - Pro Controller は既に verified 範囲が広いため、実機環境の健全性確認と regression baseline を兼ねる。Joy-Con に進む前に Pro Controller 主経路を通す。
 - P4 は LR split と D-pad の起動条件が同じで、同じ button check screen で連続確認できる。別々の active reconnect に分ける価値が低いため統合する。
-- Joy-Con L は過去に limited observation があるため、Joy-Con profile の継続観測として L1 と L2 を実行する価値がある。
+- Joy-Con L は過去に limited observation があるため、Joy-Con profile の継続観測として L1 と L2 を実行する価値がある。L2 は L1 と同じ見え方になる既定色ではなく、`controller_colors` 明示指定が profile default より優先されることを実機で見る。
 - Joy-Con R は未知が多い。最初は identity / registration の 1 本だけにし、失敗時に color や input reflection へ広げない。
 - key store は profile ごとに分ける。同じ Switch でも Pro Controller、Joy-Con L、Joy-Con R の key store を共有しない。
 - artifact dir は `build\hardware\profile-regression-20260707\...` 形式にし、profile ごとの trace、pytest log、key store を混ぜない。
@@ -178,8 +178,9 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | path | change | 内容 |
 |---|---|---|
 | `spec/wip/unit_046/HARDWARE_PROFILE_TEST_SCENARIOS.md` | update | 実機テストシナリオ整理と P1-P7 / L1 実行記録 |
-| `spec/hardware-test-log.md` | update | P1-P7 / L1 実機観測、P4 統合再実行、artifact、cleanup 記録 |
+| `spec/hardware-test-log.md` | update | P1-P7 / L1 実機観測、L2 default-color 補助観測、P4 統合再実行、artifact、cleanup 記録 |
 | `tests/hardware/test_input_operations.py` | update | P4/P5 を LR + D-pad の統合 P4 hardware test に変更 |
+| `tests/hardware/test_joycon_profile.py` | update | Joy-Con L L2 用の custom controller color hardware test を追加 |
 
 ## 10. 検証
 
@@ -215,6 +216,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | `uv run pytest tests\hardware\test_close_disconnect.py::test_switch_close_after_full_handshake_and_a_exit_for_manual_ui_confirmation -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro --log-file build\hardware\profile-regression-20260707\pro\p7-post-handshake-a-close-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 7.90s`。trace は full handshake、Button A exit、neutral、`disconnect_request status=requested`、`disconnect_request_terminal status=closed`、`transport_close_complete`、post-close UI observation checkpoint、`error` なし。ユーザ目視では A で登録画面を抜けたことと close 後の接続解除を確認 |
 | `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_pairing_records_device_info[left]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-l --log-file build\hardware\profile-regression-20260707\joycon-l\l1-joycon-left-profile-pairing-pytest-debug.log --log-file-level=DEBUG -q -s` | observed-partial | `1 passed in 24.51s`。trace は `Joy-Con (L)` local name、Device Info `controller_type=0x01`、address bytes 一致、SR+SL `000030`、neutral、`transport_close_complete`、`error` なし。ユーザ目視では初期登録 toast が Pro Controller として出て、登録自体は完了 |
 | `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_pairing_records_device_info[left]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-l-after-clear --log-file build\hardware\profile-regression-20260707\joycon-l-after-clear\l1-joycon-left-profile-pairing-after-clear-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | Switch 側接続情報削除後。`1 passed in 24.50s`。trace は Joy-Con L discovery / Device Info / SR+SL / neutral / cleanup を記録し、`error` なし。ユーザ目視では青色 Joy-Con (L) として認識され、toast も正常 |
+| `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_reads_default_controller_colors[left]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-l-l2-colors --log-file build\hardware\profile-regression-20260707\joycon-l-l2-colors\l2-joycon-left-default-colors-pytest-debug.log --log-file-level=DEBUG -q -s` | superseded-pass | `1 passed in 24.43s`。SPI `0x6050` bytes は既定値 `00b2ff32323200b2ff00b2ff` と一致。ユーザ目視では L1 と同様の色として認識されたため、L2 主シナリオから外し、利用者指定色の確認に差し替える |
 | `uv run pytest -m bumble` | not run | adapter open は承認対象。この unit では実行しない |
 | `uv run pytest -m hardware` | not run | Switch-facing 操作は承認対象。この unit では実行しない |
 
