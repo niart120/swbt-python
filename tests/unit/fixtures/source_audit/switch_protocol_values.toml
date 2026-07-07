@@ -228,6 +228,24 @@ condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB; Bumble 0.0.230; Pyt
 handoff = ["joycon-profile-hardware"]
 
 [[entry]]
+id = "pro_controller_imu_enable_mode_02_observation"
+fixture_name = "pro_controller_imu_enable_mode_02_observation"
+area = "protocol"
+value = "ProController P2 hardware reruns observed subcommand 0x40 Enable IMU with first payload byte 0x02 after Bumble initialized device_name=Pro Controller and class_of_device=0x002508. The rerun after deleting Switch-side connection information showed user-visible ProCon toast and ProCon pairing, but still produced repeated 0x40 payload 0x02 and ProtocolError in the current implementation. Debug log raw HID interrupt PDU includes a2010400014040000140404002... for the first failed 0x40. Current swbt-python ProControllerProfile accepts only 0x00 and 0x01; this entry is hardware-observed only, does not supersede the 0x00/0x01 source fact, and does not prove cross-firmware behavior."
+classification = "hardware observation"
+source = [
+    'spec\hardware-test-log.md',
+    'spec\wip\unit_046\HARDWARE_PROFILE_TEST_SCENARIOS.md',
+    'build\hardware\profile-regression-20260707\pro\subcommand-observation-window.jsonl',
+    'build\hardware\profile-regression-20260707\pro\p2-subcommand-window-pytest-debug.log',
+    'build\hardware\profile-regression-20260707\pro-p2-after-clear\subcommand-observation-window.jsonl',
+    'build\hardware\profile-regression-20260707\pro-p2-after-clear\p2-subcommand-window-after-clear-pytest-debug.log',
+]
+status = "hardware-observed-only"
+condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB expected from previous Windows runs; Bumble 0.0.230; Python 3.13.5; adapter usb:0; Switch 2 firmware 22.1.0; controller search or change grip order screen; branch test/hardware-test-scenarios at commit 3c3aead plus 2026-07-07 P2 rerun after deleting Switch-side connection information"
+handoff = ["unit_046"]
+
+[[entry]]
 id = "profile_aware_bumble_sdp_boundary"
 fixture_name = "profile_aware_bumble_sdp_boundary"
 area = "transport"

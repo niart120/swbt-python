@@ -25,6 +25,7 @@
 | public API policy | 現在の concrete controller class は `ProController`、`JoyConL`、`JoyConR` | `spec/rearchitecture/03-public-api-config-profile.md` |
 | hardware tests | 実行可能な pytest node と artifact fixture | `tests/hardware/` |
 | hardware-harness | adapter open、advertising、pairing、report loop、hardware marker の承認境界 | `.agents/skills/hardware-harness/SKILL.md` |
+| source-audit fixture | `0x40` Enable IMU payload `0x02` の ProController 実機観測を条件付き hardware observation として追加 | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` |
 
 ### 1.3 use case
 
@@ -72,9 +73,24 @@
 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
-| Switch HID / report bytes | not applicable for planning | not applicable | この unit では report byte、button bit、subcommand payload、SPI address を追加しない。既存 node の実行計画だけを整理する |
+| Switch HID / report bytes | required for P2 follow-up | done | P2 rerun 後に `0x40` Enable IMU payload `0x02` の ProController 実機観測を source-audit fixture へ条件付き hardware observation として追加した。source fact `0x00/0x01` は上書きしない |
 | Bumble / transport | required for execution plan | done | adapter open、HID advertising、pairing、report loop は `hardware-harness` の承認対象として明記した |
-| OS / driver / adapter | required for execution plan | pending execution | 実行時に OS、driver、dongle、adapter string を `spec/hardware-test-log.md` に記録する。今回の doc 作成では観測していない |
+| OS / driver / adapter | required for execution plan | done for P1/P2 | Windows、CSR8510 A10、`usb:0`、Python 3.13.5、Bumble 0.0.230 を P1/P2 実行結果として `spec/hardware-test-log.md` に記録した。driver は過去 Windows run から WinUSB expected として扱い、この run では再列挙していない |
+
+### 5.1 P2 `0x40` mode `0x02` 監査
+
+| 項目 | 値 | 根拠分類 | source | status |
+|---|---:|---|---|---|
+| `0x40` Enable IMU source fact | `0x00` disable / `0x01` enable | source fact | `subcommand_imu_vibration_enable_state` fixture | stable session-state policy。現時点で上書きしない |
+| Joy-Con L `0x40` mode | `0x02` | hardware observation | `joycon_imu_enable_mode_02` fixture | Joy-Con profile 限定の受け入れ実装済み。Pro Controller へ一般化しない |
+| ProController P2 after clear | `0x40` payload first byte `0x02` | hardware observation | `pro_controller_imu_enable_mode_02_observation` fixture、`build\hardware\profile-regression-20260707\pro-p2-after-clear\...` | Windows / CSR8510 A10 / Switch 2 22.1.0 条件付き観測。ProController の契約変更は未実装 |
+| current ProController policy | accepted modes `(0x00, 0x01)` | implementation fact | `src\swbt\protocol\profiles\pro_controller.py`、`src\swbt\protocol\subcommand.py`、`tests\unit\test_subcommand_responder.py` | `test_pro_controller_rejects_joycon_imu_mode_0x02` が現行期待を固定 |
+
+未解決事項:
+
+- Switch 2 firmware 22.1.0 が ProController pairing / initialization 中にも `0x40` mode `0x02` を送る条件は未確定。
+- `0x02` を ProController で受け入れる場合、`imu_mode=0x02` を session state に記録するだけでよいか、report / diagnostics / hardware test の期待も更新するかを TDD で決める。
+- 別 firmware、別 dongle、別 OS で同じ `0x40` mode `0x02` が出るかは未検証。
 
 ## 6. 振る舞い仕様
 
@@ -141,6 +157,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | todo | H1 open-only smoke を実行し、advertising が始まらないことを記録する | regression | bumble | yes | 明示承認後 |
 | todo | H2 Bumble advertising smoke を実行し、close cleanup を記録する | regression | bumble | yes | 明示承認後 |
 | observed-fail | P1-P8 の Pro Controller 主経路を順に実行し、trace と目視結果を記録する | regression | hardware | yes | P1 は pass。P2 は `ProController` 実行中に Switch から Joy-Con-only `0x40` mode `0x02` 相当が来て fail。接続情報削除後の再実行では ProCon toast / ProCon pairing だったが同じ失敗。Pro main path は `0x40` mode `0x02` の扱いを source-audit / TDD で切り分けるまで停止 |
+| green | P2 の `0x40` mode `0x02` を source-audit fixture に条件付き観測として記録する | characterization | local | no | `pro_controller_imu_enable_mode_02_observation` を追加。source fact `0x00/0x01` は上書きしない |
 | todo | L1-L2 の Joy-Con L 次点シナリオを実行し、limited observation を更新する | characterization | hardware | yes | normal input reflection へ拡張しない |
 | todo | R1 の Joy-Con R 最小シナリオを実行し、結果を not verified から更新するか判断する | characterization | hardware | yes | 1 本だけ実行 |
 | deferred | Joy-Con L/R の normal input reflection test を追加する | new | hardware | yes | 今回は既存 node で profile identity と registration を確認する |
@@ -174,6 +191,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_pairing_l2cap_records_diagnostics -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro --log-file build\hardware\profile-regression-20260707\pro\p1-pairing-l2cap-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 2.96s`。P1 pairing / L2CAP。non-neutral input は送っていない |
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_observation_window_replies_to_all_observed_commands -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro --log-file build\hardware\profile-regression-20260707\pro\p2-subcommand-window-pytest-debug.log --log-file-level=DEBUG -q -s` | observed-fail | `1 failed in 8.17s`。`ProController` 実行中に `0x40` Enable IMU payload `0x02` 相当で `ProtocolError`。ユーザ目視では青 Joy-Con toast 後に ProCon 接続 |
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_observation_window_replies_to_all_observed_commands -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro-p2-after-clear --log-file build\hardware\profile-regression-20260707\pro-p2-after-clear\p2-subcommand-window-after-clear-pytest-debug.log --log-file-level=DEBUG -q -s` | observed-fail | `1 failed in 7.52s`。接続情報削除後。trace は `device_name=Pro Controller`、`class_of_device=0x002508`、`connected`、`report_mode=0x30`、`0x40` `ProtocolError` 7 件、`transport_close_complete`。ユーザ目視では ProCon toast 後に ProCon として pairing |
+| `uv run pytest tests\unit\test_source_audit_fixtures.py -q` | pass | `22 passed in 0.09s`。`pro_controller_imu_enable_mode_02_observation` を条件付き hardware observation として検証 |
 | `uv run pytest -m bumble` | not run | adapter open は承認対象。この unit では実行しない |
 | `uv run pytest -m hardware` | not run | Switch-facing 操作は承認対象。この unit では実行しない |
 
