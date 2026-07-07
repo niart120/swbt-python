@@ -1,8 +1,10 @@
 """Public gamepad API."""
 
+from typing import Self
+
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
 from swbt.errors import InvalidInputError
-from swbt.gamepad._config import SwitchGamepadConfig, _ControllerSpec
+from swbt.gamepad._config import _ControllerSpec, _SwitchGamepadConfig
 from swbt.gamepad.connection import ConnectionResult
 from swbt.gamepad.interface import SwitchGamepad
 from swbt.gamepad.output import OutputReportDispatcher
@@ -55,7 +57,7 @@ class _RuntimeBackedGamepad(SwitchGamepad):
 
     def _init_from_config(
         self,
-        config: SwitchGamepadConfig,
+        config: _SwitchGamepadConfig,
         *,
         diagnostics: DiagnosticsConfig | None,
         transport: HidDeviceTransport | None,
@@ -69,11 +71,11 @@ class _RuntimeBackedGamepad(SwitchGamepad):
     @classmethod
     def _from_config(
         cls,
-        config: SwitchGamepadConfig,
+        config: _SwitchGamepadConfig,
         *,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,
-    ) -> "_RuntimeBackedGamepad":
+    ) -> Self:
         """Create a concrete gamepad from an explicit resource configuration.
 
         Args:

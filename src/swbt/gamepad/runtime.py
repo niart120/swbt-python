@@ -12,7 +12,7 @@ from swbt.errors import (
     InvalidInputError,
     SwbtError,
 )
-from swbt.gamepad._config import SwitchGamepadConfig, _RuntimeConfig
+from swbt.gamepad._config import _RuntimeConfig, _SwitchGamepadConfig
 from swbt.gamepad.connection import (
     ConnectionResult,
     ConnectionWorkflow,
@@ -67,7 +67,7 @@ class ControllerRuntime:
             InvalidInputError: ``adapter`` is omitted for the default transport or
                 ``report_period_us`` is not positive.
         """
-        config = SwitchGamepadConfig(
+        config = _SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
             report_period_us=report_period_us,
@@ -78,7 +78,7 @@ class ControllerRuntime:
 
     def _init_from_config(
         self,
-        config: SwitchGamepadConfig,
+        config: _SwitchGamepadConfig,
         *,
         diagnostics: DiagnosticsConfig | None,
         transport: HidDeviceTransport | None,
@@ -134,7 +134,7 @@ class ControllerRuntime:
     @classmethod
     def from_config(
         cls,
-        config: SwitchGamepadConfig,
+        config: _SwitchGamepadConfig,
         *,
         diagnostics: DiagnosticsConfig | None = None,
         transport: HidDeviceTransport | None = None,

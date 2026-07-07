@@ -8,7 +8,7 @@ from swbt.protocol.profiles.pro_controller import default_controller_profile
 
 
 @dataclass(frozen=True)
-class SwitchGamepadConfig:
+class _SwitchGamepadConfig:
     """Configuration used to construct a concrete gamepad.
 
     Attributes:
@@ -63,9 +63,9 @@ class _ControllerSpec:
         key_store_path: str | None,
         report_period_us: int | None,
         controller_colors: ControllerColors | None,
-    ) -> SwitchGamepadConfig:
+    ) -> _SwitchGamepadConfig:
         """Create internal construction config from public constructor options."""
-        return SwitchGamepadConfig(
+        return _SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
             profile=self.profile,
@@ -86,10 +86,10 @@ class _RuntimeConfig:
     controller_colors: ControllerColors | None
 
     @classmethod
-    def from_public_config(cls, config: SwitchGamepadConfig) -> "_RuntimeConfig":
+    def from_public_config(cls, config: _SwitchGamepadConfig) -> "_RuntimeConfig":
         """Create normalized runtime configuration from public construction config."""
         if config.report_period_us is None or config.device_name is None:
-            msg = "SwitchGamepadConfig was not normalized"
+            msg = "_SwitchGamepadConfig was not normalized"
             raise InvalidInputError(msg)
         return cls(
             adapter=config.adapter,

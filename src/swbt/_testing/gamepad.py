@@ -1,9 +1,7 @@
 """Internal gamepad constructors for tests that inject fake transports."""
 
-from typing import cast
-
 from swbt import ControllerColors, DiagnosticsConfig, JoyConL, JoyConR, ProController
-from swbt.gamepad._config import SwitchGamepadConfig
+from swbt.gamepad._config import _SwitchGamepadConfig
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.transport.base import HidDeviceTransport
 
@@ -18,18 +16,15 @@ def make_pro_controller(
     diagnostics: DiagnosticsConfig | None = None,
 ) -> ProController:
     """Create a Pro Controller with an injected internal transport for tests."""
-    return cast(
-        "ProController",
-        ProController._from_config(
-            SwitchGamepadConfig(
-                adapter=adapter,
-                key_store_path=key_store_path,
-                report_period_us=report_period_us,
-                controller_colors=controller_colors,
-            ),
-            diagnostics=diagnostics,
-            transport=transport,
+    return ProController._from_config(
+        _SwitchGamepadConfig(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            report_period_us=report_period_us,
+            controller_colors=controller_colors,
         ),
+        diagnostics=diagnostics,
+        transport=transport,
     )
 
 
@@ -44,7 +39,7 @@ def make_joycon_l(
 ) -> JoyConL:
     """Create a Joy-Con L with an injected internal transport for tests."""
     return JoyConL._from_config(
-        SwitchGamepadConfig(
+        _SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
             report_period_us=report_period_us,
@@ -67,7 +62,7 @@ def make_joycon_r(
 ) -> JoyConR:
     """Create a Joy-Con R with an injected internal transport for tests."""
     return JoyConR._from_config(
-        SwitchGamepadConfig(
+        _SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
             report_period_us=report_period_us,
