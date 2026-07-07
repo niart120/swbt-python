@@ -11,7 +11,7 @@ from swbt.gamepad.transport_factory import (
     _StaticTransportFactory,
     create_default_transport,
 )
-from swbt.protocol.profile import ProControllerProfile
+from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
 
 

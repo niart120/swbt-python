@@ -3,7 +3,9 @@ import pytest
 from swbt.errors import ProtocolError
 from swbt.input import InputState
 from swbt.protocol.output_report import OutputReport, OutputReportParser
-from swbt.protocol.profile import ControllerColors, JoyConLeftProfile, ProControllerProfile
+from swbt.protocol.profiles.base import ControllerColors
+from swbt.protocol.profiles.joycon import JoyConLeftProfile
+from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.protocol.subcommand import (
     SubcommandResponder,
     SubcommandSessionState,

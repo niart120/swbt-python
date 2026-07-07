@@ -1,6 +1,7 @@
 import asyncio
 import builtins
 import importlib
+import importlib.util
 import inspect
 import json
 import pkgutil
@@ -24,15 +25,17 @@ from swbt import (
     SwitchGamepad,
 )
 from swbt.gamepad import ConnectionResult, ConnectionStatus
+from swbt.gamepad import _config as gamepad_config
 from swbt.gamepad import core as gamepad_core
 from swbt.gamepad import runtime as gamepad_runtime
-from swbt.gamepad._config import SwitchGamepadConfig
-from swbt.protocol.profile import JoyConLeftProfile, JoyConRightProfile, ProControllerProfile
+from swbt.gamepad._config import _SwitchGamepadConfig
+from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
+from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
 
 if TYPE_CHECKING:
-    from swbt.protocol.profile import ControllerProfile
+    from swbt.protocol.profiles.base import ControllerProfile
 
 
 REARCHITECTURE_TARGET_XFAIL_REASON = (
@@ -168,7 +171,7 @@ def test_pro_controller_constructor_accepts_key_store_path() -> None:
 
 def test_pro_controller_uses_controller_runtime_owner() -> None:
     transport = FakeHidTransport()
-    pad = ProController._from_config(SwitchGamepadConfig(), transport=transport)
+    pad = ProController._from_config(_SwitchGamepadConfig(), transport=transport)
 
     assert isinstance(pad._runtime, gamepad_core.ControllerRuntime)
     assert pad._runtime._transport is transport
@@ -177,9 +180,9 @@ def test_pro_controller_uses_controller_runtime_owner() -> None:
 
 def test_pro_controller_constructor_accepts_controller_colors_config() -> None:
     constructor_signature = inspect.signature(ProController)
-    config_fields = {field.name for field in fields(SwitchGamepadConfig)}
+    config_fields = {field.name for field in fields(_SwitchGamepadConfig)}
     colors = ControllerColors(body=0x112233, buttons=0x445566)
-    config = SwitchGamepadConfig(controller_colors=colors)
+    config = _SwitchGamepadConfig(controller_colors=colors)
 
     assert "controller_colors" in constructor_signature.parameters
     assert "controller_colors" in config_fields
@@ -187,8 +190,8 @@ def test_pro_controller_constructor_accepts_controller_colors_config() -> None:
 
 
 def test_switch_gamepad_config_defaults_to_distinct_pro_controller_profiles() -> None:
-    config_a = SwitchGamepadConfig()
-    config_b = SwitchGamepadConfig()
+    config_a = _SwitchGamepadConfig()
+    config_b = _SwitchGamepadConfig()
 
     assert isinstance(config_a.profile, ProControllerProfile)
     assert isinstance(config_b.profile, ProControllerProfile)
@@ -198,7 +201,12 @@ def test_switch_gamepad_config_defaults_to_distinct_pro_controller_profiles() ->
 
 def test_switch_gamepad_config_rejects_invalid_profile() -> None:
     with pytest.raises(InvalidInputError):
-        SwitchGamepadConfig(profile=cast("ControllerProfile", object()))
+        _SwitchGamepadConfig(profile=cast("ControllerProfile", object()))
+
+
+def test_internal_gamepad_config_uses_private_class_name() -> None:
+    assert hasattr(gamepad_config, "_SwitchGamepadConfig")
+    assert not hasattr(gamepad_config, "SwitchGamepadConfig")
 
 
 def test_joycon_public_constructors_are_thin_switch_gamepad_wrappers() -> None:
@@ -219,20 +227,33 @@ def test_concrete_controller_classes_own_internal_controller_specs() -> None:
     assert isinstance(JoyConR._controller_spec.profile, JoyConRightProfile)
 
 
-def test_joycon_from_config_requires_matching_joycon_profile() -> None:
-    with pytest.raises(InvalidInputError):
-        JoyConL._from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
+def test_legacy_protocol_profile_module_is_removed() -> None:
+    assert importlib.util.find_spec("swbt.protocol.profile") is None
 
+
+@pytest.mark.parametrize(
+    ("controller_cls", "profile"),
+    [
+        (ProController, JoyConLeftProfile()),
+        (ProController, JoyConRightProfile()),
+        (JoyConL, ProControllerProfile()),
+        (JoyConR, JoyConLeftProfile()),
+    ],
+)
+def test_from_config_rejects_mismatched_controller_profile(
+    controller_cls: type[ProController | JoyConL | JoyConR],
+    profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
+) -> None:
     with pytest.raises(InvalidInputError):
-        JoyConR._from_config(
-            SwitchGamepadConfig(profile=JoyConLeftProfile()),
+        controller_cls._from_config(
+            _SwitchGamepadConfig(profile=profile),
             transport=FakeHidTransport(),
         )
 
 
 def test_joycon_from_config_accepts_matching_joycon_profile() -> None:
     pad = JoyConL._from_config(
-        SwitchGamepadConfig(profile=JoyConLeftProfile()),
+        _SwitchGamepadConfig(profile=JoyConLeftProfile()),
         transport=FakeHidTransport(),
     )
 
@@ -359,7 +380,7 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
 
         key_store_path = tmp_path / "keys.json"
         pad = ProController._from_config(
-            SwitchGamepadConfig(
+            _SwitchGamepadConfig(
                 adapter="usb:1",
                 device_name="Reference Pad",
                 key_store_path=str(key_store_path),
@@ -383,7 +404,7 @@ def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
 def test_from_config_uses_profile_device_name_unless_user_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def run(config: SwitchGamepadConfig) -> str:
+    async def run(config: _SwitchGamepadConfig) -> str:
         bumble_module = importlib.import_module("swbt.transport.bumble")
         captured_config: dict[str, object] = {}
 
@@ -451,7 +472,7 @@ def test_from_config_uses_profile_device_name_unless_user_overrides(
 
     profile_default_name = asyncio.run(
         run(
-            SwitchGamepadConfig(
+            _SwitchGamepadConfig(
                 adapter="usb:1",
                 profile=ProControllerProfile(device_name="Profile Pad"),
             )
@@ -459,7 +480,7 @@ def test_from_config_uses_profile_device_name_unless_user_overrides(
     )
     explicit_name = asyncio.run(
         run(
-            SwitchGamepadConfig(
+            _SwitchGamepadConfig(
                 adapter="usb:1",
                 device_name="Override Pad",
                 profile=ProControllerProfile(device_name="Profile Pad"),
@@ -494,7 +515,7 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
 
     monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
 
-    async def run(config: SwitchGamepadConfig) -> int:
+    async def run(config: _SwitchGamepadConfig) -> int:
         pad = ProController._from_config(config, transport=FakeHidTransport())
         await pad.open()
         await pad.close(neutral=False)
@@ -502,14 +523,14 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
 
     profile_default_period = asyncio.run(
         run(
-            SwitchGamepadConfig(
+            _SwitchGamepadConfig(
                 profile=ProControllerProfile(default_report_period_us=12_345),
             )
         )
     )
     explicit_period = asyncio.run(
         run(
-            SwitchGamepadConfig(
+            _SwitchGamepadConfig(
                 profile=ProControllerProfile(default_report_period_us=12_345),
                 report_period_us=8000,
             )
@@ -544,7 +565,7 @@ def test_public_constructor_uses_profile_default_report_period(
     monkeypatch.setattr(gamepad_runtime, "ReportLoop", SpyReportLoop)
 
     async def run() -> int:
-        pad = ProController._from_config(SwitchGamepadConfig(), transport=FakeHidTransport())
+        pad = ProController._from_config(_SwitchGamepadConfig(), transport=FakeHidTransport())
         await pad.open()
         await pad.close(neutral=False)
         return captured_periods[-1]

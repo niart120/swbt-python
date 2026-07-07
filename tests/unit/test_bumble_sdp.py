@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from swbt.protocol.profile import JoyConLeftProfile
+from swbt.protocol.profiles.joycon import JoyConLeftProfile
 from swbt.transport._bumble_sdp import build_hid_service_records
 
 

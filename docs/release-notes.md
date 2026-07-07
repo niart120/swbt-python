@@ -10,11 +10,11 @@ Rearchitecture cleanup makes the controller class model explicit. The public API
 
 | Old API | New API | Notes |
 |---|---|---|
-| `SwitchGamepad(...)` | `ProController(...)` | `SwitchGamepad` は shared interface / type annotation として使う |
-| `JoyCon("left", ...)` | `JoyConL(...)` | 単体 Joy-Con L 相当の concrete controller |
-| `JoyCon("right", ...)` | `JoyConR(...)` | 単体 Joy-Con R 相当の concrete controller |
-| `SwitchGamepadConfig(...)` | public API では廃止 | internal tests / runtime setup の境界に移した |
-| `transport=FakeHidTransport` | internal tests only | user-facing constructor には出さない |
+| `SwitchGamepad(...)` | `ProController(...)` | `SwitchGamepad` は shared interface / 型注釈用。 |
+| `JoyCon("left", ...)` | `JoyConL(...)` | 左 Joy-Con 相当の concrete controller。 |
+| `JoyCon("right", ...)` | `JoyConR(...)` | 右 Joy-Con 相当の concrete controller。 |
+| `SwitchGamepadConfig(...)` | public API から削除 | internal runtime / test setup 専用。 |
+| `transport=FakeHidTransport` | internal tests only | 利用者向け constructor には transport injection を出さない。 |
 
 `ProController(...)`, `JoyConL(...)`, `JoyConR(...)` は `adapter`, `key_store_path`, `report_period_us`, `controller_colors`, `diagnostics` を受け取ります。Pro Controller / Joy-Con L / Joy-Con R では、同じ対象機器でも `key_store_path` を分ける必要があります。
 

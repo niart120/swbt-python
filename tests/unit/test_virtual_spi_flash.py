@@ -1,12 +1,9 @@
 import pytest
 
 from swbt.errors import ProtocolError
-from swbt.protocol.profile import (
-    ControllerColors,
-    JoyConLeftProfile,
-    JoyConRightProfile,
-    ProControllerProfile,
-)
+from swbt.protocol.profiles.base import ControllerColors
+from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
+from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.protocol.spi import VirtualSpiFlash
 
 

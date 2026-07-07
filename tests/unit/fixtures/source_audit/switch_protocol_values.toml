@@ -81,7 +81,7 @@ source = [
     'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-subcommand-dispatcher-core.md',
     'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_device_info.h:6-10',
     'E:\documents\VSCodeWorkspace\swbt-daemon\swbt\switch\switch_device_info.c:21-31',
-    'src\swbt\protocol\profile.py',
+    'src\swbt\protocol\profiles\pro_controller.py',
     'spec\complete\unit_028\CONTROLLER_PROFILE_CUSTOMIZATION.md',
 ]
 status = "handoff-ready"
@@ -152,7 +152,7 @@ area = "protocol"
 value = "Joy-Con L/R profile defaults seed SPI 0x6050-0x605B with side identity colors. Joy-Con L uses body=0x00B2FF, buttons=0x323232, left_grip=0x00B2FF, right_grip=0x00B2FF. Joy-Con R uses body=0xFF3B30, buttons=0x323232, left_grip=0xFF3B30, right_grip=0xFF3B30. Explicit user-supplied controller_colors overrides the profile default. These values reuse swbt-python's existing Joy-Con-ish blue/red defaults and are not claimed as factory Joy-Con color bytes."
 classification = "implementation fact"
 source = [
-    'src\swbt\protocol\profile.py',
+    'src\swbt\protocol\profiles\joycon.py',
     'spec\complete\unit_028\CONTROLLER_PROFILE_CUSTOMIZATION.md',
 ]
 status = "profile-default-policy"
@@ -235,7 +235,9 @@ value = "Bumble transport passes ControllerProfile.hid_report_descriptor into th
 classification = "implementation fact"
 source = [
     'src\swbt\gamepad\transport_factory.py',
-    'src\swbt\protocol\profile.py',
+    'src\swbt\protocol\profiles\base.py',
+    'src\swbt\protocol\profiles\joycon.py',
+    'src\swbt\protocol\profiles\pro_controller.py',
     'src\swbt\transport\bumble.py',
     'src\swbt\transport\_bumble_sdp.py',
     'https://github.com/niart120/swbt-python/issues/53',

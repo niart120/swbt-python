@@ -32,21 +32,25 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "## 0.2.0",
         "Breaking changes",
         "Migration",
-        "`SwitchGamepad(...)`",
-        "`ProController(...)`",
-        '`JoyCon("left", ...)`',
-        "`JoyConL(...)`",
-        '`JoyCon("right", ...)`',
-        "`JoyConR(...)`",
-        "`SwitchGamepadConfig(...)`",
-        "public API では廃止",
-        "`transport=FakeHidTransport`",
-        "internal tests only",
         "Pro Controller / Joy-Con L / Joy-Con R",
         "`key_store_path` を分ける",
         "Joy-Con R、reconnect、通常入力反映は未検証",
     ):
         assert token in text
+
+    for row in (
+        "| Old API | New API | Notes |",
+        "|---|---|---|",
+        "| `SwitchGamepad(...)` | `ProController(...)` | "
+        "`SwitchGamepad` は shared interface / 型注釈用。 |",
+        '| `JoyCon("left", ...)` | `JoyConL(...)` | 左 Joy-Con 相当の concrete controller。 |',
+        '| `JoyCon("right", ...)` | `JoyConR(...)` | 右 Joy-Con 相当の concrete controller。 |',
+        "| `SwitchGamepadConfig(...)` | public API から削除 | "
+        "internal runtime / test setup 専用。 |",
+        "| `transport=FakeHidTransport` | internal tests only | "
+        "利用者向け constructor には transport injection を出さない。 |",
+    ):
+        assert row in text
 
     assert 'version = "0.2.0"' in pyproject_text
     assert 'name = "swbt-python"' in lock_text

@@ -31,8 +31,9 @@ from swbt.errors import (
     InvalidKeyStoreError,
     UnsupportedInputError,
 )
-from swbt.gamepad._config import SwitchGamepadConfig
-from swbt.protocol.profile import JoyConLeftProfile, ProControllerProfile
+from swbt.gamepad._config import _SwitchGamepadConfig
+from swbt.protocol.profiles.joycon import JoyConLeftProfile
+from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
 
 
@@ -876,7 +877,7 @@ def test_output_report_injection_uses_default_controller_colors_when_none() -> N
 def test_from_config_output_report_injection_uses_configured_controller_colors() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        config = SwitchGamepadConfig(
+        config = _SwitchGamepadConfig(
             controller_colors=ControllerColors(
                 body=0x102030,
                 buttons=0x405060,
@@ -905,7 +906,7 @@ def test_from_config_output_report_injection_uses_configured_controller_colors()
 def test_from_config_uses_profile_controller_colors_when_colors_are_unspecified() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        config = SwitchGamepadConfig(
+        config = _SwitchGamepadConfig(
             profile=ProControllerProfile(
                 controller_colors=ControllerColors(
                     body=0x010203,
@@ -969,7 +970,7 @@ def test_joycon_uses_side_default_controller_colors_when_colors_are_unspecified(
 def test_from_config_profile_reaches_periodic_input_report_builder() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        config = SwitchGamepadConfig(
+        config = _SwitchGamepadConfig(
             profile=ProControllerProfile(battery_connection=0x92),
             report_period_us=1000,
         )
@@ -988,7 +989,7 @@ def test_from_config_profile_reaches_periodic_input_report_builder() -> None:
 def test_from_config_joycon_profile_reaches_device_info_reply() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        config = SwitchGamepadConfig(
+        config = _SwitchGamepadConfig(
             profile=JoyConLeftProfile(),
             report_period_us=1000,
         )
