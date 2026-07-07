@@ -1,12 +1,13 @@
 import asyncio
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any, Literal, TextIO
 
 import pytest
 
-from swbt import Button, ControllerColors, DiagnosticsConfig, InputState, JoyConL, JoyConR
+from swbt import Button, ControllerColors, DiagnosticsConfig, InputState, JoyConL, JoyConR, Stick
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport
 from swbt.protocol.profiles.joycon import JoyConLeftProfile
@@ -18,6 +19,9 @@ _ORDER_BUTTON_MIN_REPORT_COUNT = 30
 _NEUTRAL_REPORT_HOLD_COUNT = 8
 _UI_OBSERVATION_HOLD_SECONDS = 10.0
 _VISIBLE_REPORT_HOLD_COUNT = 30
+_STICK_VISIBLE_REPORT_HOLD_COUNT = 120
+_STICK_CIRCLE_STEPS = 32
+_STICK_CIRCLE_STEP_SECONDS = 0.15
 _CUSTOM_JOYCON_LEFT_CONTROLLER_COLORS = ControllerColors(
     body=0xFF0000,
     buttons=0x0000FF,
@@ -324,12 +328,11 @@ def test_switch_joycon_left_button_check_dpad_after_reconnect_for_manual_reflect
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            await _wait_for_operator_condition(
+            _record_operator_condition(
                 trace,
                 operation="operator_prepare_joycon_left_button_check_dpad",
                 expected_switch_screen="input_device_check_button_operation_screen",
                 side="left",
-                wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
             pad = JoyConL(
                 adapter=swbt_bumble_adapter,
@@ -401,6 +404,137 @@ def test_switch_joycon_left_button_check_dpad_after_reconnect_for_manual_reflect
             operation=f"button_check_after_dpad_{direction}_neutral_complete",
             side="left",
         )
+    assert _contains_event(
+        events,
+        "manual_joycon_profile_cleanup",
+        connection_state="closed",
+        side="left",
+    )
+    assert _count_events(events, "report_tx", report_id="0x30") >= 10
+    assert not _contains_event(events, "classic_pairing")
+    assert not _contains_event(events, "key_store_update")
+    assert not _contains_event(events, "advertising_start")
+    assert not _contains_event(events, "error")
+
+
+@pytest.mark.hardware
+def test_switch_joycon_left_stick_calibration_after_reconnect_for_manual_reflection(
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Send Joy-Con L left stick hold and circle input on the calibration screen.
+
+    Run this while the Switch is already inside the target stick calibration
+    screen. Joy-Con L has no Button A in this profile, so this test does not try
+    to enter the screen by itself.
+    """
+    key_store_path = swbt_hardware_artifact_dir / "joycon-left-profile-key-store.json"
+    trace_path = swbt_hardware_artifact_dir / "joycon-left-stick-calibration.jsonl"
+    if not key_store_path.exists():
+        pytest.skip(
+            "Joy-Con L key store is missing; run "
+            "test_switch_joycon_profile_pairing_records_device_info[left] first "
+            "with the same --swbt-hardware-artifact-dir"
+        )
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            _record_operator_condition(
+                trace,
+                operation="operator_prepare_joycon_left_stick_calibration",
+                expected_switch_screen="stick_calibration_screen",
+                side="left",
+            )
+            pad = JoyConL(
+                adapter=swbt_bumble_adapter,
+                key_store_path=str(key_store_path),
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                await _active_reconnect_for_joycon_input_check(pad, trace, side="left")
+                await _wait_for_order_input_window(trace_path, timeout_seconds=20.0)
+                _record_joycon_handshake_checkpoint(pad, trace, side="left")
+
+                await pad.apply(_joycon_left_stick_state(Stick.normalized(x=1.0, y=0.0)))
+                hold_start_count = pad.status().report_counters.get(0x30, 0)
+                _record_probe_event(
+                    trace,
+                    "manual_joycon_profile_checkpoint",
+                    hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
+                    operation="left_stick_hold_start",
+                    report_0x30_count=hold_start_count,
+                    side="left",
+                )
+                await _wait_for_report_counter(
+                    pad,
+                    report_id=0x30,
+                    minimum_count=hold_start_count + _STICK_VISIBLE_REPORT_HOLD_COUNT,
+                    timeout_seconds=5.0,
+                )
+                _record_probe_event(
+                    trace,
+                    "manual_joycon_profile_checkpoint",
+                    hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
+                    operation="left_stick_hold_reports_sent",
+                    report_0x30_count=pad.status().report_counters.get(0x30, 0),
+                    side="left",
+                )
+
+                await _send_joycon_left_stick_circle(pad)
+                _record_probe_event(
+                    trace,
+                    "manual_joycon_profile_checkpoint",
+                    operation="left_stick_circle_complete",
+                    report_0x30_count=pad.status().report_counters.get(0x30, 0),
+                    side="left",
+                    step_seconds=_STICK_CIRCLE_STEP_SECONDS,
+                    steps=_STICK_CIRCLE_STEPS,
+                )
+                await _send_joycon_neutral_and_record(
+                    pad,
+                    trace,
+                    operation="left_stick_neutral_complete",
+                    side="left",
+                )
+            finally:
+                await pad.close(neutral=True)
+                _record_probe_event(
+                    trace,
+                    "manual_joycon_profile_cleanup",
+                    connection_state=pad.status().connection_state,
+                    side="left",
+                )
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+
+    assert _contains_active_reconnect_success(events)
+    assert _contains_order_input_window(events)
+    assert _contains_event(
+        events,
+        "manual_joycon_profile_checkpoint",
+        operation="handshake_complete",
+        side="left",
+    )
+    assert _contains_event(
+        events,
+        "manual_joycon_profile_checkpoint",
+        operation="left_stick_hold_reports_sent",
+        side="left",
+    )
+    assert _contains_event(
+        events,
+        "manual_joycon_profile_checkpoint",
+        operation="left_stick_circle_complete",
+        side="left",
+    )
+    assert _contains_event(
+        events,
+        "manual_joycon_profile_checkpoint",
+        operation="left_stick_neutral_complete",
+        side="left",
+    )
     assert _contains_event(
         events,
         "manual_joycon_profile_cleanup",
@@ -698,13 +832,12 @@ async def _send_order_buttons(pad: JoyConL | JoyConR, trace: TextIO, *, side: st
     )
 
 
-async def _wait_for_operator_condition(
+def _record_operator_condition(
     trace: TextIO,
     *,
     operation: str,
     expected_switch_screen: str,
     side: str,
-    wait_seconds: float,
 ) -> None:
     _record_probe_event(
         trace,
@@ -712,15 +845,13 @@ async def _wait_for_operator_condition(
         expected_switch_screen=expected_switch_screen,
         operation=operation,
         side=side,
-        wait_seconds=wait_seconds,
     )
     sys.stderr.write(
         "SWBT hardware: "
         f"{operation}; side={side}; expected_switch_screen={expected_switch_screen}; "
-        f"waiting {wait_seconds:.0f}s\n"
+        "starting immediately\n"
     )
     sys.stderr.flush()
-    await asyncio.sleep(wait_seconds)
 
 
 async def _active_reconnect_for_joycon_input_check(
@@ -826,6 +957,21 @@ async def _send_joycon_neutral_and_record(
         report_0x30_count=pad.status().report_counters.get(0x30, 0),
         side=side,
     )
+
+
+async def _send_joycon_left_stick_circle(pad: JoyConL) -> None:
+    for step in range(_STICK_CIRCLE_STEPS):
+        angle = 2 * math.pi * step / _STICK_CIRCLE_STEPS
+        await pad.apply(
+            _joycon_left_stick_state(
+                Stick.normalized(x=math.cos(angle), y=math.sin(angle)),
+            )
+        )
+        await asyncio.sleep(_STICK_CIRCLE_STEP_SECONDS)
+
+
+def _joycon_left_stick_state(stick: Stick) -> InputState:
+    return InputState.neutral().with_sticks(left_stick=stick)
 
 
 async def _wait_for_device_info_reply(
