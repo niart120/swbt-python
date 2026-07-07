@@ -12,7 +12,7 @@
 - Joy-Con L は次点として、単体 Joy-Con profile の登録と色 SPI まで見る。
 - Joy-Con R は 1 シナリオだけ実行し、未検証範囲を広げすぎない。
 
-この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0、Pro Controller P1/P2/P3 を実行済みで、P4 以降の入力反映シナリオ、Joy-Con L/R、H1/H2 は未実行である。
+この仕様は実機テストの実行計画兼記録である。2026-07-07 時点では H0、Pro Controller P1/P2/P3/P4 を実行済みで、P5 以降の入力反映シナリオ、Joy-Con L/R、H1/H2 は未実行である。
 
 ### 1.2 起点 / source
 
@@ -156,7 +156,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | green | H0 no-open adapter discovery の結果を記録する | characterization | local | no | `uv run swbt-probe adapters --json` で `usb:0` / CSR8510 A10 を確認。`opens_adapter=false` |
 | todo | H1 open-only smoke を実行し、advertising が始まらないことを記録する | regression | bumble | yes | 明示承認後 |
 | todo | H2 Bumble advertising smoke を実行し、close cleanup を記録する | regression | bumble | yes | 明示承認後 |
-| observed-partial | P1-P8 の Pro Controller 主経路を順に実行し、trace と目視結果を記録する | regression | hardware | yes | P1 は pass。P2 は `0x40` mode `0x02` 受け入れ修正後に pass。P3 は input semantics 用 key store 作成まで pass。P4-P8 は未実行 |
+| observed-partial | P1-P8 の Pro Controller 主経路を順に実行し、trace と目視結果を記録する | regression | hardware | yes | P1 は pass。P2 は `0x40` mode `0x02` 受け入れ修正後に pass。P3 は input semantics 用 key store 作成まで pass。P4 は LR split button check を pass 扱い。P5-P8 は未実行 |
 | green | P2 の `0x40` mode `0x02` を source-audit fixture に条件付き観測として記録する | characterization | local | no | `pro_controller_imu_enable_mode_02_observation` を追加。source fact `0x00/0x01` は上書きしない |
 | green | ProController が `0x40` mode `0x02` を ACK し、session state に記録する | regression | unit | no | `test_pro_controller_enable_imu_mode_0x02_updates_session_state`。cross-firmware guarantee と IMU frame 実装は対象外 |
 | todo | L1-L2 の Joy-Con L 次点シナリオを実行し、limited observation を更新する | characterization | hardware | yes | normal input reflection へ拡張しない |
@@ -202,6 +202,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | `uv run pytest tests\integration -q` | pass | `93 passed in 0.98s` |
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_observation_window_replies_to_all_observed_commands -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro-p2-accept-imu-02 --log-file build\hardware\profile-regression-20260707\pro-p2-accept-imu-02\p2-subcommand-window-accept-imu-02-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 8.05s`。trace は `imu_mode=0x02`、`0x48`、`0x21`、`transport_close_complete`、`error` / `unsupported_subcommand` なし |
 | `uv run pytest tests\hardware\test_input_operations.py::test_switch_input_semantics_pairing_writes_fresh_key_store -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro --log-file build\hardware\profile-regression-20260707\pro\p3-input-semantics-key-store-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 9.76s`。`input-semantics-key-store.json` を fresh 作成。trace は `route=pairing`、`key_store_update status=succeeded`、full handshake、`imu_mode=0x02`、`transport_close_complete`、`error` / `unsupported_subcommand` なし。non-neutral input は送っていない |
+| `uv run pytest tests\hardware\test_input_operations.py::test_switch_button_check_separate_l_r_after_active_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro --log-file build\hardware\profile-regression-20260707\pro\p4-button-lr-split-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 10.97s`。P3 の `input-semantics-key-store.json` を使った active reconnect。trace は R-only `400000`、L-only `000040`、L+R `400040`、neutral、`transport_close_complete`、`classic_pairing` / `key_store_update` / `advertising_start` / `error` なし。ユーザ目視では同時押しは厳密観測不可だがキー入力確認済みのため pass 扱い |
 | `uv run pytest -m bumble` | not run | adapter open は承認対象。この unit では実行しない |
 | `uv run pytest -m hardware` | not run | Switch-facing 操作は承認対象。この unit では実行しない |
 
@@ -209,7 +210,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 
 | 項目 | 内容 |
 |---|---|
-| 実機要否 | 実行時は required。今回の scenario 整理では not run |
+| 実機要否 | 実行時は required。H0 / P1-P4 は実行済み。未実行シナリオは個別承認後に実行する |
 | 承認範囲 | 実行前に H1/H2/P/L/R のどの scenario を実行するか、adapter open、HID advertising、pairing、report loop、input operation、cleanup の範囲を明示する |
 | adapter | 実行時に `swbt-probe adapters --json` と人間確認で決める。過去観測では `usb:0` / CSR8510 A10 / WinUSB が使われている |
 | 対象機器 | 実行時に Switch model / firmware と Switch 側画面を記録する |
@@ -236,3 +237,4 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 - [x] P1 / P2 の実機実行結果を `spec/hardware-test-log.md` に記録した
 - [x] Pro Controller 主経路を再開する前に P2 の `0x40` mode `0x02` failure を source-audit / TDD で切り分ける
 - [x] P3 の実機実行結果と fresh key store artifact を `spec/hardware-test-log.md` に記録した
+- [x] P4 の実機実行結果、LR split trace、ユーザ目視結果を `spec/hardware-test-log.md` に記録した
