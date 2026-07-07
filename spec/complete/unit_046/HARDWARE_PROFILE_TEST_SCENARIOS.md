@@ -210,7 +210,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 
 | path | change | 内容 |
 |---|---|---|
-| `spec/wip/unit_046/HARDWARE_PROFILE_TEST_SCENARIOS.md` | update | 実機テストシナリオ整理、P1-P7 / L1-L4 / R1-R4 実行記録、Joy-Con R を薄くした理由の修正、Joy-Con happy path 補強設計 |
+| `spec/complete/unit_046/HARDWARE_PROFILE_TEST_SCENARIOS.md` | update | 実機テストシナリオ整理、P1-P7 / L1-L4 / R1-R4 実行記録、Joy-Con R を薄くした理由の修正、Joy-Con happy path 補強設計 |
 | `spec/hardware-test-log.md` | update | P1-P7 / L1-L4 / R1-R4 実機観測、L2 default-color 補助観測、P4 統合再実行、artifact、cleanup 記録 |
 | `src/swbt/protocol/subcommand.py` | update | `0x22` NFC/IR MCU state の ACK 互換処理を追加 |
 | `tests/unit/test_subcommand_responder.py` | update | `0x22` ACK 互換処理の unit test を追加 |
@@ -265,7 +265,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | `uv run pytest tests\unit -q` | pass | `368 passed in 1.29s`。`0x22` 修正後の full unit |
 | `uv run pytest 'tests\hardware\test_joycon_profile.py::test_switch_joycon_profile_pairing_records_device_info[right]' -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\joycon-r-after-0x22-ack --log-file build\hardware\profile-regression-20260707\joycon-r-after-0x22-ack\r1-joycon-right-profile-pairing-after-0x22-ack-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 24.45s`。trace は Joy-Con R Device Info `04000202001bdcf99f7d0101`、`0x22` 2 件への `0x21` reply、SR+SL `300000`、neutral、`transport_close_complete`、`error` なしを記録。ユーザ目視では赤 body / グレー buttons の pairing を確認 |
 | `git diff --check` | pass | Joy-Con happy path 追加設計と L3/L4 実装 / 記録差分に whitespace error なし |
-| `rg "未検証範囲を広げすぎな[い]\|実機未検証のた[め]\|normal input reflection tes[t]\|通常入力反映テスト追[加]\|未知が多[い]" spec\wip\unit_046\HARDWARE_PROFILE_TEST_SCENARIOS.md` | pass | 古い理由づけと大きすぎる deferred item が残っていないことを確認 |
+| `rg "未検証範囲を広げすぎな[い]\|実機未検証のた[め]\|normal input reflection tes[t]\|通常入力反映テスト追[加]\|未知が多[い]" spec\complete\unit_046\HARDWARE_PROFILE_TEST_SCENARIOS.md` | pass | 完了移動後の path で、古い理由づけと大きすぎる deferred item が残っていないことを確認 |
 | `uv run pytest --collect-only tests\hardware\test_joycon_profile.py -q` | pass | L3 実装後。6 tests collected。adapter は開いていない |
 | `uv run ruff format --check tests\hardware\test_joycon_profile.py` | pass | `1 file already formatted` |
 | `uv run ruff check tests\hardware\test_joycon_profile.py` | pass | `All checks passed!` |
