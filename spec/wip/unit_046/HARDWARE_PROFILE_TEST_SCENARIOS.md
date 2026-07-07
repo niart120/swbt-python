@@ -81,15 +81,15 @@
 
 | 項目 | 値 | 根拠分類 | source | status |
 |---|---:|---|---|---|
-| `0x40` Enable IMU source fact | `0x00` disable / `0x01` enable | source fact | `subcommand_imu_vibration_enable_state` fixture | stable session-state policy。現時点で上書きしない |
-| Joy-Con L `0x40` mode | `0x02` | hardware observation | `joycon_imu_enable_mode_02` fixture | Joy-Con profile 限定の受け入れ実装済み。Pro Controller へ一般化しない |
-| ProController P2 after clear | `0x40` payload first byte `0x02` | hardware observation | `pro_controller_imu_enable_mode_02_observation` fixture、`build\hardware\profile-regression-20260707\pro-p2-after-clear\...` | Windows / CSR8510 A10 / Switch 2 22.1.0 条件付き観測。ProController の契約変更は未実装 |
-| current ProController policy | accepted modes `(0x00, 0x01)` | implementation fact | `src\swbt\protocol\profiles\pro_controller.py`、`src\swbt\protocol\subcommand.py`、`tests\unit\test_subcommand_responder.py` | `test_pro_controller_rejects_joycon_imu_mode_0x02` が現行期待を固定 |
+| `0x40` Enable IMU source fact | `0x00` disable / `0x01` enable | source fact | `subcommand_imu_vibration_enable_state` fixture | stable session-state policy。source fact として維持 |
+| Joy-Con L `0x40` mode | `0x02` | hardware observation | `joycon_imu_enable_mode_02` fixture | Joy-Con L 条件付き観測。ProController の `0x02` 受け入れ根拠とは別 entry で扱う |
+| ProController P2 after clear | `0x40` payload first byte `0x02` | hardware observation | `pro_controller_imu_enable_mode_02_observation` fixture、`build\hardware\profile-regression-20260707\pro-p2-after-clear\...` | Windows / CSR8510 A10 / Switch 2 22.1.0 条件付き観測。TDD で ProController 互換 mode として受け入れ実装済み |
+| current ProController policy | accepted modes `(0x00, 0x01, 0x02)` | implementation fact | `src\swbt\protocol\profiles\pro_controller.py`、`src\swbt\protocol\subcommand.py`、`tests\unit\test_subcommand_responder.py` | `test_pro_controller_enable_imu_mode_0x02_updates_session_state` が現行期待を固定 |
 
 未解決事項:
 
 - Switch 2 firmware 22.1.0 が ProController pairing / initialization 中にも `0x40` mode `0x02` を送る条件は未確定。
-- `0x02` を ProController で受け入れる場合、`imu_mode=0x02` を session state に記録するだけでよいか、report / diagnostics / hardware test の期待も更新するかを TDD で決める。
+- `0x02` は ProController でも `imu_mode=0x02` として session state に記録し、IMU enabled として diagnostics に出す。IMU frame の意味実装はしない。
 - 別 firmware、別 dongle、別 OS で同じ `0x40` mode `0x02` が出るかは未検証。
 
 ## 6. 振る舞い仕様
@@ -156,8 +156,9 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | green | H0 no-open adapter discovery の結果を記録する | characterization | local | no | `uv run swbt-probe adapters --json` で `usb:0` / CSR8510 A10 を確認。`opens_adapter=false` |
 | todo | H1 open-only smoke を実行し、advertising が始まらないことを記録する | regression | bumble | yes | 明示承認後 |
 | todo | H2 Bumble advertising smoke を実行し、close cleanup を記録する | regression | bumble | yes | 明示承認後 |
-| observed-fail | P1-P8 の Pro Controller 主経路を順に実行し、trace と目視結果を記録する | regression | hardware | yes | P1 は pass。P2 は `ProController` 実行中に Switch から Joy-Con-only `0x40` mode `0x02` 相当が来て fail。接続情報削除後の再実行では ProCon toast / ProCon pairing だったが同じ失敗。Pro main path は `0x40` mode `0x02` の扱いを source-audit / TDD で切り分けるまで停止 |
+| observed-partial | P1-P8 の Pro Controller 主経路を順に実行し、trace と目視結果を記録する | regression | hardware | yes | P1 は pass。P2 は `0x40` mode `0x02` 受け入れ修正後に pass。P3-P8 は未実行 |
 | green | P2 の `0x40` mode `0x02` を source-audit fixture に条件付き観測として記録する | characterization | local | no | `pro_controller_imu_enable_mode_02_observation` を追加。source fact `0x00/0x01` は上書きしない |
+| green | ProController が `0x40` mode `0x02` を ACK し、session state に記録する | regression | unit | no | `test_pro_controller_enable_imu_mode_0x02_updates_session_state`。cross-firmware guarantee と IMU frame 実装は対象外 |
 | todo | L1-L2 の Joy-Con L 次点シナリオを実行し、limited observation を更新する | characterization | hardware | yes | normal input reflection へ拡張しない |
 | todo | R1 の Joy-Con R 最小シナリオを実行し、結果を not verified から更新するか判断する | characterization | hardware | yes | 1 本だけ実行 |
 | deferred | Joy-Con L/R の normal input reflection test を追加する | new | hardware | yes | 今回は既存 node で profile identity と registration を確認する |
@@ -191,7 +192,15 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_pairing_l2cap_records_diagnostics -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro --log-file build\hardware\profile-regression-20260707\pro\p1-pairing-l2cap-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 2.96s`。P1 pairing / L2CAP。non-neutral input は送っていない |
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_observation_window_replies_to_all_observed_commands -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro --log-file build\hardware\profile-regression-20260707\pro\p2-subcommand-window-pytest-debug.log --log-file-level=DEBUG -q -s` | observed-fail | `1 failed in 8.17s`。`ProController` 実行中に `0x40` Enable IMU payload `0x02` 相当で `ProtocolError`。ユーザ目視では青 Joy-Con toast 後に ProCon 接続 |
 | `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_observation_window_replies_to_all_observed_commands -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro-p2-after-clear --log-file build\hardware\profile-regression-20260707\pro-p2-after-clear\p2-subcommand-window-after-clear-pytest-debug.log --log-file-level=DEBUG -q -s` | observed-fail | `1 failed in 7.52s`。接続情報削除後。trace は `device_name=Pro Controller`、`class_of_device=0x002508`、`connected`、`report_mode=0x30`、`0x40` `ProtocolError` 7 件、`transport_close_complete`。ユーザ目視では ProCon toast 後に ProCon として pairing |
+| `uv run pytest tests\unit\test_subcommand_responder.py -q` | red | `1 failed, 20 passed`。`test_pro_controller_enable_imu_mode_0x02_updates_session_state` が `ProtocolError` で失敗 |
+| `uv run pytest tests\unit\test_subcommand_responder.py tests\unit\test_source_audit_fixtures.py -q` | pass | `43 passed in 0.15s`。ProController `0x40` mode `0x02` と source-audit fixture を確認 |
+| `uv run pytest tests\unit -q` | pass | `362 passed in 1.43s` |
 | `uv run pytest tests\unit\test_source_audit_fixtures.py -q` | pass | `22 passed in 0.09s`。`pro_controller_imu_enable_mode_02_observation` を条件付き hardware observation として検証 |
+| `uv run ruff format --check .` | pass | `89 files already formatted` |
+| `uv run ruff check .` | pass | `All checks passed!` |
+| `uv run ty check --no-progress` | pass | `All checks passed!` |
+| `uv run pytest tests\integration -q` | pass | `93 passed in 0.98s` |
+| `uv run pytest tests\hardware\test_pairing_l2cap.py::test_switch_subcommand_observation_window_replies_to_all_observed_commands -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\profile-regression-20260707\pro-p2-accept-imu-02 --log-file build\hardware\profile-regression-20260707\pro-p2-accept-imu-02\p2-subcommand-window-accept-imu-02-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 8.05s`。trace は `imu_mode=0x02`、`0x48`、`0x21`、`transport_close_complete`、`error` / `unsupported_subcommand` なし |
 | `uv run pytest -m bumble` | not run | adapter open は承認対象。この unit では実行しない |
 | `uv run pytest -m hardware` | not run | Switch-facing 操作は承認対象。この unit では実行しない |
 
@@ -211,7 +220,7 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 
 - Joy-Con L/R の normal input reflection test 追加は、今回の実行結果を見て別 unit 化する。
 - Joy-Con R default color SPI / UI reflection は、R1 の identity / registration 結果後に判断する。
-- Pro Controller P2 は接続情報削除後も `0x40` mode `0x02` 相当で fail した。次に進めるなら source-audit で既存根拠を再確認し、TDD で ProController の `0x40` handling を変更するか、別の切り分け test を追加する。現時点では `0x40` mode `0x02` を Pro Controller 許容値として拡張しない。
+- Pro Controller P2 の `0x40` mode `0x02` は ProController 互換 mode として受け入れる実装に変更し、P2 retest は pass。別 firmware、別 dongle、別 OS での一般化はしない。
 - Linux、macOS、別 dongle、別 firmware は今回扱わない。
 - hardware runner 化は今回扱わない。
 
@@ -222,6 +231,6 @@ Joy-Con R は `build\hardware\profile-regression-20260707\joycon-r` のような
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件を記録した
 - [x] hardware pytest node を collect-only で確認した
-- [ ] 実機実行前に adapter、対象 Switch、実行 node、cleanup plan の承認を得る
+- [x] 実機実行前に adapter、対象 Switch、実行 node、cleanup plan の承認を得る
 - [x] P1 / P2 の実機実行結果を `spec/hardware-test-log.md` に記録した
-- [ ] Pro Controller 主経路を再開する前に P2 の `0x40` mode `0x02` failure を source-audit / TDD で切り分ける
+- [x] Pro Controller 主経路を再開する前に P2 の `0x40` mode `0x02` failure を source-audit / TDD で切り分ける

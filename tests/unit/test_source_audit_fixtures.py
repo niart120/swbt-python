@@ -373,6 +373,8 @@ def test_pro_controller_imu_enable_mode_02_observation_is_hardware_observed() ->
     assert "0x40" in value
     assert "0x02" in value
     assert "a2010400014040000140404002" in value
+    assert "hardware-observed compatibility mode" in value
+    assert "SubcommandSessionState.imu_mode" in value
     assert "does not supersede the 0x00/0x01 source fact" in value
 
 

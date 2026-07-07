@@ -1,6 +1,5 @@
 import pytest
 
-from swbt.errors import ProtocolError
 from swbt.input import InputState
 from swbt.protocol.output_report import OutputReport, OutputReportParser
 from swbt.protocol.profiles.base import ControllerColors
@@ -142,12 +141,16 @@ def test_joycon_enable_imu_mode_0x02_updates_session_state() -> None:
     assert session_state.imu_enabled is True
 
 
-def test_pro_controller_rejects_joycon_imu_mode_0x02() -> None:
-    with pytest.raises(ProtocolError):
-        SubcommandResponder().respond(
-            _subcommand_report(0x40, payload=b"\x02"),
-            state=InputState.neutral(),
-        )
+def test_pro_controller_enable_imu_mode_0x02_updates_session_state() -> None:
+    session_state = SubcommandSessionState()
+    responder = SubcommandResponder(session_state=session_state)
+
+    reply = responder.respond(_subcommand_report(0x40, payload=b"\x02"), state=InputState.neutral())
+
+    assert reply[13] == 0x80
+    assert reply[14] == 0x40
+    assert session_state.imu_mode == 0x02
+    assert session_state.imu_enabled is True
 
 
 def test_enable_vibration_updates_session_state() -> None:
