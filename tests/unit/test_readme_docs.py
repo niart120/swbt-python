@@ -42,16 +42,17 @@ def test_readme_documents_dedicated_adapter_and_driver_notes() -> None:
     assert "トラブルシューティング" in text
 
 
-def test_readme_reflects_button_a_and_neutral_observation() -> None:
+def test_readme_summarizes_verified_input_observation() -> None:
     text = README.read_text(encoding="utf-8")
 
-    assert "Button A" in text
-    assert "neutral" in text
-    assert "入力残りなし" in text
-    assert "D-pad" in text
+    assert "主要なボタン / スティック入力" in text
+    assert "ニュートラル復帰" in text
+    assert "ボタン入力" in text
     assert "保存済みペアリング情報を使う再接続" in text
-    assert "Joy-Con R の ABXY" in text
-    assert "hold / circle" in text
+    assert "Joy-Con L/R も部分的に動作確認済み" in text
+    assert "確認済み範囲と未確認範囲の詳細は Hardware Guide" in text
+    assert "hold / circle" not in text
+    assert "active reconnect" not in text
 
 
 def test_readme_records_current_switch_model_and_firmware_evidence() -> None:
@@ -77,11 +78,6 @@ def test_readme_documents_single_joycon_public_api_and_scope() -> None:
         "Pro Controller、Joy-Con L、Joy-Con R では `key_store_path` を分けてください",
         "`JoyConPair` は未実装",
         "Joy-Con R で左スティックや十字キー",
-        "Joy-Con L/R の SR+SL 登録",
-        "利用者指定色",
-        "Joy-Con L の D-pad",
-        "Joy-Con R の ABXY",
-        "補正画面の完了は確認対象外",
     ):
         assert token in text
 
@@ -130,6 +126,7 @@ def test_readme_keeps_detailed_hardware_and_key_store_guidance_in_docs() -> None
         "複数の接続先",
         "swbt-probe pair",
         "full observed subcommand handshake",
+        "active reconnect 後の ABXY",
         "active bond reuse reconnect",
         "pairing-free incoming bond reuse",
     ):

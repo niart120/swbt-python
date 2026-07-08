@@ -219,11 +219,10 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
         "1 つの controller profile",
         "| Joy-Con L | partially verified",
         "| Joy-Con R | partially verified",
-        "active reconnect 後の ABXY 入力",
-        "横持ち Joy-Con でのスティック補正 UI 完了",
-        "SR+SL 登録",
+        "保存済みペアリング情報を使った接続後の ABXY 入力",
+        "Joy-Con L/R の登録と利用者指定色",
         "SDP の細部一致",
-        "OS / ドングル / firmware をまたぐ互換性",
+        "OS / ドングル / ファームウェアをまたぐ互換性",
         "対象機器側でコントローラー接続画面を開いて接続します",
         "接続成功を保証するものではありません",
         "No Bond",
@@ -240,7 +239,7 @@ def test_hardware_doc_separates_confirmed_unconfirmed_and_troubleshooting() -> N
     assert "| Linux | supported |" not in text
     assert "| macOS | supported |" not in text
     assert "macOS 15.7.7" in text
-    assert "Button 入力の反映" in text
+    assert "ボタン入力の反映" in text
     assert "unsupported / untrusted" not in text
     assert "experimental" + " target" not in text
     assert "準備" + "候補" not in text
@@ -262,10 +261,9 @@ def test_hardware_doc_has_controller_profile_verification_matrix() -> None:
         "| Joy-Con L | partially verified",
         "| Joy-Con R | partially verified",
         "Button A / L / R / 十字キー / 左スティック / 右スティック",
-        "Joy-Con R device name",
-        "`0x22` ACK 互換処理",
-        "active reconnect 後の ABXY 入力",
-        "SR+SL 登録",
+        "Joy-Con R としての登録",
+        "ABXY 入力",
+        "ニュートラル復帰",
         "別の `key_store_path` を使う",
     ):
         assert token in text
@@ -311,7 +309,7 @@ def test_agent_brief_keeps_generation_on_implemented_public_api() -> None:
         "Do not invent `JoyConPair`",
         "Do not show low-level Joy-Con profile classes",
         "Do not present Joy-Con hardware compatibility beyond the recorded Windows 11",
-        "full Joy-Con stick calibration UI completion",
+        "pairing-free incoming bond reuse",
         "Do not import internal modules",
     ):
         assert token in text

@@ -41,9 +41,10 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "トレース出力設定の `diagnostics`",
         "`key_store_path` を分けてください",
         "`list_adapters()` と `AdapterInfo`",
-        "Joy-Con R は SR+SL 登録、`0x22` ACK 互換処理、"
-        "active reconnect 後の ABXY 入力、利用者指定色を確認済み",
-        "横持ち Joy-Con の UI 制約",
+        "Joy-Con L/R は Windows 11 / CSR8510 A10 / WinUSB / "
+        "Switch 2 firmware 22.1.0 で部分的に動作確認済み",
+        "確認済み範囲は Joy-Con としての登録、利用者指定色、対応するボタン入力",
+        "詳細な検証状態は `docs/hardware.md` と `spec/hardware-test-log.md` を正本とします",
     ):
         assert token in text
 
@@ -68,6 +69,7 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
     assert "`ConnectionResult` は `route`" not in text
     assert "利用者向け生成 API" not in text
     assert "Joy-Con R、再接続、通常入力反映は未検証" not in text
+    assert "`0x22` ACK" not in text
 
     assert 'version = "0.2.0"' in pyproject_text
     assert 'name = "swbt-python"' in lock_text
