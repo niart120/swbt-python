@@ -91,6 +91,7 @@ repo-local skill は `.agents/skills` を正本として管理する。`.github/
 - `agentic-self-review`: 仕様変更、実装、PR 前に gate 結果と未検証リスクを整理する。
 - `spec-format`: `spec/wip` / `spec/complete` の作業仕様を作成、更新、完了移動する。
 - `dev-journal`: 小さい設計観測や先送り事項を `spec/dev-journal.md` に記録する。
+- `docs-wording`: README、docs、release notes の文言整理で、swbt-python 固有の訳語と残す英語表記をそろえる。
 - `source-audit`: Switch HID、Bumble、既存実装、実機ログ由来の値を根拠分類して記録する。
 - `hardware-harness`: Bumble adapter、Bluetooth dongle、Switch 実機を使う検証の承認境界と記録項目を確認する。
 - `tdd-workflow`: TDD Test List から red / green / refactor を進める。

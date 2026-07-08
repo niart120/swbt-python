@@ -32,12 +32,15 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "## 0.2.0",
         "Breaking changes",
         "Migration",
+        "New public API",
+        "v0.1.1 から利用者のコードに影響する破壊的変更",
         "`SwitchGamepad(...)` ではコントローラーを作成できなくなりました",
-        "`JoyCon(\"left\", ...)` / `JoyCon(\"right\", ...)`",
-        "`transport=...`、`profile=...`、`device_name=...`",
-        "`ConnectionResult` は `route`、`status`、`peer_address`、`peer_count`",
+        "`SwitchGamepadConfig(...)` と `SwitchGamepad.from_config(...)`",
+        "`SwitchGamepad(..., transport=...)` と `SwitchGamepad(..., device_name=...)`",
+        "`HidDeviceTransport`、`BondedPeer`、`DisconnectRequestResult`",
         "トレース出力設定の `diagnostics`",
         "`key_store_path` を分けてください",
+        "`list_adapters()` と `AdapterInfo`",
         "Joy-Con R、再接続、通常入力反映は未検証",
     ):
         assert token in text
@@ -47,14 +50,21 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "|---|---|---|",
         "| `SwitchGamepad(...)` | `ProController(...)` | "
         "`SwitchGamepad` は共通インターフェース / 型注釈用。 |",
-        '| `JoyCon("left", ...)` | `JoyConL(...)` | Joy-Con（L）相当の具象コントローラー。 |',
-        '| `JoyCon("right", ...)` | `JoyConR(...)` | Joy-Con（R）相当の具象コントローラー。 |',
-        "| `SwitchGamepadConfig(...)` | 公開 API から削除 | "
-        "内部実行時 / テスト設定専用。 |",
-        "| `transport=FakeHidTransport` | 内部テストのみ | "
-        "利用者向け生成 API では transport の差し替えを受け付けない。 |",
+        "| `SwitchGamepadConfig(...)` | 各具象クラスの constructor 引数 | "
+        "`from_config()` は公開 API から削除。 |",
+        "| `SwitchGamepad(..., transport=...)` | 公開 API では移行先なし | "
+        "transport 差し替えは内部テスト用。 |",
+        "| `SwitchGamepad(..., device_name=...)` | "
+        "`ProController(...)` / `JoyConL(...)` / `JoyConR(...)` | "
+        "HID identity は具象クラスが選ぶ。 |",
+        "| `from swbt import HidDeviceTransport, BondedPeer, DisconnectRequestResult` | "
+        "公開 API から削除 | transport 内部型はトップレベル export しない。 |",
     ):
         assert row in text
+
+    assert '`JoyCon("left", ...)`' not in text
+    assert "`ConnectionResult` は `route`" not in text
+    assert "利用者向け生成 API" not in text
 
     assert 'version = "0.2.0"' in pyproject_text
     assert 'name = "swbt-python"' in lock_text

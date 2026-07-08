@@ -1,6 +1,6 @@
 ---
 name: agentic-sdd
-description: "swbt-python の Agentic Spec-Driven Development を開始、継続する入口 skill。ユーザが Agentic SDD、次の作業単位、spec/initial からの実装、spec/wip の plan/tasks/implement/gate loop、Intent Delta、TDD と gate を含む進行を求めるときに使う。"
+description: "swbt-python の Agentic Spec-Driven Development を開始、継続するentry point skill。ユーザが Agentic SDD、次の作業単位、spec/initial からの実装、spec/wip の plan/tasks/implement/gate loop、Intent Delta、TDD と gate を含む進行を求めるときに使う。"
 ---
 
 # Agentic SDD
