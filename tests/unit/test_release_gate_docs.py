@@ -32,9 +32,12 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "## 0.2.0",
         "Breaking changes",
         "Migration",
-        "Pro Controller / Joy-Con L / Joy-Con R",
-        "`key_store_path` を分ける",
-        "Joy-Con R、reconnect、通常入力反映は未検証",
+        "`SwitchGamepad(...)` ではコントローラーを作成できなくなりました",
+        "`JoyCon(\"left\", ...)` / `JoyCon(\"right\", ...)`",
+        "`transport=...`、`profile=...`、`device_name=...`",
+        "`ConnectionResult` は `route`、`status`、`peer_address`、`peer_count`",
+        "`key_store_path` を分けてください",
+        "Joy-Con R、再接続、通常入力反映は未検証",
     ):
         assert token in text
 
@@ -42,13 +45,13 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "| Old API | New API | Notes |",
         "|---|---|---|",
         "| `SwitchGamepad(...)` | `ProController(...)` | "
-        "`SwitchGamepad` は shared interface / 型注釈用。 |",
-        '| `JoyCon("left", ...)` | `JoyConL(...)` | 左 Joy-Con 相当の concrete controller。 |',
-        '| `JoyCon("right", ...)` | `JoyConR(...)` | 右 Joy-Con 相当の concrete controller。 |',
-        "| `SwitchGamepadConfig(...)` | public API から削除 | "
-        "internal runtime / test setup 専用。 |",
-        "| `transport=FakeHidTransport` | internal tests only | "
-        "利用者向け constructor には transport injection を出さない。 |",
+        "`SwitchGamepad` は共通インターフェース / 型注釈用。 |",
+        '| `JoyCon("left", ...)` | `JoyConL(...)` | Joy-Con（L）相当の具象コントローラー。 |',
+        '| `JoyCon("right", ...)` | `JoyConR(...)` | Joy-Con（R）相当の具象コントローラー。 |',
+        "| `SwitchGamepadConfig(...)` | 公開 API から削除 | "
+        "内部実行時 / テスト設定専用。 |",
+        "| `transport=FakeHidTransport` | 内部テストのみ | "
+        "利用者向け生成 API では transport の差し替えを受け付けない。 |",
     ):
         assert row in text
 
