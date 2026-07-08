@@ -38,7 +38,7 @@
 - Controller class の説明では、`concrete controller` が `具象クラス` に置き換えられた。`SwitchGamepad` を共通 interface として使う説明は残っている。
 - `adapter`、`key_store_path`、`report_period_us`、`controller_colors` の説明は短縮された。public controller では `adapter` が必須であること、profile ごとの既定周期、HID Device 表示名、controller color の作成時固定、SPI read 応答の byte layout は削除された。
 - Resource scope と connection の説明では、`advertising`、`pairing`、`reconnect`、`report loop` などが、HID 接続待ち受け、ペアリング、再接続、レポートループなどに置き換えられた。
-- 接続 API の表では、pairing fallback をしないこと、bond の語、current peer の語が削られ、保存済み接続情報、接続結果、タイムアウト、接続失敗という利用者向けの語が増えた。
+- 接続 API の表では、pairing fallback をしないこと、bond の語、current peer の語が削られ、保存済みペアリング情報、接続結果、タイムアウト、接続失敗という利用者向けの語が増えた。
 - 入力 API の表では、button set、stick、report、release report などの表記が、ボタン入力状態、スティック入力、レポート、押上レポートなどに置き換えられた。`apply(state)` が差分適用ではないこと、`tap()` が接続済みを要求することは削除された。
 - `Input Model` は Joy-Con の後ろから `Observation` の前へ移動された。API の並びとして、入力 API の直後に入力モデルを説明する構成に変わった。
 - IMU、Stick、InputState、ControllerColors の説明は、日本語の補足が増えた一方で、raw、frame、sample、sensor、immutable state などの英語語彙は一部残った。
@@ -77,7 +77,7 @@
 | periodic report loop | レポートループ | periodic report loop、report loop | 入力レポート送信の周期処理を説明する語。 |
 | input report | 入力レポート / レポート | input report、report | API 説明では `レポート` が増えているが、HID 文脈では `入力レポート` の方が曖昧さが少ない。 |
 | key store | key store / 接続情報ファイル | JSON key store path、接続情報ファイル | README では利用者向けに `接続情報ファイル`、API 詳細では `key store` が残る。二層に分ける候補。 |
-| bond | 保存済み接続情報 / ペアリング情報 | bond | 利用者向け説明では `bond` を避ける流れ。protocol / transport 内部では残す候補。 |
+| bond | 保存済みペアリング情報 / ペアリング情報 | bond | `bond` は単なる接続状態ではなく、ペアリング後に保存される鍵と相手機器情報を指す。利用者向け説明では `保存済みペアリング情報` を第一候補にする。短く書く箇所では `ペアリング情報` を使う。 |
 | button | ボタン | button | enum 名や型名はそのまま、説明文では `ボタン`。 |
 | stick | スティック | stick | 型名 `Stick` はそのまま、説明文では `スティック入力`。 |
 | D-pad | 十字キー | D-pad | Joy-Con の説明では `十字キー` に寄せる流れ。 |

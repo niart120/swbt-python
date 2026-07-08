@@ -117,9 +117,9 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 | method | contract |
 |---|---|
 | `pair(timeout=None)` | 初回ペアリング用API。HID 接続待ち受けを開始し、ホストからの接続を待つ。 |
-| `reconnect(timeout=None)` | 保存済み接続情報が 1 件ある場合だけペアリング情報を用いた再接続を試みる。 |
+| `reconnect(timeout=None)` | 保存済みペアリング情報が 1 件ある場合だけ、そのペアリング情報を用いた再接続を試みる。 |
 | `try_reconnect(timeout=None)` | 再接続を試みた結果を `ConnectionResult` として返す。 |
-| `connect(timeout=None, allow_pairing=False)` | 保存済み接続情報があれば reconnect を優先し、ない場合は `allow_pairing=True` のときだけペアリングを試みる。 |
+| `connect(timeout=None, allow_pairing=False)` | 保存済みペアリング情報があれば reconnect を優先し、ない場合は `allow_pairing=True` のときだけペアリングを試みる。 |
 | `try_connect(timeout=None, allow_pairing=False)` | `connect()` と同じ戦略で接続を試み、接続結果を `ConnectionResult` として返す。 |
 
 `connect()` / `reconnect()` は成功した場合だけ値が返却されます。接続できない場合は `ConnectionFailedError`、タイムアウト時は `ConnectionTimeoutError` が送出されます。 現在の接続先が複数ある `key_store_path` が渡されていた場合、`InvalidKeyStoreError` が送出されます。
