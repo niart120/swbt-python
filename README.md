@@ -2,13 +2,13 @@
 
 NX 向けの仮想 Bluetooth HID 入力デバイスを Python から扱うためのライブラリです。
 
-本ライブラリは pre-alpha 版です。実機での動作は Bluetoothドングル、ドライバー、対象機器のFWバージョンに依存します。
+本ライブラリは pre-alpha 版です。実機での動作は Bluetooth ドングル、ドライバー、対象機器の FW バージョンに依存します。
 
 ## 必要なもの
 
 - Python 3.12 以降
 - uv
-- Bumble が利用可能な専用 USB Bluetooth　ドングル
+- Bumble が利用可能な専用 USB Bluetooth ドングル
 
 ## インストール
 
@@ -56,12 +56,12 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Pro Controller 相当の仮想デバイスを作成しペアリング後にAボタン入力送信を行うコードの例です。
+Pro Controller 相当の仮想デバイスを作成し、ペアリング後に A ボタン入力を送信するコードの例です。
 接続情報ファイルの形式、入力 API の使い分けなどに関する詳しい説明は [Usage Guide](https://niart120.github.io/swbt-python/usage/) にあります。
 
 ### Joy-Con L/R
 
-Joy-Con 相当の仮想デバイスは `JoyConL(...)` または `JoyConR(...)` で作成します。接続、入力はの扱い方は `ProController` と同じです。
+Joy-Con 相当の仮想デバイスは `JoyConL(...)` または `JoyConR(...)` で作成します。接続と入力の扱い方は `ProController` と同じです。
 
 ```python
 import asyncio
@@ -83,7 +83,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-"持ち方/順番を変える" 画面でJoy-Con としてペアリングする場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送信する必要があります。
+"持ち方/順番を変える" 画面で Joy-Con としてペアリングする場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送信する必要があります。
+
+Pro Controller、Joy-Con L、Joy-Con R では `key_store_path` を分けてください。Joy-Con L で右スティックや A/B/X/Y、Joy-Con R で左スティックや十字キーを入力すると `UnsupportedInputError` が送出されます。`JoyConPair` は未実装です。
 
 ## 接続方法
 
@@ -93,11 +95,15 @@ asyncio.run(main())
 
 ### 確認済み構成
 
-2026-07-04 時点では、Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で、pairing、reconnect、Button A、D-pad、left / right stick、neutral 後の入力残りなしを確認済みです。
+2026-07-07 時点では、Windows 11 / CSR8510 A10 / WinUSB / `usb:0` / Switch 2 firmware 22.1.0 で、Pro Controller のペアリング、保存済みペアリング情報を使う再接続、Button A、D-pad、left / right stick、neutral 後の入力残りなしを確認済みです。
+
+同じ Windows 構成で、Joy-Con L/R の SR+SL 登録、利用者指定色、Joy-Con L の D-pad、Joy-Con R の ABXY も確認済みです。Joy-Con L/R のスティックは hold / circle の入力送信まで確認し、Switch UI の横持ち Joy-Con 制約により補正画面の完了は確認対象外にしています。
+
+macOS 15.7.7 / CSR8510 A10 では、Pro Controller のペアリング、保存済みペアリング情報を使う active reconnect、Button 入力、neutral 後の入力残りなしを記録しています。
 
 ### 実験的構成
 
-Linux / macOS は experimental です。手順は Hardware Guide に整備されていますが、動作検証されていないことに留意してください。Bluetoothデバイスにアクセスできるか、ペアリングできるか、入力が反映されるかは未確認です。
+Linux は experimental です。手順は Hardware Guide に整備されていますが、専用 USB Bluetooth ドングルにアクセスできるか、ペアリングできるか、入力が反映されるかは未確認です。macOS は Pro Controller の限定観測だけで、Joy-Con、別ドングル、別ファームウェアでの互換性は未確認です。
 
 ## 開発
 

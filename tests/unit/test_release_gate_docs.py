@@ -41,7 +41,9 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "トレース出力設定の `diagnostics`",
         "`key_store_path` を分けてください",
         "`list_adapters()` と `AdapterInfo`",
-        "Joy-Con R、再接続、通常入力反映は未検証",
+        "Joy-Con R は SR+SL 登録、`0x22` ACK 互換処理、"
+        "active reconnect 後の ABXY 入力、利用者指定色を確認済み",
+        "横持ち Joy-Con の UI 制約",
     ):
         assert token in text
 
@@ -65,6 +67,7 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
     assert '`JoyCon("left", ...)`' not in text
     assert "`ConnectionResult` は `route`" not in text
     assert "利用者向け生成 API" not in text
+    assert "Joy-Con R、再接続、通常入力反映は未検証" not in text
 
     assert 'version = "0.2.0"' in pyproject_text
     assert 'name = "swbt-python"' in lock_text

@@ -15,12 +15,13 @@ def test_readme_documents_confirmed_and_unconfirmed_hardware() -> None:
     assert "CSR8510 A10" in text
     assert "WinUSB" in text
     assert "`usb:0`" in text
-    assert "### 試験的構成" in text
+    assert "### 実験的構成" in text
     assert "Linux" in text
     assert "macOS" in text
     assert "experimental" in text
     assert "手順は Hardware Guide に整備されています" in text
-    assert "動作検証されていないことに留意してください" in text
+    assert "Pro Controller の限定観測" in text
+    assert "Joy-Con、別ドングル、別ファームウェアでの互換性は未確認" in text
     assert "unsupported" not in text
     assert "experimental" + " target" not in text
     assert "準備" + "候補" not in text
@@ -31,14 +32,14 @@ def test_readme_documents_confirmed_and_unconfirmed_hardware() -> None:
 def test_readme_documents_dedicated_adapter_and_driver_notes() -> None:
     text = README.read_text(encoding="utf-8")
 
-    assert "専用 USB Bluetooth dongle" in text
+    assert "専用 USB Bluetooth ドングル" in text
     assert "https://niart120.github.io/swbt-python/hardware/" in text
     assert "https://zadig.akeo.ie/" in text
     assert "Zadig" in text
     assert "WinUSB" in text
-    assert "WinUSB / libwdi driver" in text
+    assert "WinUSB / libwdi ドライバー" in text
     assert "通常 Bluetooth 機能" in text
-    assert "troubleshooting" in text
+    assert "トラブルシューティング" in text
 
 
 def test_readme_reflects_button_a_and_neutral_observation() -> None:
@@ -48,7 +49,9 @@ def test_readme_reflects_button_a_and_neutral_observation() -> None:
     assert "neutral" in text
     assert "入力残りなし" in text
     assert "D-pad" in text
-    assert "reconnect" in text
+    assert "保存済みペアリング情報を使う再接続" in text
+    assert "Joy-Con R の ABXY" in text
+    assert "hold / circle" in text
 
 
 def test_readme_records_current_switch_model_and_firmware_evidence() -> None:
@@ -63,20 +66,22 @@ def test_readme_documents_single_joycon_public_api_and_scope() -> None:
     text = README.read_text(encoding="utf-8")
 
     for token in (
-        "### 単体 Joy-Con L/R",
+        "### Joy-Con L/R",
         "JoyConL(...)",
         "JoyConR(...)",
         "from swbt import Button, JoyConL, Stick",
         'key_store_path="switch-left-joycon-bond.json"',
         "await left.tap(Button.SR, Button.SL)",
         "`UnsupportedInputError`",
-        "SR+SL を送ります",
+        "SR+SL を送信する必要があります",
         "Pro Controller、Joy-Con L、Joy-Con R では `key_store_path` を分けてください",
         "`JoyConPair` は未実装",
-        "Switch UI で Joy-Con として登録",
-        "Joy-Con R、reconnect",
-        "SDP 完全一致",
-        "OS / dongle / firmware をまたぐ互換性は未検証",
+        "Joy-Con R で左スティックや十字キー",
+        "Joy-Con L/R の SR+SL 登録",
+        "利用者指定色",
+        "Joy-Con L の D-pad",
+        "Joy-Con R の ABXY",
+        "補正画面の完了は確認対象外",
     ):
         assert token in text
 

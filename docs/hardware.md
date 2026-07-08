@@ -78,7 +78,7 @@ brew install pkgconf openssl@3
 
 Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用アダプタを使う前に確認する項目です。接続成功を保証するものではありません。
 
-Linux 上のアダプタ列挙、アダプタ open、HID 接続待ち受け、ペアリング、再接続、入力反映はまだ確認していません。macOS CI 上では依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までは確認済みです。CI では USB Bluetooth ドングルを使いません。
+Linux 上のアダプタ列挙、アダプタ open、HID 接続待ち受け、ペアリング、再接続、入力反映はまだ確認していません。macOS 15.7.7 / CSR8510 A10 では Pro Controller の限定観測がありますが、Joy-Con profile、別ドングル、別ファームウェアでの互換性は未確認です。macOS CI 上では依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までは確認済みです。CI では USB Bluetooth ドングルを使いません。
 
 ### Adapter Name
 
@@ -126,18 +126,20 @@ key store はコントローラー種別ごとに分けてください。Pro Con
 
 | Controller profile | Status | Verified scope | Not verified | Key store |
 |---|---|---|---|---|
-| Pro Controller | verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 でペアリング、再接続、Button A / 十字キー / 左スティック / 右スティック、ニュートラル後の入力残りなしを確認。macOS 15.7.7 / CSR8510 A10 でもペアリング、active reconnect、Button 入力、ニュートラル後の入力残りなしを確認 | Linux、CSR8510 A10 以外のドングル、別 firmware、ペアリングなしの incoming 経路でのペアリング情報再利用 | 対象機器と controller profile ごとに別の `key_store_path` を使う |
-| Joy-Con L | limited observation | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con L device name、device-info reply、subcommand 応答、SR+SL 登録のユーザ目視を記録 | 再接続 / 通常入力反映、SDP の細部一致、OS / ドングル / firmware をまたぐ互換性 | Pro Controller と Joy-Con R とは別の `key_store_path` を使う |
-| Joy-Con R | not verified | unit tests と fake transport integration で profile selection と unsupported input を確認 | ペアリング、再接続 / 通常入力反映、Switch UI 登録、OS / ドングル / firmware をまたぐ互換性 | Pro Controller と Joy-Con L とは別の `key_store_path` を使う |
+| Pro Controller | verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 でペアリング、保存済みペアリング情報を使う再接続、Button A / L / R / 十字キー / 左スティック / 右スティック、ニュートラル後の入力残りなし、close 後の接続解除を確認。macOS 15.7.7 / CSR8510 A10 でもペアリング、active reconnect、Button 入力、ニュートラル後の入力残りなしを確認 | Linux、CSR8510 A10 以外のドングル、別 firmware、ペアリングなしの incoming 経路でのペアリング情報再利用 | 対象機器と controller profile ごとに別の `key_store_path` を使う |
+| Joy-Con L | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con L device name、device-info reply、subcommand 応答、SR+SL 登録、利用者指定色、active reconnect 後の D-pad 入力を確認。left stick は hold / circle の trace とユーザ目視まで確認 | 横持ち Joy-Con でのスティック補正 UI 完了、SDP の細部一致、OS / ドングル / firmware をまたぐ互換性 | Pro Controller と Joy-Con R とは別の `key_store_path` を使う |
+| Joy-Con R | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con R device name、device-info reply、`0x22` ACK 互換処理、SR+SL 登録、active reconnect 後の ABXY 入力、利用者指定色を確認。right stick は hold / circle の trace とユーザ目視まで確認 | 横持ち Joy-Con でのスティック補正 UI 完了、SDP の細部一致、OS / ドングル / firmware をまたぐ互換性 | Pro Controller と Joy-Con L とは別の `key_store_path` を使う |
 
 ## Confirmed Behavior
 
-2026-07-04 時点では、Windows 11、CSR8510 A10、WinUSB / libwdi、Switch 2 firmware 22.1.0 の組み合わせで次を確認済みです。
+2026-07-07 時点では、Windows 11、CSR8510 A10、WinUSB / libwdi、Switch 2 firmware 22.1.0 の組み合わせで次を確認済みです。
 
-- 初回ペアリング。
-- 保存済みペアリング情報を使う再接続。
-- Button A、十字キー、左スティック / 右スティックの入力反映。
-- ニュートラル後に入力が残らないこと。
+- Pro Controller の初回ペアリング、保存済みペアリング情報を使う再接続、full observed subcommand handshake。
+- Pro Controller の Button A / L / R、十字キー、左スティック / 右スティック、ニュートラル後の入力残りなし、close 後の接続解除。
+- Joy-Con L/R の SR+SL 登録と利用者指定色。
+- Joy-Con L の active reconnect 後の D-pad 入力。
+- Joy-Con R の active reconnect 後の ABXY 入力。
+- Joy-Con L/R の有効な片側スティックの hold / circle 送信。Switch UI は横持ち Joy-Con のスティック補正を拒否するため、補正画面の完了は確認済み範囲に含めません。
 
 2026-07-05 時点では、macOS 15.7.7、CSR8510 A10、Homebrew `libusb`、Switch 2、adapter `usb:0` の組み合わせで次を確認済みです。
 
