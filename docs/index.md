@@ -9,5 +9,3 @@
 - [docs/hardware.md](hardware.md): 実機、Bluetooth adapter、driver、pairing / reconnect、troubleshooting。
 - [docs/agent-brief.md](agent-brief.md): AI エージェントが未実装 API を作らないための短い仕様。
 - [docs/release-notes.md](release-notes.md): release ごとの breaking change、migration、検証範囲。
-
-実機や Bluetooth adapter に依存する条件は [docs/hardware.md](hardware.md) にあります。
