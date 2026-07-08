@@ -4,7 +4,7 @@
 
 ## Minimal Example
 
-初回実行では `allow_pairing=True` を指定し、対象機器をコントローラー接続画面に置きます。
+初回実行では `allow_pairing=True` を指定し、対象機器側はコントローラー接続画面にセットします。
 
 ```python
 import asyncio
@@ -178,7 +178,7 @@ async with JoyConL(
 
 `InputState` + `apply()` でも同じ検査を行います。Joy-Con L に右スティック入力、Joy-Con R に左スティック入力や十字キー入力を含めると `UnsupportedInputError` になります。
 
-"持ち方/順番を変える" 画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送信します。
+"持ち方/順番を変える" 画面で Joy-Con として登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送信します。
 
 左右ペアを 1 つのコントローラーとして扱う `JoyConPair` は未実装です。
 
