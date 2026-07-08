@@ -1,7 +1,7 @@
 # Hardware
 
-`swbt-python` の実機接続では、PC の標準 Bluetooth 機能ではなく、Bumble から直接開く専用 USB Bluetooth dongle を使います。
-最初に driver と adapter 名を確認し、その後に対象機器側で controller pairing / search 画面を開いて接続します。
+`swbt-python` の実機接続では、PC の標準 Bluetooth 機能ではなく、Bumble から直接開く専用 USB Bluetooth ドングルを使います。
+最初にドライバーとアダプタ名を確認し、その後に対象機器側でコントローラー接続画面を開いて接続します。
 
 ## Setup
 
@@ -10,40 +10,34 @@
 | 項目 | 内容 |
 |---|---|
 | Python | Python 3.12 以降 |
-| USB Bluetooth dongle | PC の通常 Bluetooth 機能と共有しない専用 dongle |
-| 対象機器 | controller pairing / search 画面へ手動で移動できること |
+| USB Bluetooth ドングル | PC の通常 Bluetooth 機能と共有しない専用ドングル |
+| 対象機器 | "持ち方/順番を変える" 画面へ手動で移動できること |
 
 ### Driver / USB Access
 
-Bumble の `usb:` adapter は USB HCI transport を libusb 経由で使用します。
-ここでの driver 準備は、OS の Bluetooth 機能で使う driver ではなく、専用 dongle を Bumble から直接開くための OS 側設定を指します。
+Bumble の `usb:` アダプタは USB HCI transport を libusb 経由で使います。
+ここでのドライバー準備は、OS の Bluetooth 機能で使うドライバーではなく、専用ドングルを Bumble から直接開くための OS 側設定を指します。
 
 | OS | status | 準備 |
 |---|---|---|
-| Windows | supported | Zadig などで専用 dongle に WinUSB / libwdi driver を導入する |
-| Linux | experimental | `libusb-1.0` が使えること、USB デバイスにアクセスできること、kernel / BlueZ が対象 dongle を使用中でないことを確認する |
-| macOS | experimental | `libusb-1.0` が使えること、macOS Bluetooth stack が外付け HCI を使用しない設定になっていること、必要に応じて libusb の library path を指定する |
-
-#### Bumble USB Transport Requirements
-
-Bumble の `usb:` adapter は USB HCI transport を libusb 経由で扱います。Bumble の USB transport documentation では、`usb:` moniker、`libusb-1.0`、`usb_probe` / `lsusb` による列挙確認が示されています。
-
-`swbt-python` の lock file では Bumble 0.0.230 と `libusb1` / `libusb-package` dependency を固定しています。
+| Windows | supported | Zadig などで専用ドングルに WinUSB / libwdi ドライバーを導入する |
+| Linux | experimental | `libusb-1.0` が使えること、USB デバイスにアクセスできること、kernel / BlueZ が対象ドングルを使用中でないことを確認する |
+| macOS | experimental | `libusb-1.0` が使えること、macOS の Bluetooth stack が外付け HCI を使用しない設定になっていること、必要に応じて libusb の library path を指定する |
 
 #### Windows USB & Driver Setup
 
-Windows では、Zadig などで専用 USB Bluetooth dongle に WinUSB / libwdi driver を導入する必要があります。
+Windows では、Zadig などで専用 USB Bluetooth ドングルに WinUSB / libwdi ドライバーを導入する必要があります。
 
-[Zadig](https://zadig.akeo.ie/) は、Windows 上で WinUSB などの汎用 USB driver を対象デバイスへ入れるためのツールです。
+[Zadig](https://zadig.akeo.ie/) は、Windows 上で WinUSB などの汎用 USB ドライバーを対象デバイスへ入れるためのツールです。
 
-Zadig では次の順に進めます。
+Zadig での実施手順:
 
-- 専用 USB Bluetooth dongle を接続し、Zadig を管理者権限で起動する。
-- 対象の dongle を選択する。
-- 一覧に出ない場合は `Options > List All Devices` を使う。
-- 選択した USB デバイスの VID / PID が対象 dongle と一致することを確認する。
-- driver は `WinUSB` を選ぶ。
-- `Install Driver` を実行する。
+1. 専用 USB Bluetooth ドングルを接続し、Zadig を管理者権限で起動する。
+2. 対象のドングルを選択する。
+   - 一覧に出ない場合は `Options > List All Devices` を使う。
+3. 選択した USB デバイスの VID / PID が対象ドングルと一致することを確認する。
+4. ドライバーとして `WinUSB` を選ぶ。
+5. `Install Driver` を実行する。
 
 Zadig の操作画面と詳細: [Zadig 2.x User Guide](https://github.com/pbatard/libwdi/wiki/Zadig)。
 
@@ -51,11 +45,11 @@ Zadig の操作画面と詳細: [Zadig 2.x User Guide](https://github.com/pbatar
 
 Linux の手順はこの Hardware Guide に整備されていますが、動作検証されていないことに留意してください。
 
-Linux では、Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合、OS 側で `apt install libusb-1.0-0` が必要になることがあります。USB デバイスへのアクセス権を付け、kernel / BlueZ が dongle を使用中の場合は `hciconfig hciX down` などで解放する必要があります。
+Linux では、Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合、OS 側で `apt install libusb-1.0-0` が必要になることがあります。USB デバイスへのアクセス権を付け、kernel / BlueZ がドングルを使用中の場合は `hciconfig hciX down` などで解放する必要があります。
 
 #### macOS USB & Driver Setup
 
-macOS では、macOS Bluetooth stack が外付け HCI を使用しないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` の設定が必要になる場合があります。実行前に現在の値を確認します。
+macOS では、macOS の Bluetooth stack が外付け HCI を使用しないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` の設定が必要になる場合があります。実行前に現在の値を確認します。
 
 ```console
 nvram bluetoothHostControllerSwitchBehavior
@@ -80,17 +74,15 @@ uv run swbt-probe adapters --json
 brew install pkgconf openssl@3
 ```
 
-2026-07-05 の実機観測では、macOS 15.7.7、CSR8510 A10、Homebrew `libusb` 1.0.30、Bumble 0.0.230、Python 3.12.13、adapter `usb:0` で、pairing、HID control / interrupt L2CAP、保存済み bond を使う active reconnect、button 入力、neutral cleanup を確認しています。
-
 #### Linux / macOS Verification Scope
 
-Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用 adapter を使う前に確認する項目です。接続成功を保証するものではありません。
+Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用アダプタを使う前に確認する項目です。接続成功を保証するものではありません。
 
-Linux 上の adapter listing、adapter open、HID advertising、pairing、reconnect、input reflection はまだ確認していません。macOS CI で確認するのは、依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までです。USB Bluetooth dongle は使いません。
+Linux 上のアダプタ列挙、アダプタ open、HID 接続待ち受け、ペアリング、再接続、入力反映はまだ確認していません。macOS 15.7.7 / CSR8510 A10 では Pro Controller の限定観測がありますが、Joy-Con profile、別ドングル、別ファームウェアでの互換性は未確認です。macOS CI 上では依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までは確認済みです。CI では USB Bluetooth ドングルを使いません。
 
 ### Adapter Name
 
-driver 準備後、Bumble から見える adapter 名を確認します。
+ドライバー準備後、Bumble から見えるアダプタ名を確認します。
 
 Python から確認する場合は `list_adapters()` を使います。
 
@@ -101,7 +93,7 @@ for info in list_adapters():
     print(info.name, info.aliases)
 ```
 
-`info.name` は `ProController(adapter=info.name)` など concrete controller の `adapter` に渡す値です。`list_adapters()` は専用 USB Bluetooth dongle 候補を列挙します。対象機器本体や周辺 Bluetooth host は列挙しません。
+`info.name` は `ProController(adapter=info.name)` など具象コントローラーの `adapter` に渡す値です。`list_adapters()` は専用 USB Bluetooth ドングル候補を列挙します。対象機器本体や周辺 Bluetooth ホストは列挙しません。
 
 CLI から確認する場合は `swbt-probe adapters --json` を使います。
 
@@ -109,17 +101,17 @@ CLI から確認する場合は `swbt-probe adapters --json` を使います。
 swbt-probe adapters --json
 ```
 
-`list_adapters()` と `swbt-probe adapters --json` は adapter 一覧確認用です。USB descriptor の読み取りは行いますが、Switch に向けた pairing、HID advertising、report loop は開始しません。Bumble transport として device handle を開きません。
+`list_adapters()` と `swbt-probe adapters --json` はアダプタ一覧確認用です。USB descriptor の読み取りは行いますが、Switch に向けたペアリング、HID 接続待ち受け、レポートループは開始しません。Bumble transport としてデバイスハンドルを開きません。
 
-`adapter` には `usb:0` のような Bumble adapter 名を指定します。adapter 名は PC の接続状態で変わるため、コード例の `usb:0` を固定値として扱わないでください。
+`adapter` には `usb:0` のような Bumble アダプタ名を指定します。アダプタ名は PC の接続状態で変わるため、コード例の `usb:0` を固定値として扱わないでください。
 
 ## Pairing And Reconnect
 
-`key_store_path` は pairing 情報を保存する JSON key store path です。保存済み bond を使う場合は `ProController(adapter="usb:0", key_store_path="switch-bond.json")` のように指定します。
+`key_store_path` はペアリング情報を保存する JSON key store path です。保存済みペアリング情報を使う場合は `ProController(adapter="usb:0", key_store_path="switch-bond.json")` のように指定します。
 
 ### Profile-specific Key Stores
 
-key store は controller profile ごとに分けてください。Pro Controller 相当、Joy-Con L 相当、Joy-Con R 相当のように HID identity や SDP record が異なる profile を同じ key store に混ぜると、保存済み bond と実際に advertising する identity の対応が崩れます。
+key store はコントローラー種別ごとに分けてください。Pro Controller 相当、Joy-Con L 相当、Joy-Con R 相当のように HID identity や SDP record が異なる profile を同じ key store に混ぜると、保存済みペアリング情報と接続待ち受け時の identity の対応が崩れます。
 
 運用例:
 
@@ -127,80 +119,72 @@ key store は controller profile ごとに分けてください。Pro Controller
 - Joy-Con L 相当: `keys/joy-con-left.json`
 - Joy-Con R 相当: `keys/joy-con-right.json`
 
-同じ profile でも、接続先の対象機器を分ける場合は key store も分けます。1 つの key store は「1 つの対象機器」と「1 つの controller profile」の組み合わせに固定してください。
+同じ profile でも、接続先の対象機器を分ける場合は key store も分けてください。1 つの key store は「1 つの対象機器」と「1 つの controller profile」の組み合わせに固定します。
 
 ## Controller Profile Verification Matrix
+以下の表は、各コントローラー種別の動作確認状況をまとめたものです。
 
 | Controller profile | Status | Verified scope | Not verified | Key store |
 |---|---|---|---|---|
-| Pro Controller | verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で pairing、reconnect、Button A / D-pad / left stick / right stick、neutral cleanup を確認。macOS 15.7.7 / CSR8510 A10 でも pairing、active reconnect、Button 入力、neutral cleanup を確認 | Linux、CSR8510 A10 以外の dongle、別 firmware、pairing-free incoming bond reuse | Use a separate `key_store_path` for each target device and controller profile |
-| Joy-Con L | limited observation | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con L device name、device-info reply、subcommand 応答、SR+SL registration のユーザ目視を記録 | reconnect / normal input reflection、SDP の細部一致、OS / dongle / firmware をまたぐ互換性 | Use a separate `key_store_path` from Pro Controller and Joy-Con R |
-| Joy-Con R | not verified | unit tests と fake transport integration で profile selection と unsupported input を確認 | pairing、reconnect / normal input reflection、Switch UI 登録、OS / dongle / firmware をまたぐ互換性 | Use a separate `key_store_path` from Pro Controller and Joy-Con L |
-
-Joy-Con profile の実機互換は限定的な観測です。2026-07-06 の Joy-Con L run では、`Joy-Con (L)` の device name、Joy-Con L device-info reply、Switch からの subcommand 応答、neutral report loop、clean close を trace で確認しました。SDP policy 反映後の retest では、Joy-Con L の観測済み初期 sequence `0x02` / `0x08` / `0x10` / `0x03` / `0x04` / `0x40` / `0x30` / `0x48` に返信した後、`Button.SR` + `Button.SL` を約 5 秒間押下状態で periodic report に乗せ、ユーザ目視では Switch UI で Joy-Con として登録されました。Joy-Con 固有の reconnect、通常入力反映、Joy-Con R、SDP の細部一致、OS / dongle / firmware をまたぐ互換性は確認済みとして扱わないでください。
-
-Bumble adapter open、HID advertising、Switch pairing、Switch-facing output report / subcommand handling、periodic input report loop は実機または USB Bluetooth dongle に触れる操作です。Joy-Con profile でこれらを試す場合も、対象 adapter、実行 command、Switch-facing 動作範囲、cleanup plan を明示したうえで、人間の承認を得てから実行してください。
-
-`connect(timeout=..., allow_pairing=True)` は保存済み bond があれば reconnect を優先し、bond がない場合だけ pairing fallback へ進みます。初回 pairing では対象機器を controller pairing / search 画面に置いてください。
-
-`reconnect(timeout=...)` は key store に current bonded peer が 1 件ある場合だけ active reconnect を試します。pairing fallback はしません。
-
-1 つの key store に複数の current peers を混ぜないでください。複数 current peers は `multiple current peers` の不正状態として扱い、どの peer を使うかを推測しません。別対象機器には別の `key_store_path` を使ってください。
+| Pro Controller | verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 でペアリング、保存済みペアリング情報を使う再接続、Button A / L / R / 十字キー / 左スティック / 右スティック、ニュートラル後の入力残りなし、close 後の接続解除を確認。macOS 15.7.7 / CSR8510 A10 でもペアリング、保存済みペアリング情報を使う再接続、ボタン入力、ニュートラル復帰を確認 | Linux、CSR8510 A10 以外のドングル、別 firmware、ペアリングなしで対象機器から接続した場合のペアリング情報再利用 | 対象機器と controller profile ごとに別の `key_store_path` を使う |
+| Joy-Con L | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con L としての登録、利用者指定色、保存済みペアリング情報を使った接続後の十字キー入力を確認。左スティックは入力送信とニュートラル復帰まで確認 | SDP の細部一致、OS / ドングル / ファームウェアをまたぐ互換性 | Pro Controller と Joy-Con R とは別の `key_store_path` を使う |
+| Joy-Con R | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con R としての登録、利用者指定色、保存済みペアリング情報を使った接続後の ABXY 入力を確認。右スティックは入力送信とニュートラル復帰まで確認 | SDP の細部一致、OS / ドングル / ファームウェアをまたぐ互換性 | Pro Controller と Joy-Con L とは別の `key_store_path` を使う |
 
 ## Confirmed Behavior
 
-2026-07-04 時点では、Windows 11、CSR8510 A10、WinUSB / libwdi、Switch 2 firmware 22.1.0 の組み合わせで次を確認済みです。
+2026-07-07 時点では、Windows 11、CSR8510 A10、WinUSB / libwdi、Switch 2 firmware 22.1.0 の組み合わせで次を確認済みです。
 
-- 初回 pairing。
-- 保存済み pairing 情報を使う reconnect。
-- Button A、D-pad、left / right stick の入力反映。
-- neutral 後に入力が残らないこと。
+- Pro Controller の初回ペアリング、保存済みペアリング情報を使う再接続、主要な初期化シーケンス。
+- Pro Controller の Button A / L / R、十字キー、左スティック / 右スティック、ニュートラル復帰、切断。
+- Joy-Con L/R の登録と利用者指定色。
+- Joy-Con L の十字キー入力、Joy-Con R の ABXY 入力。
+- Joy-Con L/R の対応スティック入力送信とニュートラル復帰。
 
 2026-07-05 時点では、macOS 15.7.7、CSR8510 A10、Homebrew `libusb`、Switch 2、adapter `usb:0` の組み合わせで次を確認済みです。
 
-- 初回 pairing。
-- 保存済み pairing 情報を使う active reconnect。
-- 主要 subcommand への応答を含む初期化 sequence。
-- Button 入力の反映。
-- neutral 後に入力が残らないこと。
+- 初回ペアリング。
+- 保存済みペアリング情報を使う再接続。
+- 主要な初期化シーケンス。
+- ボタン入力の反映。
+- ニュートラル復帰。
 
-確認済み条件の trace、Bumble version、Python version、driver version は repository 内の `spec/hardware-test-log.md` にあります。
+確認済み条件のトレースログ、Bumble version、Python version、ドライバー情報はリポジトリ内の `spec/hardware-test-log.md` にあります。
 
 ## Notes
 
-Linux / macOS で必要になる OS 側設定は、Bumble から専用 adapter を使うためのものです。PC の通常 Bluetooth 機能と同じ adapter は使わないでください。
+Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluetooth ドングルを使うためのものです。PC に内蔵されている通常 Bluetooth 機能と同じアダプタは使わないでください。
 
 ## Troubleshooting
 
 ### Adapter Does Not Open
 
-- 専用 USB Bluetooth dongle を使っているか確認します。
+- 専用 USB Bluetooth ドングルを使っているか確認します。
 - Windows では WinUSB / libwdi に切り替わっているか確認します。
-- 専用 dongle の adapter 名を指定しているか確認します。
-- `list_adapters()` または `swbt-probe adapters --json` で adapter 名を確認します。
-- `adapters=[]` は HCI 候補 0 件です。driver、USB 接続、OS 側の占有状態を確認します。
-- `AdapterDiscoveryError` は libusb の読み込みや USB 列挙開始の失敗です。adapter open 失敗とは別に扱います。
+- 専用ドングルのアダプタ名を指定しているか確認します。
+- `list_adapters()` または `swbt-probe adapters --json` でアダプタ名を確認します。
+- `adapters=[]` は HCI 候補 0 件です。ドライバー、USB 接続、OS 側の占有状態を確認します。
+- `AdapterDiscoveryError` は libusb の読み込みや USB 列挙開始の失敗です。アダプタ open 失敗とは別に扱います。
 
 ### Pairing Timeout
 
-- 対象機器が controller pairing / search 画面にいるか確認します。
+- 対象機器がコントローラー接続画面にいるか確認します。
 - `pair()` または `connect(..., allow_pairing=True)` を使っているか確認します。
-- trace に `advertising_start`、`connection_request`、`host_connection` があるか確認します。
+- トレースログに `advertising_start`、`connection_request`、`host_connection` があるか確認します。
 
 ### No Bond
 
-- `reconnect()` / `try_reconnect()` は保存済み bond がない場合、`no bond` として失敗します。
+- `reconnect()` / `try_reconnect()` は保存済みペアリング情報がない場合、`no_bond` として失敗します。
 - 初回接続では `connect(..., allow_pairing=True)` か `pair()` を使います。
 - `key_store_path` が別ファイルを指していないか確認します。
 
 ### Multiple Current Peers
 
-- 1 つの key store に複数の current peers がある状態です。
+- 1 つの key store に複数の現在の再接続候補がある状態です。
 - 対象機器ごとに key store を分けます。
-- 復旧する場合は該当 key store を削除し、pairing をやり直します。
+- 復旧する場合は該当 key store を削除し、ペアリングをやり直します。
 
 ### Input Is Not Reflected In The UI
 
-- pairing / reconnect 直後の初期通信が終わってから入力を送っているか確認します。
-- `tap()` は即時 report を送ります。`press()` / `release()` / `sticks()` / `neutral()` は state update API であり、即時送信を保証しません。
-- trace の `report_tx`、`subcommand_rx`、`subcommand_reply_tx`、`connected`、`disconnected` を確認します。
+- ペアリングまたは再接続直後の初期通信が終わってから入力を送っているか確認します。
+- `tap()` は即時レポートを送ります。`press()` / `release()` / `sticks()` / `neutral()` は state update API であり、即時送信を保証しません。
+- トレースログの `report_tx`、`subcommand_rx`、`subcommand_reply_tx`、`connected`、`disconnected` を確認します。

@@ -15,12 +15,13 @@ def test_readme_documents_confirmed_and_unconfirmed_hardware() -> None:
     assert "CSR8510 A10" in text
     assert "WinUSB" in text
     assert "`usb:0`" in text
-    assert "### 試験的構成" in text
+    assert "### 実験的構成" in text
     assert "Linux" in text
     assert "macOS" in text
     assert "experimental" in text
     assert "手順は Hardware Guide に整備されています" in text
-    assert "動作検証されていないことに留意してください" in text
+    assert "Pro Controller の限定観測" in text
+    assert "Joy-Con、別ドングル、別ファームウェアでの互換性は未確認" in text
     assert "unsupported" not in text
     assert "experimental" + " target" not in text
     assert "準備" + "候補" not in text
@@ -31,24 +32,27 @@ def test_readme_documents_confirmed_and_unconfirmed_hardware() -> None:
 def test_readme_documents_dedicated_adapter_and_driver_notes() -> None:
     text = README.read_text(encoding="utf-8")
 
-    assert "専用 USB Bluetooth dongle" in text
+    assert "専用 USB Bluetooth ドングル" in text
     assert "https://niart120.github.io/swbt-python/hardware/" in text
     assert "https://zadig.akeo.ie/" in text
     assert "Zadig" in text
     assert "WinUSB" in text
-    assert "WinUSB / libwdi driver" in text
+    assert "WinUSB / libwdi ドライバー" in text
     assert "通常 Bluetooth 機能" in text
-    assert "troubleshooting" in text
+    assert "トラブルシューティング" in text
 
 
-def test_readme_reflects_button_a_and_neutral_observation() -> None:
+def test_readme_summarizes_verified_input_observation() -> None:
     text = README.read_text(encoding="utf-8")
 
-    assert "Button A" in text
-    assert "neutral" in text
-    assert "入力残りなし" in text
-    assert "D-pad" in text
-    assert "reconnect" in text
+    assert "主要なボタン / スティック入力" in text
+    assert "ニュートラル復帰" in text
+    assert "ボタン入力" in text
+    assert "保存済みペアリング情報を使う再接続" in text
+    assert "Joy-Con L/R も部分的に動作確認済み" in text
+    assert "確認済み範囲と未確認範囲の詳細は Hardware Guide" in text
+    assert "hold / circle" not in text
+    assert "active reconnect" not in text
 
 
 def test_readme_records_current_switch_model_and_firmware_evidence() -> None:
@@ -63,20 +67,17 @@ def test_readme_documents_single_joycon_public_api_and_scope() -> None:
     text = README.read_text(encoding="utf-8")
 
     for token in (
-        "### 単体 Joy-Con L/R",
+        "### Joy-Con L/R",
         "JoyConL(...)",
         "JoyConR(...)",
         "from swbt import Button, JoyConL, Stick",
         'key_store_path="switch-left-joycon-bond.json"',
         "await left.tap(Button.SR, Button.SL)",
         "`UnsupportedInputError`",
-        "SR+SL を送ります",
+        "SR+SL を送信する必要があります",
         "Pro Controller、Joy-Con L、Joy-Con R では `key_store_path` を分けてください",
         "`JoyConPair` は未実装",
-        "Switch UI で Joy-Con として登録",
-        "Joy-Con R、reconnect",
-        "SDP 完全一致",
-        "OS / dongle / firmware をまたぐ互換性は未検証",
+        "Joy-Con R で左スティックや十字キー",
     ):
         assert token in text
 
@@ -125,6 +126,7 @@ def test_readme_keeps_detailed_hardware_and_key_store_guidance_in_docs() -> None
         "複数の接続先",
         "swbt-probe pair",
         "full observed subcommand handshake",
+        "active reconnect 後の ABXY",
         "active bond reuse reconnect",
         "pairing-free incoming bond reuse",
     ):

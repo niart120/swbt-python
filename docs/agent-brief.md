@@ -48,4 +48,4 @@ Rules:
 - Do not invent `JoyConPair`; paired left/right Joy-Con support is not implemented.
 - Do not show low-level Joy-Con profile classes or the removed side-string Joy-Con wrapper in user-facing examples.
 - Do not import internal modules unless writing swbt's own tests.
-- Do not present Joy-Con real-device compatibility, exact SDP parity, Linux, macOS, other dongles, other firmware, or pairing-free incoming bond reuse as confirmed.
+- Do not present Joy-Con hardware compatibility beyond the recorded Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 profile scenarios. Exact SDP parity, Linux, Joy-Con on macOS, other dongles, other firmware, and pairing-free incoming bond reuse are not confirmed.

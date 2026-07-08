@@ -32,9 +32,19 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "## 0.2.0",
         "Breaking changes",
         "Migration",
-        "Pro Controller / Joy-Con L / Joy-Con R",
-        "`key_store_path` を分ける",
-        "Joy-Con R、reconnect、通常入力反映は未検証",
+        "New public API",
+        "v0.1.1 から利用者のコードに影響する破壊的変更",
+        "`SwitchGamepad(...)` ではコントローラーを作成できなくなりました",
+        "`SwitchGamepadConfig(...)` と `SwitchGamepad.from_config(...)`",
+        "`SwitchGamepad(..., transport=...)` と `SwitchGamepad(..., device_name=...)`",
+        "`HidDeviceTransport`、`BondedPeer`、`DisconnectRequestResult`",
+        "トレース出力設定の `diagnostics`",
+        "`key_store_path` を分けてください",
+        "`list_adapters()` と `AdapterInfo`",
+        "Joy-Con L/R は Windows 11 / CSR8510 A10 / WinUSB / "
+        "Switch 2 firmware 22.1.0 で部分的に動作確認済み",
+        "確認済み範囲は Joy-Con としての登録、利用者指定色、対応するボタン入力",
+        "詳細な検証状態は `docs/hardware.md` と `spec/hardware-test-log.md` を正本とします",
     ):
         assert token in text
 
@@ -42,15 +52,24 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "| Old API | New API | Notes |",
         "|---|---|---|",
         "| `SwitchGamepad(...)` | `ProController(...)` | "
-        "`SwitchGamepad` は shared interface / 型注釈用。 |",
-        '| `JoyCon("left", ...)` | `JoyConL(...)` | 左 Joy-Con 相当の concrete controller。 |',
-        '| `JoyCon("right", ...)` | `JoyConR(...)` | 右 Joy-Con 相当の concrete controller。 |',
-        "| `SwitchGamepadConfig(...)` | public API から削除 | "
-        "internal runtime / test setup 専用。 |",
-        "| `transport=FakeHidTransport` | internal tests only | "
-        "利用者向け constructor には transport injection を出さない。 |",
+        "`SwitchGamepad` は共通インターフェース / 型注釈用。 |",
+        "| `SwitchGamepadConfig(...)` | 各具象クラスの constructor 引数 | "
+        "`from_config()` は公開 API から削除。 |",
+        "| `SwitchGamepad(..., transport=...)` | 公開 API では移行先なし | "
+        "transport 差し替えは内部テスト用。 |",
+        "| `SwitchGamepad(..., device_name=...)` | "
+        "`ProController(...)` / `JoyConL(...)` / `JoyConR(...)` | "
+        "HID identity は具象クラスが選ぶ。 |",
+        "| `from swbt import HidDeviceTransport, BondedPeer, DisconnectRequestResult` | "
+        "公開 API から削除 | transport 内部型はトップレベル export しない。 |",
     ):
         assert row in text
+
+    assert '`JoyCon("left", ...)`' not in text
+    assert "`ConnectionResult` は `route`" not in text
+    assert "利用者向け生成 API" not in text
+    assert "Joy-Con R、再接続、通常入力反映は未検証" not in text
+    assert "`0x22` ACK" not in text
 
     assert 'version = "0.2.0"' in pyproject_text
     assert 'name = "swbt-python"' in lock_text
