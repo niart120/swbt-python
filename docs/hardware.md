@@ -147,7 +147,7 @@ key store はコントローラー種別ごとに分けてください。Pro Con
 - Button 入力の反映。
 - ニュートラル後に入力が残らないこと。
 
-確認済み条件の trace、Bumble version、Python version、ドライバー情報は repository 内の `spec/hardware-test-log.md` にあります。
+確認済み条件のトレースログ、Bumble version、Python version、ドライバー情報は repository 内の `spec/hardware-test-log.md` にあります。
 
 ## Notes
 
@@ -168,7 +168,7 @@ Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluet
 
 - 対象機器がコントローラー接続画面にいるか確認します。
 - `pair()` または `connect(..., allow_pairing=True)` を使っているか確認します。
-- trace に `advertising_start`、`connection_request`、`host_connection` があるか確認します。
+- トレースログに `advertising_start`、`connection_request`、`host_connection` があるか確認します。
 
 ### No Bond
 
@@ -186,4 +186,4 @@ Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluet
 
 - ペアリングまたは再接続直後の初期通信が終わってから入力を送っているか確認します。
 - `tap()` は即時レポートを送ります。`press()` / `release()` / `sticks()` / `neutral()` は state update API であり、即時送信を保証しません。
-- trace の `report_tx`、`subcommand_rx`、`subcommand_reply_tx`、`connected`、`disconnected` を確認します。
+- トレースログの `report_tx`、`subcommand_rx`、`subcommand_reply_tx`、`connected`、`disconnected` を確認します。

@@ -36,6 +36,7 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
         "`JoyCon(\"left\", ...)` / `JoyCon(\"right\", ...)`",
         "`transport=...`、`profile=...`、`device_name=...`",
         "`ConnectionResult` は `route`、`status`、`peer_address`、`peer_count`",
+        "トレース出力設定の `diagnostics`",
         "`key_store_path` を分けてください",
         "Joy-Con R、再接続、通常入力反映は未検証",
     ):

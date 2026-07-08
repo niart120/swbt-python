@@ -76,6 +76,8 @@
 | HID advertising | HID 接続待ち受け | advertising、HID advertising | Switch から見える接続待機動作として説明する場合の候補。 |
 | periodic report loop | レポートループ | periodic report loop、report loop | 入力レポート送信の周期処理を説明する語。 |
 | input report | 入力レポート / レポート | input report、report | API 説明では `レポート` が増えているが、HID 文脈では `入力レポート` の方が曖昧さが少ない。 |
+| diagnostics | トレース出力 | diagnostics、診断、ロギング | API 名 `DiagnosticsConfig` や引数名 `diagnostics` は残す。本文では、原因を自動判定する「診断」ではなく、JSON Lines の実行記録を出す機能として `トレース出力` を第一候補にする。 |
+| trace | トレースログ / トレース | trace、JSON Lines trace | ファイルに残る実行記録は `トレースログ`、引数名やファイル名では `trace` を残す。実機ログや根拠監査とは分ける。 |
 | key store | key store / 接続情報ファイル | JSON key store path、接続情報ファイル | README では利用者向けに `接続情報ファイル`、API 詳細では `key store` が残る。二層に分ける候補。 |
 | bond | 保存済みペアリング情報 / ペアリング情報 | bond | `bond` は単なる接続状態ではなく、ペアリング後に保存される鍵と相手機器情報を指す。利用者向け説明では `保存済みペアリング情報` を第一候補にする。短く書く箇所では `ペアリング情報` を使う。 |
 | button | ボタン | button | enum 名や型名はそのまま、説明文では `ボタン`。 |

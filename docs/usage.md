@@ -356,4 +356,6 @@ with Path("trace.jsonl").open("w", encoding="utf-8") as trace:
         print(status.connection_state)
 ```
 
-`DiagnosticsConfig(trace_writer=trace)` は JSON Lines trace を出力します。`pad.status()` は接続状態、レポートカウンター、最後に処理した subcommand、raw rumble、最後のエラーを返します。
+`DiagnosticsConfig(trace_writer=trace)` は JSON Lines のトレースログを出力します。出力されるのは接続状態の遷移、送信したレポート、受信した subcommand、エラー、実行時のメタデータです。原因を自動判定する機能ではありません。
+
+`pad.status()` は接続状態、レポートカウンター、最後に処理した subcommand、raw rumble、最後のエラーを返します。ファイルに残す必要がある実行記録は `DiagnosticsConfig`、その時点の状態をコードから読む用途は `status()` を使います。

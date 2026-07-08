@@ -35,7 +35,7 @@ from swbt import (
 | `Stick` | スティック入力 |
 | `IMUFrame` | IMU frame |
 | `InputState` | イミュータブルな完全入力状態 |
-| `DiagnosticsConfig` | diagnostics trace 設定 |
+| `DiagnosticsConfig` | トレース出力設定 |
 | `GamepadStatus` | `status()` のスナップショット |
 | `SwbtError` | swbt 例外基底 class |
 | `AdapterDiscoveryError` | no-open adapter 列挙の失敗 |
@@ -67,7 +67,7 @@ else:
 
 通常、`AdaptroInfo.name`には`usb:N`などの値が入ります。この値はUSB 接続状態で変わり得ることに注意してください。`AdapterInfo.aliases` には `usb:0A12:0001`、`usb:0A12:0001#1`、`usb:0A12:0001/ABC123` などのエイリアス名が入ります。
 
-`list_adapters()` は  libusb 列挙にてUSB descriptor を読みますが、デバイスハンドルを開くことはありません。 同様に、HID 接続待ち受け、ペアリング、レポートループが開始されることもありません。候補が返っても、当該で `ProController(adapter=...)` などの controller が open できることや対象機器と接続できることは保証しません。
+`list_adapters()` は  libusb 列挙にてUSB descriptor を読みますが、デバイスハンドルを開くことはありません。 同様に、HID 接続待ち受け、ペアリング、レポートループが開始されることもありません。候補が返っても、当該で `ProController(adapter=...)` などのコントローラーが open できることや対象機器と接続できることは保証しません。
 
 ## Controller Classes
 
@@ -92,11 +92,13 @@ pad = ProController(
 
 `adapter` は Bumble transport に渡す アダプタの名称です。
 
-`key_store_path` は Bumble transport がペアリングキーを保存する JSON key store のファイルパス です。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに分けてください。`None` は永続 bond を持たない一時的なコントローラーを意味します。
+`key_store_path` は Bumble transport がペアリングキーを保存する JSON key store のファイルパス です。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに分けてください。`None` を指定した場合はペアリング情報を永続化しない一時的なコントローラーとして扱われます。
 
 `report_period_us` は レポートループの送信周期です。`None` が指定された場合既定周期 (8 ms) を使います。
 
-`controller_colors` は controller body / buttons / left grip / right grip のプロファイルカラーです。`None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使います。各 field は独立した既定値を持ちます。
+`controller_colors` は controller body / buttons / left grip / right grip のプロファイルカラーです。`None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使います。それぞれの値は独立した既定値を持ちます。
+
+`diagnostics` はトレース出力設定です。`DiagnosticsConfig(trace_writer=...)` を渡すと、接続、送信レポート、subcommand、エラー、実行時のメタデータを指定したトレースログ出力先へ JSON 形式で出力します。`None` を指定した場合はトレースログを出力しません。
 
 ### Resource Scope
 
@@ -108,7 +110,7 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 `async with` は `open()` と `close(neutral=True)` の resource scope です。`__aenter__()` は HID 接続待ち受け、ペアリング、(ペアリング情報を用いた)再接続を開始しません。
 
-`open()` は transport、下位レイヤーのコールバック、ロギング、レポートループを準備します。 HID 接続待ち受けは開始しません。transport open に失敗した場合は `TransportOpenError` または 下位レイヤーの例外を返します。
+`open()` は transport、下位レイヤーのコールバック、トレース出力、レポートループを準備します。 HID 接続待ち受けは開始しません。transport open に失敗した場合は `TransportOpenError` または 下位レイヤーの例外を返します。
 
 `close(neutral=True)` は接続中ならニュートラル入力を試み、レポートループを停止し、接続先に対する切断要求を試み、最終的に transport を閉じます。複数回呼んでも未完了の後処理のみを実行します。
 
@@ -184,7 +186,7 @@ await pad.apply(state)
 
 ## JoyConL / JoyConR
 
-`JoyConL` と `JoyConR` は単体 Joy-Con L/R 相当の concrete controller です。`side` 引数はありません。接続、入力、diagnostics、`close()` の契約は `SwitchGamepad` interface と同じです。
+`JoyConL` と `JoyConR` は単体 Joy-Con L/R 相当の concrete controller です。`side` 引数はありません。接続、入力、トレース出力、`close()` の契約は `SwitchGamepad` interface と同じです。
 
 ```python
 from swbt import Button, JoyConL, JoyConR, Stick
@@ -224,3 +226,5 @@ OS / dongle / firmware をまたぐ互換性は未検証です。
 ## Errors And Diagnostics
 
 例外は `SwbtError` を基底例外とします。アダプタ列挙の失敗は `AdapterDiscoveryError`、利用者入力の不正は `InvalidInputError`、コントローラーが対応しない入力は `UnsupportedInputError`、transport open 失敗は `TransportOpenError`、接続タイムアウトは `ConnectionTimeoutError`、接続不成立は `ConnectionFailedError`、key store 形式不一致は `InvalidKeyStoreError` が送出されます。
+
+`DiagnosticsConfig` はトレース出力のための設定です。`trace_writer` にテキストストリームを渡すと、接続状態の遷移、送信したレポート、受信した subcommand、エラー、`adapter` や `key_store_path` などの実行時メタデータを 1 行 1 件の JSON object として出力します。このトレースログは、実機接続時の挙動確認や失敗時の切り分けに使います。`DiagnosticsConfig` 自体は原因を自動判定する機能ではありません。
