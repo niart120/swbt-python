@@ -720,6 +720,38 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
                 await _wait_for_full_handshake(trace_path, timeout_seconds=20.0)
                 _record_handshake_checkpoint(pad, trace)
 
+                await pad.press(Button.ZL)
+                zl_hold_start_count = pad.status().report_counters.get(0x30, 0)
+                expected_button_bytes = _current_button_bytes(pad)
+                _record_probe_event(
+                    trace,
+                    "manual_input_checkpoint",
+                    expected_button_bytes=expected_button_bytes,
+                    hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
+                    operation="gyro_control_zl_start",
+                    report_0x30_count=zl_hold_start_count,
+                )
+                await _wait_for_report_counter(
+                    pad,
+                    report_id=0x30,
+                    minimum_count=zl_hold_start_count + _STICK_VISIBLE_REPORT_HOLD_COUNT,
+                    timeout_seconds=5.0,
+                )
+                _record_probe_event(
+                    trace,
+                    "manual_input_checkpoint",
+                    expected_button_bytes=expected_button_bytes,
+                    hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
+                    operation="gyro_control_zl_reports_sent",
+                    report_0x30_count=pad.status().report_counters.get(0x30, 0),
+                )
+                await pad.release(Button.ZL)
+                await _send_neutral_and_record(
+                    pad,
+                    trace,
+                    operation="gyro_control_zl_neutral_complete",
+                )
+
                 for axis, frame in axis_frames:
                     await pad.imu(frame)
                     assert pad.snapshot().imu_frames == (frame, frame, frame)
@@ -763,6 +795,17 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
     assert _contains_active_reconnect_success(events)
     assert _contains_full_handshake(events)
     assert _contains_event(events, "manual_input_checkpoint", operation="handshake_complete")
+    assert _contains_event(
+        events,
+        "manual_input_checkpoint",
+        expected_button_bytes="000080",
+        operation="gyro_control_zl_reports_sent",
+    )
+    assert _contains_event(
+        events,
+        "manual_input_checkpoint",
+        operation="gyro_control_zl_neutral_complete",
+    )
     for axis, frame in axis_frames:
         assert _contains_event(
             events,
