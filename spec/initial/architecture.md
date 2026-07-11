@@ -176,6 +176,7 @@ swbt/
 | `swbt.__init__` | 公開 API の再 export |
 | `swbt.gamepad` | `SwitchGamepad` と設定オブジェクト |
 | `swbt.input` | `InputState`, `Button`, `Stick`, `IMUFrame` |
+| `swbt.imu` | 仮想ジャイロ校正値、rad/s と raw 値の相互変換、SPI 用 serialization |
 | `swbt.state_store` | 現在入力の保持、snapshot 生成 |
 | `swbt.report_loop` | 周期送信、reply queue 優先制御 |
 | `swbt.protocol.switch_hid` | Switch HID protocol の統合 facade |

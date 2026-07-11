@@ -36,7 +36,8 @@ Rules:
 - Use `sticks()` when both sticks should be updated in one state update.
 - Use `Stick.up()`, `Stick.down()`, `Stick.left()`, `Stick.right()`, or `Stick.tilt()` to construct stick values.
 - Use `imu()` for IMU state updates.
-- Use `IMUFrame.gyro()`, `IMUFrame.accel()`, `IMUFrame.raw()`, `IMUFrame.with_gyro()`, or `IMUFrame.with_accel()` to construct IMU frames.
+- Use `IMUFrame.gyro()`, `IMUFrame.accel()`, `IMUFrame.raw()`, `IMUFrame.with_gyro()`, or `IMUFrame.with_accel()` for raw IMU values.
+- Use `IMUFrame.gyro_rate()` or `IMUFrame.with_gyro_rate()` for angular velocity in rad/s, and `IMUFrame.to_gyro_rate()` for conversion back to rad/s. The scale is fixed at `0.070 dps/raw`.
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
 - Use a separate `key_store_path` for Pro Controller, Joy-Con L, and Joy-Con R profiles, even when the target device is the same.
 - Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`: left does not support right stick or A/B/X/Y, right does not support left stick or D-pad.

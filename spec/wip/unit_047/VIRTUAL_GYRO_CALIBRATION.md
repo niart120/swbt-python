@@ -102,8 +102,8 @@
 | refactor-skipped | `IMUFrame.gyro_rate()` が rad/s から 3 軸 raw を生成し、`to_gyro_rate()` が逆変換する | new | unit | no | 63 passed。変換を校正値へ集約済みで追加の構造変更なし |
 | refactor-skipped | `IMUFrame.with_gyro_rate()` が accel を維持して gyro だけを物理角速度から置換する | new | unit | no | 64 passed。既存 `with_gyro()` へ委譲し追加の構造変更なし |
 | refactor-skipped | 物理角速度 API が signed int16 境界を受理し、範囲外を `InvalidInputError` にする | edge | unit | no | 65 passed。finite validation を校正変換へ集約し、追加の構造変更なし |
-| todo | 既存 `IMUFrame.raw()` / `gyro()` / `with_gyro()` の raw 入力契約を維持する | regression | unit | no | 既存 test に明示的回帰を追加 |
-| todo | public docstring と docs が rad/s API、固定尺度、範囲外例外、raw API との使い分けを説明する | docs | unit | no | initial design も追従 |
+| refactor-skipped | 既存 `IMUFrame.raw()` / `gyro()` / `with_gyro()` の raw 入力契約を維持する | regression | unit | no | 既存 5 tests が pass。実装変更不要 |
+| refactor-skipped | public docstring と docs が rad/s API、固定尺度、範囲外例外、raw API との使い分けを説明する | docs | unit | no | 14 passed。公開 docs と initial design を追従し追加の構造変更なし |
 | todo | Pro Controller のジャイロ入力が Switch 実機で観測できる | regression | hardware | yes | adapter、command、cleanup を承認後に実行 |
 
 ## 8. 設計メモ
@@ -149,6 +149,9 @@
 | `uv run pytest tests/unit/test_input_state.py -q` | pass | 64 passed。物理角速度による gyro 置換と accel 保持を確認 |
 | `uv run pytest tests/unit/test_input_state.py::test_imu_frame_gyro_rate_accepts_i16_boundaries_and_rejects_out_of_range -q` | red | 1 failed。infinity が `OverflowError` になる未統一を確認 |
 | `uv run pytest tests/unit/test_input_state.py -q` | pass | 65 passed。signed int16 両端、有限の範囲外、NaN、infinity と `InvalidInputError` 方針を確認 |
+| `uv run pytest tests/unit/test_input_state.py::test_imu_frame_raw_defaults_to_neutral_and_sets_accel_and_gyro_axes tests/unit/test_input_state.py::test_imu_frame_raw_rejects_values_outside_i16_range tests/unit/test_input_state.py::test_imu_frame_gyro_and_accel_shorthands_match_raw_construction tests/unit/test_input_state.py::test_imu_frame_update_helpers_preserve_the_opposite_sensor_axes -q` | pass | 5 passed。既存 raw API の生成、範囲、shorthand、部分更新を確認 |
+| `uv run pytest tests/unit/test_public_api_docstrings.py tests/unit/test_public_docs.py -q` | red | 4 failed, 10 passed。固定尺度の docstring と API / usage / agent docs が未記載であることを確認 |
+| `uv run pytest tests/unit/test_public_api_docstrings.py tests/unit/test_public_docs.py -q` | pass | 14 passed。rad/s API、`0.070 dps/raw`、範囲外例外、raw API の使い分けを確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_input_state.py` | not run | 各 TDD cycle で対象 test を絞って実行する |
 | `uv sync --dev` | not run | 最終 gate |
 | `uv run ruff format --check .` | not run | 最終 gate |
@@ -182,7 +185,7 @@
 - [x] source-audit fixture を更新した
 - [ ] profile と SPI の校正共有を実装した
 - [ ] rad/s ↔ raw の公開 API と境界方針を実装した
-- [ ] raw API の回帰を確認した
-- [ ] docs と initial design を更新した
+- [x] raw API の回帰を確認した
+- [x] docs と initial design を更新した
 - [ ] Pro Controller 実機回帰を実行して結果を記録した
 - [ ] 標準 gate の結果を記録した

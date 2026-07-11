@@ -320,6 +320,8 @@ class IMUFrame:
     ) -> "IMUFrame":
         """Return a frame from XYZ gyroscope rates in radians per second.
 
+        Conversion uses the fixed virtual sensitivity of ``0.070 dps/raw``.
+
         Args:
             x_rad_s: X-axis angular velocity in radians per second.
             y_rad_s: Y-axis angular velocity in radians per second.
@@ -335,6 +337,8 @@ class IMUFrame:
 
     def to_gyro_rate(self) -> tuple[float, float, float]:
         """Return XYZ gyroscope rates in radians per second.
+
+        Conversion uses the fixed virtual sensitivity of ``0.070 dps/raw``.
 
         Returns:
             tuple[float, float, float]: X, Y, and Z angular velocities in radians per
@@ -386,6 +390,8 @@ class IMUFrame:
         z_rad_s: float = 0.0,
     ) -> "IMUFrame":
         """Return a frame with gyroscope rates replaced from radians per second.
+
+        Conversion uses the fixed virtual sensitivity of ``0.070 dps/raw``.
 
         Args:
             x_rad_s: Replacement X-axis angular velocity in radians per second.
