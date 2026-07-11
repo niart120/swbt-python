@@ -107,7 +107,7 @@
 | refactor-skipped | 物理角速度 API が signed int16 境界を受理し、範囲外を `InvalidInputError` にする | edge | unit | no | 65 passed。finite validation を校正変換へ集約し、追加の構造変更なし |
 | refactor-skipped | 既存 `IMUFrame.raw()` / `gyro()` / `with_gyro()` の raw 入力契約を維持する | regression | unit | no | 既存 5 tests が pass。実装変更不要 |
 | refactor-skipped | public docstring と docs が rad/s API、固定尺度、範囲外例外、raw API との使い分けを説明する | docs | unit | no | 14 passed。公開 docs と initial design を追従し追加の構造変更なし |
-| todo | Pro Controller のジャイロ入力が Switch 実機で観測できる | regression | hardware | yes | adapter、command、cleanup を承認後に実行 |
+| todo | Pro Controller のジャイロ入力が Switch 実機で観測できる | regression | hardware | yes | test 実装・collection 済み。adapter、command、cleanup を承認後に実行 |
 
 ## 8. 設計メモ
 
@@ -157,6 +157,7 @@
 | `uv run pytest tests/unit/test_public_api_docstrings.py tests/unit/test_public_docs.py -q` | pass | 14 passed。rad/s API、`0.070 dps/raw`、範囲外例外、raw API の使い分けを確認 |
 | `uv run pytest tests/unit/test_virtual_spi_flash.py::test_virtual_spi_flash_seeds_gyro_calibration_for_joycon_profiles -q` | red | 2 failed。Joy-Con L/R の `gyro_calibration` が `None` であることを確認 |
 | `uv run pytest tests/unit/test_virtual_spi_flash.py tests/unit/test_protocol_profile.py -q` | pass | 52 passed。Pro / Joy-Con L / Joy-Con R の共通校正 seed と既存 profile / SPI contract を確認 |
+| `uv run pytest tests/hardware/test_input_operations.py::test_switch_gyro_rate_after_active_reconnect_for_manual_reflection --collect-only -q` | pass | 1 test collected。adapter open、接続、report loop は未実行 |
 | `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_input_state.py` | not run | 各 TDD cycle で対象 test を絞って実行する |
 | `uv sync --dev` | not run | 最終 gate |
 | `uv run ruff format --check .` | not run | 最終 gate |
@@ -172,7 +173,7 @@
 | 実機要否 | required |
 | 承認範囲 | 未承認。Bumble adapter open、Pro Controller advertising / reconnect、periodic report loop、gyro report、neutral、close を対象として明示承認が必要 |
 | adapter | 候補 `usb:0`。専用 CSR8510 A10 / WinUSB であることを実行直前に確認する |
-| 実行 command | hardware test 実装後に node id、artifact dir、log path を含む完全な command を提示する |
+| 実行 command | `uv run pytest tests\hardware\test_input_operations.py::test_switch_gyro_rate_after_active_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\issue-69-gyro-calibration-20260711 --log-file build\hardware\issue-69-gyro-calibration-20260711\gyro-rate-pytest-debug.log --log-file-level=DEBUG -q -s` |
 | 実行遮断 | 環境変数による遮断は採用しない。明示承認、対象 adapter、command、Switch-facing 動作、cleanup plan で管理する |
 | log / artifact | `build/hardware/` 配下の JSONL trace と pytest debug log、`spec/hardware-test-log.md` |
 | cleanup | gyro 入力後に neutral frame を送り、report loop を停止し、transport を close して adapter を解放する |
