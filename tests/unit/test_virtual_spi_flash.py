@@ -65,8 +65,7 @@ def test_virtual_spi_flash_seeds_factory_accelerometer_calibration_from_profile(
 
 def test_virtual_spi_flash_returns_complete_factory_six_axis_calibration() -> None:
     assert VirtualSpiFlash().read(0x6020, 24) == bytes.fromhex(
-        "00 00 00 00 00 00 00 40 00 40 00 40 "
-        "00 00 00 00 00 00 3b 34 3b 34 3b 34"
+        "00 00 00 00 00 00 00 40 00 40 00 40 00 00 00 00 00 00 3b 34 3b 34 3b 34"
     )
 
 

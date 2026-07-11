@@ -37,20 +37,21 @@ class AccelerometerCalibration:
             self._validate_acceleration(f"{axis}_g", value)
             for axis, value in zip("xyz", accelerations_g, strict=True)
         )
-        return tuple(
+        converted = tuple(
             zero + round(value / self.g_per_raw)
             for zero, value in zip(self.zero_raw, values, strict=True)
         )
+        return (converted[0], converted[1], converted[2])
 
     def raw_to_accelerations(
         self,
         raw: tuple[int, int, int],
     ) -> tuple[float, float, float]:
         """Convert XYZ raw values to accelerations in G."""
-        return tuple(
-            (value - zero) * self.g_per_raw
-            for zero, value in zip(self.zero_raw, raw, strict=True)
+        converted = tuple(
+            (value - zero) * self.g_per_raw for zero, value in zip(self.zero_raw, raw, strict=True)
         )
+        return (converted[0], converted[1], converted[2])
 
     @staticmethod
     def _validate_acceleration(name: str, value: object) -> float:
