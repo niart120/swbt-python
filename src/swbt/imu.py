@@ -1,0 +1,19 @@
+"""Shared virtual IMU calibration values."""
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class GyroCalibration:
+    """Virtual gyroscope zero, reference, and fixed conversion scale."""
+
+    zero_raw: tuple[int, int, int] = (0, 0, 0)
+    reference_raw: tuple[int, int, int] = (0x343B, 0x343B, 0x343B)
+
+    @property
+    def dps_per_raw(self) -> float:
+        """Return the fixed gyroscope sensitivity in degrees per second per raw unit."""
+        return 0.070
+
+
+DEFAULT_GYRO_CALIBRATION = GyroCalibration()

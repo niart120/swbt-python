@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from swbt.errors import InvalidInputError, UnsupportedInputError
+from swbt.imu import DEFAULT_GYRO_CALIBRATION, GyroCalibration
 from swbt.input import Button, InputState, Stick
 from swbt.protocol.buttons import PRO_CONTROLLER_BUTTON_BITS, ButtonBitMap
 from swbt.protocol.descriptors import SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
@@ -126,6 +127,7 @@ class ControllerProfile:
     hid_report_descriptor: bytes = SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
     hid_sdp_policy: HidSdpPolicy = field(default_factory=HidSdpPolicy)
     controller_colors: ControllerColors = field(default_factory=ControllerColors)
+    gyro_calibration: GyroCalibration = DEFAULT_GYRO_CALIBRATION
     button_bits: ButtonBitMap = field(default_factory=lambda: PRO_CONTROLLER_BUTTON_BITS)
     imu_enable_modes: tuple[int, ...] = (0x00, 0x01)
     supports_left_stick: bool = True

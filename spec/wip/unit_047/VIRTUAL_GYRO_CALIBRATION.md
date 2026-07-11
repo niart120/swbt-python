@@ -97,7 +97,7 @@
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
 | refactor-skipped | source-audit fixture が `0x602C-0x6037` の軸順、Int16LE、zero/reference、固定尺度を保持する | new | unit | no | 25 passed。既存 fixture 形式に沿っており追加の構造変更なし |
-| todo | `ControllerProfile` が既定の仮想ジャイロ校正情報を所有する | new | unit | no | 全軸 zero/reference と固定尺度 |
+| refactor-skipped | `ControllerProfile` が既定の仮想ジャイロ校正情報を所有する | new | unit | no | 39 passed。immutable な共有既定値を field で所有し、追加の構造変更なし |
 | todo | `VirtualSpiFlash` が profile 由来の factory gyro calibration bytes を返す | new | unit | no | 12-byte fixture で layout を固定 |
 | todo | `IMUFrame.gyro_rate()` が rad/s から 3 軸 raw を生成し、`to_gyro_rate()` が逆変換する | new | unit | no | `0.070 dps/raw` を共有 |
 | todo | `IMUFrame.with_gyro_rate()` が accel を維持して gyro だけを物理角速度から置換する | new | unit | no | immutable copy |
@@ -138,6 +138,8 @@
 |---|---|---|
 | `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | red | 2 failed, 23 passed。`factory_gyro_calibration_layout` が fixture に未登録であることを確認 |
 | `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 25 passed。layout、axis order、Int16LE、zero/reference、固定尺度と source classification を確認 |
+| `uv run pytest tests/unit/test_protocol_profile.py::test_pro_controller_profile_owns_default_virtual_gyro_calibration -q` | red | collection error。`swbt.imu` が未実装であることを確認 |
+| `uv run pytest tests/unit/test_protocol_profile.py -q` | pass | 39 passed。profile ownership と既存 profile contract を確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_input_state.py` | not run | 各 TDD cycle で対象 test を絞って実行する |
 | `uv sync --dev` | not run | 最終 gate |
 | `uv run ruff format --check .` | not run | 最終 gate |
