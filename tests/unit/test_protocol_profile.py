@@ -47,6 +47,8 @@ def test_controller_profiles_own_default_virtual_accelerometer_calibration(
 
     assert calibration.zero_raw == (0, 0, 0)
     assert calibration.reference_raw == (0x4000, 0x4000, 0x4000)
+    assert calibration.reference_acceleration_g == 4.0
+    assert calibration.g_per_raw == 1 / 4096
 
 
 def test_controller_kind_branching_stays_localized_to_profiles_and_gamepad_classes() -> None:
