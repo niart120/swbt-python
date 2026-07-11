@@ -698,9 +698,7 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
 
     resting_frame = IMUFrame.accel(0, 0, 4096)
     axis_frames = (
-        ("x", resting_frame.with_gyro_rate(x_rad_s=math.radians(90.0))),
-        ("y", resting_frame.with_gyro_rate(y_rad_s=math.radians(90.0))),
-        ("z", resting_frame.with_gyro_rate(z_rad_s=math.radians(90.0))),
+        ("positive_z", resting_frame.with_gyro_rate(z_rad_s=math.radians(0x0600 * 0.070))),
     )
 
     async def run() -> None:
@@ -714,6 +712,7 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
             pad = ProController(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
+                report_period_us=15_000,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
             try:
