@@ -378,6 +378,30 @@ class IMUFrame:
             gyro=(x, y, z),
         )
 
+    def with_gyro_rate(
+        self,
+        *,
+        x_rad_s: float = 0.0,
+        y_rad_s: float = 0.0,
+        z_rad_s: float = 0.0,
+    ) -> "IMUFrame":
+        """Return a frame with gyroscope rates replaced from radians per second.
+
+        Args:
+            x_rad_s: Replacement X-axis angular velocity in radians per second.
+            y_rad_s: Replacement Y-axis angular velocity in radians per second.
+            z_rad_s: Replacement Z-axis angular velocity in radians per second.
+
+        Returns:
+            IMUFrame: Copy of this frame with accelerometer axes preserved.
+
+        Raises:
+            InvalidInputError: A converted raw value is outside the signed 16-bit range.
+        """
+        return self.with_gyro(
+            *DEFAULT_GYRO_CALIBRATION.gyro_rates_to_raw((x_rad_s, y_rad_s, z_rad_s))
+        )
+
     def with_accel(self, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":
         """Return a frame with replaced accelerometer axes.
 

@@ -184,6 +184,18 @@ def test_imu_frame_converts_three_axis_gyro_rates_between_rad_s_and_raw() -> Non
     assert frame.to_gyro_rate() == pytest.approx(rates)
 
 
+def test_imu_frame_with_gyro_rate_preserves_accelerometer_axes() -> None:
+    frame = IMUFrame.accel(1, 2, 3)
+
+    updated = frame.with_gyro_rate(
+        x_rad_s=radians(7.0),
+        y_rad_s=radians(-14.0),
+        z_rad_s=radians(0.07),
+    )
+
+    assert updated == IMUFrame.raw(accel=(1, 2, 3), gyro=(100, -200, 1))
+
+
 def test_imu_frame_update_helpers_preserve_the_opposite_sensor_axes() -> None:
     frame = IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, -100)
 
