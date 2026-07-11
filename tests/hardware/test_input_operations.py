@@ -696,10 +696,11 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
             "test_switch_input_semantics_pairing_writes_fresh_key_store first"
         )
 
+    resting_frame = IMUFrame.accel(0, 0, 4096)
     axis_frames = (
-        ("x", IMUFrame.gyro_rate(x_rad_s=math.radians(90.0))),
-        ("y", IMUFrame.gyro_rate(y_rad_s=math.radians(90.0))),
-        ("z", IMUFrame.gyro_rate(z_rad_s=math.radians(90.0))),
+        ("x", resting_frame.with_gyro_rate(x_rad_s=math.radians(90.0))),
+        ("y", resting_frame.with_gyro_rate(y_rad_s=math.radians(90.0))),
+        ("z", resting_frame.with_gyro_rate(z_rad_s=math.radians(90.0))),
     )
 
     async def run() -> None:
@@ -760,6 +761,7 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
                         trace,
                         "manual_input_checkpoint",
                         axis=axis,
+                        expected_accel_raw=(frame.accel_x, frame.accel_y, frame.accel_z),
                         expected_gyro_raw=(frame.gyro_x, frame.gyro_y, frame.gyro_z),
                         hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
                         operation=f"gyro_{axis}_rate_start",
@@ -775,6 +777,7 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
                         trace,
                         "manual_input_checkpoint",
                         axis=axis,
+                        expected_accel_raw=(frame.accel_x, frame.accel_y, frame.accel_z),
                         expected_gyro_raw=(frame.gyro_x, frame.gyro_y, frame.gyro_z),
                         hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
                         operation=f"gyro_{axis}_rate_reports_sent",
@@ -811,6 +814,7 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
             events,
             "manual_input_checkpoint",
             axis=axis,
+            expected_accel_raw=[frame.accel_x, frame.accel_y, frame.accel_z],
             expected_gyro_raw=[frame.gyro_x, frame.gyro_y, frame.gyro_z],
             operation=f"gyro_{axis}_rate_reports_sent",
         )
