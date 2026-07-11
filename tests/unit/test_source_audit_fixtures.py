@@ -24,6 +24,7 @@ REQUIRED_ENTRY_IDS = {
     "device_info_grip_color_tail_0302",
     "joycon_device_info_profile",
     "device_info_local_bluetooth_address_wiring",
+    "factory_gyro_calibration_layout",
     "joycon_spi_device_type_values",
     "joycon_default_controller_color_profile",
     "joycon_standard_button_mapping",
@@ -342,6 +343,23 @@ def test_subcommand_imu_vibration_enable_state_is_source_audited() -> None:
     assert "0x00" in value
     assert "0x01" in value
     assert "SubcommandSessionState" in value
+
+
+def test_factory_gyro_calibration_layout_is_source_audited() -> None:
+    entry = _entry_by_id("factory_gyro_calibration_layout")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "stable-virtual-profile"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x602c-0x6037" in value
+    assert "zero_x,zero_y,zero_z,reference_x,reference_y,reference_z" in value
+    assert "Int16LE" in value
+    assert "zero=0" in value
+    assert "reference=0x343b" in value
+    assert "0.070 dps/raw" in value
+    assert "816/936" in value
 
 
 def test_subcommand_nfc_ir_mcu_state_is_source_audited() -> None:

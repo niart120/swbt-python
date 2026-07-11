@@ -184,6 +184,20 @@ status = "profile-policy"
 handoff = ["unit_031"]
 
 [[entry]]
+id = "factory_gyro_calibration_layout"
+fixture_name = "factory_gyro_calibration_0x602c_0x6037"
+area = "protocol"
+value = "Factory 6-axis calibration uses four groups of XYZ Int16LE at 0x6020-0x6037; the latter two groups make the gyro region 0x602c-0x6037 in zero_x,zero_y,zero_z,reference_x,reference_y,reference_z order. The virtual profile fixes each axis to zero=0 and reference=0x343b, and rad/s conversion uses 0.070 dps/raw directly without a full-span or 816/936 calculation."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md',
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/imu_sensor_notes.md',
+    'https://github.com/niart120/swbt-python/issues/69',
+]
+status = "stable-virtual-profile"
+handoff = ["unit_047"]
+
+[[entry]]
 id = "subcommand_report_mode_session_state"
 fixture_name = "subcommand_report_mode_session_state"
 area = "protocol"

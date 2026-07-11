@@ -96,7 +96,7 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | source-audit fixture が `0x602C-0x6037` の軸順、Int16LE、zero/reference、固定尺度を保持する | new | unit | no | upstream URL と classification を含む |
+| refactor-skipped | source-audit fixture が `0x602C-0x6037` の軸順、Int16LE、zero/reference、固定尺度を保持する | new | unit | no | 25 passed。既存 fixture 形式に沿っており追加の構造変更なし |
 | todo | `ControllerProfile` が既定の仮想ジャイロ校正情報を所有する | new | unit | no | 全軸 zero/reference と固定尺度 |
 | todo | `VirtualSpiFlash` が profile 由来の factory gyro calibration bytes を返す | new | unit | no | 12-byte fixture で layout を固定 |
 | todo | `IMUFrame.gyro_rate()` が rad/s から 3 軸 raw を生成し、`to_gyro_rate()` が逆変換する | new | unit | no | `0.070 dps/raw` を共有 |
@@ -136,7 +136,8 @@
 
 | command | result | notes |
 |---|---|---|
-| `uv run pytest tests/unit/test_source_audit_fixtures.py` | not run | 最初の TDD item で red / green を記録する |
+| `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | red | 2 failed, 23 passed。`factory_gyro_calibration_layout` が fixture に未登録であることを確認 |
+| `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 25 passed。layout、axis order、Int16LE、zero/reference、固定尺度と source classification を確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_input_state.py` | not run | 各 TDD cycle で対象 test を絞って実行する |
 | `uv sync --dev` | not run | 最終 gate |
 | `uv run ruff format --check .` | not run | 最終 gate |
@@ -167,7 +168,7 @@
 - [x] TDD Test List の初期案を作成した
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件と未承認状態を記録した
-- [ ] source-audit fixture を更新した
+- [x] source-audit fixture を更新した
 - [ ] profile と SPI の校正共有を実装した
 - [ ] rad/s ↔ raw の公開 API と境界方針を実装した
 - [ ] raw API の回帰を確認した
