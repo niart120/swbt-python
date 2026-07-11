@@ -311,6 +311,8 @@ await pad.imu(frame)
 
 `IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)` は、加速度を設定した frame にジャイロを追加します。`IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, 0))` と同じ値です。
 
+G 単位で指定する場合は `IMUFrame.accel_g(x_g=0.0, y_g=0.0, z_g=1.0)` を使います。固定尺度は `1/4096 G/raw` で、`frame.to_accel_g()` が G の 3 軸 tuple を返します。既存 gyro を維持して加速度だけを置き換える場合は `frame.with_accel_g(x_g=..., y_g=..., z_g=...)` を使います。
+
 加速度を維持したまま物理角速度を設定する場合は、`frame.with_gyro_rate(x_rad_s=..., y_rad_s=..., z_rad_s=...)` を使います。
 
 ### Three IMU Frames

@@ -484,11 +484,32 @@ class IMUFrame:
     def with_accel(self, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame": ...
 
     def to_gyro_rate(self) -> tuple[float, float, float]: ...
+
+    @classmethod
+    def accel_g(
+        cls,
+        *,
+        x_g: float = 0.0,
+        y_g: float = 0.0,
+        z_g: float = 0.0,
+    ) -> "IMUFrame": ...
+
+    def with_accel_g(
+        self,
+        *,
+        x_g: float = 0.0,
+        y_g: float = 0.0,
+        z_g: float = 0.0,
+    ) -> "IMUFrame": ...
+
+    def to_accel_g(self) -> tuple[float, float, float]: ...
 ```
 
 `IMUFrame.neutral()` は全軸ゼロの frame を返す。`IMUFrame.raw()` は accel / gyro を 3 軸 tuple で指定し、未指定側はゼロにする。`IMUFrame.gyro()` と `IMUFrame.accel()` は片側 sensor だけを raw 値で指定する short form である。`with_gyro()` と `with_accel()` は既存 frame の反対側 sensor を維持して片側だけを置き換える。
 
 `IMUFrame.gyro_rate()` と `with_gyro_rate()` は rad/s の 3 軸角速度を固定尺度 `0.070 dps/raw` で raw 値へ変換する。`to_gyro_rate()` は raw 値を rad/s の 3 軸 tuple へ戻す。呼び出し側から校正値や尺度は渡さない。変換後の raw 値が signed int16 の範囲外、または角速度が非有限値の場合は clamp せず `InvalidInputError` とする。
+
+`IMUFrame.accel_g()` と `with_accel_g()` は G 単位の 3 軸加速度を固定尺度 `1/4096 G/raw` で raw 値へ変換する。`to_accel_g()` は raw 値を G の 3 軸 tuple へ戻す。呼び出し側から校正値や尺度は渡さない。変換後の raw 値が signed int16 の範囲外、または加速度が非有限値の場合は clamp せず `InvalidInputError` とする。
 
 ## 8. `ControllerColors`
 

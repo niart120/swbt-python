@@ -37,6 +37,8 @@ Unit tests は `tests/unit/` に置く。
 - `IMUFrame.with_gyro()` / `with_accel()` が反対側の sensor 値を維持する
 - `IMUFrame.gyro_rate()` / `to_gyro_rate()` が固定 `0.070 dps/raw` で 3 軸の rad/s と raw 値を相互変換する
 - `IMUFrame.with_gyro_rate()` が accel を維持し、signed int16 境界を受理して範囲外を `InvalidInputError` にする
+- `IMUFrame.accel_g()` / `to_accel_g()` が固定 `1/4096 G/raw` で 3 軸の G と raw 値を相互変換する
+- `IMUFrame.with_accel_g()` が gyro を維持し、signed int16 境界を受理して範囲外を `InvalidInputError` にする
 - `InputState.neutral()` が空の button 集合と center stick を持つ
 - `InputState.with_imu()` / `with_gyro()` / `with_accel()` が 1 個を 3 frame に複製し、3 個は順に設定する
 - `InputState` が immutable に扱える

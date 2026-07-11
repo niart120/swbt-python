@@ -126,7 +126,7 @@ class IMUFrame:
     def accel(cls, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame": ...
 ```
 
-`IMUFrame.raw()`、`gyro()`、`accel()`、`with_gyro()`、`with_accel()` は raw int16 値を扱う。`gyro_rate()`、`with_gyro_rate()`、`to_gyro_rate()` は仮想ジャイロ校正の zero と固定尺度 `0.070 dps/raw` を共有し、rad/s と raw 値を相互変換する。加速度の物理単位変換、重力方向、姿勢推定は protocol core の責務に含めない。
+`IMUFrame.raw()`、`gyro()`、`accel()`、`with_gyro()`、`with_accel()` は raw int16 値を扱う。`gyro_rate()`、`with_gyro_rate()`、`to_gyro_rate()` は仮想ジャイロ校正の zero と固定尺度 `0.070 dps/raw` を共有し、rad/s と raw 値を相互変換する。`accel_g()`、`with_accel_g()`、`to_accel_g()` は仮想加速度校正の zero と固定尺度 `1/4096 G/raw` を共有し、G と raw 値を相互変換する。重力方向や姿勢の生成は protocol core の責務に含めない。
 
 ## 4. Output report
 

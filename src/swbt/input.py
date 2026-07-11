@@ -371,13 +371,29 @@ class IMUFrame:
         y_g: float = 0.0,
         z_g: float = 0.0,
     ) -> "IMUFrame":
-        """Return a frame from XYZ accelerations in G using ``1/4096 G/raw``."""
+        """Return a frame from XYZ accelerations in G using ``1/4096 G/raw``.
+
+        Args:
+            x_g: X-axis acceleration in G.
+            y_g: Y-axis acceleration in G.
+            z_g: Z-axis acceleration in G.
+
+        Returns:
+            IMUFrame: Frame with converted accelerometer raw values and zero gyroscope.
+
+        Raises:
+            InvalidInputError: A value is non-finite or converts outside signed 16-bit.
+        """
         return cls.raw(
             accel=DEFAULT_ACCELEROMETER_CALIBRATION.accelerations_to_raw((x_g, y_g, z_g))
         )
 
     def to_accel_g(self) -> tuple[float, float, float]:
-        """Return XYZ accelerations in G using ``1/4096 G/raw``."""
+        """Return XYZ accelerations in G using ``1/4096 G/raw``.
+
+        Returns:
+            tuple[float, float, float]: X, Y, and Z accelerations in G.
+        """
         return DEFAULT_ACCELEROMETER_CALIBRATION.raw_to_accelerations(
             (self.accel_x, self.accel_y, self.accel_z)
         )
@@ -453,7 +469,19 @@ class IMUFrame:
         y_g: float = 0.0,
         z_g: float = 0.0,
     ) -> "IMUFrame":
-        """Return a frame with accelerations replaced from G values."""
+        """Return a frame with accelerations replaced using ``1/4096 G/raw``.
+
+        Args:
+            x_g: Replacement X-axis acceleration in G.
+            y_g: Replacement Y-axis acceleration in G.
+            z_g: Replacement Z-axis acceleration in G.
+
+        Returns:
+            IMUFrame: Copy of this frame with gyroscope axes preserved.
+
+        Raises:
+            InvalidInputError: A value is non-finite or converts outside signed 16-bit.
+        """
         return self.with_accel(
             *DEFAULT_ACCELEROMETER_CALIBRATION.accelerations_to_raw((x_g, y_g, z_g))
         )
