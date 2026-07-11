@@ -76,7 +76,7 @@
 | 項目 | 値 | 根拠分類 | source | status |
 |---|---:|---|---|---|
 | factory 6-axis calibration layout | `0x6020-0x6037`, 4 groups of XYZ Int16LE | source fact | dekuNukem `spi_flash_notes.md` | stable |
-| factory gyro calibration layout | `0x602C-0x6031` zero XYZ、`0x6032-0x6037` reference XYZ | inference | 上記 layout と「後半 2 groups は Gyro cal」の記述から導出 | fixture で固定予定 |
+| factory gyro calibration layout | `0x602C-0x6031` zero XYZ、`0x6032-0x6037` reference XYZ | inference | 上記 layout と「後半 2 groups は Gyro cal」の記述から導出 | source-audit fixture と unit test で固定済み |
 | gyro zero raw | `0, 0, 0` | implementation policy | Issue #69 | stable virtual default |
 | gyro reference raw | `0x343B, 0x343B, 0x343B` | source fact / implementation policy | dekuNukem `spi_flash_notes.md`, Issue #69 | stable virtual default |
 | gyro scale | `0.070 dps/raw` | source fact / implementation policy | dekuNukem `imu_sensor_notes.md`, Issue #69 | stable fixed scale |
@@ -85,8 +85,8 @@
 
 | 振る舞い | 入力・状態 | 期待結果 | 備考 |
 |---|---|---|---|
-| profile ownership | 既定 `ProControllerProfile` | zero `(0, 0, 0)`、reference `(13371, 13371, 13371)`、scale `0.070` の校正情報を持つ | profile と SPI の共有元 |
-| SPI encoding | 既定 profile で `read(0x602C, 12)` | `00 00 00 00 00 00 3b 34 3b 34 3b 34` | XYZ zero、XYZ reference、Int16LE |
+| profile ownership | Pro Controller / Joy-Con L / Joy-Con R の既定 profile | zero `(0, 0, 0)`、reference `(13371, 13371, 13371)`、scale `0.070` の校正情報を共有する | profile と SPI の共有元 |
+| SPI encoding | 各既定 profile で `read(0x602C, 12)` | `00 00 00 00 00 00 3b 34 3b 34 3b 34` | XYZ zero、XYZ reference、Int16LE |
 | rate factory | rad/s の X/Y/Z | `degrees(value) / 0.070` を zero raw へ加え、最も近い整数 raw に丸めた `IMUFrame` | accel はゼロ |
 | rate replacement | accel を持つ frame と rad/s の X/Y/Z | accel を維持し gyro raw だけを置換した frame | immutable copy |
 | inverse conversion | gyro raw の X/Y/Z | `(raw - zero) * 0.070` を degree/s から rad/s へ変換した tuple | 3 軸同じ定義 |
