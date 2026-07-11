@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from swbt.errors import InvalidInputError
+from swbt.imu import DEFAULT_GYRO_CALIBRATION
 
 
 class Button(Enum):
@@ -308,6 +309,38 @@ class IMUFrame:
             InvalidInputError: Any value is outside the supported signed 16-bit range.
         """
         return cls.raw(gyro=(x, y, z))
+
+    @classmethod
+    def gyro_rate(
+        cls,
+        *,
+        x_rad_s: float = 0.0,
+        y_rad_s: float = 0.0,
+        z_rad_s: float = 0.0,
+    ) -> "IMUFrame":
+        """Return a frame from XYZ gyroscope rates in radians per second.
+
+        Args:
+            x_rad_s: X-axis angular velocity in radians per second.
+            y_rad_s: Y-axis angular velocity in radians per second.
+            z_rad_s: Z-axis angular velocity in radians per second.
+
+        Returns:
+            IMUFrame: Frame with converted gyroscope raw values and zero accelerometer.
+
+        Raises:
+            InvalidInputError: A converted raw value is outside the signed 16-bit range.
+        """
+        return cls.raw(gyro=DEFAULT_GYRO_CALIBRATION.gyro_rates_to_raw((x_rad_s, y_rad_s, z_rad_s)))
+
+    def to_gyro_rate(self) -> tuple[float, float, float]:
+        """Return XYZ gyroscope rates in radians per second.
+
+        Returns:
+            tuple[float, float, float]: X, Y, and Z angular velocities in radians per
+                second.
+        """
+        return DEFAULT_GYRO_CALIBRATION.raw_to_gyro_rates((self.gyro_x, self.gyro_y, self.gyro_z))
 
     @classmethod
     def accel(cls, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":

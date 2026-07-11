@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from math import radians
 from typing import cast
 
 import pytest
@@ -168,6 +169,19 @@ def test_imu_frame_gyro_and_accel_shorthands_match_raw_construction() -> None:
     assert IMUFrame.gyro(x=100) == IMUFrame.raw(gyro=(100, 0, 0))
     assert IMUFrame.accel(0, 0, 4096) == IMUFrame.raw(accel=(0, 0, 4096))
     assert IMUFrame.accel(z=4096) == IMUFrame.raw(accel=(0, 0, 4096))
+
+
+def test_imu_frame_converts_three_axis_gyro_rates_between_rad_s_and_raw() -> None:
+    rates = (radians(7.0), radians(-14.0), radians(0.07))
+
+    frame = IMUFrame.gyro_rate(
+        x_rad_s=rates[0],
+        y_rad_s=rates[1],
+        z_rad_s=rates[2],
+    )
+
+    assert frame == IMUFrame.gyro(100, -200, 1)
+    assert frame.to_gyro_rate() == pytest.approx(rates)
 
 
 def test_imu_frame_update_helpers_preserve_the_opposite_sensor_axes() -> None:

@@ -99,7 +99,7 @@
 | refactor-skipped | source-audit fixture が `0x602C-0x6037` の軸順、Int16LE、zero/reference、固定尺度を保持する | new | unit | no | 25 passed。既存 fixture 形式に沿っており追加の構造変更なし |
 | refactor-skipped | `ControllerProfile` が既定の仮想ジャイロ校正情報を所有する | new | unit | no | 39 passed。immutable な共有既定値を field で所有し、追加の構造変更なし |
 | refactor-skipped | `VirtualSpiFlash` が profile 由来の factory gyro calibration bytes を返す | new | unit | no | 51 passed。校正値側で Int16LE serialize し、SPI は profile 値を seed。追加の構造変更なし |
-| todo | `IMUFrame.gyro_rate()` が rad/s から 3 軸 raw を生成し、`to_gyro_rate()` が逆変換する | new | unit | no | `0.070 dps/raw` を共有 |
+| refactor-skipped | `IMUFrame.gyro_rate()` が rad/s から 3 軸 raw を生成し、`to_gyro_rate()` が逆変換する | new | unit | no | 63 passed。変換を校正値へ集約済みで追加の構造変更なし |
 | todo | `IMUFrame.with_gyro_rate()` が accel を維持して gyro だけを物理角速度から置換する | new | unit | no | immutable copy |
 | todo | 物理角速度 API が signed int16 境界を受理し、範囲外を `InvalidInputError` にする | edge | unit | no | clamp しない方針を固定 |
 | todo | 既存 `IMUFrame.raw()` / `gyro()` / `with_gyro()` の raw 入力契約を維持する | regression | unit | no | 既存 test に明示的回帰を追加 |
@@ -143,6 +143,8 @@
 | `uv run pytest tests/unit/test_protocol_profile.py -q` | pass | 39 passed。profile ownership と既存 profile contract を確認 |
 | `uv run pytest tests/unit/test_virtual_spi_flash.py::test_virtual_spi_flash_seeds_factory_gyro_calibration_from_profile -q` | red | 1 failed。`0x602C` が erased byte `ff` のままであることを確認 |
 | `uv run pytest tests/unit/test_virtual_spi_flash.py tests/unit/test_protocol_profile.py -q` | pass | 51 passed。default/custom Pro profile の gyro bytes と Joy-Con erased calibration の回帰を確認 |
+| `uv run pytest tests/unit/test_input_state.py::test_imu_frame_converts_three_axis_gyro_rates_between_rad_s_and_raw -q` | red | 1 failed。`IMUFrame.gyro_rate` が未実装の `AttributeError` を確認 |
+| `uv run pytest tests/unit/test_input_state.py -q` | pass | 63 passed。3 軸の rad/s → raw と raw → rad/s、および既存 input model test を確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_input_state.py` | not run | 各 TDD cycle で対象 test を絞って実行する |
 | `uv sync --dev` | not run | 最終 gate |
 | `uv run ruff format --check .` | not run | 最終 gate |
