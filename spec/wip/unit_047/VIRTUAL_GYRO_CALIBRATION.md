@@ -78,7 +78,7 @@
 | gyro conversion scale | required | done | dekuNukem `imu_sensor_notes.md` は saturation-free LSM6DS3 ±2000 dps を `0.070 dps/raw` とする。Issue #69 はこの尺度を固定し、full-span 換算と `816` / `936` の直接利用を明示的に除外する |
 | factory accel calibration | required | done | dekuNukem `spi_flash_notes.md` は6-axis calibration前半2 groupsをAccel XYZ origin/reference、既定referenceを各軸`0x4000`とする。virtual zeroは各軸`0`とし、物理加速度APIには拡大しない |
 | Bumble / transport | not applicable | not applicable | report packing、transport、advertising、L2CAP は変更しない |
-| OS / driver / adapter | required | todo | 完了条件の Pro Controller 実機回帰は Windows / CSR8510 A10 / WinUSB / Bumble adapter `usb:0` を候補とする。実行前に明示承認と当日の環境確認が必要 |
+| OS / driver / adapter | required | done | Windows 11 / CSR8510 A10 / WinUSB / Bumble `usb:0` で実行し、環境とcleanupをhardware logへ記録した |
 
 ### 5.1 監査値
 
@@ -119,7 +119,7 @@
 | refactor-skipped | 物理角速度 API が signed int16 境界を受理し、範囲外を `InvalidInputError` にする | edge | unit | no | 65 passed。finite validation を校正変換へ集約し、追加の構造変更なし |
 | refactor-skipped | 既存 `IMUFrame.raw()` / `gyro()` / `with_gyro()` の raw 入力契約を維持する | regression | unit | no | 既存 5 tests が pass。実装変更不要 |
 | refactor-skipped | public docstring と docs が rad/s API、固定尺度、範囲外例外、raw API との使い分けを説明する | docs | unit | no | 14 passed。公開 docs と initial design を追従し追加の構造変更なし |
-| todo | Pro Controller のジャイロ入力が Switch 実機で観測できる | regression | hardware | yes | test 実装・collection 済み。adapter、command、cleanup を承認後に実行 |
+| refactor-skipped | Pro Controller のジャイロ入力が Switch 実機で観測できる | regression | hardware | yes | 正方向Z raw `0x0600`で右回転を目視。低速・負方向はobserved-partialとしてhardware logへ記録 |
 
 ## 8. 設計メモ
 
@@ -207,5 +207,5 @@
 - [x] rad/s ↔ raw の公開 API と境界方針を実装した
 - [x] raw API の回帰を確認した
 - [x] docs と initial design を更新した
-- [ ] Pro Controller 実機回帰を実行して結果を記録した
+- [x] Pro Controller 実機回帰を実行して結果を記録した
 - [x] 標準 gate の結果を記録した

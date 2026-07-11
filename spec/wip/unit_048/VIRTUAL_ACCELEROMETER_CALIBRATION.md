@@ -53,7 +53,7 @@
 | Switch HID / report bytes | required | done | Issue #70 と source-audit fixture が layout、Int16LE、zero/reference を固定する |
 | G conversion scale | required | done | Issue #70 が reference acceleration `4.0 G`、尺度 `1/4096 G/raw` を指定する |
 | Bumble / transport | not applicable | not applicable | transport と report packing は変更しない |
-| OS / driver / adapter | required | todo | Pro/Joy-Con 実機回帰の実行時に記録する |
+| OS / driver / adapter | required | in progress | Pro ControllerはWindows 11 / CSR8510 A10 / WinUSB / `usb:0`で記録済み。Joy-Conは未実行 |
 
 ## 6. 振る舞い仕様
 
@@ -70,13 +70,13 @@
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
 | refactor-skipped | source fixture が layout、軸順、Int16LE、zero/reference、4.0 G、`1/4096 G/raw` を保持する | new | unit | no | fixture は unit_047 で先行追加。Issue #70 の全契約へ更新する |
-| red | 3 profile と SPI が同じ加速度校正値を共有する | new | unit | no | 中断差分の test/実装を精査して green にする |
-| todo | `accel_g()` と `to_accel_g()` が 3 軸を相互変換する | new | unit | no |  |
-| todo | `with_accel_g()` が gyro を維持する | new | unit | no |  |
-| todo | G API が signed int16 境界を受理し範囲外を統一例外にする | edge | unit | no | NaN/inf を含む |
-| todo | factory 24 bytes と既存 raw/gyro API が共存する | regression | unit | no |  |
-| todo | 公開 docs と initial design が G API と固定尺度を説明する | docs | unit | no |  |
-| todo | Pro Controller と Joy-Con の SPI read を実機で記録する | regression | hardware | yes | 別途明示承認が必要 |
+| refactor-done | 3 profile と SPI が同じ加速度校正値を共有する | new | unit | no | gyroと共通の3軸校正モデルへ集約 |
+| refactor-skipped | `accel_g()` と `to_accel_g()` が 3 軸を相互変換する | new | unit | no | 68 input tests pass |
+| refactor-skipped | `with_accel_g()` が gyro を維持する | new | unit | no | 反対側sensor保持を確認 |
+| refactor-skipped | G API が signed int16 境界を受理し範囲外を統一例外にする | edge | unit | no | NaN/infを含め確認 |
+| refactor-skipped | factory 24 bytes と既存 raw/gyro API が共存する | regression | unit | no | 24-byte fixtureと既存API tests pass |
+| refactor-skipped | 公開 docs と initial design が G API と固定尺度を説明する | docs | unit | no | public docs tests pass |
+| green | Pro Controller と Joy-Con の SPI read を実機で記録する | regression | hardware | yes | Proは`0x6020` 24-byte応答を記録。Joy-Conは未実行 |
 
 ## 8. 設計メモ
 
@@ -101,7 +101,7 @@
 | command | result | notes |
 |---|---|---|
 | `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 26 passed。Issue #70 の尺度記述は次 cycle で追加する |
-| standard gate | not run | 実装後に実行する |
+| standard gate | pass | format、lint、ty、unit 386件、integration 93件。最終差分で再実行する |
 
 ## 11. 実機実行条件
 
@@ -124,7 +124,7 @@
 - [x] TDD Test List を作成した
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件を未承認として記録した
-- [ ] unit test と実装を完了した
-- [ ] docs と initial design を更新した
+- [x] unit test と実装を完了した
+- [x] docs と initial design を更新した
 - [ ] Pro/Joy-Con 実機回帰を記録した
 - [ ] 標準 gate を記録した
