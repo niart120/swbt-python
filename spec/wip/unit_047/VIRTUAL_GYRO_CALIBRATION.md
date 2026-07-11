@@ -11,6 +11,7 @@
 | source | 内容 | path |
 |---|---|---|
 | GitHub Issue #69 | `ControllerProfile` による校正値所有、SPI `0x602C-0x6037`、固定尺度 `0.070 dps/raw`、物理角速度 API、実機回帰の完了条件 | https://github.com/niart120/swbt-python/issues/69 |
+| user follow-up | Joy-Con L/R profile も同じ仮想ジャイロ校正値を SPI に設定する | 2026-07-11 conversation |
 | upstream reverse-engineering notes | 6-axis factory calibration は 4 組の XYZ Int16LE。後半 2 組が gyro zero / reference で、既定 reference は `0x343B` | https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md |
 | upstream IMU notes | saturation-free LSM6DS3 ±2000 dps の尺度は `0.070 dps/raw`。SPI 校正の gyro zero は静止時 offset | https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/imu_sensor_notes.md |
 | completed unit | 既存 `IMUFrame.raw()` / `gyro()` / `with_gyro()` と signed int16 validation | `spec/complete/unit_025/IMU_INPUT_SHORTHAND_API.md` |
@@ -28,6 +29,7 @@
 ## 2. 対象範囲
 
 - `ControllerProfile` が仮想ジャイロ校正情報を所有する。
+- Pro Controller、Joy-Con L、Joy-Con R の具象 profile が同じ既定校正を共有する。
 - 既定校正を全軸 zero raw `0`、reference raw `0x343B`、`0.070 dps/raw` とする。
 - `VirtualSpiFlash` が profile の校正情報から `0x602C-0x6037` を生成する。
 - `IMUFrame.gyro_rate(x_rad_s=..., y_rad_s=..., z_rad_s=...)` を追加する。
@@ -45,7 +47,7 @@
 - 姿勢推定、センサーフュージョン、ノイズや温度ドリフトの再現。
 - マウス入力から角速度を生成する処理。
 - ユーザー向け校正 GUI。
-- Joy-Con 固有の軸反転や実機回帰。
+- Joy-Con の加速度校正、スティック校正、固有の軸反転、実機回帰。Joy-Con L/R のジャイロ校正 seed は対象に含む。
 
 ## 4. 関連 docs
 
@@ -99,6 +101,7 @@
 | refactor-skipped | source-audit fixture が `0x602C-0x6037` の軸順、Int16LE、zero/reference、固定尺度を保持する | new | unit | no | 25 passed。既存 fixture 形式に沿っており追加の構造変更なし |
 | refactor-skipped | `ControllerProfile` が既定の仮想ジャイロ校正情報を所有する | new | unit | no | 39 passed。immutable な共有既定値を field で所有し、追加の構造変更なし |
 | refactor-skipped | `VirtualSpiFlash` が profile 由来の factory gyro calibration bytes を返す | new | unit | no | 51 passed。校正値側で Int16LE serialize し、SPI は profile 値を seed。追加の構造変更なし |
+| refactor-done | Joy-Con L/R profile も共通の factory gyro calibration bytes を返す | new | unit | no | 52 passed。共有既定値を base profile へ移し、3 profile の重複定義を避けた |
 | refactor-skipped | `IMUFrame.gyro_rate()` が rad/s から 3 軸 raw を生成し、`to_gyro_rate()` が逆変換する | new | unit | no | 63 passed。変換を校正値へ集約済みで追加の構造変更なし |
 | refactor-skipped | `IMUFrame.with_gyro_rate()` が accel を維持して gyro だけを物理角速度から置換する | new | unit | no | 64 passed。既存 `with_gyro()` へ委譲し追加の構造変更なし |
 | refactor-skipped | 物理角速度 API が signed int16 境界を受理し、範囲外を `InvalidInputError` にする | edge | unit | no | 65 passed。finite validation を校正変換へ集約し、追加の構造変更なし |
@@ -109,7 +112,7 @@
 ## 8. 設計メモ
 
 - 校正値オブジェクトは zero/reference の XYZ tuple と固定 `0.070 dps/raw` を一つに束ね、`ControllerProfile` と `IMUFrame` conversion が同じ既定定義を参照する。
-- base `ControllerProfile` は optional な校正 field を所有し、対象の Pro profile が既定校正を設定する。Joy-Con profile の未監査 calibration は既存契約どおり erased のまま維持する。
+- base `ControllerProfile` が共通の既定校正 field を所有し、Pro Controller、Joy-Con L、Joy-Con R が同じ immutable 値を継承する。Joy-Con の加速度校正とスティック校正は erased のまま維持する。
 - SPI の reference 値から conversion scale を再計算しない。Issue #69 が指定する `0.070 dps/raw` を正本とし、`816` / `936` は実装に置かない。
 - rad/s から raw への変換は `round()` で最も近い整数にする。変換後に signed int16 validation を通し、範囲外は clamp せず `InvalidInputError` にする。
 - `IMUFrame` の rate API は呼び出し側から校正値や尺度を受け取らない。今回の profile は尺度変更を提供しないため、既定 profile と public conversion は同じ固定定義を共有する。
@@ -152,6 +155,8 @@
 | `uv run pytest tests/unit/test_input_state.py::test_imu_frame_raw_defaults_to_neutral_and_sets_accel_and_gyro_axes tests/unit/test_input_state.py::test_imu_frame_raw_rejects_values_outside_i16_range tests/unit/test_input_state.py::test_imu_frame_gyro_and_accel_shorthands_match_raw_construction tests/unit/test_input_state.py::test_imu_frame_update_helpers_preserve_the_opposite_sensor_axes -q` | pass | 5 passed。既存 raw API の生成、範囲、shorthand、部分更新を確認 |
 | `uv run pytest tests/unit/test_public_api_docstrings.py tests/unit/test_public_docs.py -q` | red | 4 failed, 10 passed。固定尺度の docstring と API / usage / agent docs が未記載であることを確認 |
 | `uv run pytest tests/unit/test_public_api_docstrings.py tests/unit/test_public_docs.py -q` | pass | 14 passed。rad/s API、`0.070 dps/raw`、範囲外例外、raw API の使い分けを確認 |
+| `uv run pytest tests/unit/test_virtual_spi_flash.py::test_virtual_spi_flash_seeds_gyro_calibration_for_joycon_profiles -q` | red | 2 failed。Joy-Con L/R の `gyro_calibration` が `None` であることを確認 |
+| `uv run pytest tests/unit/test_virtual_spi_flash.py tests/unit/test_protocol_profile.py -q` | pass | 52 passed。Pro / Joy-Con L / Joy-Con R の共通校正 seed と既存 profile / SPI contract を確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_input_state.py` | not run | 各 TDD cycle で対象 test を絞って実行する |
 | `uv sync --dev` | not run | 最終 gate |
 | `uv run ruff format --check .` | not run | 最終 gate |
@@ -183,7 +188,7 @@
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件と未承認状態を記録した
 - [x] source-audit fixture を更新した
-- [ ] profile と SPI の校正共有を実装した
+- [x] profile と SPI の校正共有を実装した
 - [ ] rad/s ↔ raw の公開 API と境界方針を実装した
 - [x] raw API の回帰を確認した
 - [x] docs と initial design を更新した

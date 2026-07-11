@@ -76,10 +76,15 @@ def test_virtual_spi_flash_returns_erased_bytes_for_unseeded_address() -> None:
     assert spi.read(0x70000, 2) == b"\xff\xff"
 
 
-def test_virtual_spi_flash_leaves_unaudited_calibration_erased_for_joycon_profiles() -> None:
-    spi = VirtualSpiFlash(profile=JoyConLeftProfile())
+@pytest.mark.parametrize("profile", [JoyConLeftProfile(), JoyConRightProfile()])
+def test_virtual_spi_flash_seeds_gyro_calibration_for_joycon_profiles(
+    profile: JoyConLeftProfile | JoyConRightProfile,
+) -> None:
+    spi = VirtualSpiFlash(profile=profile)
 
-    assert spi.read(0x6020, 0x18) == b"\xff" * 0x18
+    assert profile.gyro_calibration is not None
+    assert spi.read(0x6020, 12) == b"\xff" * 12
+    assert spi.read(0x602C, 12) == bytes.fromhex("00 00 00 00 00 00 3b 34 3b 34 3b 34")
     assert spi.read(0x603D, 9) == b"\xff" * 9
     assert spi.read(0x6046, 9) == b"\xff" * 9
 
