@@ -36,6 +36,19 @@ def test_pro_controller_profile_owns_default_virtual_gyro_calibration() -> None:
     assert calibration.dps_per_raw == 0.070
 
 
+@pytest.mark.parametrize(
+    "profile",
+    [ProControllerProfile(), JoyConLeftProfile(), JoyConRightProfile()],
+)
+def test_controller_profiles_own_default_virtual_accelerometer_calibration(
+    profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
+) -> None:
+    calibration = profile.accelerometer_calibration
+
+    assert calibration.zero_raw == (0, 0, 0)
+    assert calibration.reference_raw == (0x4000, 0x4000, 0x4000)
+
+
 def test_controller_kind_branching_stays_localized_to_profiles_and_gamepad_classes() -> None:
     allowed_paths = {
         "src/swbt/gamepad/core.py",

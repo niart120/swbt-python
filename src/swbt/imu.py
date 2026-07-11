@@ -8,6 +8,18 @@ from swbt.errors import InvalidInputError
 
 
 @dataclass(frozen=True)
+class AccelerometerCalibration:
+    """Virtual accelerometer zero and reference values for factory SPI."""
+
+    zero_raw: tuple[int, int, int] = (0, 0, 0)
+    reference_raw: tuple[int, int, int] = (0x4000, 0x4000, 0x4000)
+
+    def to_spi_bytes(self) -> bytes:
+        """Return accelerometer zero XYZ followed by reference XYZ as Int16LE."""
+        return pack("<6h", *self.zero_raw, *self.reference_raw)
+
+
+@dataclass(frozen=True)
 class GyroCalibration:
     """Virtual gyroscope zero, reference, and fixed conversion scale."""
 
@@ -56,4 +68,5 @@ class GyroCalibration:
         return float(value)
 
 
+DEFAULT_ACCELEROMETER_CALIBRATION = AccelerometerCalibration()
 DEFAULT_GYRO_CALIBRATION = GyroCalibration()
