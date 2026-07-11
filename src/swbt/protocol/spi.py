@@ -30,9 +30,9 @@ class VirtualSpiFlash:
             self.CONTROLLER_COLORS_ADDRESS : self.CONTROLLER_COLORS_ADDRESS + len(controller_colors)
         ] = controller_colors
         accelerometer_calibration = profile.accelerometer_calibration.to_spi_bytes()
+        accelerometer_address = self.FACTORY_ACCELEROMETER_CALIBRATION_ADDRESS
         self._data[
-            self.FACTORY_ACCELEROMETER_CALIBRATION_ADDRESS : self.FACTORY_ACCELEROMETER_CALIBRATION_ADDRESS
-            + len(accelerometer_calibration)
+            accelerometer_address : accelerometer_address + len(accelerometer_calibration)
         ] = accelerometer_calibration
         if profile.gyro_calibration is not None:
             gyro_calibration = profile.gyro_calibration.to_spi_bytes()
