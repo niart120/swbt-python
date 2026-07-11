@@ -446,6 +446,18 @@ class IMUFrame:
             gyro=(self.gyro_x, self.gyro_y, self.gyro_z),
         )
 
+    def with_accel_g(
+        self,
+        *,
+        x_g: float = 0.0,
+        y_g: float = 0.0,
+        z_g: float = 0.0,
+    ) -> "IMUFrame":
+        """Return a frame with accelerations replaced from G values."""
+        return self.with_accel(
+            *DEFAULT_ACCELEROMETER_CALIBRATION.accelerations_to_raw((x_g, y_g, z_g))
+        )
+
     @classmethod
     def _validate_i16(cls, field_name: str, value: object) -> int:
         if not isinstance(value, int) or not cls.MIN <= value <= cls.MAX:
