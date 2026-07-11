@@ -145,7 +145,7 @@
 | `uv run pytest tests/unit/test_protocol_profile.py::test_pro_controller_profile_owns_default_virtual_gyro_calibration -q` | red | collection error。`swbt.imu` が未実装であることを確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py -q` | pass | 39 passed。profile ownership と既存 profile contract を確認 |
 | `uv run pytest tests/unit/test_virtual_spi_flash.py::test_virtual_spi_flash_seeds_factory_gyro_calibration_from_profile -q` | red | 1 failed。`0x602C` が erased byte `ff` のままであることを確認 |
-| `uv run pytest tests/unit/test_virtual_spi_flash.py tests/unit/test_protocol_profile.py -q` | pass | 51 passed。default/custom Pro profile の gyro bytes と Joy-Con erased calibration の回帰を確認 |
+| `uv run pytest tests/unit/test_virtual_spi_flash.py tests/unit/test_protocol_profile.py -q` | pass | 51 passed。default/custom Pro profile の gyro bytes と当時の既存 profile contract を確認 |
 | `uv run pytest tests/unit/test_input_state.py::test_imu_frame_converts_three_axis_gyro_rates_between_rad_s_and_raw -q` | red | 1 failed。`IMUFrame.gyro_rate` が未実装の `AttributeError` を確認 |
 | `uv run pytest tests/unit/test_input_state.py -q` | pass | 63 passed。3 軸の rad/s → raw と raw → rad/s、および既存 input model test を確認 |
 | `uv run pytest tests/unit/test_input_state.py::test_imu_frame_with_gyro_rate_preserves_accelerometer_axes -q` | red | 1 failed。`with_gyro_rate` が未実装の `AttributeError` を確認 |
@@ -158,13 +158,13 @@
 | `uv run pytest tests/unit/test_virtual_spi_flash.py::test_virtual_spi_flash_seeds_gyro_calibration_for_joycon_profiles -q` | red | 2 failed。Joy-Con L/R の `gyro_calibration` が `None` であることを確認 |
 | `uv run pytest tests/unit/test_virtual_spi_flash.py tests/unit/test_protocol_profile.py -q` | pass | 52 passed。Pro / Joy-Con L / Joy-Con R の共通校正 seed と既存 profile / SPI contract を確認 |
 | `uv run pytest tests/hardware/test_input_operations.py::test_switch_gyro_rate_after_active_reconnect_for_manual_reflection --collect-only -q` | pass | 1 test collected。adapter open、接続、report loop は未実行 |
-| `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_input_state.py` | not run | 各 TDD cycle で対象 test を絞って実行する |
-| `uv sync --dev` | not run | 最終 gate |
-| `uv run ruff format --check .` | not run | 最終 gate |
-| `uv run ruff check .` | not run | 最終 gate |
-| `uv run ty check --no-progress` | not run | 最終 gate |
-| `uv run pytest tests/unit` | not run | 最終 gate |
-| `uv run pytest tests/integration` | not run | 関連 tree の回帰 gate |
+| `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_input_state.py -q` | pass | 117 passed |
+| `uv sync --dev` | pass | Resolved 53 packages |
+| `uv run ruff format --check .` | pass | 90 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit -q` | pass | 376 passed |
+| `uv run pytest tests/integration -q` | pass | 93 passed |
 
 ## 11. 実機実行条件
 
@@ -190,8 +190,8 @@
 - [x] 実機実行条件と未承認状態を記録した
 - [x] source-audit fixture を更新した
 - [x] profile と SPI の校正共有を実装した
-- [ ] rad/s ↔ raw の公開 API と境界方針を実装した
+- [x] rad/s ↔ raw の公開 API と境界方針を実装した
 - [x] raw API の回帰を確認した
 - [x] docs と initial design を更新した
 - [ ] Pro Controller 実機回帰を実行して結果を記録した
-- [ ] 標準 gate の結果を記録した
+- [x] 標準 gate の結果を記録した
