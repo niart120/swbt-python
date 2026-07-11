@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from swbt.errors import InvalidInputError
-from swbt.imu import DEFAULT_GYRO_CALIBRATION
+from swbt.imu import DEFAULT_ACCELEROMETER_CALIBRATION, DEFAULT_GYRO_CALIBRATION
 
 
 class Button(Enum):
@@ -362,6 +362,25 @@ class IMUFrame:
             InvalidInputError: Any value is outside the supported signed 16-bit range.
         """
         return cls.raw(accel=(x, y, z))
+
+    @classmethod
+    def accel_g(
+        cls,
+        *,
+        x_g: float = 0.0,
+        y_g: float = 0.0,
+        z_g: float = 0.0,
+    ) -> "IMUFrame":
+        """Return a frame from XYZ accelerations in G using ``1/4096 G/raw``."""
+        return cls.raw(
+            accel=DEFAULT_ACCELEROMETER_CALIBRATION.accelerations_to_raw((x_g, y_g, z_g))
+        )
+
+    def to_accel_g(self) -> tuple[float, float, float]:
+        """Return XYZ accelerations in G using ``1/4096 G/raw``."""
+        return DEFAULT_ACCELEROMETER_CALIBRATION.raw_to_accelerations(
+            (self.accel_x, self.accel_y, self.accel_z)
+        )
 
     def with_gyro(self, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":
         """Return a frame with replaced gyroscope axes.

@@ -14,9 +14,50 @@ class AccelerometerCalibration:
     zero_raw: tuple[int, int, int] = (0, 0, 0)
     reference_raw: tuple[int, int, int] = (0x4000, 0x4000, 0x4000)
 
+    @property
+    def reference_acceleration_g(self) -> float:
+        """Return the fixed reference acceleration in G."""
+        return 4.0
+
+    @property
+    def g_per_raw(self) -> float:
+        """Return the fixed accelerometer sensitivity in G per raw unit."""
+        return 1 / 4096
+
     def to_spi_bytes(self) -> bytes:
         """Return accelerometer zero XYZ followed by reference XYZ as Int16LE."""
         return pack("<6h", *self.zero_raw, *self.reference_raw)
+
+    def accelerations_to_raw(
+        self,
+        accelerations_g: tuple[float, float, float],
+    ) -> tuple[int, int, int]:
+        """Convert XYZ accelerations in G to raw values."""
+        values = tuple(
+            self._validate_acceleration(f"{axis}_g", value)
+            for axis, value in zip("xyz", accelerations_g, strict=True)
+        )
+        return tuple(
+            zero + round(value / self.g_per_raw)
+            for zero, value in zip(self.zero_raw, values, strict=True)
+        )
+
+    def raw_to_accelerations(
+        self,
+        raw: tuple[int, int, int],
+    ) -> tuple[float, float, float]:
+        """Convert XYZ raw values to accelerations in G."""
+        return tuple(
+            (value - zero) * self.g_per_raw
+            for zero, value in zip(self.zero_raw, raw, strict=True)
+        )
+
+    @staticmethod
+    def _validate_acceleration(name: str, value: object) -> float:
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not isfinite(value):
+            msg = f"{name} must be a finite number: {value}"
+            raise InvalidInputError(msg)
+        return float(value)
 
 
 @dataclass(frozen=True)
