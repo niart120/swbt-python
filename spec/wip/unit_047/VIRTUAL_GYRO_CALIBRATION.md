@@ -31,7 +31,7 @@
 
 当初はIssue #69どおりfactory 6-axis calibrationのgyro部分だけを対象とした。実機ではSwitchが`0x6020`から24 bytesを一括取得し、accel側12 bytesが全て`FF`の状態では、gyro値と静止加速度を正しくpackしてもスプラトゥーン3のカメラ反映を確認できなかった。
 
-6-axis calibrationブロック全体を有効にするため、factory accel calibrationのSPI seedを対象へ追加する。加速度の物理単位変換や公開APIは追加しない。
+6-axis calibrationブロック全体を有効にするため、factory accel calibrationはIssue #70と`spec/wip/unit_048/VIRTUAL_ACCELEROMETER_CALIBRATION.md`で実装する。本 unit はその校正値と共存するgyro側の契約を追跡する。
 
 ## 2. 対象範囲
 
@@ -48,7 +48,7 @@
 
 ## 3. 対象外
 
-- 加速度センサーの物理単位変換と公開 rate API。factory SPI seedだけを追加する。
+- 加速度センサーの校正、G単位変換、公開API。Issue #70 / unit_048で扱う。
 - `0.070 dps/raw` 以外の尺度を選ぶ設定。
 - full-span から尺度を算出する方式。
 - `816` / `936` を conversion 定数として使う方式。
@@ -110,7 +110,7 @@
 |---|---|---|---|---|---|
 | refactor-skipped | source-audit fixture が `0x602C-0x6037` の軸順、Int16LE、zero/reference、固定尺度を保持する | new | unit | no | 25 passed。既存 fixture 形式に沿っており追加の構造変更なし |
 | refactor-skipped | source-audit fixture が `0x6020-0x602B` のaccel軸順、Int16LE、zero/referenceを保持する | new | unit | no | 26 passed。既存fixture形式に沿っており追加の構造変更なし |
-| todo | `ControllerProfile` と `VirtualSpiFlash` がfactory accel zero=`0` / reference=`0x4000`を共有する | new | unit | no | 物理加速度変換は追加しない |
+| deferred | factory accel calibrationとG単位APIを実装する | new | unit | no | Issue #70 / unit_048へ移管 |
 | refactor-skipped | `ControllerProfile` が既定の仮想ジャイロ校正情報を所有する | new | unit | no | 39 passed。immutable な共有既定値を field で所有し、追加の構造変更なし |
 | refactor-skipped | `VirtualSpiFlash` が profile 由来の factory gyro calibration bytes を返す | new | unit | no | 51 passed。校正値側で Int16LE serialize し、SPI は profile 値を seed。追加の構造変更なし |
 | refactor-done | Joy-Con L/R profile も共通の factory gyro calibration bytes を返す | new | unit | no | 52 passed。共有既定値を base profile へ移し、3 profile の重複定義を避けた |
