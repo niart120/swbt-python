@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from math import radians
+from math import inf, nan, radians
 from typing import cast
 
 import pytest
@@ -194,6 +194,26 @@ def test_imu_frame_with_gyro_rate_preserves_accelerometer_axes() -> None:
     )
 
     assert updated == IMUFrame.raw(accel=(1, 2, 3), gyro=(100, -200, 1))
+
+
+def test_imu_frame_gyro_rate_accepts_i16_boundaries_and_rejects_out_of_range() -> None:
+    frame = IMUFrame.gyro_rate(
+        x_rad_s=radians(IMUFrame.MIN * 0.070),
+        y_rad_s=radians(IMUFrame.MAX * 0.070),
+    )
+
+    assert frame == IMUFrame.gyro(IMUFrame.MIN, IMUFrame.MAX, 0)
+
+    invalid_rates = (
+        radians((IMUFrame.MIN - 1) * 0.070),
+        radians((IMUFrame.MAX + 1) * 0.070),
+        -inf,
+        inf,
+        nan,
+    )
+    for rate in invalid_rates:
+        with pytest.raises(InvalidInputError):
+            IMUFrame.gyro_rate(x_rad_s=rate)
 
 
 def test_imu_frame_update_helpers_preserve_the_opposite_sensor_axes() -> None:
