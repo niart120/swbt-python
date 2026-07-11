@@ -12,6 +12,7 @@
 |---|---|---|
 | GitHub Issue #69 | `ControllerProfile` による校正値所有、SPI `0x602C-0x6037`、固定尺度 `0.070 dps/raw`、物理角速度 API、実機回帰の完了条件 | https://github.com/niart120/swbt-python/issues/69 |
 | user follow-up | Joy-Con L/R profile も同じ仮想ジャイロ校正値を SPI に設定する | 2026-07-11 conversation |
+| hardware observation | ZL は反映されたが、IMU有効化・gyro PDU送信・静止加速度追加後もスプラトゥーン3のカメラは動かなかった。Switchが一括取得したfactory 6-axis calibrationのaccel側は全て `FF` だった | `build/hardware/issue-69-gyro-calibration-20260712/` |
 | upstream reverse-engineering notes | 6-axis factory calibration は 4 組の XYZ Int16LE。後半 2 組が gyro zero / reference で、既定 reference は `0x343B` | https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md |
 | upstream IMU notes | saturation-free LSM6DS3 ±2000 dps の尺度は `0.070 dps/raw`。SPI 校正の gyro zero は静止時 offset | https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/imu_sensor_notes.md |
 | completed unit | 既存 `IMUFrame.raw()` / `gyro()` / `with_gyro()` と signed int16 validation | `spec/complete/unit_025/IMU_INPUT_SHORTHAND_API.md` |
@@ -26,12 +27,19 @@
 | diagnostics | raw gyro を持つ `IMUFrame` を逆変換する | 3 軸の角速度を rad/s で得る | SPI と同じ zero と尺度を使う |
 | existing user | `IMUFrame.raw()` / `IMUFrame.gyro()` を使う | 従来どおり signed int16 raw 値を設定できる | 既存 API を変更しない |
 
+### 1.4 Intent Delta
+
+当初はIssue #69どおりfactory 6-axis calibrationのgyro部分だけを対象とした。実機ではSwitchが`0x6020`から24 bytesを一括取得し、accel側12 bytesが全て`FF`の状態では、gyro値と静止加速度を正しくpackしてもスプラトゥーン3のカメラ反映を確認できなかった。
+
+6-axis calibrationブロック全体を有効にするため、factory accel calibrationのSPI seedを対象へ追加する。加速度の物理単位変換や公開APIは追加しない。
+
 ## 2. 対象範囲
 
 - `ControllerProfile` が仮想ジャイロ校正情報を所有する。
 - Pro Controller、Joy-Con L、Joy-Con R の具象 profile が同じ既定校正を共有する。
 - 既定校正を全軸 zero raw `0`、reference raw `0x343B`、`0.070 dps/raw` とする。
 - `VirtualSpiFlash` が profile の校正情報から `0x602C-0x6037` を生成する。
+- `VirtualSpiFlash` が profile の校正情報から accel側 `0x6020-0x602B` も生成し、factory 6-axis calibration 24 bytesを完成させる。
 - `IMUFrame.gyro_rate(x_rad_s=..., y_rad_s=..., z_rad_s=...)` を追加する。
 - `IMUFrame.with_gyro_rate(...)` と `IMUFrame.to_gyro_rate()` を追加する。
 - rad/s と raw の相互変換、3 軸、signed int16 境界、範囲外を unit test で固定する。
@@ -40,7 +48,7 @@
 
 ## 3. 対象外
 
-- 加速度センサーの物理単位変換。
+- 加速度センサーの物理単位変換と公開 rate API。factory SPI seedだけを追加する。
 - `0.070 dps/raw` 以外の尺度を選ぶ設定。
 - full-span から尺度を算出する方式。
 - `816` / `936` を conversion 定数として使う方式。
@@ -68,6 +76,7 @@
 |---|---|---|---|
 | Switch HID / report bytes | required | done | dekuNukem `spi_flash_notes.md` は 6-axis calibration を 4 組の XYZ Int16LE とし、後半 2 組を gyro calibration、reference 既定値を各軸 `0x343B` と記録する。従って gyro 部分は `0x602C-0x6037`、zero XYZ の後に reference XYZ とする |
 | gyro conversion scale | required | done | dekuNukem `imu_sensor_notes.md` は saturation-free LSM6DS3 ±2000 dps を `0.070 dps/raw` とする。Issue #69 はこの尺度を固定し、full-span 換算と `816` / `936` の直接利用を明示的に除外する |
+| factory accel calibration | required | done | dekuNukem `spi_flash_notes.md` は6-axis calibration前半2 groupsをAccel XYZ origin/reference、既定referenceを各軸`0x4000`とする。virtual zeroは各軸`0`とし、物理加速度APIには拡大しない |
 | Bumble / transport | not applicable | not applicable | report packing、transport、advertising、L2CAP は変更しない |
 | OS / driver / adapter | required | todo | 完了条件の Pro Controller 実機回帰は Windows / CSR8510 A10 / WinUSB / Bumble adapter `usb:0` を候補とする。実行前に明示承認と当日の環境確認が必要 |
 
@@ -76,6 +85,7 @@
 | 項目 | 値 | 根拠分類 | source | status |
 |---|---:|---|---|---|
 | factory 6-axis calibration layout | `0x6020-0x6037`, 4 groups of XYZ Int16LE | source fact | dekuNukem `spi_flash_notes.md` | stable |
+| factory accel calibration layout | `0x6020-0x6025` zero XYZ、`0x6026-0x602B` reference XYZ | source fact / implementation policy | dekuNukem `spi_flash_notes.md`, hardware observation | source-audit fixtureとunit testで固定済み |
 | factory gyro calibration layout | `0x602C-0x6031` zero XYZ、`0x6032-0x6037` reference XYZ | inference | 上記 layout と「後半 2 groups は Gyro cal」の記述から導出 | source-audit fixture と unit test で固定済み |
 | gyro zero raw | `0, 0, 0` | implementation policy | Issue #69 | stable virtual default |
 | gyro reference raw | `0x343B, 0x343B, 0x343B` | source fact / implementation policy | dekuNukem `spi_flash_notes.md`, Issue #69 | stable virtual default |
@@ -99,6 +109,8 @@
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
 | refactor-skipped | source-audit fixture が `0x602C-0x6037` の軸順、Int16LE、zero/reference、固定尺度を保持する | new | unit | no | 25 passed。既存 fixture 形式に沿っており追加の構造変更なし |
+| refactor-skipped | source-audit fixture が `0x6020-0x602B` のaccel軸順、Int16LE、zero/referenceを保持する | new | unit | no | 26 passed。既存fixture形式に沿っており追加の構造変更なし |
+| todo | `ControllerProfile` と `VirtualSpiFlash` がfactory accel zero=`0` / reference=`0x4000`を共有する | new | unit | no | 物理加速度変換は追加しない |
 | refactor-skipped | `ControllerProfile` が既定の仮想ジャイロ校正情報を所有する | new | unit | no | 39 passed。immutable な共有既定値を field で所有し、追加の構造変更なし |
 | refactor-skipped | `VirtualSpiFlash` が profile 由来の factory gyro calibration bytes を返す | new | unit | no | 51 passed。校正値側で Int16LE serialize し、SPI は profile 値を seed。追加の構造変更なし |
 | refactor-done | Joy-Con L/R profile も共通の factory gyro calibration bytes を返す | new | unit | no | 52 passed。共有既定値を base profile へ移し、3 profile の重複定義を避けた |
@@ -142,6 +154,8 @@
 |---|---|---|
 | `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | red | 2 failed, 23 passed。`factory_gyro_calibration_layout` が fixture に未登録であることを確認 |
 | `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 25 passed。layout、axis order、Int16LE、zero/reference、固定尺度と source classification を確認 |
+| `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | red | 2 failed, 24 passed。`factory_accelerometer_calibration_layout`がfixtureに未登録であることを確認 |
+| `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 26 passed。accel layout、axis order、Int16LE、zero/referenceとsource classificationを確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py::test_pro_controller_profile_owns_default_virtual_gyro_calibration -q` | red | collection error。`swbt.imu` が未実装であることを確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py -q` | pass | 39 passed。profile ownership と既存 profile contract を確認 |
 | `uv run pytest tests/unit/test_virtual_spi_flash.py::test_virtual_spi_flash_seeds_factory_gyro_calibration_from_profile -q` | red | 1 failed。`0x602C` が erased byte `ff` のままであることを確認 |

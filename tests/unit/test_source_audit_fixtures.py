@@ -24,6 +24,7 @@ REQUIRED_ENTRY_IDS = {
     "device_info_grip_color_tail_0302",
     "joycon_device_info_profile",
     "device_info_local_bluetooth_address_wiring",
+    "factory_accelerometer_calibration_layout",
     "factory_gyro_calibration_layout",
     "joycon_spi_device_type_values",
     "joycon_default_controller_color_profile",
@@ -360,6 +361,22 @@ def test_factory_gyro_calibration_layout_is_source_audited() -> None:
     assert "reference=0x343b" in value
     assert "0.070 dps/raw" in value
     assert "816/936" in value
+
+
+def test_factory_accelerometer_calibration_layout_is_source_audited() -> None:
+    entry = _entry_by_id("factory_accelerometer_calibration_layout")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "stable-virtual-profile"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x6020-0x602b" in value
+    assert "zero_x,zero_y,zero_z,reference_x,reference_y,reference_z" in value
+    assert "Int16LE" in value
+    assert "zero=0" in value
+    assert "reference=0x4000" in value
+    assert "physical acceleration API" in value
 
 
 def test_subcommand_nfc_ir_mcu_state_is_source_audited() -> None:

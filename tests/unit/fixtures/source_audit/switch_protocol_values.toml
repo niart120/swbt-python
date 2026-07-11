@@ -184,6 +184,20 @@ status = "profile-policy"
 handoff = ["unit_031"]
 
 [[entry]]
+id = "factory_accelerometer_calibration_layout"
+fixture_name = "factory_accelerometer_calibration_0x6020_0x602b"
+area = "protocol"
+value = "Factory 6-axis calibration uses four groups of XYZ Int16LE at 0x6020-0x6037; the first two groups make the accelerometer region 0x6020-0x602b in zero_x,zero_y,zero_z,reference_x,reference_y,reference_z order. The virtual profile fixes each axis to zero=0 and reference=0x4000 so the complete 6-axis factory block is valid; this seeds SPI only and does not add a physical acceleration API."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md',
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/imu_sensor_notes.md',
+    'spec\hardware-test-log.md',
+]
+status = "stable-virtual-profile"
+handoff = ["unit_047"]
+
+[[entry]]
 id = "factory_gyro_calibration_layout"
 fixture_name = "factory_gyro_calibration_0x602c_0x6037"
 area = "protocol"
