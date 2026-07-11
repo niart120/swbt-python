@@ -13,6 +13,10 @@ from swbt.protocol.subcommand import SubcommandResponder
 _CONTROLLER_COLOR_ADDRESS = 0x6050
 _CONTROLLER_COLOR_SIZE = 12
 _CONTROLLER_COLOR_TAIL_ADDRESS = _CONTROLLER_COLOR_ADDRESS + _CONTROLLER_COLOR_SIZE
+_FACTORY_SENSOR_CALIBRATION_ADDRESS = 0x6020
+_FACTORY_SENSOR_CALIBRATION_BYTES = bytes.fromhex(
+    "00 00 00 00 00 00 00 40 00 40 00 40 00 00 00 00 00 00 3b 34 3b 34 3b 34"
+)
 _DEFAULT_DEVICE_INFO_DATA = bytes.fromhex("04 00 03 02 00 00 00 00 00 00 03 02")
 _DEVICE_INFO_DATA_TAIL_0101 = bytes.fromhex("04 00 03 02 00 00 00 00 00 00 01 01")
 _DEVICE_INFO_SIZE = 12
@@ -112,6 +116,12 @@ def test_switch_reads_sentinel_controller_color_profile(
         events, "device_info_reply", device_info_data=_DEFAULT_DEVICE_INFO_DATA.hex()
     )
     assert _contains_event(events, "subcommand_reply_tx", subcommand_id="0x10")
+    assert _contains_event(
+        events,
+        "factory_sensor_calibration_spi_reply",
+        calibration_bytes=_FACTORY_SENSOR_CALIBRATION_BYTES.hex(),
+        matches_expected_calibration=True,
+    )
     assert _contains_event(events, "report_tx", report_id="0x21", reason="subcommand_reply")
     assert _contains_event(
         events,
@@ -547,6 +557,22 @@ class RecordingSubcommandResponder(SubcommandResponder):
             "request_prefix": payload[:5].hex(),
             "size": size,
         }
+        calibration_offset = _FACTORY_SENSOR_CALIBRATION_ADDRESS - address
+        calibration_size = len(_FACTORY_SENSOR_CALIBRATION_BYTES)
+        if calibration_offset >= 0 and calibration_offset + calibration_size <= len(read_data):
+            calibration_bytes = read_data[
+                calibration_offset : calibration_offset + calibration_size
+            ]
+            _record_probe_event(
+                self._trace,
+                "factory_sensor_calibration_spi_reply",
+                address=f"0x{address:06x}",
+                calibration_bytes=calibration_bytes.hex(),
+                matches_expected_calibration=(
+                    calibration_bytes == _FACTORY_SENSOR_CALIBRATION_BYTES
+                ),
+                size=size,
+            )
         color_offset = _CONTROLLER_COLOR_ADDRESS - address
         if color_offset >= 0 and color_offset + _CONTROLLER_COLOR_SIZE <= len(read_data):
             controller_color_bytes = read_data[color_offset : color_offset + _CONTROLLER_COLOR_SIZE]
