@@ -376,6 +376,8 @@ def test_factory_accelerometer_calibration_layout_is_source_audited() -> None:
     assert "Int16LE" in value
     assert "zero=0" in value
     assert "reference=0x4000" in value
+    assert "reference acceleration=4.0 G" in value
+    assert "1/4096 G/raw" in value
     assert "physical acceleration API" in value
 
 
