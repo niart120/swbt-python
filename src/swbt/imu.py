@@ -1,6 +1,7 @@
 """Shared virtual IMU calibration values."""
 
 from dataclasses import dataclass
+from struct import pack
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,10 @@ class GyroCalibration:
     def dps_per_raw(self) -> float:
         """Return the fixed gyroscope sensitivity in degrees per second per raw unit."""
         return 0.070
+
+    def to_spi_bytes(self) -> bytes:
+        """Return gyro zero XYZ followed by reference XYZ as signed Int16LE."""
+        return pack("<6h", *self.zero_raw, *self.reference_raw)
 
 
 DEFAULT_GYRO_CALIBRATION = GyroCalibration()

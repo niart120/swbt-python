@@ -1,6 +1,7 @@
 import pytest
 
 from swbt.errors import ProtocolError
+from swbt.imu import GyroCalibration
 from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
@@ -28,6 +29,22 @@ def test_virtual_spi_flash_returns_seeded_color_info_exists_flag() -> None:
     spi = VirtualSpiFlash()
 
     assert spi.read(0x601B, 1) == b"\x01"
+
+
+def test_virtual_spi_flash_seeds_factory_gyro_calibration_from_profile() -> None:
+    assert VirtualSpiFlash().read(0x602C, 12) == bytes.fromhex(
+        "00 00 00 00 00 00 3b 34 3b 34 3b 34"
+    )
+
+    profile = ProControllerProfile(
+        gyro_calibration=GyroCalibration(
+            zero_raw=(-1, 2, -3),
+            reference_raw=(0x343B, 0x343A, 0x3439),
+        )
+    )
+    assert VirtualSpiFlash(profile=profile).read(0x602C, 12) == bytes.fromhex(
+        "ff ff 02 00 fd ff 3b 34 3a 34 39 34"
+    )
 
 
 def test_virtual_spi_flash_returns_seeded_custom_controller_colors() -> None:

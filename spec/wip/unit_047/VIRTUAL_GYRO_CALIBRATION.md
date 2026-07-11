@@ -98,7 +98,7 @@
 |---|---|---|---|---|---|
 | refactor-skipped | source-audit fixture が `0x602C-0x6037` の軸順、Int16LE、zero/reference、固定尺度を保持する | new | unit | no | 25 passed。既存 fixture 形式に沿っており追加の構造変更なし |
 | refactor-skipped | `ControllerProfile` が既定の仮想ジャイロ校正情報を所有する | new | unit | no | 39 passed。immutable な共有既定値を field で所有し、追加の構造変更なし |
-| todo | `VirtualSpiFlash` が profile 由来の factory gyro calibration bytes を返す | new | unit | no | 12-byte fixture で layout を固定 |
+| refactor-skipped | `VirtualSpiFlash` が profile 由来の factory gyro calibration bytes を返す | new | unit | no | 51 passed。校正値側で Int16LE serialize し、SPI は profile 値を seed。追加の構造変更なし |
 | todo | `IMUFrame.gyro_rate()` が rad/s から 3 軸 raw を生成し、`to_gyro_rate()` が逆変換する | new | unit | no | `0.070 dps/raw` を共有 |
 | todo | `IMUFrame.with_gyro_rate()` が accel を維持して gyro だけを物理角速度から置換する | new | unit | no | immutable copy |
 | todo | 物理角速度 API が signed int16 境界を受理し、範囲外を `InvalidInputError` にする | edge | unit | no | clamp しない方針を固定 |
@@ -109,6 +109,7 @@
 ## 8. 設計メモ
 
 - 校正値オブジェクトは zero/reference の XYZ tuple と固定 `0.070 dps/raw` を一つに束ね、`ControllerProfile` と `IMUFrame` conversion が同じ既定定義を参照する。
+- base `ControllerProfile` は optional な校正 field を所有し、対象の Pro profile が既定校正を設定する。Joy-Con profile の未監査 calibration は既存契約どおり erased のまま維持する。
 - SPI の reference 値から conversion scale を再計算しない。Issue #69 が指定する `0.070 dps/raw` を正本とし、`816` / `936` は実装に置かない。
 - rad/s から raw への変換は `round()` で最も近い整数にする。変換後に signed int16 validation を通し、範囲外は clamp せず `InvalidInputError` にする。
 - `IMUFrame` の rate API は呼び出し側から校正値や尺度を受け取らない。今回の profile は尺度変更を提供しないため、既定 profile と public conversion は同じ固定定義を共有する。
@@ -140,6 +141,8 @@
 | `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 25 passed。layout、axis order、Int16LE、zero/reference、固定尺度と source classification を確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py::test_pro_controller_profile_owns_default_virtual_gyro_calibration -q` | red | collection error。`swbt.imu` が未実装であることを確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py -q` | pass | 39 passed。profile ownership と既存 profile contract を確認 |
+| `uv run pytest tests/unit/test_virtual_spi_flash.py::test_virtual_spi_flash_seeds_factory_gyro_calibration_from_profile -q` | red | 1 failed。`0x602C` が erased byte `ff` のままであることを確認 |
+| `uv run pytest tests/unit/test_virtual_spi_flash.py tests/unit/test_protocol_profile.py -q` | pass | 51 passed。default/custom Pro profile の gyro bytes と Joy-Con erased calibration の回帰を確認 |
 | `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_virtual_spi_flash.py tests/unit/test_input_state.py` | not run | 各 TDD cycle で対象 test を絞って実行する |
 | `uv sync --dev` | not run | 最終 gate |
 | `uv run ruff format --check .` | not run | 最終 gate |

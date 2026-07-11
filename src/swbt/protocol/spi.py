@@ -16,6 +16,7 @@ class VirtualSpiFlash:
     COLOR_INFO_EXISTS_ADDRESS = 0x601B
     COLOR_INFO_EXISTS = 0x01
     CONTROLLER_COLORS_ADDRESS = 0x6050
+    FACTORY_GYRO_CALIBRATION_ADDRESS = 0x602C
 
     def __init__(self, *, profile: ControllerProfile | None = None) -> None:
         """Create a virtual SPI flash image."""
@@ -27,6 +28,12 @@ class VirtualSpiFlash:
         self._data[
             self.CONTROLLER_COLORS_ADDRESS : self.CONTROLLER_COLORS_ADDRESS + len(controller_colors)
         ] = controller_colors
+        if profile.gyro_calibration is not None:
+            gyro_calibration = profile.gyro_calibration.to_spi_bytes()
+            self._data[
+                self.FACTORY_GYRO_CALIBRATION_ADDRESS : self.FACTORY_GYRO_CALIBRATION_ADDRESS
+                + len(gyro_calibration)
+            ] = gyro_calibration
 
     def read(self, address: int, size: int) -> bytes:
         """Read bytes from the virtual SPI address space."""
