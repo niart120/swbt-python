@@ -114,12 +114,49 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
 
-  publish-to-pypi:
-    name: Publish to PyPI
+  create-github-release:
+    name: Create draft GitHub Release
     if: ${{ inputs.target == 'pypi' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') }}
     needs:
       - validate
       - build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download distribution artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Create or reuse draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if IS_DRAFT="$(gh release view "${TAG}" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [ "${IS_DRAFT}" != "true" ]; then
+              echo "GitHub Release ${TAG} is already published." >&2
+              exit 1
+            fi
+          else
+            gh release create "${TAG}" --verify-tag --draft --generate-notes --title "${TAG}"
+          fi
+
+      - name: Upload distributions to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    if: ${{ inputs.target == 'pypi' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') }}
+    needs:
+      - create-github-release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -138,3 +175,19 @@ jobs:
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-github-release:
+    name: Publish GitHub Release
+    if: ${{ inputs.target == 'pypi' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') }}
+    needs:
+      - publish-to-pypi
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Publish draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
