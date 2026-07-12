@@ -1,7 +1,7 @@
 import pytest
 
 from swbt.errors import ProtocolError
-from swbt.input import InputState
+from swbt.input import IMUFrame, InputState
 from swbt.protocol.imu_report import ImuEncodingState, ImuMode
 from swbt.protocol.output_report import OutputReport, OutputReportParser
 from swbt.protocol.profiles.base import ControllerColors
@@ -255,6 +255,30 @@ def test_spi_flash_read_does_not_change_imu_session_state() -> None:
 
     assert reply[13:15] == bytes((0x90, 0x10))
     assert session.state == before
+
+
+def test_imu_mode_request_does_not_change_factory_calibration_or_raw_input() -> None:
+    profile = ProControllerProfile()
+    session = SwitchHidSession(profile)
+    responder = SubcommandResponder(profile=profile, session=session)
+    state = InputState.neutral().with_imu(
+        IMUFrame.raw(accel=(1, 2, 3), gyro=(4, 5, 6)),
+        IMUFrame.raw(accel=(7, 8, 9), gyro=(10, 11, 12)),
+        IMUFrame.raw(accel=(13, 14, 15), gyro=(16, 17, 18)),
+    )
+    spi_read = _subcommand_report(0x10, payload=bytes.fromhex("20 60 00 00 18"))
+    calibration_before = responder.respond(spi_read, state=state)
+
+    responder.respond(_subcommand_report(0x40, payload=b"\x02"), state=state)
+    calibration_after = responder.respond(spi_read, state=state)
+
+    assert session.state.imu_mode is ImuMode.QUATERNION_1
+    assert calibration_after == calibration_before
+    assert state.imu_frames == (
+        IMUFrame.raw(accel=(1, 2, 3), gyro=(4, 5, 6)),
+        IMUFrame.raw(accel=(7, 8, 9), gyro=(10, 11, 12)),
+        IMUFrame.raw(accel=(13, 14, 15), gyro=(16, 17, 18)),
+    )
 
 
 def test_mcu_config_subcommand_builds_config_reply() -> None:
