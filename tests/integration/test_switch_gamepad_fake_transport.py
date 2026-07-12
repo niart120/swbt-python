@@ -1446,6 +1446,7 @@ def test_output_report_injection_records_subcommand_session_state() -> None:
         assert {
             "event": "subcommand_session_state",
             "imu_enabled": False,
+            "imu_encoding_format": "disabled",
             "imu_mode": "0x00",
             "packet_id": 0x21,
             "report_mode": "0x3f",
@@ -1454,6 +1455,38 @@ def test_output_report_injection_records_subcommand_session_state() -> None:
             "unsupported_report_mode": "0x3f",
             "vibration_enabled": False,
         } in events
+
+    asyncio.run(run())
+
+
+def test_imu_mode_diagnostics_record_accepted_mode_and_encoding_format() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        pad = make_pro_controller(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=10_000_000,
+        )
+
+        await pad.open()
+        await transport.connect()
+        await transport.inject_interrupt_data(bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 02"))
+        await transport.inject_interrupt_data(bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 01"))
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        imu_events = [
+            event
+            for event in events
+            if event["event"] == "subcommand_session_state" and event["subcommand_id"] == "0x40"
+        ]
+
+        assert [(event["imu_mode"], event["imu_encoding_format"]) for event in imu_events] == [
+            ("0x02", "quaternion"),
+            ("0x01", "standard"),
+        ]
+        assert all(not any("reset" in key for key in event) for event in imu_events)
 
     asyncio.run(run())
 

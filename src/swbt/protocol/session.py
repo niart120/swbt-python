@@ -14,7 +14,7 @@ from swbt.protocol.profiles.base import ControllerProfile
 
 @dataclass(frozen=True)
 class SwitchHidSessionState:
-    """Immutable host-requested state for one HID connection generation."""
+    """Immutable host-requested state for one HID connection."""
 
     report_mode: int | None = None
     report_mode_supported: bool = False
@@ -27,6 +27,15 @@ class SwitchHidSessionState:
     def imu_enabled(self) -> bool:
         """Return whether the host selected an active IMU mode."""
         return self.imu_mode is not ImuMode.DISABLED
+
+    @property
+    def imu_encoding_format(self) -> str:
+        """Return the diagnostic wire-format name derived from the IMU mode."""
+        if self.imu_mode is ImuMode.DISABLED:
+            return "disabled"
+        if self.imu_mode is ImuMode.STANDARD:
+            return "standard"
+        return "quaternion"
 
 
 def apply_imu_mode_request(
@@ -52,7 +61,7 @@ def apply_imu_mode_request(
 
 
 class SwitchHidSession:
-    """Own host-requested and IMU encoding state for one connection generation."""
+    """Own host-requested and IMU encoding state for one HID connection."""
 
     def __init__(self, profile: ControllerProfile) -> None:
         """Create a disabled session for the configured controller profile."""

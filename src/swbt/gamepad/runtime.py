@@ -230,7 +230,7 @@ class ControllerRuntime:
                 raise
 
     def _reset_protocol_session(self) -> None:
-        """Create fresh host-requested state for the next HID connection generation."""
+        """Create fresh host-requested state for the next HID connection."""
         self._protocol_session = SwitchHidSession(self._controller_profile)
         self._output_report_dispatcher.subcommand_responder = SubcommandResponder(
             profile=self._controller_profile,
