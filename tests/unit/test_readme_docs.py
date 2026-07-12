@@ -20,7 +20,7 @@ def test_readme_documents_confirmed_and_unconfirmed_hardware() -> None:
     assert "macOS" in text
     assert "experimental" in text
     assert "手順は Hardware Guide に整備されています" in text
-    assert "Pro Controller の限定観測" in text
+    assert "Pro Controller の一部挙動のみ検証済み" in text
     assert "Joy-Con、別ドングル、別ファームウェアでの互換性は未確認" in text
     assert "unsupported" not in text
     assert "experimental" + " target" not in text
