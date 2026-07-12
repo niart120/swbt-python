@@ -94,6 +94,23 @@ def test_imu_frames_are_packed_as_i16_little_endian_values() -> None:
     assert report[37:49] == bytes.fromhex("01 00 fe ff 03 00 fc ff 05 00 fa ff")
 
 
+def test_imu_mode_01_preserves_three_distinct_raw_frames() -> None:
+    session_state = SubcommandSessionState(imu_mode=0x01, imu_enabled=True)
+    state = InputState.neutral().with_imu(
+        IMUFrame.raw(accel=(1, -2, 3), gyro=(-4, 5, -6)),
+        IMUFrame.raw(accel=(7, -8, 9), gyro=(-10, 11, -12)),
+        IMUFrame.raw(accel=(13, -14, 15), gyro=(-16, 17, -18)),
+    )
+
+    report = InputReportBuilder(session_state=session_state).build_0x30(state)
+
+    assert report[13:49] == bytes.fromhex(
+        "01 00 fe ff 03 00 fc ff 05 00 fa ff "
+        "07 00 f8 ff 09 00 f6 ff 0b 00 f4 ff "
+        "0d 00 f2 ff 0f 00 f0 ff 11 00 ee ff"
+    )
+
+
 def test_imu_mode_02_packs_identity_quaternion_instead_of_standard_gyro() -> None:
     session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
     builder = InputReportBuilder(session_state=session_state, clock_ns=lambda: 0)

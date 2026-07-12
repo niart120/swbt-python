@@ -196,7 +196,7 @@ next_imu_encoding_state = result.state
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | mode `0x01`が現行のraw 3 frame bytesを変えず生成する | characterization | unit | no | 構造変更前のwire回帰を固定 |
+| refactor-skipped | mode `0x01`が現行のraw 3 frame bytesを変えず生成する | characterization | unit | no | expected-green characterization。異なる3 frameの36 bytesを明示fixtureで固定 |
 | todo | mode `0x02-0x05`が現行のidentity、正負Z、3 sample、packing mode 2 bytesを維持する | characterization | unit | no | deterministic clock fixtureを明示時刻へ置換する |
 | todo | 同じIMU encoding state、frame、profile、時刻が同じ36 byte blockと次状態を返す | new | unit | no | shared mutable packerを使わない |
 | todo | `InputReportBuilder`が同じinput、IMU block、timerから同じ49 byte reportを返す | regression | unit | no | builderからsession / clockを除く |
@@ -324,6 +324,7 @@ Tidy decision:
 | command | result | notes |
 |---|---|---|
 | `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 27 passed。IMU mode、packing mode 2、factory calibrationの既存根拠fixtureを確認 |
+| `uv run pytest tests/unit/test_input_report.py::test_imu_mode_01_preserves_three_distinct_raw_frames -q` | pass | 1 passed。mode `0x01`の異なるraw 3 frameをInt16LE 36 bytesで固定 |
 | `git diff --no-index --check -- NUL spec/wip/unit_049/IMU_SESSION_AND_ENCODING_REDESIGN.md` | pass | 新規未追跡ファイルにwhitespace errorなし |
 | `rg -n "\\[(?:TO)(?:DO)\\]|(?:T)(?:BD)|(?:x)(?:xx)" spec/wip/unit_049` | pass | 本番用placeholderの残存なし |
 
