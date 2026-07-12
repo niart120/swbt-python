@@ -7,6 +7,7 @@ from swbt.protocol.output_report import OutputReport, OutputReportParser
 from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
+from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.subcommand import (
     SubcommandResponder,
     UnsupportedSubcommandError,
@@ -235,6 +236,25 @@ def test_spi_flash_read_subcommand_returns_custom_controller_colors() -> None:
     assert reply[14] == 0x10
     assert reply[15:32] == bytes.fromhex("50 60 00 00 0c 11 22 33 44 55 66 77 88 99 aa bb cc")
     assert reply[32:] == bytes(18)
+
+
+def test_spi_flash_read_does_not_change_imu_session_state() -> None:
+    profile = ProControllerProfile()
+    session = SwitchHidSession(profile)
+    responder = SubcommandResponder(profile=profile, session=session)
+    state = InputState.neutral()
+    session.set_imu_mode(0x02)
+    session.encode_imu(state.imu_frames, now_ns=1_000_000_000)
+    session.encode_imu(state.imu_frames, now_ns=1_015_000_000)
+    before = session.state
+
+    reply = responder.respond(
+        _subcommand_report(0x10, payload=bytes.fromhex("2c 60 00 00 0c")),
+        state=state,
+    )
+
+    assert reply[13:15] == bytes((0x90, 0x10))
+    assert session.state == before
 
 
 def test_mcu_config_subcommand_builds_config_reply() -> None:

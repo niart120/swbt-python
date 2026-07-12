@@ -212,7 +212,7 @@ next_imu_encoding_state = result.state
 | refactor-skipped | `0x40` ACKが新modeの最初のperiodic `0x30`より先に送られる | regression | integration | no | expected-green regression。fake transportの送信列で`0x21` ACKの次にquaternion `0x30`が続くことを固定 |
 | green | disconnect / close後の新接続がIMU mode、vibration、report mode、quaternion状態を引き継がない | new | integration | no | 同じ`SwitchGamepad`の再openでhost-requested stateとpackerを初期化。新session型への完全移行は後続refactorで行う |
 | refactor-skipped | disconnect時に`InputStateStore`は従来どおりneutralへ戻り、profile / SPI bytesは変わらない | regression | integration | no | expected-green regression。host disconnect後のneutral snapshotと再open前後のfactory calibration reply一致を確認 |
-| todo | `0x10` SPI readの前後でIMU modeとIMU encoding stateが変わらない | regression | unit | no | SPIとsessionの独立 |
+| refactor-skipped | `0x10` SPI readの前後でIMU modeとIMU encoding stateが変わらない | regression | unit | no | expected-green regression。quaternionの時刻状態を進めた後のSPI readでsession state全体が不変 |
 | todo | `0x40`の前後でfactory calibration bytesとraw `InputState` が変わらない | regression | unit | no | modeと値モデルの独立 |
 | todo | public raw / rad/s / G helperの現行契約を維持する | regression | unit | no | public value API変更なし |
 | todo | `SwitchGamepad.imu()`がstate update APIとして現行契約を維持する | regression | integration | no | 接続不要、即時送信の保証なし |
