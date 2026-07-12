@@ -206,7 +206,7 @@ next_imu_encoding_state = result.state
 | refactor-skipped | 初期sessionとmode `0x00`が36 byteゼロのIMU blockを生成する | new | unit | no | initial connection stateをdisabledとし、ゼロblockと初期encoding stateを返す経路を追加。mode dispatchは後続itemで行う |
 | refactor-skipped | `0x40 01`がACKされ、次のperiodic reportがstandard raw形式になる | regression | integration | no | expected-green regression。fake transportでACKと異なるraw 3 frameを確認 |
 | refactor-skipped | `0x40 02-05`がACKされ、次のperiodic reportがquaternion形式になる | regression | integration | no | expected-green regression。3 profile × 4 modeのACK、packing mode 2、sample countをfake transportで固定 |
-| todo | acceptedな同mode再要求が姿勢と前回時刻を初期化する | regression | unit | no | one-shot reset flagを使わない |
+| refactor-skipped | acceptedな同mode再要求が姿勢と前回時刻を初期化する | regression | unit | no | pure session transitionが新しいimmutable stateを返し、同modeでもencoding stateを初期化。one-shot flag不使用 |
 | todo | standard / quaternion / disabled間の遷移が次のepochへ姿勢を持ち越さない | new | unit | no | mode遷移表を固定 |
 | todo | 未対応modeが例外となり、mode、姿勢、前回時刻を変更しない | edge | unit | no | profile capabilityで検証 |
 | todo | `0x40` ACKが新modeの最初のperiodic `0x30`より先に送られる | regression | integration | no | fake transportでreport順序を検査 |
@@ -357,6 +357,11 @@ Tidy decision:
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_quaternion_imu_modes_switch_all_profiles_to_mode_2_input -q` | pass | 12 passed。Pro / Joy-Con L / Joy-Con Rのmode `0x02-0x05`を確認 |
 | `uv run ruff check tests/integration/test_switch_gamepad_fake_transport.py` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit/test_protocol_session.py -q` | red | `apply_imu_mode_request` が未実装の`ImportError`を確認 |
+| `uv run pytest tests/unit/test_protocol_session.py tests/unit/test_imu_report.py -q` | pass | 9 passed。同mode再要求の新epochと旧state不変を確認 |
+| `uv run ruff format --check src/swbt/protocol/session.py tests/unit/test_protocol_session.py` | pass | 2 files already formatted |
+| `uv run ruff check src/swbt/protocol/session.py tests/unit/test_protocol_session.py` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `git diff --no-index --check -- NUL spec/wip/unit_049/IMU_SESSION_AND_ENCODING_REDESIGN.md` | pass | 新規未追跡ファイルにwhitespace errorなし |
 | `rg -n "\\[(?:TO)(?:DO)\\]|(?:T)(?:BD)|(?:x)(?:xx)" spec/wip/unit_049` | pass | 本番用placeholderの残存なし |

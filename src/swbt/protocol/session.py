@@ -1,7 +1,8 @@
 """Connection-scoped Switch HID protocol state."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
+from swbt.errors import ProtocolError
 from swbt.protocol.imu_report import ImuEncodingState, ImuMode
 
 
@@ -20,3 +21,25 @@ class SwitchHidSessionState:
     def imu_enabled(self) -> bool:
         """Return whether the host selected an active IMU mode."""
         return self.imu_mode is not ImuMode.DISABLED
+
+
+def apply_imu_mode_request(
+    state: SwitchHidSessionState,
+    *,
+    requested_mode: int,
+    accepted_modes: tuple[int, ...],
+) -> SwitchHidSessionState:
+    """Return the session state for a newly accepted IMU encoding epoch."""
+    if requested_mode not in accepted_modes:
+        msg = f"unsupported enable IMU value: 0x{requested_mode:02x}"
+        raise ProtocolError(msg)
+    try:
+        mode = ImuMode(requested_mode)
+    except ValueError as error:
+        msg = f"unknown enable IMU value: 0x{requested_mode:02x}"
+        raise ProtocolError(msg) from error
+    return replace(
+        state,
+        imu_mode=mode,
+        imu_encoding_state=ImuEncodingState(),
+    )
