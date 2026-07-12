@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from swbt.errors import InvalidInputError
+from swbt.imu import DEFAULT_ACCELEROMETER_CALIBRATION, DEFAULT_GYRO_CALIBRATION
 
 
 class Button(Enum):
@@ -310,6 +311,42 @@ class IMUFrame:
         return cls.raw(gyro=(x, y, z))
 
     @classmethod
+    def gyro_rate(
+        cls,
+        *,
+        x_rad_s: float = 0.0,
+        y_rad_s: float = 0.0,
+        z_rad_s: float = 0.0,
+    ) -> "IMUFrame":
+        """Return a frame from XYZ gyroscope rates in radians per second.
+
+        Conversion uses the fixed virtual sensitivity of ``0.070 dps/raw``.
+
+        Args:
+            x_rad_s: X-axis angular velocity in radians per second.
+            y_rad_s: Y-axis angular velocity in radians per second.
+            z_rad_s: Z-axis angular velocity in radians per second.
+
+        Returns:
+            IMUFrame: Frame with converted gyroscope raw values and zero accelerometer.
+
+        Raises:
+            InvalidInputError: A converted raw value is outside the signed 16-bit range.
+        """
+        return cls.raw(gyro=DEFAULT_GYRO_CALIBRATION.gyro_rates_to_raw((x_rad_s, y_rad_s, z_rad_s)))
+
+    def to_gyro_rate(self) -> tuple[float, float, float]:
+        """Return XYZ gyroscope rates in radians per second.
+
+        Conversion uses the fixed virtual sensitivity of ``0.070 dps/raw``.
+
+        Returns:
+            tuple[float, float, float]: X, Y, and Z angular velocities in radians per
+                second.
+        """
+        return DEFAULT_GYRO_CALIBRATION.raw_to_gyro_rates((self.gyro_x, self.gyro_y, self.gyro_z))
+
+    @classmethod
     def accel(cls, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":
         """Return an IMU frame with only accelerometer axes set.
 
@@ -325,6 +362,41 @@ class IMUFrame:
             InvalidInputError: Any value is outside the supported signed 16-bit range.
         """
         return cls.raw(accel=(x, y, z))
+
+    @classmethod
+    def accel_g(
+        cls,
+        *,
+        x_g: float = 0.0,
+        y_g: float = 0.0,
+        z_g: float = 0.0,
+    ) -> "IMUFrame":
+        """Return a frame from XYZ accelerations in G using ``1/4096 G/raw``.
+
+        Args:
+            x_g: X-axis acceleration in G.
+            y_g: Y-axis acceleration in G.
+            z_g: Z-axis acceleration in G.
+
+        Returns:
+            IMUFrame: Frame with converted accelerometer raw values and zero gyroscope.
+
+        Raises:
+            InvalidInputError: A value is non-finite or converts outside signed 16-bit.
+        """
+        return cls.raw(
+            accel=DEFAULT_ACCELEROMETER_CALIBRATION.accelerations_to_raw((x_g, y_g, z_g))
+        )
+
+    def to_accel_g(self) -> tuple[float, float, float]:
+        """Return XYZ accelerations in G using ``1/4096 G/raw``.
+
+        Returns:
+            tuple[float, float, float]: X, Y, and Z accelerations in G.
+        """
+        return DEFAULT_ACCELEROMETER_CALIBRATION.raw_to_accelerations(
+            (self.accel_x, self.accel_y, self.accel_z)
+        )
 
     def with_gyro(self, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":
         """Return a frame with replaced gyroscope axes.
@@ -345,6 +417,32 @@ class IMUFrame:
             gyro=(x, y, z),
         )
 
+    def with_gyro_rate(
+        self,
+        *,
+        x_rad_s: float = 0.0,
+        y_rad_s: float = 0.0,
+        z_rad_s: float = 0.0,
+    ) -> "IMUFrame":
+        """Return a frame with gyroscope rates replaced from radians per second.
+
+        Conversion uses the fixed virtual sensitivity of ``0.070 dps/raw``.
+
+        Args:
+            x_rad_s: Replacement X-axis angular velocity in radians per second.
+            y_rad_s: Replacement Y-axis angular velocity in radians per second.
+            z_rad_s: Replacement Z-axis angular velocity in radians per second.
+
+        Returns:
+            IMUFrame: Copy of this frame with accelerometer axes preserved.
+
+        Raises:
+            InvalidInputError: A converted raw value is outside the signed 16-bit range.
+        """
+        return self.with_gyro(
+            *DEFAULT_GYRO_CALIBRATION.gyro_rates_to_raw((x_rad_s, y_rad_s, z_rad_s))
+        )
+
     def with_accel(self, x: int = 0, y: int = 0, z: int = 0) -> "IMUFrame":
         """Return a frame with replaced accelerometer axes.
 
@@ -362,6 +460,30 @@ class IMUFrame:
         return IMUFrame.raw(
             accel=(x, y, z),
             gyro=(self.gyro_x, self.gyro_y, self.gyro_z),
+        )
+
+    def with_accel_g(
+        self,
+        *,
+        x_g: float = 0.0,
+        y_g: float = 0.0,
+        z_g: float = 0.0,
+    ) -> "IMUFrame":
+        """Return a frame with accelerations replaced using ``1/4096 G/raw``.
+
+        Args:
+            x_g: Replacement X-axis acceleration in G.
+            y_g: Replacement Y-axis acceleration in G.
+            z_g: Replacement Z-axis acceleration in G.
+
+        Returns:
+            IMUFrame: Copy of this frame with gyroscope axes preserved.
+
+        Raises:
+            InvalidInputError: A value is non-finite or converts outside signed 16-bit.
+        """
+        return self.with_accel(
+            *DEFAULT_ACCELEROMETER_CALIBRATION.accelerations_to_raw((x_g, y_g, z_g))
         )
 
     @classmethod

@@ -283,6 +283,25 @@ await pad.imu(IMUFrame.gyro(100, 0, 0))
 
 `imu()` は IMU 入力だけを置き換える state update API です。`imu(frame)` は 3 つの IMU frame すべてに同じ値を設定します。即時送信は保証しません。
 
+### Update Gyro From Physical Angular Velocity
+
+```python
+from math import radians
+from swbt import IMUFrame
+
+omega_x = radians(90.0)
+omega_y = radians(-45.0)
+omega_z = 0.0
+frame = IMUFrame.gyro_rate(x_rad_s=omega_x, y_rad_s=omega_y, z_rad_s=omega_z)
+await pad.imu(frame)
+
+x_rad_s, y_rad_s, z_rad_s = frame.to_gyro_rate()
+```
+
+`gyro_rate()` の単位は rad/s です。全軸で固定の `0.070 dps/raw` を使って raw 値へ変換します。変換後の値が signed int16 の範囲外になる場合は clamp せず `InvalidInputError` が送出されます。raw 値を直接指定する場合は既存の `IMUFrame.gyro()` を使います。
+
+`ProController`、`JoyConL`、`JoyConR`にSwitchがIMU mode `0x02-0x05`を要求する接続では、runtimeがこの角速度をquaternion形式へ自動変換します。呼び出し側の指定方法は変わりません。Joy-Con L/Rでもwire packingは共通ですが、Joy-Con固有の物理軸方向は実機未検証です。
+
 ### Set Accel And Gyro In One Frame
 
 ```python
@@ -293,6 +312,10 @@ await pad.imu(frame)
 ```
 
 `IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)` は、加速度を設定した frame にジャイロを追加します。`IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, 0))` と同じ値です。
+
+G 単位で指定する場合は `IMUFrame.accel_g(x_g=0.0, y_g=0.0, z_g=1.0)` を使います。固定尺度は `1/4096 G/raw` で、`frame.to_accel_g()` が G の 3 軸 tuple を返します。既存 gyro を維持して加速度だけを置き換える場合は `frame.with_accel_g(x_g=..., y_g=..., z_g=...)` を使います。
+
+加速度を維持したまま物理角速度を設定する場合は、`frame.with_gyro_rate(x_rad_s=..., y_rad_s=..., z_rad_s=...)` を使います。
 
 ### Three IMU Frames
 

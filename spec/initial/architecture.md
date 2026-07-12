@@ -97,7 +97,7 @@ input
 
 ### 2.5 `SwitchHidProtocol`
 
-Switch 向け HID report の生成と解釈を担当する。具体的には、`0x30` input report の生成、`0x01` / `0x10` output report の解析、`0x21` reply の組み立てを扱う。
+Switch 向け HID report の生成と解釈を担当する。具体的には、hostのIMU modeに応じた`0x30` input reportの生成、`0x01` / `0x10` output reportの解析、`0x21` replyの組み立てを扱う。mode `0x02-0x05`のquaternion姿勢状態はprotocol層が所有する。同じIMU modeの再要求でもsubcommand sessionがmotion reset要求を記録し、input report builderが一度だけ消費する。
 
 この層は Bluetooth 接続状態や HCI transport を扱わない。
 
@@ -176,10 +176,12 @@ swbt/
 | `swbt.__init__` | 公開 API の再 export |
 | `swbt.gamepad` | `SwitchGamepad` と設定オブジェクト |
 | `swbt.input` | `InputState`, `Button`, `Stick`, `IMUFrame` |
+| `swbt.imu` | 仮想ジャイロ校正値、rad/s と raw 値の相互変換、SPI 用 serialization |
 | `swbt.state_store` | 現在入力の保持、snapshot 生成 |
 | `swbt.report_loop` | 周期送信、reply queue 優先制御 |
 | `swbt.protocol.switch_hid` | Switch HID protocol の統合 facade |
 | `swbt.protocol.input_report` | `0x30` input report builder |
+| `swbt.protocol.motion` | IMU mode `0x02-0x05`のquaternion積分と36 byte packing |
 | `swbt.protocol.output_report` | `0x01` / `0x10` output report parser |
 | `swbt.protocol.subcommand` | subcommand reply 生成 |
 | `swbt.protocol.spi` | virtual SPI flash |

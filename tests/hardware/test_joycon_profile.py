@@ -22,6 +22,10 @@ _VISIBLE_REPORT_HOLD_COUNT = 30
 _STICK_VISIBLE_REPORT_HOLD_COUNT = 120
 _STICK_CIRCLE_STEPS = 32
 _STICK_CIRCLE_STEP_SECONDS = 0.15
+_FACTORY_SENSOR_CALIBRATION_ADDRESS = 0x6020
+_FACTORY_SENSOR_CALIBRATION_BYTES = bytes.fromhex(
+    "00 00 00 00 00 00 00 40 00 40 00 40 00 00 00 00 00 00 3b 34 3b 34 3b 34"
+)
 _CUSTOM_JOYCON_LEFT_CONTROLLER_COLORS = ControllerColors(
     body=0xFF0000,
     buttons=0x0000FF,
@@ -294,6 +298,13 @@ def test_switch_joycon_profile_reads_default_controller_colors(
         "controller_color_spi_reply",
         controller_color_bytes=expected_color_bytes.hex(),
         matches_expected_controller_colors=True,
+        side=side,
+    )
+    assert _contains_event(
+        events,
+        "factory_sensor_calibration_spi_reply",
+        calibration_bytes=_FACTORY_SENSOR_CALIBRATION_BYTES.hex(),
+        matches_expected_calibration=True,
         side=side,
     )
     assert _contains_event(
@@ -1148,12 +1159,31 @@ class RecordingDeviceInfoResponder(SubcommandResponder):
         )
 
     def _record_spi_reply(self, payload: bytes, reply: bytes) -> None:
-        if self._expected_controller_color_bytes is None or len(payload) < 5:
+        if len(payload) < 5:
             return
 
         address = int.from_bytes(payload[0:4], "little")
         size = payload[4]
         read_data = reply[20 : 20 + size]
+        calibration_offset = _FACTORY_SENSOR_CALIBRATION_ADDRESS - address
+        calibration_size = len(_FACTORY_SENSOR_CALIBRATION_BYTES)
+        if calibration_offset >= 0 and calibration_offset + calibration_size <= len(read_data):
+            calibration_bytes = read_data[
+                calibration_offset : calibration_offset + calibration_size
+            ]
+            _record_probe_event(
+                self._trace,
+                "factory_sensor_calibration_spi_reply",
+                address=f"0x{address:06x}",
+                calibration_bytes=calibration_bytes.hex(),
+                matches_expected_calibration=(
+                    calibration_bytes == _FACTORY_SENSOR_CALIBRATION_BYTES
+                ),
+                side=self._side,
+                size=size,
+            )
+        if self._expected_controller_color_bytes is None:
+            return
         color_offset = 0x6050 - address
         if color_offset < 0 or color_offset + 12 > len(read_data):
             return

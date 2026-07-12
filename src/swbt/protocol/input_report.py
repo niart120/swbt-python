@@ -1,16 +1,35 @@
 """Input report builders."""
 
+from collections.abc import Callable
+from time import monotonic_ns
+from typing import Protocol
+
 from swbt.input import InputState, Stick
+from swbt.protocol.motion import QuaternionMotionPacker
 from swbt.protocol.profiles.base import ControllerProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
+
+
+class _ImuSessionState(Protocol):
+    imu_mode: int | None
+
+    def consume_imu_mode_reset_request(self) -> bool: ...
 
 
 class InputReportBuilder:
     """Build Switch HID input reports from immutable input state."""
 
-    def __init__(self, profile: ControllerProfile | None = None) -> None:
+    def __init__(
+        self,
+        profile: ControllerProfile | None = None,
+        *,
+        session_state: _ImuSessionState | None = None,
+        clock_ns: Callable[[], int] = monotonic_ns,
+    ) -> None:
         """Create a report builder."""
         self._profile = profile or default_controller_profile()
+        self._session_state = session_state
+        self._quaternion_packer = QuaternionMotionPacker(clock_ns=clock_ns)
 
     def build_0x30(self, state: InputState, *, timer: int = 0) -> bytes:
         """Build a 0x30 standard full input report."""
@@ -41,8 +60,16 @@ class InputReportBuilder:
             )
         )
 
-    @staticmethod
-    def _pack_imu_frames(report: bytearray, state: InputState) -> None:
+    def _pack_imu_frames(self, report: bytearray, state: InputState) -> None:
+        if self._session_state is not None and self._session_state.consume_imu_mode_reset_request():
+            self._quaternion_packer.reset()
+        imu_mode = self._session_state.imu_mode if self._session_state is not None else None
+        if imu_mode in (0x02, 0x03, 0x04, 0x05):
+            report[13:49] = self._quaternion_packer.pack(
+                state.imu_frames,
+                gyro_calibration=self._profile.gyro_calibration,
+            )
+            return
         cursor = 13
         for frame in state.imu_frames:
             for value in (

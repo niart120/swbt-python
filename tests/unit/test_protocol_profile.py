@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 
 from swbt.errors import InvalidInputError
+from swbt.imu import DEFAULT_GYRO_CALIBRATION
 from swbt.protocol.buttons import PRO_CONTROLLER_BUTTON_BITS
 from swbt.protocol.descriptors import SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
 from swbt.protocol.profiles.base import ControllerColors, ControllerKind
@@ -24,6 +25,40 @@ def test_protocol_profile_implementation_is_split_by_profile_concern() -> None:
     assert JoyConRightProfile.__module__ == "swbt.protocol.profiles.joycon"
     assert ProControllerProfile().button_bits is PRO_CONTROLLER_BUTTON_BITS
     assert default_controller_profile().__class__ is ProControllerProfile
+
+
+def test_pro_controller_profile_owns_default_virtual_gyro_calibration() -> None:
+    calibration = ProControllerProfile().gyro_calibration
+
+    assert calibration is DEFAULT_GYRO_CALIBRATION
+    assert calibration.zero_raw == (0, 0, 0)
+    assert calibration.reference_raw == (0x343B, 0x343B, 0x343B)
+    assert calibration.dps_per_raw == 0.070
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [ProControllerProfile(), JoyConLeftProfile(), JoyConRightProfile()],
+)
+def test_controller_profiles_accept_standard_and_quaternion_imu_modes(
+    profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
+) -> None:
+    assert profile.imu_enable_modes == (0x00, 0x01, 0x02, 0x03, 0x04, 0x05)
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [ProControllerProfile(), JoyConLeftProfile(), JoyConRightProfile()],
+)
+def test_controller_profiles_own_default_virtual_accelerometer_calibration(
+    profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
+) -> None:
+    calibration = profile.accelerometer_calibration
+
+    assert calibration.zero_raw == (0, 0, 0)
+    assert calibration.reference_raw == (0x4000, 0x4000, 0x4000)
+    assert calibration.reference_acceleration_g == 4.0
+    assert calibration.g_per_raw == 1 / 4096
 
 
 def test_controller_kind_branching_stays_localized_to_profiles_and_gamepad_classes() -> None:

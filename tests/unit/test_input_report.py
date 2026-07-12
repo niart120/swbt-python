@@ -1,9 +1,18 @@
+from math import radians, sin
+
 import pytest
 
 from swbt.errors import UnsupportedInputError
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
+from swbt.protocol.subcommand import SubcommandSessionState
+
+
+def _mode_2_component_2(report: bytes) -> int:
+    motion = report[13:49]
+    encoded = ((int.from_bytes(motion[18:21], "little") & 0x7FFFF) << 2) | (motion[11] >> 6)
+    return encoded - (1 << 21) if encoded & (1 << 20) else encoded
 
 
 def test_neutral_0x30_report_has_report_id_and_49_byte_length() -> None:
@@ -83,6 +92,133 @@ def test_imu_frames_are_packed_as_i16_little_endian_values() -> None:
     assert report[13:25] == bytes.fromhex("01 00 fe ff 03 00 fc ff 05 00 fa ff")
     assert report[25:37] == bytes.fromhex("01 00 fe ff 03 00 fc ff 05 00 fa ff")
     assert report[37:49] == bytes.fromhex("01 00 fe ff 03 00 fc ff 05 00 fa ff")
+
+
+def test_imu_mode_02_packs_identity_quaternion_instead_of_standard_gyro() -> None:
+    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
+    builder = InputReportBuilder(session_state=session_state, clock_ns=lambda: 0)
+    state = InputState.neutral().with_accel((0, 0, 4096)).with_gyro((0, 0, 1234))
+
+    report = builder.build_0x30(state)
+
+    assert report[13:19] == bytes.fromhex("00 00 00 00 00 10")
+    assert report[19] & 0x0F == 0x0E
+    assert report[25:31] == bytes.fromhex("00 00 00 00 00 10")
+    assert report[37:43] == bytes.fromhex("00 00 00 00 00 10")
+    assert report[48] >> 2 == 3
+
+
+@pytest.mark.parametrize("profile", [JoyConLeftProfile(), JoyConRightProfile()])
+@pytest.mark.parametrize("imu_mode", [0x02, 0x03, 0x04, 0x05])
+def test_joycon_quaternion_modes_use_mode_2_motion_packing(
+    profile: JoyConLeftProfile | JoyConRightProfile,
+    imu_mode: int,
+) -> None:
+    session_state = SubcommandSessionState(imu_mode=imu_mode, imu_enabled=True)
+    builder = InputReportBuilder(
+        profile,
+        session_state=session_state,
+        clock_ns=lambda: 0,
+    )
+    state = InputState.neutral().with_accel((0, 0, 4096))
+
+    report = builder.build_0x30(state)
+
+    assert report[19] & 0x0F == 0x0E
+    assert report[48] >> 2 == 3
+
+
+def test_imu_mode_02_quaternion_distinguishes_positive_and_negative_z_rotation() -> None:
+    now_ns = 0
+
+    def clock_ns() -> int:
+        return now_ns
+
+    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
+    positive = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    negative = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    positive_state = InputState.neutral().with_gyro((0, 0, 1000))
+    negative_state = InputState.neutral().with_gyro((0, 0, -1000))
+    positive.build_0x30(positive_state)
+    negative.build_0x30(negative_state)
+
+    now_ns = 1_000_000_000
+    positive_report = positive.build_0x30(positive_state)
+    negative_report = negative.build_0x30(negative_state)
+
+    assert positive_report[13:49] != negative_report[13:49]
+
+    assert _mode_2_component_2(positive_report) > 0
+    assert _mode_2_component_2(negative_report) < 0
+
+    assert positive_report[13:49] != bytes(36)
+    assert negative_report[13:49] != bytes(36)
+
+
+@pytest.mark.parametrize("active_sample_index", range(3))
+def test_quaternion_mode_integrates_all_three_gyro_samples(active_sample_index: int) -> None:
+    now_ns = 0
+
+    def clock_ns() -> int:
+        return now_ns
+
+    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
+    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    builder.build_0x30(InputState.neutral())
+    frames = tuple(
+        IMUFrame.gyro(0, 0, 1000 if index == active_sample_index else 0) for index in range(3)
+    )
+    state = InputState.neutral().with_imu(
+        frames[0],
+        frames[1],
+        frames[2],
+    )
+
+    now_ns = 1_000_000_000
+    report = builder.build_0x30(state)
+
+    assert _mode_2_component_2(report) > 0
+
+
+def test_quaternion_mode_divides_elapsed_time_across_duplicate_samples() -> None:
+    now_ns = 0
+
+    def clock_ns() -> int:
+        return now_ns
+
+    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
+    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    state = InputState.neutral().with_gyro((0, 0, 1000))
+    builder.build_0x30(state)
+
+    now_ns = 1_000_000_000
+    report = builder.build_0x30(state)
+    expected_component = int(sin(radians(70.0) / 2) * 0x40000000) >> 10
+
+    assert abs(_mode_2_component_2(report) - expected_component) <= 1
+
+
+def test_repeated_imu_mode_02_request_resets_quaternion_orientation() -> None:
+    now_ns = 0
+
+    def clock_ns() -> int:
+        return now_ns
+
+    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
+    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    state = InputState.neutral().with_gyro((0, 0, 1000))
+    initial_report = builder.build_0x30(state)
+
+    now_ns = 1_000_000_000
+    rotated_report = builder.build_0x30(state)
+    assert _mode_2_component_2(rotated_report) > 0
+
+    session_state.record_imu_mode_request(0x02)
+    now_ns = 2_000_000_000
+    reset_report = builder.build_0x30(state)
+
+    assert _mode_2_component_2(initial_report) == 0
+    assert _mode_2_component_2(reset_report) == 0
 
 
 @pytest.mark.parametrize(

@@ -184,6 +184,35 @@ status = "profile-policy"
 handoff = ["unit_031"]
 
 [[entry]]
+id = "factory_accelerometer_calibration_layout"
+fixture_name = "factory_accelerometer_calibration_0x6020_0x602b"
+area = "protocol"
+value = "Factory 6-axis calibration uses four groups of XYZ Int16LE at 0x6020-0x6037; the first two groups make the accelerometer region 0x6020-0x602b in zero_x,zero_y,zero_z,reference_x,reference_y,reference_z order. Issue #70 fixes the virtual profile to zero=0, reference=0x4000, reference acceleration=4.0 G, and 1/4096 G/raw; SPI and the physical acceleration API share this definition."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md',
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/imu_sensor_notes.md',
+    'https://github.com/niart120/swbt-python/issues/70',
+    'spec\hardware-test-log.md',
+]
+status = "stable-virtual-profile"
+handoff = ["unit_047", "unit_048"]
+
+[[entry]]
+id = "factory_gyro_calibration_layout"
+fixture_name = "factory_gyro_calibration_0x602c_0x6037"
+area = "protocol"
+value = "Factory 6-axis calibration uses four groups of XYZ Int16LE at 0x6020-0x6037; the latter two groups make the gyro region 0x602c-0x6037 in zero_x,zero_y,zero_z,reference_x,reference_y,reference_z order. The virtual profile fixes each axis to zero=0 and reference=0x343b, and rad/s conversion uses 0.070 dps/raw directly without a full-span or 816/936 calculation."
+classification = "source fact"
+source = [
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md',
+    'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/imu_sensor_notes.md',
+    'https://github.com/niart120/swbt-python/issues/69',
+]
+status = "stable-virtual-profile"
+handoff = ["unit_047"]
+
+[[entry]]
 id = "subcommand_report_mode_session_state"
 fixture_name = "subcommand_report_mode_session_state"
 area = "protocol"
@@ -270,6 +299,21 @@ source = [
 status = "hardware-observed-only"
 condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB expected from previous Windows runs; Bumble 0.0.230; Python 3.13.5; adapter usb:0; Switch 2 firmware 22.1.0; controller search or change grip order screen; branch test/hardware-test-scenarios at commit 3c3aead plus 2026-07-07 P2 rerun after deleting Switch-side connection information"
 handoff = ["unit_046"]
+
+[[entry]]
+id = "pro_controller_imu_mode_02_quaternion_format"
+fixture_name = "pro_controller_imu_mode_02_quaternion_format"
+area = "protocol"
+value = "MissionControl models subcommand 0x40 as SensorSleep: mode 0x01 selects StandardMotionPacker, while modes 0x02-0x05 select QuaternionMotionPacker. Its 36-byte SwitchMotionData packing mode 2 keeps three XYZ Int16LE acceleration samples, stores a unit quaternion with the largest component omitted, uses three signed 21-bit fixed-point components at 2^20 units per 1.0, zeroes interpolation deltas for a single orientation sample, and carries an 11-bit millisecond timestamp plus sample count 3. swbt-python applies the same mode dispatch and wire packer to Pro Controller, Joy-Con L, and Joy-Con R profiles. On Switch 2 firmware 22.1.0 with Splatoon 3, packing mode 2 produced left rotation, stop, right rotation, stop for positive Z, rest, negative Z, rest using the Pro Controller profile. This hardware observation confirms the causal link for the tested Pro Controller Z axis; it does not establish Joy-Con axis direction or cross-firmware behavior."
+classification = "implementation fact"
+source = [
+    'https://github.com/ndeadly/MissionControl/blob/d3941d433f15827de8aea116d61ea17bb61d0bcc/mc_mitm/source/controllers/switch_controller.hpp',
+    'https://github.com/ndeadly/MissionControl/blob/d3941d433f15827de8aea116d61ea17bb61d0bcc/mc_mitm/source/controllers/emulated_switch_controller.cpp',
+    'https://github.com/ndeadly/MissionControl/blob/d3941d433f15827de8aea116d61ea17bb61d0bcc/mc_mitm/source/controllers/switch_motion_packing.hpp',
+    'https://github.com/ndeadly/MissionControl/blob/d3941d433f15827de8aea116d61ea17bb61d0bcc/mc_mitm/source/controllers/switch_motion_packing.cpp',
+]
+status = "source-backed-hardware-observed"
+handoff = ["unit_047"]
 
 [[entry]]
 id = "profile_aware_bumble_sdp_boundary"

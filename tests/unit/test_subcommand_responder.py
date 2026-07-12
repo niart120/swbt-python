@@ -4,7 +4,7 @@ from swbt.errors import ProtocolError
 from swbt.input import InputState
 from swbt.protocol.output_report import OutputReport, OutputReportParser
 from swbt.protocol.profiles.base import ControllerColors
-from swbt.protocol.profiles.joycon import JoyConLeftProfile
+from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.protocol.subcommand import (
     SubcommandResponder,
@@ -121,10 +121,13 @@ def test_enable_imu_updates_session_state() -> None:
     responder.respond(_subcommand_report(0x40, payload=b"\x01"), state=InputState.neutral())
     assert session_state.imu_mode == 0x01
     assert session_state.imu_enabled is True
+    assert session_state.consume_imu_mode_reset_request() is True
+    assert session_state.consume_imu_mode_reset_request() is False
 
     responder.respond(_subcommand_report(0x40, payload=b"\x00"), state=InputState.neutral())
     assert session_state.imu_mode == 0x00
     assert session_state.imu_enabled is False
+    assert session_state.consume_imu_mode_reset_request() is True
 
 
 def test_joycon_enable_imu_mode_0x02_updates_session_state() -> None:
@@ -142,6 +145,37 @@ def test_joycon_enable_imu_mode_0x02_updates_session_state() -> None:
     assert session_state.imu_enabled is True
 
 
+@pytest.mark.parametrize("profile", [JoyConLeftProfile(), JoyConRightProfile()])
+@pytest.mark.parametrize("imu_mode", [0x02, 0x03, 0x04, 0x05])
+def test_joycon_profiles_accept_quaternion_imu_modes(
+    profile: JoyConLeftProfile | JoyConRightProfile,
+    imu_mode: int,
+) -> None:
+    session_state = SubcommandSessionState()
+    responder = SubcommandResponder(profile=profile, session_state=session_state)
+
+    reply = responder.respond(
+        _subcommand_report(0x40, payload=bytes((imu_mode,))),
+        state=InputState.neutral(),
+    )
+
+    assert reply[13:15] == bytes.fromhex("80 40")
+    assert session_state.imu_mode == imu_mode
+
+
+def test_enable_imu_rejects_unknown_mode_with_profile_accepted_modes() -> None:
+    responder = SubcommandResponder(profile=JoyConLeftProfile())
+
+    with pytest.raises(
+        ProtocolError,
+        match="must be one of: 0x00, 0x01, 0x02, 0x03, 0x04, 0x05",
+    ):
+        responder.respond(
+            _subcommand_report(0x40, payload=b"\x06"),
+            state=InputState.neutral(),
+        )
+
+
 def test_pro_controller_enable_imu_mode_0x02_updates_session_state() -> None:
     session_state = SubcommandSessionState()
     responder = SubcommandResponder(session_state=session_state)
@@ -152,6 +186,20 @@ def test_pro_controller_enable_imu_mode_0x02_updates_session_state() -> None:
     assert reply[14] == 0x40
     assert session_state.imu_mode == 0x02
     assert session_state.imu_enabled is True
+
+
+@pytest.mark.parametrize("imu_mode", [0x02, 0x03, 0x04, 0x05])
+def test_pro_controller_accepts_quaternion_imu_modes(imu_mode: int) -> None:
+    session_state = SubcommandSessionState()
+    responder = SubcommandResponder(session_state=session_state)
+
+    reply = responder.respond(
+        _subcommand_report(0x40, payload=bytes((imu_mode,))),
+        state=InputState.neutral(),
+    )
+
+    assert reply[13:15] == bytes.fromhex("80 40")
+    assert session_state.imu_mode == imu_mode
 
 
 def test_enable_vibration_updates_session_state() -> None:

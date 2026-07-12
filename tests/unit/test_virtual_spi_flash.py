@@ -1,6 +1,7 @@
 import pytest
 
 from swbt.errors import ProtocolError
+from swbt.imu import AccelerometerCalibration, GyroCalibration
 from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
@@ -28,6 +29,44 @@ def test_virtual_spi_flash_returns_seeded_color_info_exists_flag() -> None:
     spi = VirtualSpiFlash()
 
     assert spi.read(0x601B, 1) == b"\x01"
+
+
+def test_virtual_spi_flash_seeds_factory_gyro_calibration_from_profile() -> None:
+    assert VirtualSpiFlash().read(0x602C, 12) == bytes.fromhex(
+        "00 00 00 00 00 00 3b 34 3b 34 3b 34"
+    )
+
+    profile = ProControllerProfile(
+        gyro_calibration=GyroCalibration(
+            zero_raw=(-1, 2, -3),
+            reference_raw=(0x343B, 0x343A, 0x3439),
+        )
+    )
+    assert VirtualSpiFlash(profile=profile).read(0x602C, 12) == bytes.fromhex(
+        "ff ff 02 00 fd ff 3b 34 3a 34 39 34"
+    )
+
+
+def test_virtual_spi_flash_seeds_factory_accelerometer_calibration_from_profile() -> None:
+    assert VirtualSpiFlash().read(0x6020, 12) == bytes.fromhex(
+        "00 00 00 00 00 00 00 40 00 40 00 40"
+    )
+
+    profile = ProControllerProfile(
+        accelerometer_calibration=AccelerometerCalibration(
+            zero_raw=(-1, 2, -3),
+            reference_raw=(0x4000, 0x3FFF, 0x3FFE),
+        )
+    )
+    assert VirtualSpiFlash(profile=profile).read(0x6020, 12) == bytes.fromhex(
+        "ff ff 02 00 fd ff 00 40 ff 3f fe 3f"
+    )
+
+
+def test_virtual_spi_flash_returns_complete_factory_six_axis_calibration() -> None:
+    assert VirtualSpiFlash().read(0x6020, 24) == bytes.fromhex(
+        "00 00 00 00 00 00 00 40 00 40 00 40 00 00 00 00 00 00 3b 34 3b 34 3b 34"
+    )
 
 
 def test_virtual_spi_flash_returns_seeded_custom_controller_colors() -> None:
@@ -59,10 +98,14 @@ def test_virtual_spi_flash_returns_erased_bytes_for_unseeded_address() -> None:
     assert spi.read(0x70000, 2) == b"\xff\xff"
 
 
-def test_virtual_spi_flash_leaves_unaudited_calibration_erased_for_joycon_profiles() -> None:
-    spi = VirtualSpiFlash(profile=JoyConLeftProfile())
+@pytest.mark.parametrize("profile", [JoyConLeftProfile(), JoyConRightProfile()])
+def test_virtual_spi_flash_seeds_factory_sensor_calibration_for_joycon_profiles(
+    profile: JoyConLeftProfile | JoyConRightProfile,
+) -> None:
+    spi = VirtualSpiFlash(profile=profile)
 
-    assert spi.read(0x6020, 0x18) == b"\xff" * 0x18
+    assert spi.read(0x6020, 12) == bytes.fromhex("00 00 00 00 00 00 00 40 00 40 00 40")
+    assert spi.read(0x602C, 12) == bytes.fromhex("00 00 00 00 00 00 3b 34 3b 34 3b 34")
     assert spi.read(0x603D, 9) == b"\xff" * 9
     assert spi.read(0x6046, 9) == b"\xff" * 9
 

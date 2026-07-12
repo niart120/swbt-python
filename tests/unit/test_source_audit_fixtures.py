@@ -24,6 +24,8 @@ REQUIRED_ENTRY_IDS = {
     "device_info_grip_color_tail_0302",
     "joycon_device_info_profile",
     "device_info_local_bluetooth_address_wiring",
+    "factory_accelerometer_calibration_layout",
+    "factory_gyro_calibration_layout",
     "joycon_spi_device_type_values",
     "joycon_default_controller_color_profile",
     "joycon_standard_button_mapping",
@@ -33,6 +35,7 @@ REQUIRED_ENTRY_IDS = {
     "subcommand_nfc_ir_mcu_state",
     "subcommand_nfc_ir_mcu_state_ack_policy",
     "pro_controller_imu_enable_mode_02_observation",
+    "pro_controller_imu_mode_02_quaternion_format",
     "profile_aware_bumble_sdp_boundary",
     "joycontrol_sdp_record_policy",
     "spi_flash_boundary_and_seed_map",
@@ -344,6 +347,41 @@ def test_subcommand_imu_vibration_enable_state_is_source_audited() -> None:
     assert "SubcommandSessionState" in value
 
 
+def test_factory_gyro_calibration_layout_is_source_audited() -> None:
+    entry = _entry_by_id("factory_gyro_calibration_layout")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "stable-virtual-profile"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x602c-0x6037" in value
+    assert "zero_x,zero_y,zero_z,reference_x,reference_y,reference_z" in value
+    assert "Int16LE" in value
+    assert "zero=0" in value
+    assert "reference=0x343b" in value
+    assert "0.070 dps/raw" in value
+    assert "816/936" in value
+
+
+def test_factory_accelerometer_calibration_layout_is_source_audited() -> None:
+    entry = _entry_by_id("factory_accelerometer_calibration_layout")
+
+    assert entry["classification"] == "source fact"
+    assert entry["status"] == "stable-virtual-profile"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "0x6020-0x602b" in value
+    assert "zero_x,zero_y,zero_z,reference_x,reference_y,reference_z" in value
+    assert "Int16LE" in value
+    assert "zero=0" in value
+    assert "reference=0x4000" in value
+    assert "reference acceleration=4.0 G" in value
+    assert "1/4096 G/raw" in value
+    assert "physical acceleration API" in value
+
+
 def test_subcommand_nfc_ir_mcu_state_is_source_audited() -> None:
     entry = _entry_by_id("subcommand_nfc_ir_mcu_state")
 
@@ -408,6 +446,25 @@ def test_pro_controller_imu_enable_mode_02_observation_is_hardware_observed() ->
     assert "hardware-observed compatibility mode" in value
     assert "SubcommandSessionState.imu_mode" in value
     assert "does not supersede the 0x00/0x01 source fact" in value
+
+
+def test_pro_controller_imu_mode_02_quaternion_format_is_source_audited() -> None:
+    entry = _entry_by_id("pro_controller_imu_mode_02_quaternion_format")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "source-backed-hardware-observed"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "mode 0x01 selects StandardMotionPacker" in value
+    assert "modes 0x02-0x05 select QuaternionMotionPacker" in value
+    assert "three XYZ Int16LE acceleration samples" in value
+    assert "signed 21-bit fixed-point components" in value
+    assert "11-bit millisecond timestamp" in value
+    assert "sample count 3" in value
+    assert "left rotation, stop, right rotation, stop" in value
+    assert "does not establish Joy-Con axis direction" in value
+    assert "same mode dispatch and wire packer" in value
 
 
 def test_profile_aware_bumble_sdp_boundary_is_source_audited() -> None:

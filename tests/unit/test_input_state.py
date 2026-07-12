@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from math import inf, nan, radians
 from typing import cast
 
 import pytest
@@ -168,6 +169,76 @@ def test_imu_frame_gyro_and_accel_shorthands_match_raw_construction() -> None:
     assert IMUFrame.gyro(x=100) == IMUFrame.raw(gyro=(100, 0, 0))
     assert IMUFrame.accel(0, 0, 4096) == IMUFrame.raw(accel=(0, 0, 4096))
     assert IMUFrame.accel(z=4096) == IMUFrame.raw(accel=(0, 0, 4096))
+
+
+def test_imu_frame_converts_three_axis_gyro_rates_between_rad_s_and_raw() -> None:
+    rates = (radians(7.0), radians(-14.0), radians(0.07))
+
+    frame = IMUFrame.gyro_rate(
+        x_rad_s=rates[0],
+        y_rad_s=rates[1],
+        z_rad_s=rates[2],
+    )
+
+    assert frame == IMUFrame.gyro(100, -200, 1)
+    assert frame.to_gyro_rate() == pytest.approx(rates)
+
+
+def test_imu_frame_with_gyro_rate_preserves_accelerometer_axes() -> None:
+    frame = IMUFrame.accel(1, 2, 3)
+
+    updated = frame.with_gyro_rate(
+        x_rad_s=radians(7.0),
+        y_rad_s=radians(-14.0),
+        z_rad_s=radians(0.07),
+    )
+
+    assert updated == IMUFrame.raw(accel=(1, 2, 3), gyro=(100, -200, 1))
+
+
+def test_imu_frame_gyro_rate_accepts_i16_boundaries_and_rejects_out_of_range() -> None:
+    frame = IMUFrame.gyro_rate(
+        x_rad_s=radians(IMUFrame.MIN * 0.070),
+        y_rad_s=radians(IMUFrame.MAX * 0.070),
+    )
+
+    assert frame == IMUFrame.gyro(IMUFrame.MIN, IMUFrame.MAX, 0)
+
+    invalid_rates = (
+        radians((IMUFrame.MIN - 1) * 0.070),
+        radians((IMUFrame.MAX + 1) * 0.070),
+        -inf,
+        inf,
+        nan,
+    )
+    for rate in invalid_rates:
+        with pytest.raises(InvalidInputError):
+            IMUFrame.gyro_rate(x_rad_s=rate)
+
+
+def test_imu_frame_converts_three_axis_acceleration_between_g_and_raw() -> None:
+    frame = IMUFrame.accel_g(x_g=1.0, y_g=-0.5, z_g=4.0)
+
+    assert frame == IMUFrame.accel(4096, -2048, 16384)
+    assert frame.to_accel_g() == pytest.approx((1.0, -0.5, 4.0))
+
+
+def test_imu_frame_with_accel_g_preserves_gyroscope_axes() -> None:
+    frame = IMUFrame.gyro(100, -200, 300)
+
+    updated = frame.with_accel_g(x_g=1.0, y_g=-0.5, z_g=0.25)
+
+    assert updated == IMUFrame.raw(accel=(4096, -2048, 1024), gyro=(100, -200, 300))
+
+
+def test_imu_frame_accel_g_accepts_i16_boundaries_and_rejects_out_of_range() -> None:
+    frame = IMUFrame.accel_g(x_g=IMUFrame.MIN / 4096, y_g=IMUFrame.MAX / 4096)
+
+    assert frame == IMUFrame.accel(IMUFrame.MIN, IMUFrame.MAX, 0)
+
+    for acceleration in ((IMUFrame.MIN - 1) / 4096, (IMUFrame.MAX + 1) / 4096, -inf, inf, nan):
+        with pytest.raises(InvalidInputError):
+            IMUFrame.accel_g(x_g=acceleration)
 
 
 def test_imu_frame_update_helpers_preserve_the_opposite_sensor_axes() -> None:

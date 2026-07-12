@@ -7,7 +7,7 @@ from typing import Any, Literal, TextIO
 
 import pytest
 
-from swbt import Button, DiagnosticsConfig, InputState, ProController, Stick
+from swbt import Button, DiagnosticsConfig, IMUFrame, InputState, ProController, Stick
 from swbt.protocol.input_report import InputReportBuilder
 
 _OPERATOR_WAIT_SECONDS = 5.0
@@ -676,6 +676,169 @@ def test_switch_stick_calibration_after_active_reconnect_for_manual_reflection(
     assert not _contains_event(events, "error")
 
 
+@pytest.mark.hardware
+def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Send symmetric Z gyroscope rates during an active Switch connection.
+
+    A pytest pass proves active reconnect, mode-aware report transmission,
+    checkpoints, rest cleanup, and transport cleanup only. The human-visible result
+    must be recorded in spec/hardware-test-log.md.
+    """
+    key_store_path = _input_semantics_key_store_path(swbt_hardware_artifact_dir)
+    trace_path = swbt_hardware_artifact_dir / "active-reconnect-gyro-rate-quaternion-z.jsonl"
+    if not key_store_path.exists():
+        pytest.skip(
+            "input semantics key store is missing; copy a current Pro Controller "
+            "key store into the artifact directory or run "
+            "test_switch_input_semantics_pairing_writes_fresh_key_store first"
+        )
+
+    resting_frame = IMUFrame.accel(0, 0, 4096)
+    axis_frames = (
+        ("positive_z", resting_frame.with_gyro_rate(z_rad_s=0.5)),
+        ("negative_z", resting_frame.with_gyro_rate(z_rad_s=-0.5)),
+    )
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            await _wait_for_operator_condition(
+                trace,
+                operation="operator_prepare_gyro_reflection",
+                expected_switch_screen="gyro_responsive_screen_or_motion_calibration",
+                wait_seconds=_OPERATOR_WAIT_SECONDS,
+            )
+            pad = ProController(
+                adapter=swbt_bumble_adapter,
+                key_store_path=str(key_store_path),
+                report_period_us=15_000,
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                await _active_reconnect_for_input_check(pad, trace)
+                await pad.imu(resting_frame)
+                await _wait_for_full_handshake(trace_path, timeout_seconds=20.0)
+                _record_handshake_checkpoint(pad, trace)
+                await _send_imu_rest_and_record(
+                    pad,
+                    trace,
+                    resting_frame,
+                    operation="gyro_quaternion_rest_ready",
+                )
+
+                await pad.press(Button.ZL)
+                zl_hold_start_count = pad.status().report_counters.get(0x30, 0)
+                expected_button_bytes = _current_button_bytes(pad)
+                _record_probe_event(
+                    trace,
+                    "manual_input_checkpoint",
+                    expected_button_bytes=expected_button_bytes,
+                    hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
+                    operation="gyro_control_zl_start",
+                    report_0x30_count=zl_hold_start_count,
+                )
+                await _wait_for_report_counter(
+                    pad,
+                    report_id=0x30,
+                    minimum_count=zl_hold_start_count + _STICK_VISIBLE_REPORT_HOLD_COUNT,
+                    timeout_seconds=5.0,
+                )
+                _record_probe_event(
+                    trace,
+                    "manual_input_checkpoint",
+                    expected_button_bytes=expected_button_bytes,
+                    hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
+                    operation="gyro_control_zl_reports_sent",
+                    report_0x30_count=pad.status().report_counters.get(0x30, 0),
+                )
+                await pad.release(Button.ZL)
+                await _send_imu_rest_and_record(
+                    pad,
+                    trace,
+                    resting_frame,
+                    operation="gyro_control_zl_neutral_complete",
+                )
+
+                for axis, frame in axis_frames:
+                    await pad.imu(frame)
+                    assert pad.snapshot().imu_frames == (frame, frame, frame)
+                    hold_start_count = pad.status().report_counters.get(0x30, 0)
+                    _record_probe_event(
+                        trace,
+                        "manual_input_checkpoint",
+                        axis=axis,
+                        expected_accel_raw=(frame.accel_x, frame.accel_y, frame.accel_z),
+                        expected_gyro_raw=(frame.gyro_x, frame.gyro_y, frame.gyro_z),
+                        hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
+                        operation=f"gyro_{axis}_rate_start",
+                        report_0x30_count=hold_start_count,
+                    )
+                    await _wait_for_report_counter(
+                        pad,
+                        report_id=0x30,
+                        minimum_count=hold_start_count + _STICK_VISIBLE_REPORT_HOLD_COUNT,
+                        timeout_seconds=5.0,
+                    )
+                    _record_probe_event(
+                        trace,
+                        "manual_input_checkpoint",
+                        axis=axis,
+                        expected_accel_raw=(frame.accel_x, frame.accel_y, frame.accel_z),
+                        expected_gyro_raw=(frame.gyro_x, frame.gyro_y, frame.gyro_z),
+                        hold_report_count=_STICK_VISIBLE_REPORT_HOLD_COUNT,
+                        operation=f"gyro_{axis}_rate_reports_sent",
+                        report_0x30_count=pad.status().report_counters.get(0x30, 0),
+                    )
+                    await _send_imu_rest_and_record(
+                        pad,
+                        trace,
+                        resting_frame,
+                        operation=f"gyro_{axis}_neutral_complete",
+                    )
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+
+    assert _contains_active_reconnect_success(events)
+    assert _contains_full_handshake(events)
+    assert _contains_event(events, "manual_input_checkpoint", operation="handshake_complete")
+    assert _contains_event(
+        events,
+        "manual_input_checkpoint",
+        expected_button_bytes="000080",
+        operation="gyro_control_zl_reports_sent",
+    )
+    assert _contains_event(
+        events,
+        "manual_input_checkpoint",
+        operation="gyro_control_zl_neutral_complete",
+    )
+    for axis, frame in axis_frames:
+        assert _contains_event(
+            events,
+            "manual_input_checkpoint",
+            axis=axis,
+            expected_accel_raw=[frame.accel_x, frame.accel_y, frame.accel_z],
+            expected_gyro_raw=[frame.gyro_x, frame.gyro_y, frame.gyro_z],
+            operation=f"gyro_{axis}_rate_reports_sent",
+        )
+        assert _contains_event(
+            events,
+            "manual_input_checkpoint",
+            operation=f"gyro_{axis}_neutral_complete",
+        )
+    assert _count_events(events, "report_tx", report_id="0x30") >= 30
+    assert not _contains_event(events, "classic_pairing")
+    assert not _contains_event(events, "key_store_update")
+    assert not _contains_event(events, "advertising_start")
+    assert not _contains_event(events, "error")
+
+
 async def _wait_for_event(
     trace_path: Path,
     event_name: str,
@@ -777,6 +940,32 @@ def _record_handshake_checkpoint(pad: ProController, trace: TextIO) -> None:
         last_subcommand_id=_format_optional_hex(pad.status().last_subcommand_id),
         report_0x30_count=pad.status().report_counters.get(0x30, 0),
         report_0x21_count=pad.status().report_counters.get(0x21, 0),
+    )
+
+
+async def _send_imu_rest_and_record(
+    pad: ProController,
+    trace: TextIO,
+    frame: IMUFrame,
+    *,
+    operation: str,
+) -> None:
+    await pad.imu(frame)
+    assert pad.snapshot().imu_frames == (frame, frame, frame)
+    rest_start_count = pad.status().report_counters.get(0x30, 0)
+    await _wait_for_report_counter(
+        pad,
+        report_id=0x30,
+        minimum_count=rest_start_count + _NEUTRAL_REPORT_HOLD_COUNT,
+        timeout_seconds=2.0,
+    )
+    _record_probe_event(
+        trace,
+        "manual_input_checkpoint",
+        expected_accel_raw=(frame.accel_x, frame.accel_y, frame.accel_z),
+        expected_gyro_raw=(frame.gyro_x, frame.gyro_y, frame.gyro_z),
+        operation=operation,
+        report_0x30_count=pad.status().report_counters.get(0x30, 0),
     )
 
 

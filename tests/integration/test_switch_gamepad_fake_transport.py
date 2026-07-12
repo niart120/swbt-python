@@ -774,6 +774,29 @@ def test_output_report_injection_sends_subcommand_reply() -> None:
     asyncio.run(run())
 
 
+def test_imu_mode_02_output_switches_periodic_input_to_quaternion_motion() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        enable_quaternion_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 02")
+
+        async with make_pro_controller(
+            transport=transport,
+            report_period_us=10_000_000,
+        ) as pad:
+            await transport.connect()
+            await transport.inject_interrupt_data(enable_quaternion_imu)
+            await transport.wait_for_interrupt_report_id(0x21)
+
+            start_count = len(transport.sent_interrupt_reports)
+            await pad.tap(Button.ZL, duration=0)
+            reports = transport.sent_interrupt_reports[start_count:]
+
+            assert reports[0][0] == 0x30
+            assert reports[0][19] & 0x0F == 0x0E
+
+    asyncio.run(run())
+
+
 def test_output_report_injection_uses_transport_bluetooth_address_for_device_info() -> None:
     async def run() -> None:
         transport = FakeHidTransport(local_bluetooth_address=bytes.fromhex("00 1b dc f9 9f 7d"))

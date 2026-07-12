@@ -119,9 +119,15 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         IMUFrame.neutral,
         IMUFrame.raw,
         IMUFrame.gyro,
+        IMUFrame.gyro_rate,
         IMUFrame.accel,
+        IMUFrame.accel_g,
         IMUFrame.with_gyro,
+        IMUFrame.with_gyro_rate,
         IMUFrame.with_accel,
+        IMUFrame.with_accel_g,
+        IMUFrame.to_gyro_rate,
+        IMUFrame.to_accel_g,
         InputState.neutral,
         InputState.with_imu,
         InputState.with_gyro,
@@ -131,6 +137,44 @@ def test_public_value_object_docstrings_describe_attributes_and_factory_returns(
         _assert_doc_contains(factory, "Returns:")
 
     _assert_doc_contains(list_adapters, "Raises:", "AdapterDiscoveryError")
+
+
+def test_imu_gyro_rate_docstrings_describe_units_scale_and_range_errors() -> None:
+    for method in (IMUFrame.gyro_rate, IMUFrame.with_gyro_rate):
+        _assert_doc_contains(
+            method,
+            "Args:",
+            "x_rad_s",
+            "y_rad_s",
+            "z_rad_s",
+            "radians per second",
+            "0.070 dps/raw",
+            "Raises:",
+            "InvalidInputError",
+        )
+
+    _assert_doc_contains(
+        IMUFrame.to_gyro_rate,
+        "Returns:",
+        "radians per second",
+        "0.070 dps/raw",
+    )
+
+
+def test_imu_accel_g_docstrings_describe_units_scale_and_range_errors() -> None:
+    for method in (IMUFrame.accel_g, IMUFrame.with_accel_g):
+        _assert_doc_contains(
+            method,
+            "Args:",
+            "x_g",
+            "y_g",
+            "z_g",
+            "1/4096 G/raw",
+            "Raises:",
+            "InvalidInputError",
+        )
+
+    _assert_doc_contains(IMUFrame.to_accel_g, "Returns:", "1/4096 G/raw")
 
 
 def test_public_error_docstrings_describe_constructor_arguments() -> None:
