@@ -40,6 +40,16 @@ def test_pro_controller_profile_owns_default_virtual_gyro_calibration() -> None:
     "profile",
     [ProControllerProfile(), JoyConLeftProfile(), JoyConRightProfile()],
 )
+def test_controller_profiles_accept_standard_and_quaternion_imu_modes(
+    profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
+) -> None:
+    assert profile.imu_enable_modes == (0x00, 0x01, 0x02, 0x03, 0x04, 0x05)
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [ProControllerProfile(), JoyConLeftProfile(), JoyConRightProfile()],
+)
 def test_controller_profiles_own_default_virtual_accelerometer_calibration(
     profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
 ) -> None:

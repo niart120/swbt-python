@@ -11,7 +11,7 @@
 | source | 内容 | path |
 |---|---|---|
 | GitHub Issue #70 | profile 所有、SPI `0x6020-0x602B`、固定尺度 `1/4096 G/raw`、G API、Pro/Joy-Con 実機回帰 | https://github.com/niart120/swbt-python/issues/70 |
-| unit_047 実機観測 | Switch は `0x6020` から 24 bytes を読み、accel 側が全て `FF` の場合はジャイロのカメラ反映を確認できなかった | `spec/wip/unit_047/VIRTUAL_GYRO_CALIBRATION.md` |
+| unit_047 実機観測 | Switch は `0x6020` から 24 bytes を読み、accel 側が全て `FF` の場合はジャイロのカメラ反映を確認できなかった | `spec/complete/unit_047/VIRTUAL_GYRO_CALIBRATION.md` |
 
 ### 1.3 use case
 
@@ -39,7 +39,7 @@
 
 ## 4. 関連 docs
 
-- `spec/wip/unit_047/VIRTUAL_GYRO_CALIBRATION.md`
+- `spec/complete/unit_047/VIRTUAL_GYRO_CALIBRATION.md`
 - `spec/initial/api.md`
 - `spec/initial/protocol.md`
 - `spec/initial/testing.md`

@@ -301,6 +301,21 @@ condition = "Windows-11-10.0.26200-SP0; CSR8510 A10; WinUSB expected from previo
 handoff = ["unit_046"]
 
 [[entry]]
+id = "pro_controller_imu_mode_02_quaternion_format"
+fixture_name = "pro_controller_imu_mode_02_quaternion_format"
+area = "protocol"
+value = "MissionControl models subcommand 0x40 as SensorSleep: mode 0x01 selects StandardMotionPacker, while modes 0x02-0x05 select QuaternionMotionPacker. Its 36-byte SwitchMotionData packing mode 2 keeps three XYZ Int16LE acceleration samples, stores a unit quaternion with the largest component omitted, uses three signed 21-bit fixed-point components at 2^20 units per 1.0, zeroes interpolation deltas for a single orientation sample, and carries an 11-bit millisecond timestamp plus sample count 3. swbt-python applies the same mode dispatch and wire packer to Pro Controller, Joy-Con L, and Joy-Con R profiles. On Switch 2 firmware 22.1.0 with Splatoon 3, packing mode 2 produced left rotation, stop, right rotation, stop for positive Z, rest, negative Z, rest using the Pro Controller profile. This hardware observation confirms the causal link for the tested Pro Controller Z axis; it does not establish Joy-Con axis direction or cross-firmware behavior."
+classification = "implementation fact"
+source = [
+    'https://github.com/ndeadly/MissionControl/blob/d3941d433f15827de8aea116d61ea17bb61d0bcc/mc_mitm/source/controllers/switch_controller.hpp',
+    'https://github.com/ndeadly/MissionControl/blob/d3941d433f15827de8aea116d61ea17bb61d0bcc/mc_mitm/source/controllers/emulated_switch_controller.cpp',
+    'https://github.com/ndeadly/MissionControl/blob/d3941d433f15827de8aea116d61ea17bb61d0bcc/mc_mitm/source/controllers/switch_motion_packing.hpp',
+    'https://github.com/ndeadly/MissionControl/blob/d3941d433f15827de8aea116d61ea17bb61d0bcc/mc_mitm/source/controllers/switch_motion_packing.cpp',
+]
+status = "source-backed-hardware-observed"
+handoff = ["unit_047"]
+
+[[entry]]
 id = "profile_aware_bumble_sdp_boundary"
 fixture_name = "profile_aware_bumble_sdp_boundary"
 area = "transport"

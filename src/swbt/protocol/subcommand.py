@@ -30,6 +30,7 @@ class SubcommandSessionState:
     unsupported_report_mode: int | None = None
     imu_mode: int | None = None
     imu_enabled: bool = False
+    imu_mode_revision: int = 0
     vibration_enabled: bool = False
 
 
@@ -125,6 +126,7 @@ class SubcommandResponder:
 
     def _set_imu_enabled(self, payload: bytes) -> bytes:
         imu_mode = _imu_enable_payload(payload, self._profile.imu_enable_modes)
+        self._session_state.imu_mode_revision += 1
         self._session_state.imu_mode = imu_mode
         self._session_state.imu_enabled = imu_mode != 0x00
         return b""
@@ -183,7 +185,8 @@ def _imu_enable_payload(payload: bytes, accepted_modes: tuple[int, ...]) -> int:
     value = _first_payload_byte(payload, "enable IMU")
     if value in accepted_modes:
         return value
-    msg = "enable IMU subcommand argument must be 0x00 or 0x01"
+    accepted = ", ".join(f"0x{mode:02X}" for mode in accepted_modes)
+    msg = f"enable IMU subcommand argument must be one of: {accepted}"
     raise ProtocolError(msg)
 
 

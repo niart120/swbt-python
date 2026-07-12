@@ -35,6 +35,7 @@ REQUIRED_ENTRY_IDS = {
     "subcommand_nfc_ir_mcu_state",
     "subcommand_nfc_ir_mcu_state_ack_policy",
     "pro_controller_imu_enable_mode_02_observation",
+    "pro_controller_imu_mode_02_quaternion_format",
     "profile_aware_bumble_sdp_boundary",
     "joycontrol_sdp_record_policy",
     "spi_flash_boundary_and_seed_map",
@@ -445,6 +446,25 @@ def test_pro_controller_imu_enable_mode_02_observation_is_hardware_observed() ->
     assert "hardware-observed compatibility mode" in value
     assert "SubcommandSessionState.imu_mode" in value
     assert "does not supersede the 0x00/0x01 source fact" in value
+
+
+def test_pro_controller_imu_mode_02_quaternion_format_is_source_audited() -> None:
+    entry = _entry_by_id("pro_controller_imu_mode_02_quaternion_format")
+
+    assert entry["classification"] == "implementation fact"
+    assert entry["status"] == "source-backed-hardware-observed"
+    value = entry["value"]
+
+    assert isinstance(value, str)
+    assert "mode 0x01 selects StandardMotionPacker" in value
+    assert "modes 0x02-0x05 select QuaternionMotionPacker" in value
+    assert "three XYZ Int16LE acceleration samples" in value
+    assert "signed 21-bit fixed-point components" in value
+    assert "11-bit millisecond timestamp" in value
+    assert "sample count 3" in value
+    assert "left rotation, stop, right rotation, stop" in value
+    assert "does not establish Joy-Con axis direction" in value
+    assert "same mode dispatch and wire packer" in value
 
 
 def test_profile_aware_bumble_sdp_boundary_is_source_audited() -> None:

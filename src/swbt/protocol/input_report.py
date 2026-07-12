@@ -1,16 +1,35 @@
 """Input report builders."""
 
+from collections.abc import Callable
+from time import monotonic_ns
+from typing import Protocol
+
 from swbt.input import InputState, Stick
+from swbt.protocol.motion import QuaternionMotionPacker
 from swbt.protocol.profiles.base import ControllerProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
+
+
+class _ImuSessionState(Protocol):
+    imu_mode: int | None
+    imu_mode_revision: int
 
 
 class InputReportBuilder:
     """Build Switch HID input reports from immutable input state."""
 
-    def __init__(self, profile: ControllerProfile | None = None) -> None:
+    def __init__(
+        self,
+        profile: ControllerProfile | None = None,
+        *,
+        session_state: _ImuSessionState | None = None,
+        clock_ns: Callable[[], int] = monotonic_ns,
+    ) -> None:
         """Create a report builder."""
         self._profile = profile or default_controller_profile()
+        self._session_state = session_state
+        self._quaternion_packer = QuaternionMotionPacker(clock_ns=clock_ns)
+        self._last_imu_request: tuple[int | None, int] | None = None
 
     def build_0x30(self, state: InputState, *, timer: int = 0) -> bytes:
         """Build a 0x30 standard full input report."""
@@ -41,8 +60,23 @@ class InputReportBuilder:
             )
         )
 
-    @staticmethod
-    def _pack_imu_frames(report: bytearray, state: InputState) -> None:
+    def _pack_imu_frames(self, report: bytearray, state: InputState) -> None:
+        imu_mode = self._session_state.imu_mode if self._session_state is not None else None
+        imu_revision = (
+            self._session_state.imu_mode_revision if self._session_state is not None else 0
+        )
+        imu_request = (imu_mode, imu_revision)
+        if imu_mode in (0x02, 0x03, 0x04, 0x05):
+            if imu_request != self._last_imu_request:
+                self._quaternion_packer.reset()
+            report[13:49] = self._quaternion_packer.pack(
+                state.imu_frames,
+                gyro_calibration=self._profile.gyro_calibration,
+            )
+            self._last_imu_request = imu_request
+            return
+
+        self._last_imu_request = imu_request
         cursor = 13
         for frame in state.imu_frames:
             for value in (

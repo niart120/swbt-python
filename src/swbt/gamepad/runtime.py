@@ -26,7 +26,7 @@ from swbt.gamepad.transport_factory import (
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.profiles.base import ControllerColors
-from swbt.protocol.subcommand import SubcommandResponder
+from swbt.protocol.subcommand import SubcommandResponder, SubcommandSessionState
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
@@ -103,12 +103,16 @@ class ControllerRuntime:
             controller_colors=self._config.controller_colors
             or self._config.profile.controller_colors,
         )
+        self._subcommand_session_state = SubcommandSessionState()
         self._output_report_dispatcher = OutputReportDispatcher(
             diagnostics=self._diagnostics,
             require_reply_sender=self._require_subcommand_reply_sender,
             send_subcommand_reply=self._send_subcommand_reply,
             state_store=self._state_store,
-            subcommand_responder=SubcommandResponder(profile=self._controller_profile),
+            subcommand_responder=SubcommandResponder(
+                profile=self._controller_profile,
+                session_state=self._subcommand_session_state,
+            ),
         )
         self._report_loop: ReportLoop | None = None
         self._lifecycle_lock = asyncio.Lock()
@@ -207,7 +211,10 @@ class ControllerRuntime:
                     transport=transport,
                     state_store=self._state_store,
                     report_period_us=self._config.report_period_us,
-                    input_report_builder=InputReportBuilder(self._controller_profile),
+                    input_report_builder=InputReportBuilder(
+                        self._controller_profile,
+                        session_state=self._subcommand_session_state,
+                    ),
                     diagnostics=self._diagnostics,
                 )
                 self._connection_state = "opened"

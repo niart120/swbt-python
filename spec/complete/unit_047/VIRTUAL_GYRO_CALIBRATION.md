@@ -15,6 +15,7 @@
 | hardware observation | ZL は反映されたが、IMU有効化・gyro PDU送信・静止加速度追加後もスプラトゥーン3のカメラは動かなかった。Switchが一括取得したfactory 6-axis calibrationのaccel側は全て `FF` だった | `build/hardware/issue-69-gyro-calibration-20260712/` |
 | upstream reverse-engineering notes | 6-axis factory calibration は 4 組の XYZ Int16LE。後半 2 組が gyro zero / reference で、既定 reference は `0x343B` | https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/spi_flash_notes.md |
 | upstream IMU notes | saturation-free LSM6DS3 ±2000 dps の尺度は `0.070 dps/raw`。SPI 校正の gyro zero は静止時 offset | https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/imu_sensor_notes.md |
+| MissionControl mode dispatch / packing | subcommand `0x40`の`0x01`は標準形式、`0x02-0x05`はquaternion形式。packing mode 2の36 byte layoutと姿勢更新 | https://github.com/ndeadly/MissionControl/tree/d3941d433f15827de8aea116d61ea17bb61d0bcc/mc_mitm/source/controllers |
 | completed unit | 既存 `IMUFrame.raw()` / `gyro()` / `with_gyro()` と signed int16 validation | `spec/complete/unit_025/IMU_INPUT_SHORTHAND_API.md` |
 | current implementation | SPI は device type、color flag、controller colors のみ profile から seed し、6-axis calibration は erased のまま | `src/swbt/protocol/spi.py` |
 
@@ -33,6 +34,10 @@
 
 6-axis calibrationブロック全体を有効にするため、factory accel calibrationはIssue #70と`spec/wip/unit_048/VIRTUAL_ACCELEROMETER_CALIBRATION.md`で実装する。本 unit はその校正値と共存するgyro側の契約を追跡する。
 
+実機再試験ではSwitch 2 firmware 22.1.0がsubcommand `0x40` payload `0x02`を送り、swbt-pythonは従来の3×6-axis形式を返していた。正負Z rawの閾値的な反応と乱回転を校正値で解消できなかった後、MissionControlがmode `0x02-0x05`をquaternion形式へ切り替える実装を確認した。
+
+このため本unitへhost IMU modeに応じた36 byte packingを追加する。mode `0x01`の従来形式とpublic raw/rad/s APIは維持し、mode `0x02-0x05`だけ状態を持つquaternion packing mode 2へ変換する。Pro Controller、Joy-Con L、Joy-Con Rは同じmode分岐とwire packerを使う。
+
 ## 2. 対象範囲
 
 - `ControllerProfile` が仮想ジャイロ校正情報を所有する。
@@ -45,6 +50,9 @@
 - rad/s と raw の相互変換、3 軸、signed int16 境界、範囲外を unit test で固定する。
 - public docs、docstring、initial design を更新する。
 - Pro Controller のジャイロ入力を Switch 実機で回帰確認し、結果を記録する。
+- subcommand sessionのIMU modeをinput report builderと共有する。
+- mode `0x01`では既存の3×6-axis Int16LE形式を維持する。
+- Pro Controller、Joy-Con L、Joy-Con Rのmode `0x02-0x05`では、加速度3 sampleと積分済み姿勢をpacking mode 2の36 byteへ格納する。
 
 ## 3. 対象外
 
@@ -52,10 +60,10 @@
 - `0.070 dps/raw` 以外の尺度を選ぶ設定。
 - full-span から尺度を算出する方式。
 - `816` / `936` を conversion 定数として使う方式。
-- 姿勢推定、センサーフュージョン、ノイズや温度ドリフトの再現。
+- 加速度とジャイロを融合する姿勢推定、ノイズや温度ドリフトの再現。mode `0x02-0x05`に必要な角速度積分だけを行う。
 - マウス入力から角速度を生成する処理。
 - ユーザー向け校正 GUI。
-- Joy-Con の加速度校正、スティック校正、固有の軸反転、実機回帰。Joy-Con L/R のジャイロ校正 seed は対象に含む。
+- Joy-Con の加速度校正、スティック校正、固有の軸反転、実機回帰。Joy-Con L/Rのジャイロ校正seedとPro Controller共通のquaternion wire packingは対象に含む。
 
 ## 4. 関連 docs
 
@@ -77,6 +85,7 @@
 | Switch HID / report bytes | required | done | dekuNukem `spi_flash_notes.md` は 6-axis calibration を 4 組の XYZ Int16LE とし、後半 2 組を gyro calibration、reference 既定値を各軸 `0x343B` と記録する。従って gyro 部分は `0x602C-0x6037`、zero XYZ の後に reference XYZ とする |
 | gyro conversion scale | required | done | dekuNukem `imu_sensor_notes.md` は saturation-free LSM6DS3 ±2000 dps を `0.070 dps/raw` とする。Issue #69 はこの尺度を固定し、full-span 換算と `816` / `936` の直接利用を明示的に除外する |
 | factory accel calibration | required | done | dekuNukem `spi_flash_notes.md` は6-axis calibration前半2 groupsをAccel XYZ origin/reference、既定referenceを各軸`0x4000`とする。virtual zeroは各軸`0`とし、物理加速度APIには拡大しない |
+| IMU mode `0x02-0x05` packing | required | done | MissionControlはmode `0x01`を標準形式、`0x02-0x05`をQuaternionMotionPackerへ分岐し、packing mode 2のbitfieldを定義する。commit `d3941d433f15827de8aea116d61ea17bb61d0bcc`をsource-audit fixtureへ固定した |
 | Bumble / transport | not applicable | not applicable | report packing、transport、advertising、L2CAP は変更しない |
 | OS / driver / adapter | required | done | Windows 11 / CSR8510 A10 / WinUSB / Bumble `usb:0` で実行し、環境とcleanupをhardware logへ記録した |
 
@@ -90,6 +99,8 @@
 | gyro zero raw | `0, 0, 0` | implementation policy | Issue #69 | stable virtual default |
 | gyro reference raw | `0x343B, 0x343B, 0x343B` | source fact / implementation policy | dekuNukem `spi_flash_notes.md`, Issue #69 | stable virtual default |
 | gyro scale | `0.070 dps/raw` | source fact / implementation policy | dekuNukem `imu_sensor_notes.md`, Issue #69 | stable fixed scale |
+| SensorSleep mode dispatch | `0x01` standard、`0x02-0x05` quaternion | implementation fact | MissionControl `emulated_switch_controller.cpp` | source fixtureとunit testで固定済み |
+| quaternion packing mode 2 | accel 3×XYZ Int16LE、最大成分を除くsigned 21-bit 3成分、11-bit timestamp、sample count `3` | implementation fact / hardware observation | MissionControl `switch_motion_packing.hpp/.cpp`、Switch 2実機trace | 3 profile共通のwire packingをsource fixtureとunit testで固定。Switch 2 / スプラトゥーン3の正負Zと静止はPro Controllerのみ確認済み |
 
 ## 6. 振る舞い仕様
 
@@ -103,6 +114,10 @@
 | signed int16 boundary | raw `-32768` / `32767` に正確に対応する rad/s | 境界 raw を持つ frame | clamp しない |
 | out of range | 丸め後 raw が signed int16 外 | `InvalidInputError` | 既存 raw API と同じ例外方針 |
 | existing raw API | `raw()` / `gyro()` / `with_gyro()` | 既存の結果と validation を維持する | regression test |
+
+| standard mode packing | session IMU mode `0x01` | 既存の3×(accel XYZ + gyro XYZ) Int16LE | 既存互換 |
+| quaternion mode packing | Pro Controller / Joy-Con L / Joy-Con Rのsession IMU mode `0x02-0x05` | raw gyroをprofile校正でrad/sへ戻し、経過時間で姿勢を更新してpacking mode 2へ格納する | 3 acceleration sampleは維持する。Joy-Con軸方向は実機未検証 |
+| quaternion sign | 同じ絶対値の正負Z角速度 | packing済みquaternionのZ対応成分が反対符号になる | artificial SPI offsetは使わない |
 
 ## 7. TDD Test List
 
@@ -119,7 +134,11 @@
 | refactor-skipped | 物理角速度 API が signed int16 境界を受理し、範囲外を `InvalidInputError` にする | edge | unit | no | 65 passed。finite validation を校正変換へ集約し、追加の構造変更なし |
 | refactor-skipped | 既存 `IMUFrame.raw()` / `gyro()` / `with_gyro()` の raw 入力契約を維持する | regression | unit | no | 既存 5 tests が pass。実装変更不要 |
 | refactor-skipped | public docstring と docs が rad/s API、固定尺度、範囲外例外、raw API との使い分けを説明する | docs | unit | no | 14 passed。公開 docs と initial design を追従し追加の構造変更なし |
-| refactor-skipped | Pro Controller のジャイロ入力が Switch 実機で観測できる | regression | hardware | yes | 正方向Z raw `0x0600`で右回転を目視。低速・負方向はobserved-partialとしてhardware logへ記録 |
+| refactor-skipped | source-audit fixtureがmode `0x01`と`0x02-0x05`のpacking分岐、packing mode 2の主要fieldを保持する | new | unit | no | 27 passed。MissionControl commitを固定し、Switch 2実機観測を追記 |
+| refactor-skipped | mode `0x02`のidentity姿勢がaccel 3 sample、packing mode `2`、max index `w`、sample count `3`をpackする | new | unit | no | `test_input_report.py` pass |
+| refactor-skipped | 同じ絶対値の正負Z角速度がpacking済みquaternionの反対符号になる | regression | unit | no | deterministic clockでpass |
+| refactor-skipped | Pro Controllerのmode `0x02` quaternionがSwitch実機で正負方向へ反映される | regression | hardware | yes | production factory calibrationで左回転、停止、右回転、停止を観測。traceとcleanupをhardware logへ記録済み |
+| refactor-skipped | Joy-Con L/Rがmode `0x02-0x05`を受理し、Pro Controllerと同じquaternion packerを使う | regression | unit | no | profile、subcommand、input reportのunit testで固定。Joy-Con実機検証は手段がないため未実行 |
 
 ## 8. 設計メモ
 
@@ -128,7 +147,10 @@
 - SPI の reference 値から conversion scale を再計算しない。Issue #69 が指定する `0.070 dps/raw` を正本とし、`816` / `936` は実装に置かない。
 - rad/s から raw への変換は `round()` で最も近い整数にする。変換後に signed int16 validation を通し、範囲外は clamp せず `InvalidInputError` にする。
 - `IMUFrame` の rate API は呼び出し側から校正値や尺度を受け取らない。今回の profile は尺度変更を提供しないため、既定 profile と public conversion は同じ固定定義を共有する。
-- Joy-Con の物理軸方向はこの unit では確定しない。公開 conversion は report 上の X/Y/Z を変換する。
+- Joy-Con の物理軸方向はこの unit では確定しない。Pro Controllerと同じwire packingを使うが、軸反転は追加しない。公開 conversion は report 上の X/Y/Z を変換する。
+- `SubcommandSessionState`はresponderと`InputReportBuilder`で同じinstanceを共有する。profileは固定identity、IMU modeはsession mutable stateという既存境界を維持する。
+- quaternion packerはreport生成時のmonotonic clock差分でraw gyroを積分する。加速度とのfusionは行わず、最大絶対値のquaternion成分を省略した残り3成分だけをfixed point化する。
+- 3 profileともmode `0x02-0x05`はpacking mode 2を使う。MissionControlも4つのDscale modeを同じpackerへ分岐し、single orientation sampleのdeltaをゼロにしている。
 
 ## 9. 対象ファイル
 
@@ -141,6 +163,10 @@
 | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` | modify | layout と尺度の根拠 fixture |
 | `tests/unit/test_source_audit_fixtures.py` | modify | source fixture contract |
 | `tests/unit/test_protocol_profile.py` | modify | profile ownership |
+| `src/swbt/protocol/motion.py` | new | mode `0x02-0x05` quaternion積分とpacking mode 2 |
+| `src/swbt/protocol/input_report.py` | modify | session IMU modeに応じた36 byte packing切替 |
+| `src/swbt/gamepad/runtime.py` | modify | responderとinput report builderのsession state共有 |
+| `tests/unit/test_input_report.py`, `tests/integration/test_switch_gamepad_fake_transport.py` | modify | bitfield、正負符号、runtime mode切替 |
 | `tests/unit/test_virtual_spi_flash.py` | modify | SPI bytes fixture |
 | `tests/unit/test_input_state.py` | modify | conversion、境界、raw regression |
 | `tests/hardware/test_input_operations.py` | modify | Pro Controller gyro manual reflection |
@@ -179,15 +205,32 @@
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/unit -q` | pass | 376 passed |
 | `uv run pytest tests/integration -q` | pass | 93 passed |
+| `uv run pytest tests/unit/test_input_report.py -q` | red | 2 failed, 33 passed。`InputReportBuilder`がsession stateとclockを受けず、mode `0x02` packing未実装を確認 |
+| `uv run pytest tests/unit/test_input_report.py tests/unit/test_report_loop.py -q` | pass | 38 passed。標準形式回帰、identity packing、正負Z quaternionを確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_imu_mode_02_output_switches_periodic_input_to_quaternion_motion -q` | pass | subcommand `0x40 02`後のruntime reportがpacking mode 2へ切り替わることを確認 |
+| `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 27 passed。MissionControl commit、mode分岐、主要bitfieldを固定 |
+| `uv run ruff check ...` / `uv run ty check --no-progress` | pass | 新規protocol実装、runtime配線、testsのlint/typeを確認 |
+| `uv run ruff format --check .` | pass | 91 files already formatted |
+| `uv run ruff check .` / `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit -q` | pass | 395 passed |
+| `uv run pytest tests/integration -q` | pass | 94 passed |
+| `uv run pytest tests/hardware/test_input_operations.py::test_switch_gyro_rate_after_active_reconnect_for_manual_reflection --collect-only -q` | pass | 1 test collected。adapter open、Switch接続、report送信は未実行 |
+| `uv run pytest tests\hardware\test_input_operations.py::test_switch_gyro_rate_after_active_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\issue-69-gyro-calibration-20260712 --log-file build\hardware\issue-69-gyro-calibration-20260712\gyro-rate-quaternion-z-pytest-debug.log --log-file-level=DEBUG -q -s` | pass | `1 passed in 17.99s`。Switch 2 / スプラトゥーン3で左回転、停止、右回転、停止を観測。traceはmode `0x02`、正負Z、neutral、transport closeを記録 |
+| `uv run pytest tests/unit/test_protocol_profile.py::test_controller_profiles_accept_standard_and_quaternion_imu_modes tests/unit/test_subcommand_responder.py::test_joycon_profiles_accept_quaternion_imu_modes -q` | red | 8 failed, 3 passed。Joy-Con L/Rがmode `0x03-0x05`を拒否する既存profile契約を確認 |
+| 同上 | pass | 11 passed。Joy-Con L/Rがmode `0x02-0x05`をACKし、session stateへ保持することを確認 |
+| `uv run pytest tests/unit/test_protocol_profile.py tests/unit/test_subcommand_responder.py tests/unit/test_input_report.py tests/unit/test_source_audit_fixtures.py tests/unit/test_public_docs.py -q` | pass | 161 passed。Joy-Con profile、subcommand、packing、source-audit、公開文書の契約を確認 |
+| `uv run ruff format --check .` | pass | 91 files already formatted |
+| `uv run ruff check .` / `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit -q` / `uv run pytest tests/integration -q` | pass | 414 passed / 94 passed |
 
 ## 11. 実機実行条件
 
 | 項目 | 内容 |
 |---|---|
 | 実機要否 | required |
-| 承認範囲 | 未承認。Bumble adapter open、Pro Controller advertising / reconnect、periodic report loop、gyro report、neutral、close を対象として明示承認が必要 |
-| adapter | 候補 `usb:0`。専用 CSR8510 A10 / WinUSB であることを実行直前に確認する |
-| 実行 command | `uv run pytest tests\hardware\test_input_operations.py::test_switch_gyro_rate_after_active_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\issue-69-gyro-calibration-20260711 --log-file build\hardware\issue-69-gyro-calibration-20260711\gyro-rate-pytest-debug.log --log-file-level=DEBUG -q -s` |
+| 承認範囲 | 2026-07-12に明示承認済み。Bumble adapter open、既存bondによるactive reconnect、periodic report loop、ZL、正負Z gyro report、neutral、closeを実行。意図的なpairing / advertisingは対象外 |
+| adapter | `usb:0`。専用 CSR8510 A10 / WinUSBを実行直前に確認済み |
+| 実行 command | `uv run pytest tests\hardware\test_input_operations.py::test_switch_gyro_rate_after_active_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\issue-69-gyro-calibration-20260712 --log-file build\hardware\issue-69-gyro-calibration-20260712\gyro-rate-quaternion-z-pytest-debug.log --log-file-level=DEBUG -q -s` |
 | 実行遮断 | 環境変数による遮断は採用しない。明示承認、対象 adapter、command、Switch-facing 動作、cleanup plan で管理する |
 | log / artifact | `build/hardware/` 配下の JSONL trace と pytest debug log、`spec/hardware-test-log.md` |
 | cleanup | gyro 入力後に neutral frame を送り、report loop を停止し、transport を close して adapter を解放する |
@@ -209,3 +252,7 @@
 - [x] docs と initial design を更新した
 - [x] Pro Controller 実機回帰を実行して結果を記録した
 - [x] 標準 gate の結果を記録した
+- [x] IMU mode `0x02-0x05`のquaternion形式を根拠監査した
+- [x] session-aware quaternion packingとfake transport回帰を実装した
+- [x] Joy-Con L/RにPro Controllerと同じmode `0x02-0x05` quaternion packingを適用する
+- [x] production factory calibrationで正負ZのSwitch 2実機回帰を確認する

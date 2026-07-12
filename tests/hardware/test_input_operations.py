@@ -681,14 +681,14 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
     swbt_bumble_adapter: str,
     swbt_hardware_artifact_dir: Path,
 ) -> None:
-    """Send X, Y, and Z gyroscope rates during an active Switch connection.
+    """Send symmetric Z gyroscope rates during an active Switch connection.
 
-    A pytest pass proves active reconnect, rate conversion, report transmission
-    checkpoints, neutral cleanup, and transport cleanup only. The human-visible
-    result must be recorded in spec/hardware-test-log.md.
+    A pytest pass proves active reconnect, mode-aware report transmission,
+    checkpoints, rest cleanup, and transport cleanup only. The human-visible result
+    must be recorded in spec/hardware-test-log.md.
     """
     key_store_path = _input_semantics_key_store_path(swbt_hardware_artifact_dir)
-    trace_path = swbt_hardware_artifact_dir / "active-reconnect-gyro-rate.jsonl"
+    trace_path = swbt_hardware_artifact_dir / "active-reconnect-gyro-rate-quaternion-z.jsonl"
     if not key_store_path.exists():
         pytest.skip(
             "input semantics key store is missing; copy a current Pro Controller "
@@ -698,7 +698,8 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
 
     resting_frame = IMUFrame.accel(0, 0, 4096)
     axis_frames = (
-        ("positive_z", resting_frame.with_gyro_rate(z_rad_s=math.radians(0x0600 * 0.070))),
+        ("positive_z", resting_frame.with_gyro_rate(z_rad_s=0.5)),
+        ("negative_z", resting_frame.with_gyro_rate(z_rad_s=-0.5)),
     )
 
     async def run() -> None:
@@ -717,8 +718,15 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
             )
             try:
                 await _active_reconnect_for_input_check(pad, trace)
+                await pad.imu(resting_frame)
                 await _wait_for_full_handshake(trace_path, timeout_seconds=20.0)
                 _record_handshake_checkpoint(pad, trace)
+                await _send_imu_rest_and_record(
+                    pad,
+                    trace,
+                    resting_frame,
+                    operation="gyro_quaternion_rest_ready",
+                )
 
                 await pad.press(Button.ZL)
                 zl_hold_start_count = pad.status().report_counters.get(0x30, 0)
@@ -746,9 +754,10 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
                     report_0x30_count=pad.status().report_counters.get(0x30, 0),
                 )
                 await pad.release(Button.ZL)
-                await _send_neutral_and_record(
+                await _send_imu_rest_and_record(
                     pad,
                     trace,
+                    resting_frame,
                     operation="gyro_control_zl_neutral_complete",
                 )
 
@@ -782,9 +791,10 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
                         operation=f"gyro_{axis}_rate_reports_sent",
                         report_0x30_count=pad.status().report_counters.get(0x30, 0),
                     )
-                    await _send_neutral_and_record(
+                    await _send_imu_rest_and_record(
                         pad,
                         trace,
+                        resting_frame,
                         operation=f"gyro_{axis}_neutral_complete",
                     )
             finally:
@@ -930,6 +940,32 @@ def _record_handshake_checkpoint(pad: ProController, trace: TextIO) -> None:
         last_subcommand_id=_format_optional_hex(pad.status().last_subcommand_id),
         report_0x30_count=pad.status().report_counters.get(0x30, 0),
         report_0x21_count=pad.status().report_counters.get(0x21, 0),
+    )
+
+
+async def _send_imu_rest_and_record(
+    pad: ProController,
+    trace: TextIO,
+    frame: IMUFrame,
+    *,
+    operation: str,
+) -> None:
+    await pad.imu(frame)
+    assert pad.snapshot().imu_frames == (frame, frame, frame)
+    rest_start_count = pad.status().report_counters.get(0x30, 0)
+    await _wait_for_report_counter(
+        pad,
+        report_id=0x30,
+        minimum_count=rest_start_count + _NEUTRAL_REPORT_HOLD_COUNT,
+        timeout_seconds=2.0,
+    )
+    _record_probe_event(
+        trace,
+        "manual_input_checkpoint",
+        expected_accel_raw=(frame.accel_x, frame.accel_y, frame.accel_z),
+        expected_gyro_raw=(frame.gyro_x, frame.gyro_y, frame.gyro_z),
+        operation=operation,
+        report_0x30_count=pad.status().report_counters.get(0x30, 0),
     )
 
 

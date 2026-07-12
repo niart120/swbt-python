@@ -38,6 +38,7 @@ Rules:
 - Use `imu()` for IMU state updates.
 - Use `IMUFrame.gyro()`, `IMUFrame.accel()`, `IMUFrame.raw()`, `IMUFrame.with_gyro()`, or `IMUFrame.with_accel()` for raw IMU values.
 - Use `IMUFrame.gyro_rate()` or `IMUFrame.with_gyro_rate()` for angular velocity in rad/s, and `IMUFrame.to_gyro_rate()` for conversion back to rad/s. The scale is fixed at `0.070 dps/raw`.
+- Do not pre-pack quaternion motion. The runtime selects standard or quaternion wire packing from the host IMU mode.
 - Use `IMUFrame.accel_g()` or `IMUFrame.with_accel_g()` for acceleration in G, and `IMUFrame.to_accel_g()` for conversion back to G. The scale is fixed at `1/4096 G/raw`.
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
 - Use a separate `key_store_path` for Pro Controller, Joy-Con L, and Joy-Con R profiles, even when the target device is the same.
