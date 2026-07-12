@@ -104,7 +104,6 @@ def test_virtual_spi_flash_seeds_factory_sensor_calibration_for_joycon_profiles(
 ) -> None:
     spi = VirtualSpiFlash(profile=profile)
 
-    assert profile.gyro_calibration is not None
     assert spi.read(0x6020, 12) == bytes.fromhex("00 00 00 00 00 00 00 40 00 40 00 40")
     assert spi.read(0x602C, 12) == bytes.fromhex("00 00 00 00 00 00 3b 34 3b 34 3b 34")
     assert spi.read(0x603D, 9) == b"\xff" * 9

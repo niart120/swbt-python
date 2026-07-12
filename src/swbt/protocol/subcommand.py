@@ -1,6 +1,6 @@
 """Subcommand reply generation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from swbt.errors import ProtocolError
 from swbt.input import InputState
@@ -30,8 +30,20 @@ class SubcommandSessionState:
     unsupported_report_mode: int | None = None
     imu_mode: int | None = None
     imu_enabled: bool = False
-    imu_mode_revision: int = 0
+    _imu_mode_reset_requested: bool = field(default=False, init=False, repr=False, compare=False)
     vibration_enabled: bool = False
+
+    def record_imu_mode_request(self, imu_mode: int) -> None:
+        """Record one host IMU mode request and request motion-state reset."""
+        self.imu_mode = imu_mode
+        self.imu_enabled = imu_mode != 0x00
+        self._imu_mode_reset_requested = True
+
+    def consume_imu_mode_reset_request(self) -> bool:
+        """Return and clear the pending motion-state reset request."""
+        reset_requested = self._imu_mode_reset_requested
+        self._imu_mode_reset_requested = False
+        return reset_requested
 
 
 class UnsupportedSubcommandError(ProtocolError):
@@ -126,9 +138,7 @@ class SubcommandResponder:
 
     def _set_imu_enabled(self, payload: bytes) -> bytes:
         imu_mode = _imu_enable_payload(payload, self._profile.imu_enable_modes)
-        self._session_state.imu_mode_revision += 1
-        self._session_state.imu_mode = imu_mode
-        self._session_state.imu_enabled = imu_mode != 0x00
+        self._session_state.record_imu_mode_request(imu_mode)
         return b""
 
     def _set_vibration_enabled(self, payload: bytes) -> bytes:

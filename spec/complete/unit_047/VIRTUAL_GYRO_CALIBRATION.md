@@ -32,7 +32,7 @@
 
 当初はIssue #69どおりfactory 6-axis calibrationのgyro部分だけを対象とした。実機ではSwitchが`0x6020`から24 bytesを一括取得し、accel側12 bytesが全て`FF`の状態では、gyro値と静止加速度を正しくpackしてもスプラトゥーン3のカメラ反映を確認できなかった。
 
-6-axis calibrationブロック全体を有効にするため、factory accel calibrationはIssue #70と`spec/wip/unit_048/VIRTUAL_ACCELEROMETER_CALIBRATION.md`で実装する。本 unit はその校正値と共存するgyro側の契約を追跡する。
+6-axis calibrationブロック全体を有効にするため、factory accel calibrationはIssue #70と`spec/complete/unit_048/VIRTUAL_ACCELEROMETER_CALIBRATION.md`で実装する。本 unit はその校正値と共存するgyro側の契約を追跡する。
 
 実機再試験ではSwitch 2 firmware 22.1.0がsubcommand `0x40` payload `0x02`を送り、swbt-pythonは従来の3×6-axis形式を返していた。正負Z rawの閾値的な反応と乱回転を校正値で解消できなかった後、MissionControlがmode `0x02-0x05`をquaternion形式へ切り替える実装を確認した。
 
@@ -116,7 +116,7 @@
 | existing raw API | `raw()` / `gyro()` / `with_gyro()` | 既存の結果と validation を維持する | regression test |
 
 | standard mode packing | session IMU mode `0x01` | 既存の3×(accel XYZ + gyro XYZ) Int16LE | 既存互換 |
-| quaternion mode packing | Pro Controller / Joy-Con L / Joy-Con Rのsession IMU mode `0x02-0x05` | raw gyroをprofile校正でrad/sへ戻し、経過時間で姿勢を更新してpacking mode 2へ格納する | 3 acceleration sampleは維持する。Joy-Con軸方向は実機未検証 |
+| quaternion mode packing | Pro Controller / Joy-Con L / Joy-Con Rのsession IMU mode `0x02-0x05` | 3つのraw gyroをprofile校正でrad/sへ戻し、時系列順にreport間隔の3等分ずつ姿勢へ積分してpacking mode 2へ格納する | 3 acceleration sampleは維持する。Joy-Con軸方向は実機未検証 |
 | quaternion sign | 同じ絶対値の正負Z角速度 | packing済みquaternionのZ対応成分が反対符号になる | artificial SPI offsetは使わない |
 
 ## 7. TDD Test List
@@ -125,7 +125,7 @@
 |---|---|---|---|---|---|
 | refactor-skipped | source-audit fixture が `0x602C-0x6037` の軸順、Int16LE、zero/reference、固定尺度を保持する | new | unit | no | 25 passed。既存 fixture 形式に沿っており追加の構造変更なし |
 | refactor-skipped | source-audit fixture が `0x6020-0x602B` のaccel軸順、Int16LE、zero/referenceを保持する | new | unit | no | 26 passed。既存fixture形式に沿っており追加の構造変更なし |
-| deferred | factory accel calibrationとG単位APIを実装する | new | unit | no | Issue #70 / unit_048へ移管 |
+| refactor-skipped | factory accel calibrationとG単位APIを実装する | new | unit | no | Issue #70 / unit_048で実装・検証済み |
 | refactor-skipped | `ControllerProfile` が既定の仮想ジャイロ校正情報を所有する | new | unit | no | 39 passed。immutable な共有既定値を field で所有し、追加の構造変更なし |
 | refactor-skipped | `VirtualSpiFlash` が profile 由来の factory gyro calibration bytes を返す | new | unit | no | 51 passed。校正値側で Int16LE serialize し、SPI は profile 値を seed。追加の構造変更なし |
 | refactor-done | Joy-Con L/R profile も共通の factory gyro calibration bytes を返す | new | unit | no | 52 passed。共有既定値を base profile へ移し、3 profile の重複定義を避けた |
@@ -139,18 +139,22 @@
 | refactor-skipped | 同じ絶対値の正負Z角速度がpacking済みquaternionの反対符号になる | regression | unit | no | deterministic clockでpass |
 | refactor-skipped | Pro Controllerのmode `0x02` quaternionがSwitch実機で正負方向へ反映される | regression | hardware | yes | production factory calibrationで左回転、停止、右回転、停止を観測。traceとcleanupをhardware logへ記録済み |
 | refactor-skipped | Joy-Con L/Rがmode `0x02-0x05`を受理し、Pro Controllerと同じquaternion packerを使う | regression | unit | no | profile、subcommand、input reportのunit testで固定。Joy-Con実機検証は手段がないため未実行 |
+| refactor-skipped | mode `0x02-0x05`で異なる3つのgyro sampleがすべて姿勢更新へ寄与する | regression | unit | no | fake clockで非ゼロsampleの3位置と同一sample時の総積分角を固定 |
+| refactor-done | 同じIMU modeの再要求がquaternion姿勢をリセットする | regression | unit | no | revision番号比較を1回消費型のmotion reset要求へ置換 |
+| refactor-done | profileのfactory gyro calibrationをSPIへ必ずseedする | regression | unit | no | 非optionalなprofile契約に合わせて到達不能なNone分岐を除去 |
+
 
 ## 8. 設計メモ
 
 - 校正値オブジェクトは zero/reference の XYZ tuple と固定 `0.070 dps/raw` を一つに束ね、`ControllerProfile` と `IMUFrame` conversion が同じ既定定義を参照する。
-- base `ControllerProfile` が共通の既定校正 field を所有し、Pro Controller、Joy-Con L、Joy-Con R が同じ immutable 値を継承する。Joy-Con の加速度校正とスティック校正は erased のまま維持する。
+- base `ControllerProfile` が共通の既定校正 field を所有し、Pro Controller、Joy-Con L、Joy-Con R が同じ immutable 値を継承する。加速度校正はunit_048で3 profileへ適用し、スティック校正はerasedのまま維持する。
 - SPI の reference 値から conversion scale を再計算しない。Issue #69 が指定する `0.070 dps/raw` を正本とし、`816` / `936` は実装に置かない。
 - rad/s から raw への変換は `round()` で最も近い整数にする。変換後に signed int16 validation を通し、範囲外は clamp せず `InvalidInputError` にする。
 - `IMUFrame` の rate API は呼び出し側から校正値や尺度を受け取らない。今回の profile は尺度変更を提供しないため、既定 profile と public conversion は同じ固定定義を共有する。
 - Joy-Con の物理軸方向はこの unit では確定しない。Pro Controllerと同じwire packingを使うが、軸反転は追加しない。公開 conversion は report 上の X/Y/Z を変換する。
-- `SubcommandSessionState`はresponderと`InputReportBuilder`で同じinstanceを共有する。profileは固定identity、IMU modeはsession mutable stateという既存境界を維持する。
-- quaternion packerはreport生成時のmonotonic clock差分でraw gyroを積分する。加速度とのfusionは行わず、最大絶対値のquaternion成分を省略した残り3成分だけをfixed point化する。
-- 3 profileともmode `0x02-0x05`はpacking mode 2を使う。MissionControlも4つのDscale modeを同じpackerへ分岐し、single orientation sampleのdeltaをゼロにしている。
+- `SubcommandSessionState`はresponderと`InputReportBuilder`で同じinstanceを共有する。subcommandはIMU modeとmotion reset要求を記録し、builderがreset要求を一度だけ消費する。profileは固定identity、IMU modeはsession mutable stateという既存境界を維持する。
+- quaternion packerはreport生成時のmonotonic clock差分を3等分し、3つのraw gyroを時系列順に積分する。加速度とのfusionは行わず、最大絶対値のquaternion成分を省略した残り3成分だけをfixed point化する。
+- 3 profileともmode `0x02-0x05`はpacking mode 2を使う。MissionControlも4つのDscale modeを同じpackerへ分岐し、single orientation sampleのdeltaをゼロにしている。swbt-pythonは公開APIの3 gyro sampleを単一の出力姿勢へ統合する。
 
 ## 9. 対象ファイル
 
@@ -222,6 +226,13 @@
 | `uv run ruff format --check .` | pass | 91 files already formatted |
 | `uv run ruff check .` / `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/unit -q` / `uv run pytest tests/integration -q` | pass | 414 passed / 94 passed |
+| `uv run pytest tests/unit/test_input_report.py::test_quaternion_mode_integrates_all_three_gyro_samples -q` | red | 1 failed。末尾sampleだけを使う既存実装を確認 |
+| `uv run pytest tests/unit/test_input_report.py -q` | pass | 48 passed。3 sampleの各位置、総積分角、既存packing回帰を確認 |
+| `uv run pytest tests/unit/test_input_report.py::test_repeated_imu_mode_02_request_resets_quaternion_orientation tests/unit/test_subcommand_responder.py::test_enable_imu_updates_session_state -q` | red | 2 failed。revision依存のsession stateを確認 |
+| `uv run pytest tests/unit/test_input_report.py tests/unit/test_subcommand_responder.py -q` | pass | 83 passed。reset要求の記録・一回消費と繰り返しmode requestを確認 |
+| `uv run pytest tests/unit/test_virtual_spi_flash.py -q` | pass | 15 passed。None分岐除去前後でfactory SPI bytes不変 |
+| standard gate after mode 2 cleanup | pass | format、lint、ty、unit 418件、integration 94件 |
+
 
 ## 11. 実機実行条件
 
@@ -256,3 +267,6 @@
 - [x] session-aware quaternion packingとfake transport回帰を実装した
 - [x] Joy-Con L/RにPro Controllerと同じmode `0x02-0x05` quaternion packingを適用する
 - [x] production factory calibrationで正負ZのSwitch 2実機回帰を確認する
+- [x] mode `0x02-0x05`で3つのgyro sampleを時系列順に積分する
+- [x] IMU mode再要求を一回消費型のmotion reset要求として扱う
+- [x] factory gyro calibrationの到達不能なNone分岐を除去する

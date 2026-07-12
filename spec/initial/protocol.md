@@ -87,7 +87,7 @@ battery / connection info は profile の初期値として固定する。実機
 
 `InputState.imu_frames`はraw int16の3 frameを保持する。hostがsubcommand `0x40`でmode `0x01`を要求した場合、3 frameをint16 little-endianの6軸値としてそのまま送る。
 
-mode `0x02-0x05`では、加速度3 sampleを維持し、最新frameのraw gyroをprofile校正でrad/sへ戻してmonotonic clock差分で姿勢へ積分する。36 byteはquaternion packing mode 2とし、最大絶対値の成分を省いたsigned 21-bit fixed-point 3成分、11-bit millisecond timestamp、sample count `3`を格納する。Pro Controller、Joy-Con L、Joy-Con Rは同じwire packingを使う。これはwire packingの責務であり、`InputState`と公開APIはquaternionを保持しない。Joy-Con固有の物理軸方向は実機未検証とする。
+mode `0x02-0x05`では、加速度3 sampleを維持し、各frameのraw gyroをprofile校正でrad/sへ戻す。3 sampleを時系列順にreport間隔の3等分ずつ姿勢へ積分し、36 byteをquaternion packing mode 2として生成する。最大絶対値の成分を省いたsigned 21-bit fixed-point 3成分、11-bit millisecond timestamp、sample count `3`を格納する。Pro Controller、Joy-Con L、Joy-Con Rは同じwire packingを使う。これはwire packingの責務であり、`InputState`と公開APIはquaternionを保持しない。Joy-Con固有の物理軸方向は実機未検証とする。
 
 IMU frame の構造は次の値オブジェクトで表す。
 

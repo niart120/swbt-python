@@ -97,7 +97,7 @@ input
 
 ### 2.5 `SwitchHidProtocol`
 
-Switch 向け HID report の生成と解釈を担当する。具体的には、hostのIMU modeに応じた`0x30` input reportの生成、`0x01` / `0x10` output reportの解析、`0x21` replyの組み立てを扱う。mode `0x02-0x05`のquaternion姿勢状態はprotocol層が所有する。
+Switch 向け HID report の生成と解釈を担当する。具体的には、hostのIMU modeに応じた`0x30` input reportの生成、`0x01` / `0x10` output reportの解析、`0x21` replyの組み立てを扱う。mode `0x02-0x05`のquaternion姿勢状態はprotocol層が所有する。同じIMU modeの再要求でもsubcommand sessionがmotion reset要求を記録し、input report builderが一度だけ消費する。
 
 この層は Bluetooth 接続状態や HCI transport を扱わない。
 

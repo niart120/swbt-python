@@ -37,13 +37,14 @@ class QuaternionMotionPacker:
             elapsed_seconds = max(0, now_ns - self._previous_ns) / 1_000_000_000
         self._previous_ns = now_ns
 
-        newest = frames[-1]
-        rates = gyro_calibration.raw_to_gyro_rates((newest.gyro_x, newest.gyro_y, newest.gyro_z))
-        self._orientation = _advance_orientation(
-            self._orientation,
-            rates,
-            elapsed_seconds,
-        )
+        sample_seconds = elapsed_seconds / len(frames)
+        for frame in frames:
+            rates = gyro_calibration.raw_to_gyro_rates((frame.gyro_x, frame.gyro_y, frame.gyro_z))
+            self._orientation = _advance_orientation(
+                self._orientation,
+                rates,
+                sample_seconds,
+            )
         return _pack_mode_2(frames, self._orientation, timestamp_ms=now_ns // 1_000_000)
 
 

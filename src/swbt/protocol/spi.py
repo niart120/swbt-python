@@ -34,12 +34,11 @@ class VirtualSpiFlash:
         self._data[
             accelerometer_address : accelerometer_address + len(accelerometer_calibration)
         ] = accelerometer_calibration
-        if profile.gyro_calibration is not None:
-            gyro_calibration = profile.gyro_calibration.to_spi_bytes()
-            self._data[
-                self.FACTORY_GYRO_CALIBRATION_ADDRESS : self.FACTORY_GYRO_CALIBRATION_ADDRESS
-                + len(gyro_calibration)
-            ] = gyro_calibration
+        gyro_calibration = profile.gyro_calibration.to_spi_bytes()
+        self._data[
+            self.FACTORY_GYRO_CALIBRATION_ADDRESS : self.FACTORY_GYRO_CALIBRATION_ADDRESS
+            + len(gyro_calibration)
+        ] = gyro_calibration
 
     def read(self, address: int, size: int) -> bytes:
         """Read bytes from the virtual SPI address space."""

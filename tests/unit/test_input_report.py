@@ -1,3 +1,5 @@
+from math import radians, sin
+
 import pytest
 
 from swbt.errors import UnsupportedInputError
@@ -153,6 +155,49 @@ def test_imu_mode_02_quaternion_distinguishes_positive_and_negative_z_rotation()
     assert negative_report[13:49] != bytes(36)
 
 
+@pytest.mark.parametrize("active_sample_index", range(3))
+def test_quaternion_mode_integrates_all_three_gyro_samples(active_sample_index: int) -> None:
+    now_ns = 0
+
+    def clock_ns() -> int:
+        return now_ns
+
+    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
+    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    builder.build_0x30(InputState.neutral())
+    frames = tuple(
+        IMUFrame.gyro(0, 0, 1000 if index == active_sample_index else 0) for index in range(3)
+    )
+    state = InputState.neutral().with_imu(
+        frames[0],
+        frames[1],
+        frames[2],
+    )
+
+    now_ns = 1_000_000_000
+    report = builder.build_0x30(state)
+
+    assert _mode_2_component_2(report) > 0
+
+
+def test_quaternion_mode_divides_elapsed_time_across_duplicate_samples() -> None:
+    now_ns = 0
+
+    def clock_ns() -> int:
+        return now_ns
+
+    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
+    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    state = InputState.neutral().with_gyro((0, 0, 1000))
+    builder.build_0x30(state)
+
+    now_ns = 1_000_000_000
+    report = builder.build_0x30(state)
+    expected_component = int(sin(radians(70.0) / 2) * 0x40000000) >> 10
+
+    assert abs(_mode_2_component_2(report) - expected_component) <= 1
+
+
 def test_repeated_imu_mode_02_request_resets_quaternion_orientation() -> None:
     now_ns = 0
 
@@ -168,7 +213,7 @@ def test_repeated_imu_mode_02_request_resets_quaternion_orientation() -> None:
     rotated_report = builder.build_0x30(state)
     assert _mode_2_component_2(rotated_report) > 0
 
-    session_state.imu_mode_revision += 1
+    session_state.record_imu_mode_request(0x02)
     now_ns = 2_000_000_000
     reset_report = builder.build_0x30(state)
 

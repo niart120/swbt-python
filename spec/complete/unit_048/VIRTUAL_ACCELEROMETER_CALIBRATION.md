@@ -53,7 +53,7 @@
 | Switch HID / report bytes | required | done | Issue #70 と source-audit fixture が layout、Int16LE、zero/reference を固定する |
 | G conversion scale | required | done | Issue #70 が reference acceleration `4.0 G`、尺度 `1/4096 G/raw` を指定する |
 | Bumble / transport | not applicable | not applicable | transport と report packing は変更しない |
-| OS / driver / adapter | required | in progress | Pro ControllerはWindows 11 / CSR8510 A10 / WinUSB / `usb:0`で記録済み。Joy-Conは未実行 |
+| OS / driver / adapter | required | done / not run | Pro ControllerはWindows 11 / CSR8510 A10 / WinUSB / `usb:0`で記録済み。Joy-Conは検証手段がないためnot run |
 
 ## 6. 振る舞い仕様
 
@@ -76,7 +76,7 @@
 | refactor-skipped | G API が signed int16 境界を受理し範囲外を統一例外にする | edge | unit | no | NaN/infを含め確認 |
 | refactor-skipped | factory 24 bytes と既存 raw/gyro API が共存する | regression | unit | no | 24-byte fixtureと既存API tests pass |
 | refactor-skipped | 公開 docs と initial design が G API と固定尺度を説明する | docs | unit | no | public docs tests pass |
-| green | Pro Controller と Joy-Con の SPI read を実機で記録する | regression | hardware | yes | Proは`0x6020` 24-byte応答を記録。Joy-Conは未実行 |
+| refactor-skipped | Pro Controller と Joy-Con の SPI read結果を記録する | regression | hardware | yes | Proは`0x6020` 24-byte応答を記録。Joy-Conは検証手段がないためnot runと記録 |
 
 ## 8. 設計メモ
 
@@ -100,19 +100,20 @@
 
 | command | result | notes |
 |---|---|---|
-| `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 26 passed。Issue #70 の尺度記述は次 cycle で追加する |
-| standard gate | pass | format、lint、ty、unit 386件、integration 93件。最終差分で再実行する |
+| `uv run pytest tests/unit/test_source_audit_fixtures.py -q` | pass | 27 passed。layout、尺度、mode 2 packingの根拠fixtureを確認 |
+| `uv run pytest tests\hardware\test_input_operations.py::test_switch_gyro_rate_after_active_reconnect_for_manual_reflection -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir build\hardware\issue-69-gyro-calibration-20260712 --log-file build\hardware\issue-69-gyro-calibration-20260712\gyro-rate-quaternion-z-pytest-debug.log --log-file-level=DEBUG -q -s` | pass / not run | Proは`1 passed in 17.99s`でfactory `0x6020` 24-byte応答を記録。Joy-Conは検証手段がないためnot run |
+| standard gate | pass | format、lint、ty、unit 418件、integration 94件 |
 
 ## 11. 実機実行条件
 
 | 項目 | 内容 |
 |---|---|
 | 実機要否 | required |
-| 承認範囲 | 未承認。Pro/Joy-Con の adapter open、接続、SPI read、close に明示承認が必要 |
-| adapter | 実行時に identity と adapter string を確認する |
+| 承認範囲 | Proは2026-07-12に明示承認済みのunit_047実機試験でadapter open、active reconnect、SPI read、report loop、neutral、closeを実行。Joy-Conは検証手段がないためnot run |
+| adapter | Pro実行時に`usb:0`の専用CSR8510 A10 / WinUSBを確認済み |
 | 実行遮断 | 環境変数による遮断は採用しない。明示承認、対象 adapter、command、cleanup plan で管理する |
-| log / artifact | `build/hardware/` と `spec/hardware-test-log.md` |
-| cleanup | report loop を停止し、transport を close して adapter を解放する |
+| log / artifact | `build/hardware/issue-69-gyro-calibration-20260712/active-reconnect-gyro-rate-quaternion-z.jsonl`、`spec/hardware-test-log.md` |
+| cleanup | Pro実行はneutral、disconnect、`transport_close_complete`を記録しadapterを解放済み |
 
 ## 12. 先送り事項
 
@@ -123,8 +124,8 @@
 - [x] Issue #70 の対象範囲と対象外を確認した
 - [x] TDD Test List を作成した
 - [x] 必要な根拠監査を記録した
-- [x] 実機実行条件を未承認として記録した
+- [x] 実機実行条件、Proの結果、Joy-Conの未実行理由を記録した
 - [x] unit test と実装を完了した
 - [x] docs と initial design を更新した
-- [ ] Pro/Joy-Con 実機回帰を記録した
-- [ ] 標準 gate を記録した
+- [x] Pro実機回帰とJoy-Con未実行理由を記録した
+- [x] 標準 gate を記録した

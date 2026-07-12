@@ -12,7 +12,8 @@ from swbt.protocol.profiles.pro_controller import default_controller_profile
 
 class _ImuSessionState(Protocol):
     imu_mode: int | None
-    imu_mode_revision: int
+
+    def consume_imu_mode_reset_request(self) -> bool: ...
 
 
 class InputReportBuilder:
@@ -29,7 +30,6 @@ class InputReportBuilder:
         self._profile = profile or default_controller_profile()
         self._session_state = session_state
         self._quaternion_packer = QuaternionMotionPacker(clock_ns=clock_ns)
-        self._last_imu_request: tuple[int | None, int] | None = None
 
     def build_0x30(self, state: InputState, *, timer: int = 0) -> bytes:
         """Build a 0x30 standard full input report."""
@@ -61,22 +61,15 @@ class InputReportBuilder:
         )
 
     def _pack_imu_frames(self, report: bytearray, state: InputState) -> None:
+        if self._session_state is not None and self._session_state.consume_imu_mode_reset_request():
+            self._quaternion_packer.reset()
         imu_mode = self._session_state.imu_mode if self._session_state is not None else None
-        imu_revision = (
-            self._session_state.imu_mode_revision if self._session_state is not None else 0
-        )
-        imu_request = (imu_mode, imu_revision)
         if imu_mode in (0x02, 0x03, 0x04, 0x05):
-            if imu_request != self._last_imu_request:
-                self._quaternion_packer.reset()
             report[13:49] = self._quaternion_packer.pack(
                 state.imu_frames,
                 gyro_calibration=self._profile.gyro_calibration,
             )
-            self._last_imu_request = imu_request
             return
-
-        self._last_imu_request = imu_request
         cursor = 13
         for frame in state.imu_frames:
             for value in (

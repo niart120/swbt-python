@@ -121,12 +121,13 @@ def test_enable_imu_updates_session_state() -> None:
     responder.respond(_subcommand_report(0x40, payload=b"\x01"), state=InputState.neutral())
     assert session_state.imu_mode == 0x01
     assert session_state.imu_enabled is True
-    assert session_state.imu_mode_revision == 1
+    assert session_state.consume_imu_mode_reset_request() is True
+    assert session_state.consume_imu_mode_reset_request() is False
 
     responder.respond(_subcommand_report(0x40, payload=b"\x00"), state=InputState.neutral())
     assert session_state.imu_mode == 0x00
     assert session_state.imu_enabled is False
-    assert session_state.imu_mode_revision == 2
+    assert session_state.consume_imu_mode_reset_request() is True
 
 
 def test_joycon_enable_imu_mode_0x02_updates_session_state() -> None:

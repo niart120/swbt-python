@@ -176,7 +176,7 @@ await pad.apply(state)
 
 物理角速度から作る場合は `IMUFrame.gyro_rate(x_rad_s=0.0, y_rad_s=0.0, z_rad_s=0.0)` を使います。単位は rad/s、変換尺度は全軸で固定の `0.070 dps/raw` です。`IMUFrame.to_gyro_rate()` は raw 値を rad/s の `(x, y, z)` に戻します。変換後の raw 値が signed int16 の範囲外になる場合は clamp せず `InvalidInputError` が送出されます。
 
-`ProController`、`JoyConL`、`JoyConR`にSwitchがsubcommand `0x40`でIMU mode `0x02-0x05`を要求した場合、runtimeはraw gyroをprofile校正で物理角速度へ戻し、36 byteのquaternion形式へ自動変換します。利用者がquaternionやwire modeを指定するAPIはありません。mode `0x01`では従来のraw 3 frameを送ります。Joy-Con L/Rでもwire packingは共通ですが、Joy-Con固有の物理軸方向は実機未検証です。
+`ProController`、`JoyConL`、`JoyConR`にSwitchがsubcommand `0x40`でIMU mode `0x02-0x05`を要求した場合、runtimeはraw gyroをprofile校正で物理角速度へ戻し、36 byteのquaternion形式へ自動変換します。3つのgyro frameは時系列順にreport間隔の3等分ずつ姿勢へ積分します。利用者がquaternionやwire modeを指定するAPIはありません。mode `0x01`では従来のraw 3 frameを送ります。Joy-Con L/Rでもwire packingは共通ですが、Joy-Con固有の物理軸方向は実機未検証です。
 
 メソッドチェーンによって `IMUFrame` を構築することも可能です。`IMUFrame.with_gyro(x=0, y=0, z=0)` は既存 accel を維持して gyro を raw 値で置き換え、`IMUFrame.with_gyro_rate(x_rad_s=0.0, y_rad_s=0.0, z_rad_s=0.0)` は既存 accel を維持して gyro を rad/s から置き換えます。`IMUFrame.with_accel(x=0, y=0, z=0)` は既存 gyro を維持して accel を raw 値で置き換え、`IMUFrame.with_accel_g(x_g=0.0, y_g=0.0, z_g=0.0)` は G から置き換えます。
 
