@@ -797,6 +797,36 @@ def test_imu_mode_02_output_switches_periodic_input_to_quaternion_motion() -> No
     asyncio.run(run())
 
 
+def test_imu_mode_01_ack_switches_next_input_to_standard_raw() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        enable_standard_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 01")
+        frames = (
+            IMUFrame.raw(accel=(1, -2, 3), gyro=(-4, 5, -6)),
+            IMUFrame.raw(accel=(7, -8, 9), gyro=(-10, 11, -12)),
+            IMUFrame.raw(accel=(13, -14, 15), gyro=(-16, 17, -18)),
+        )
+
+        async with make_pro_controller(
+            transport=transport,
+            report_period_us=10_000_000,
+        ) as pad:
+            await transport.connect()
+            await pad.imu(*frames)
+            await transport.inject_interrupt_data(enable_standard_imu)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            start_count = len(transport.sent_interrupt_reports)
+            await pad.tap(Button.ZL, duration=0)
+            reports = transport.sent_interrupt_reports[start_count:]
+
+            assert reply[14] == 0x40
+            assert reports[0][0] == 0x30
+            assert reports[0][13:49] == b"".join(_imu_frame_bytes(frame) for frame in frames)
+
+    asyncio.run(run())
+
+
 def test_output_report_injection_uses_transport_bluetooth_address_for_device_info() -> None:
     async def run() -> None:
         transport = FakeHidTransport(local_bluetooth_address=bytes.fromhex("00 1b dc f9 9f 7d"))
