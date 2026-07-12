@@ -3,7 +3,13 @@
 from dataclasses import dataclass, field, replace
 
 from swbt.errors import ProtocolError
-from swbt.protocol.imu_report import ImuEncodingState, ImuMode
+from swbt.input import IMUFrame
+from swbt.protocol.imu_report import (
+    ImuEncodingState,
+    ImuMode,
+    encode_imu_block,
+)
+from swbt.protocol.profiles.base import ControllerProfile
 
 
 @dataclass(frozen=True)
@@ -43,3 +49,55 @@ def apply_imu_mode_request(
         imu_mode=mode,
         imu_encoding_state=ImuEncodingState(),
     )
+
+
+class SwitchHidSession:
+    """Own host-requested and IMU encoding state for one connection generation."""
+
+    def __init__(self, profile: ControllerProfile) -> None:
+        """Create a disabled session for the configured controller profile."""
+        self._profile = profile
+        self._state = SwitchHidSessionState()
+
+    @property
+    def state(self) -> SwitchHidSessionState:
+        """Return the current immutable session state."""
+        return self._state
+
+    def set_report_mode(self, mode: int, *, supported: bool) -> None:
+        """Record one host-selected input report mode."""
+        self._state = replace(
+            self._state,
+            report_mode=mode,
+            report_mode_supported=supported,
+            unsupported_report_mode=None if supported else mode,
+        )
+
+    def set_imu_mode(self, mode: int) -> None:
+        """Start a new IMU encoding epoch for an accepted host mode."""
+        self._state = apply_imu_mode_request(
+            self._state,
+            requested_mode=mode,
+            accepted_modes=self._profile.imu_enable_modes,
+        )
+
+    def set_vibration_enabled(self, enabled: bool) -> None:
+        """Record the host-selected vibration enable state."""
+        self._state = replace(self._state, vibration_enabled=enabled)
+
+    def encode_imu(
+        self,
+        frames: tuple[IMUFrame, IMUFrame, IMUFrame],
+        *,
+        now_ns: int,
+    ) -> bytes:
+        """Encode one IMU block and retain only its explicit next state."""
+        result = encode_imu_block(
+            state=self._state.imu_encoding_state,
+            mode=self._state.imu_mode,
+            frames=frames,
+            gyro_calibration=self._profile.gyro_calibration,
+            now_ns=now_ns,
+        )
+        self._state = replace(self._state, imu_encoding_state=result.state)
+        return result.block

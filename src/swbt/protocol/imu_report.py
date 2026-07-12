@@ -44,6 +44,30 @@ def encode_disabled_imu() -> ImuEncodingResult:
     return ImuEncodingResult(block=bytes(36), state=ImuEncodingState())
 
 
+def encode_imu_block(
+    *,
+    state: ImuEncodingState,
+    mode: ImuMode,
+    frames: tuple[IMUFrame, IMUFrame, IMUFrame],
+    gyro_calibration: GyroCalibration,
+    now_ns: int,
+) -> ImuEncodingResult:
+    """Encode one IMU block for the explicit host-selected mode."""
+    if mode is ImuMode.DISABLED:
+        return encode_disabled_imu()
+    if mode is ImuMode.STANDARD:
+        return ImuEncodingResult(
+            block=encode_standard_imu(frames),
+            state=ImuEncodingState(),
+        )
+    return encode_quaternion_imu(
+        state=state,
+        frames=frames,
+        gyro_calibration=gyro_calibration,
+        now_ns=now_ns,
+    )
+
+
 def encode_standard_imu(frames: tuple[IMUFrame, IMUFrame, IMUFrame]) -> bytes:
     """Encode three raw six-axis frames as signed Int16LE values."""
     result = bytearray(36)
