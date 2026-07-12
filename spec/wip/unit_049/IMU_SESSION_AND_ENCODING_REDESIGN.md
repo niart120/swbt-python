@@ -214,7 +214,7 @@ next_imu_encoding_state = result.state
 | refactor-skipped | disconnect時に`InputStateStore`は従来どおりneutralへ戻り、profile / SPI bytesは変わらない | regression | integration | no | expected-green regression。host disconnect後のneutral snapshotと再open前後のfactory calibration reply一致を確認 |
 | refactor-skipped | `0x10` SPI readの前後でIMU modeとIMU encoding stateが変わらない | regression | unit | no | expected-green regression。quaternionの時刻状態を進めた後のSPI readでsession state全体が不変 |
 | refactor-skipped | `0x40`の前後でfactory calibration bytesとraw `InputState` が変わらない | regression | unit | no | expected-green regression。非ゼロraw 3 frameとSPI `0x6020-0x6037` replyがmode `0x02`要求の前後で一致 |
-| todo | public raw / rad/s / G helperの現行契約を維持する | regression | unit | no | public value API変更なし |
+| refactor-skipped | public raw / rad/s / G helperの現行契約を維持する | regression | unit | no | expected-green regression。既存13 testでraw境界、rad/s・G相互変換、既存軸保持を確認。public value API変更なし |
 | todo | `SwitchGamepad.imu()`がstate update APIとして現行契約を維持する | regression | integration | no | 接続不要、即時送信の保証なし |
 | todo | diagnosticsがaccepted IMU mode、encoding format、connection generationを記録し、reset flagの内部用語を公開しない | new | integration | no | 値そのものは記録しない |
 | deferred | Pro Controllerの正負Zが実機で反映される | regression | hardware | yes | unit_047で確認済み。wire fixture差分がない限り再実行しない |
