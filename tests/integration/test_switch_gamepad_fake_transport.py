@@ -1310,6 +1310,40 @@ def test_reopened_connection_does_not_inherit_host_requested_session_state() -> 
     asyncio.run(run())
 
 
+def test_disconnect_neutralizes_input_without_changing_profile_spi_data() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = make_pro_controller(transport=transport, report_period_us=10_000_000)
+        read_factory_calibration = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 20 60 00 00 18")
+
+        await pad.open()
+        await transport.connect()
+        await transport.inject_interrupt_data(read_factory_calibration)
+        first_reply = transport.sent_interrupt_reports[-1]
+
+        await pad.apply(
+            InputState.neutral()
+            .with_buttons([Button.A])
+            .with_imu(IMUFrame.accel(0, 0, 4096).with_gyro(100, 200, 300))
+        )
+        await transport.disconnect(reason=0x13)
+
+        assert pad.snapshot() == InputState.neutral()
+        assert transport.is_open is False
+
+        await pad.open()
+        await transport.connect()
+        try:
+            await transport.inject_interrupt_data(read_factory_calibration)
+            second_reply = transport.sent_interrupt_reports[-1]
+
+            assert first_reply[15:44] == second_reply[15:44]
+        finally:
+            await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+
 def test_report_tx_counter_distinguishes_0x21_and_0x30() -> None:
     async def run() -> None:
         trace = StringIO()
