@@ -1,3 +1,6 @@
+import pytest
+
+from swbt.imu import GyroCalibration
 from swbt.input import IMUFrame
 from swbt.protocol.imu_report import (
     ImuEncodingState,
@@ -49,3 +52,51 @@ def test_standard_encoding_preserves_three_raw_frames_without_calibration() -> N
         "07 00 f8 ff 09 00 f6 ff 0b 00 f4 ff "
         "0d 00 f2 ff 0f 00 f0 ff 11 00 ee ff"
     )
+
+
+@pytest.mark.parametrize("active_sample_index", range(3))
+def test_quaternion_encoding_uses_each_gyro_sample_and_preserves_acceleration(
+    active_sample_index: int,
+) -> None:
+    samples = tuple(
+        IMUFrame.raw(
+            accel=(index + 1, index + 2, index + 3),
+            gyro=(0, 0, 1000 if index == active_sample_index else 0),
+        )
+        for index in range(3)
+    )
+    frames = (samples[0], samples[1], samples[2])
+
+    result = encode_quaternion_imu(
+        state=ImuEncodingState(previous_report_ns=0),
+        frames=frames,
+        gyro_calibration=GyroCalibration(),
+        now_ns=1_000_000_000,
+    )
+
+    assert result.state.orientation[2] > 0
+    assert result.block[0:6] == bytes.fromhex("01 00 02 00 03 00")
+    assert result.block[12:18] == bytes.fromhex("02 00 03 00 04 00")
+    assert result.block[24:30] == bytes.fromhex("03 00 04 00 05 00")
+
+
+def test_quaternion_encoding_uses_the_active_gyro_calibration() -> None:
+    frame = IMUFrame.gyro(0, 0, 1000)
+    frames = (frame, frame, frame)
+    state = ImuEncodingState(previous_report_ns=0)
+
+    default_result = encode_quaternion_imu(
+        state=state,
+        frames=frames,
+        gyro_calibration=GyroCalibration(),
+        now_ns=1_000_000_000,
+    )
+    offset_result = encode_quaternion_imu(
+        state=state,
+        frames=frames,
+        gyro_calibration=GyroCalibration(zero_raw=(0, 0, 1000)),
+        now_ns=1_000_000_000,
+    )
+
+    assert default_result.state.orientation[2] > 0
+    assert offset_result.state.orientation == (0.0, 0.0, 0.0, 1.0)
