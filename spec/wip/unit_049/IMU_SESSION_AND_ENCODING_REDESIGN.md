@@ -209,7 +209,7 @@ next_imu_encoding_state = result.state
 | refactor-skipped | acceptedな同mode再要求が姿勢と前回時刻を初期化する | regression | unit | no | pure session transitionが新しいimmutable stateを返し、同modeでもencoding stateを初期化。one-shot flag不使用 |
 | refactor-skipped | standard / quaternion / disabled間の遷移が次のepochへ姿勢を持ち越さない | new | unit | no | expected-green regression。disabled / standard / quaternionの双方向遷移とderived `imu_enabled`を固定 |
 | refactor-skipped | 未対応modeが例外となり、mode、姿勢、前回時刻を変更しない | edge | unit | no | expected-green regression。profile capabilityで検証し、pure transitionの旧state不変を固定 |
-| todo | `0x40` ACKが新modeの最初のperiodic `0x30`より先に送られる | regression | integration | no | fake transportでreport順序を検査 |
+| refactor-skipped | `0x40` ACKが新modeの最初のperiodic `0x30`より先に送られる | regression | integration | no | expected-green regression。fake transportの送信列で`0x21` ACKの次にquaternion `0x30`が続くことを固定 |
 | todo | disconnect / close後の新接続がIMU mode、vibration、report mode、quaternion状態を引き継がない | new | integration | no | 同じ`SwitchGamepad`とfake transport factoryで接続generationを更新 |
 | todo | disconnect時に`InputStateStore`は従来どおりneutralへ戻り、profile / SPI bytesは変わらない | regression | integration | no | session寿命とgamepad寿命の分離 |
 | todo | `0x10` SPI readの前後でIMU modeとIMU encoding stateが変わらない | regression | unit | no | SPIとsessionの独立 |
@@ -368,6 +368,9 @@ Tidy decision:
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/unit/test_protocol_session.py -q` | pass | 7 passed。未対応modeの`ProtocolError`とsession state不変を確認 |
 | `uv run ruff check tests/unit/test_protocol_session.py` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_imu_mode_ack_precedes_first_periodic_input_in_the_new_format -q` | pass | 1 passed。`0x40` ACKが新形式の最初のperiodic inputに先行することを確認 |
+| `uv run ruff check tests/integration/test_switch_gamepad_fake_transport.py` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `git diff --no-index --check -- NUL spec/wip/unit_049/IMU_SESSION_AND_ENCODING_REDESIGN.md` | pass | 新規未追跡ファイルにwhitespace errorなし |
 | `rg -n "\\[(?:TO)(?:DO)\\]|(?:T)(?:BD)|(?:x)(?:xx)" spec/wip/unit_049` | pass | 本番用placeholderの残存なし |

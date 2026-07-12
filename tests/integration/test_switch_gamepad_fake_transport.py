@@ -1235,6 +1235,29 @@ def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
     asyncio.run(run())
 
 
+def test_imu_mode_ack_precedes_first_periodic_input_in_the_new_format() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        enable_quaternion_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 02")
+
+        async with make_pro_controller(transport=transport, report_period_us=100_000) as pad:
+            await transport.connect()
+            await pad.imu(IMUFrame.accel(0, 0, 4096))
+
+            start_count = len(transport.sent_interrupt_reports)
+            await transport.inject_interrupt_data(enable_quaternion_imu)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 2)
+
+            ack = reports[start_count]
+            first_new_input = reports[start_count + 1]
+            assert ack[0] == 0x21
+            assert ack[14] == 0x40
+            assert first_new_input[0] == 0x30
+            assert first_new_input[19] & 0x0F == 0x0E
+
+    asyncio.run(run())
+
+
 def test_report_tx_counter_distinguishes_0x21_and_0x30() -> None:
     async def run() -> None:
         trace = StringIO()
