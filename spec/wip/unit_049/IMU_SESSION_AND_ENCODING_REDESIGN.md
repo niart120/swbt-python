@@ -203,7 +203,7 @@ next_imu_encoding_state = result.state
 | refactor-done | standard modeが3つのraw frameを校正変換せずInt16LEで保持する | regression | unit | no | pure standard encoderを追加し、legacy builderの重複packingも同関数へ集約 |
 | refactor-skipped | quaternion modeがactive profile calibrationでraw gyro 3 sampleを角速度へ戻し、各3 sampleが次姿勢に寄与する | regression | unit | no | expected-green regression。custom zero offset、各sample位置、accel 3 sample保持をpure encoderで固定 |
 | refactor-skipped | quaternion生成の初回時刻差とclock後退を`0`とし、入力stateを変更しない | edge | unit | no | expected-green regression。初回 / 後退のidentity、next timestamp、frame不変を固定。時刻上限は追加しない |
-| todo | 初期sessionとmode `0x00`が36 byteゼロのIMU blockを生成する | new | unit | no | 現行raw fallbackをsource-backed null behaviorへ修正 |
+| refactor-skipped | 初期sessionとmode `0x00`が36 byteゼロのIMU blockを生成する | new | unit | no | initial connection stateをdisabledとし、ゼロblockと初期encoding stateを返す経路を追加。mode dispatchは後続itemで行う |
 | todo | `0x40 01`がACKされ、次のperiodic reportがstandard raw形式になる | regression | integration | no | fake transport |
 | todo | `0x40 02-05`がACKされ、次のperiodic reportがquaternion形式になる | regression | integration | no | 3 profileのmode capabilityを維持 |
 | todo | acceptedな同mode再要求が姿勢と前回時刻を初期化する | regression | unit | no | one-shot reset flagを使わない |
@@ -346,6 +346,11 @@ Tidy decision:
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/unit/test_imu_report.py -q` | pass | 7 passed。初回とclock後退時の経過時間0、入力frame不変を確認 |
 | `uv run ruff check tests/unit/test_imu_report.py` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit/test_imu_report.py::test_initial_and_disabled_imu_mode_encode_a_zero_block_and_reset_state -q` | red | `ImuMode` が未実装の`ImportError`を確認 |
+| `uv run pytest tests/unit/test_imu_report.py tests/unit/test_input_report.py -q` | pass | 62 passed。initial disabled mode、36 byte zero block、encoding state resetと既存wire回帰を確認 |
+| `uv run ruff format --check src/swbt/protocol/imu_report.py src/swbt/protocol/session.py tests/unit/test_imu_report.py` | pass | 3 files already formatted |
+| `uv run ruff check src/swbt/protocol/imu_report.py src/swbt/protocol/session.py tests/unit/test_imu_report.py` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `git diff --no-index --check -- NUL spec/wip/unit_049/IMU_SESSION_AND_ENCODING_REDESIGN.md` | pass | 新規未追跡ファイルにwhitespace errorなし |
 | `rg -n "\\[(?:TO)(?:DO)\\]|(?:T)(?:BD)|(?:x)(?:xx)" spec/wip/unit_049` | pass | 本番用placeholderの残存なし |

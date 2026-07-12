@@ -1,6 +1,7 @@
 """Pure IMU wire encoding from explicit state and report time."""
 
 from dataclasses import dataclass
+from enum import IntEnum
 from math import cos, sin, sqrt
 from struct import pack_into
 
@@ -9,6 +10,17 @@ from swbt.input import IMUFrame
 
 _Quaternion = tuple[float, float, float, float]
 _IDENTITY_QUATERNION: _Quaternion = (0.0, 0.0, 0.0, 1.0)
+
+
+class ImuMode(IntEnum):
+    """Host-selected IMU wire mode."""
+
+    DISABLED = 0x00
+    STANDARD = 0x01
+    QUATERNION_1 = 0x02
+    QUATERNION_2 = 0x03
+    QUATERNION_3 = 0x04
+    QUATERNION_4 = 0x05
 
 
 @dataclass(frozen=True)
@@ -25,6 +37,11 @@ class ImuEncodingResult:
 
     block: bytes
     state: ImuEncodingState
+
+
+def encode_disabled_imu() -> ImuEncodingResult:
+    """Encode the disabled IMU block and reset its encoding state."""
+    return ImuEncodingResult(block=bytes(36), state=ImuEncodingState())
 
 
 def encode_standard_imu(frames: tuple[IMUFrame, IMUFrame, IMUFrame]) -> bytes:

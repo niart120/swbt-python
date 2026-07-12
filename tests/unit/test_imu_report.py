@@ -4,10 +4,13 @@ from swbt.imu import GyroCalibration
 from swbt.input import IMUFrame
 from swbt.protocol.imu_report import (
     ImuEncodingState,
+    ImuMode,
+    encode_disabled_imu,
     encode_quaternion_imu,
     encode_standard_imu,
 )
 from swbt.protocol.profiles.pro_controller import default_controller_profile
+from swbt.protocol.session import SwitchHidSessionState
 
 
 def test_quaternion_encoding_is_deterministic_for_explicit_state_and_time() -> None:
@@ -125,3 +128,22 @@ def test_quaternion_encoding_uses_zero_elapsed_time_initially_and_when_clock_rec
     assert initial.state.previous_report_ns == 100
     assert receded.state.previous_report_ns == 100
     assert frames == original_frames
+
+
+def test_initial_and_disabled_imu_mode_encode_a_zero_block_and_reset_state() -> None:
+    session_state = SwitchHidSessionState()
+    frame = IMUFrame.gyro(100, 200, 300)
+    frames = (frame, frame, frame)
+    rotated_state = ImuEncodingState(
+        orientation=(0.1, 0.2, 0.3, 0.9),
+        previous_report_ns=123,
+    )
+
+    result = encode_disabled_imu()
+
+    assert session_state.imu_mode is ImuMode.DISABLED
+    assert session_state.imu_enabled is False
+    assert result.block == bytes(36)
+    assert result.state == ImuEncodingState()
+    assert rotated_state.previous_report_ns == 123
+    assert frames == (frame, frame, frame)
