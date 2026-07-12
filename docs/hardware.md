@@ -78,7 +78,7 @@ brew install pkgconf openssl@3
 
 Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用アダプタを使う前に確認する項目です。接続成功を保証するものではありません。
 
-Linux 上のアダプタ列挙、アダプタ open、HID 接続待ち受け、ペアリング、再接続、入力反映はまだ確認していません。macOS 15.7.7 / CSR8510 A10 では Pro Controller の限定観測がありますが、Joy-Con profile、別ドングル、別ファームウェアでの互換性は未確認です。macOS CI 上では依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までは確認済みです。CI では USB Bluetooth ドングルを使いません。
+Linux 上のアダプタ列挙、アダプタ open、HID 接続待ち受け、ペアリング、再接続、入力反映は未確認です。macOS 15.7.7 / CSR8510 A10 では Pro Controller の限定的な動作確認結果がありますが、Joy-Con profile、別ドングル、別ファームウェアでの互換性は未確認です。macOS CI 上では依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までは確認済みです。
 
 ### Adapter Name
 

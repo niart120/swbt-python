@@ -271,9 +271,9 @@ await pad.apply(state)
 
 `apply()` は現在入力全体を置き換えます。差分適用ではありません。
 
-## IMU Input
+## 6軸センサー入力
 
-### Update Gyro Only
+### ジャイロだけを設定する
 
 ```python
 from swbt import IMUFrame
@@ -281,9 +281,9 @@ from swbt import IMUFrame
 await pad.imu(IMUFrame.gyro(100, 0, 0))
 ```
 
-`imu()` は IMU 入力だけを置き換える state update API です。`imu(frame)` は 3 つの IMU frame すべてに同じ値を設定します。即時送信は保証しません。
+`imu()` は現在の6軸センサー入力だけを置き換えます。1つの `IMUFrame` を渡すと、同じ値が3入力分に設定されます。値はレポートループから送信されるため、呼び出し時の即時送信は保証しません。
 
-### Update Gyro From Physical Angular Velocity
+### 角速度を指定する
 
 ```python
 from math import radians
@@ -298,11 +298,11 @@ await pad.imu(frame)
 x_rad_s, y_rad_s, z_rad_s = frame.to_gyro_rate()
 ```
 
-`gyro_rate()` の単位は rad/s です。全軸で固定の `0.070 dps/raw` を使って raw 値へ変換します。変換後の値が signed int16 の範囲外になる場合は clamp せず `InvalidInputError` が送出されます。raw 値を直接指定する場合は既存の `IMUFrame.gyro()` を使います。
+`gyro_rate()` は角速度を rad/s 単位で受け取ります。設定値を同じ単位で取得するには `to_gyro_rate()` を使います。センサーの生値を直接指定する場合は `IMUFrame.gyro()` を使います。
 
-`ProController`、`JoyConL`、`JoyConR`にSwitchがIMU mode `0x02-0x05`を要求する接続では、runtimeがこの角速度をquaternion形式へ自動変換します。mode `0x01`ではraw 3 frame、mode未指定または`0x00`ではゼロのIMU領域を送ります。呼び出し側はmodeを指定せず、`imu()`には同じraw値を設定します。接続を開き直した場合、前回接続のmodeとquaternion状態は引き継ぎません。Joy-Con L/Rでもwire packingは共通ですが、Joy-Con固有の物理軸方向は実機未検証です。
+内部では `0.070 dps/raw` の尺度で生値へ変換します。変換結果が16ビット符号付き整数の範囲を超える場合は、上限値や下限値への丸めを行わず `InvalidInputError` が送出されます。Switchとの通信形式は自動で選ばれます。
 
-### Set Accel And Gyro In One Frame
+### 加速度とジャイロをまとめて設定する
 
 ```python
 from swbt import IMUFrame
@@ -311,13 +311,13 @@ frame = IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)
 await pad.imu(frame)
 ```
 
-`IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)` は、加速度を設定した frame にジャイロを追加します。`IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, 0))` と同じ値です。
+`IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)` は、加速度を設定した入力値にジャイロを追加します。`IMUFrame.raw(accel=(0, 0, 4096), gyro=(100, 0, 0))` と同じ値です。
 
-G 単位で指定する場合は `IMUFrame.accel_g(x_g=0.0, y_g=0.0, z_g=1.0)` を使います。固定尺度は `1/4096 G/raw` で、`frame.to_accel_g()` が G の 3 軸 tuple を返します。既存 gyro を維持して加速度だけを置き換える場合は `frame.with_accel_g(x_g=..., y_g=..., z_g=...)` を使います。
+加速度を G 単位で指定する場合は `IMUFrame.accel_g(x_g=0.0, y_g=0.0, z_g=1.0)` を使います。`frame.to_accel_g()` は設定値を G 単位の3軸値として返します。内部の変換尺度は `1/4096 G/raw` です。ジャイロを維持して加速度だけを置き換える場合は `frame.with_accel_g(x_g=..., y_g=..., z_g=...)` を使います。
 
 加速度を維持したまま物理角速度を設定する場合は、`frame.with_gyro_rate(x_rad_s=..., y_rad_s=..., z_rad_s=...)` を使います。
 
-### Three IMU Frames
+### 3入力分を個別に設定する
 
 ```python
 from swbt import IMUFrame
@@ -329,9 +329,9 @@ await pad.imu(
 )
 ```
 
-3 つの IMU frame を渡した場合は順に設定します。0 個、2 個、4 個以上、または `IMUFrame` 以外を渡すと `InvalidInputError` になります。
+3つの `IMUFrame` を渡すと、それぞれの値が順に設定されます。引数の数が1個または3個でない場合や、`IMUFrame` 以外を渡した場合は `InvalidInputError` が送出されます。
 
-### Complete State With Button, Stick, And IMU
+### ボタンやスティックと同時に設定する
 
 ```python
 from swbt import Button, IMUFrame, InputState, Stick
@@ -346,7 +346,7 @@ state = (
 await pad.apply(state)
 ```
 
-`with_accel((0, 0, 4096))` と `with_gyro((100, 0, 0))` は 1 sample を 3 つの IMU frame すべてに複製します。3 sample を渡すと、各 frame の加速度またはジャイロを順に置き換えます。ボタン、スティック、IMU を同じ入力状態として扱う場合は `InputState` + `apply()` を使います。
+`with_accel((0, 0, 4096))` と `with_gyro((100, 0, 0))` は、1入力分の値を3入力分に複製します。3入力分を渡すと、各値の加速度またはジャイロを順に置き換えます。ボタン、スティック、6軸センサーを同じタイミングで更新する場合は、`InputState` を組み立てて `apply()` に渡します。
 
 ## Neutral And Close
 

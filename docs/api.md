@@ -139,7 +139,7 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 | `sticks(left=None, right=None)` | state update API | 指定されたスティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
 | `lstick(stick)` | state update API | 左スティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
 | `rstick(stick)` | state update API | 右スティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
-| `imu(*frames)` | state update API | IMU(6軸センサー入力)を置き換える。1入力単位分が与えられた場合は3入力単位分に複製し、3入力単位分が与えられた場合は順に設定する。即時送信を保証しない。 |
+| `imu(*frames)` | state update API | 6軸センサー入力を置き換える。1入力分を渡すと3入力分に複製し、3入力分を渡すと順に設定する。即時送信を保証しない。 |
 | `neutral()` | state update API | `InputState.neutral()` 相当に戻す。即時送信を保証しない。 |
 | `apply(state)` | complete state | 構築済みの `InputState` で現在入力全体を置き換える。 |
 | `tap(*buttons, duration=0.08)` | action API | 押下レポートを即時送信後、 `duration` 秒待機して押上レポートを送信する。 |
@@ -148,7 +148,7 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 `lstick(stick)` は `sticks(left=stick)`、`rstick(stick)` は `sticks(right=stick)` と同じ state update API です。左右を同じ状態更新で置き換える場合は `sticks(left=..., right=...)` を使います。
 
-`imu(*frames)` は現在入力の IMU 部分だけを置き換える state update API です。`imu(frame)` は 3 frame すべてへ同じ値を設定し、`imu(frame1, frame2, frame3)` は順に設定します。0 個、2 個、4 個以上、`IMUFrame` 以外が与えられた場合は `InvalidInputError` が送出されます。
+`imu(*frames)` は現在の6軸センサー入力だけを置き換えます。`imu(frame)` は同じ値を3入力分に設定し、`imu(frame1, frame2, frame3)` は3つの値を順に設定します。引数の数が1個または3個でない場合や、`IMUFrame` 以外を渡した場合は `InvalidInputError` が送出されます。
 
 `press()` の直後に `lstick()`、`rstick()`、`sticks()`、`imu()` を呼んでも、同一 HID report に入る保証はありません。button、stick、IMU を完全な同時入力として扱う場合は 構築済みの `InputState` を作り、`apply(state)` に渡してください。
 
@@ -170,15 +170,15 @@ await pad.apply(state)
 `Stick.tilt(x, y)` は `Stick.normalized(x=x, y=y)` と同じ正規化座標を使う短い生成 API です。`Stick.tilt(1.0, 1.0)` は矩形座標モデルとみなしたときの正当な入力として受理されます。
 `Stick.up(amount=1.0)`、`Stick.down(amount=1.0)`、`Stick.left(amount=1.0)`、`Stick.right(amount=1.0)` は各方向の倒し込み量を `0.0..1.0` で受けとります。`amount=0.0` は無入力、`amount=1.0` はスティックが完全に倒れた状態を表します。
 
-`IMUFrame.neutral()` は移動なしの IMU 入力単位 (IMU frame) を返します。`IMUFrame.raw(accel=None, gyro=None)` は加速度とジャイロの 3 軸 raw 値を持つ tuple から入力単位を作ります。未指定側は `(0, 0, 0)` として扱います。`IMUFrame.accel(x=0, y=0, z=0)` は accel だけ、`IMUFrame.gyro(x=0, y=0, z=0)` は gyro だけを raw 値で指定します。
+`IMUFrame` は、加速度とジャイロをまとめた1入力分の値です。`IMUFrame.neutral()` は動きのない値を返します。`IMUFrame.raw(accel=None, gyro=None)` は加速度とジャイロの3軸の生値から作成し、未指定側を `(0, 0, 0)` として扱います。加速度だけを指定する場合は `IMUFrame.accel(x=0, y=0, z=0)`、ジャイロだけを指定する場合は `IMUFrame.gyro(x=0, y=0, z=0)` を使います。
 
-物理加速度から作る場合は `IMUFrame.accel_g(x_g=0.0, y_g=0.0, z_g=0.0)` を使います。単位は G、変換尺度は全軸で固定の `1/4096 G/raw` です。`IMUFrame.to_accel_g()` は raw 値を G の `(x, y, z)` に戻します。非有限値または変換後の raw 値が signed int16 の範囲外になる場合は clamp せず `InvalidInputError` が送出されます。
+加速度を G 単位で指定する場合は `IMUFrame.accel_g(x_g=0.0, y_g=0.0, z_g=0.0)` を使います。`IMUFrame.to_accel_g()` は設定値を G 単位の `(x, y, z)` として返します。変換尺度は `1/4096 G/raw` です。
 
-物理角速度から作る場合は `IMUFrame.gyro_rate(x_rad_s=0.0, y_rad_s=0.0, z_rad_s=0.0)` を使います。単位は rad/s、変換尺度は全軸で固定の `0.070 dps/raw` です。`IMUFrame.to_gyro_rate()` は raw 値を rad/s の `(x, y, z)` に戻します。変換後の raw 値が signed int16 の範囲外になる場合は clamp せず `InvalidInputError` が送出されます。
+角速度を rad/s 単位で指定する場合は `IMUFrame.gyro_rate(x_rad_s=0.0, y_rad_s=0.0, z_rad_s=0.0)` を使います。`IMUFrame.to_gyro_rate()` は設定値を rad/s 単位の `(x, y, z)` として返します。変換尺度は `0.070 dps/raw` です。
 
-`ProController`、`JoyConL`、`JoyConR`にSwitchがsubcommand `0x40`でIMU mode `0x02-0x05`を要求した場合、runtimeはraw gyroをprofile校正で物理角速度へ戻し、36 byteのquaternion形式へ自動変換します。3つのgyro frameは時系列順にreport間隔の3等分ずつ姿勢へ反映します。mode `0x01`ではraw 3 frameを送り、mode未指定または`0x00`ではIMU領域をゼロにします。利用者がquaternionやwire modeを指定するAPIはありません。接続を開き直した場合、前回接続のmodeとquaternion状態は引き継ぎません。Joy-Con L/Rでもwire packingは共通ですが、Joy-Con固有の物理軸方向は実機未検証です。
+生値への変換結果が16ビット符号付き整数の範囲を超える場合は、上限値や下限値への丸めを行わず `InvalidInputError` が送出されます。Switchとの通信に使う形式は接続先の要求に応じて自動で選ばれるため、利用者が指定する必要はありません。
 
-メソッドチェーンによって `IMUFrame` を構築することも可能です。`IMUFrame.with_gyro(x=0, y=0, z=0)` は既存 accel を維持して gyro を raw 値で置き換え、`IMUFrame.with_gyro_rate(x_rad_s=0.0, y_rad_s=0.0, z_rad_s=0.0)` は既存 accel を維持して gyro を rad/s から置き換えます。`IMUFrame.with_accel(x=0, y=0, z=0)` は既存 gyro を維持して accel を raw 値で置き換え、`IMUFrame.with_accel_g(x_g=0.0, y_g=0.0, z_g=0.0)` は G から置き換えます。
+既存の `IMUFrame` の一部だけを変更することもできます。`IMUFrame.with_gyro(x=0, y=0, z=0)` と `IMUFrame.with_gyro_rate(x_rad_s=0.0, y_rad_s=0.0, z_rad_s=0.0)` は加速度を維持してジャイロを置き換えます。`IMUFrame.with_accel(x=0, y=0, z=0)` と `IMUFrame.with_accel_g(x_g=0.0, y_g=0.0, z_g=0.0)` はジャイロを維持して加速度を置き換えます。
 
 `InputState.neutral()` は ボタン入力なし、左右スティックが中央、ニュートラルのIMU frame の状態を返します。`InputState.with_buttons(...)`、`InputState.with_sticks(...)`、`InputState.with_imu(...)`、`InputState.with_gyro(...)`、`InputState.with_accel(...)` は新しい immutable state を返します。`with_imu(frame)` は 1 frame を 3 frame に複製し、`with_imu(frame1, frame2, frame3)` は順に設定します。`with_gyro((x, y, z))` と `with_accel((x, y, z))` も 1 sample を 3 frame に複製し、3 sample では順に片側の sensor だけを置き換えます。
 
