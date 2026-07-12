@@ -28,7 +28,7 @@ class SubcommandSessionState:
     report_mode: int | None = None
     report_mode_supported: bool = False
     unsupported_report_mode: int | None = None
-    imu_mode: int | None = None
+    imu_mode: int | None = 0x00
     imu_enabled: bool = False
     _imu_mode_reset_requested: bool = field(default=False, init=False, repr=False, compare=False)
     vibration_enabled: bool = False

@@ -202,6 +202,7 @@ class ControllerRuntime:
             transport = self._ensure_transport()
             self._record_run_metadata()
             self._connection_state = "opening"
+            self._reset_protocol_session()
             self._register_transport_callbacks()
             self._connected_event.clear()
             try:
@@ -225,6 +226,15 @@ class ControllerRuntime:
                 self._report_loop = None
                 self._is_open = False
                 raise
+
+    def _reset_protocol_session(self) -> None:
+        """Create fresh host-requested state for the next HID connection generation."""
+        self._subcommand_session_state = SubcommandSessionState()
+        self._output_report_dispatcher.subcommand_responder = SubcommandResponder(
+            profile=self._controller_profile,
+            session_state=self._subcommand_session_state,
+        )
+        self._configured_device_info_bluetooth_address = None
 
     async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
         """Start pairing advertising and wait for a host connection.

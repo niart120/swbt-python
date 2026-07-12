@@ -81,6 +81,9 @@ class InputReportBuilder:
         if self._session_state is not None and self._session_state.consume_imu_mode_reset_request():
             self._quaternion_packer.reset()
         imu_mode = self._session_state.imu_mode if self._session_state is not None else None
+        if self._session_state is not None and imu_mode == 0x00:
+            report[13:49] = bytes(36)
+            return
         if imu_mode in (0x02, 0x03, 0x04, 0x05):
             report[13:49] = self._quaternion_packer.pack(
                 state.imu_frames,

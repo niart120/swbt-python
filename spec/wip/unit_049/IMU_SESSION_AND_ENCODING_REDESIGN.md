@@ -210,7 +210,7 @@ next_imu_encoding_state = result.state
 | refactor-skipped | standard / quaternion / disabled間の遷移が次のepochへ姿勢を持ち越さない | new | unit | no | expected-green regression。disabled / standard / quaternionの双方向遷移とderived `imu_enabled`を固定 |
 | refactor-skipped | 未対応modeが例外となり、mode、姿勢、前回時刻を変更しない | edge | unit | no | expected-green regression。profile capabilityで検証し、pure transitionの旧state不変を固定 |
 | refactor-skipped | `0x40` ACKが新modeの最初のperiodic `0x30`より先に送られる | regression | integration | no | expected-green regression。fake transportの送信列で`0x21` ACKの次にquaternion `0x30`が続くことを固定 |
-| todo | disconnect / close後の新接続がIMU mode、vibration、report mode、quaternion状態を引き継がない | new | integration | no | 同じ`SwitchGamepad`とfake transport factoryで接続generationを更新 |
+| green | disconnect / close後の新接続がIMU mode、vibration、report mode、quaternion状態を引き継がない | new | integration | no | 同じ`SwitchGamepad`の再openでhost-requested stateとpackerを初期化。新session型への完全移行は後続refactorで行う |
 | todo | disconnect時に`InputStateStore`は従来どおりneutralへ戻り、profile / SPI bytesは変わらない | regression | integration | no | session寿命とgamepad寿命の分離 |
 | todo | `0x10` SPI readの前後でIMU modeとIMU encoding stateが変わらない | regression | unit | no | SPIとsessionの独立 |
 | todo | `0x40`の前後でfactory calibration bytesとraw `InputState` が変わらない | regression | unit | no | modeと値モデルの独立 |
@@ -371,6 +371,12 @@ Tidy decision:
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_imu_mode_ack_precedes_first_periodic_input_in_the_new_format -q` | pass | 1 passed。`0x40` ACKが新形式の最初のperiodic inputに先行することを確認 |
 | `uv run ruff check tests/integration/test_switch_gamepad_fake_transport.py` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_reopened_connection_does_not_inherit_host_requested_session_state -q` | red | 再open後も前回のmode `0x02`を使いquaternion blockを送る現行不具合を確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 107 passed。再open後のdisabled block、report / IMU / vibration state reset、fake transport回帰を確認 |
+| `uv run pytest tests/unit/test_subcommand_responder.py tests/unit/test_input_report.py tests/unit/test_report_loop.py -q` | pass | 95 passed。subcommand、input report、report loop回帰を確認 |
+| `uv run ruff format --check src/swbt/gamepad/runtime.py src/swbt/protocol/input_report.py src/swbt/protocol/subcommand.py tests/integration/test_switch_gamepad_fake_transport.py` | pass | 4 files already formatted |
+| `uv run ruff check src/swbt/gamepad/runtime.py src/swbt/protocol/input_report.py src/swbt/protocol/subcommand.py tests/integration/test_switch_gamepad_fake_transport.py` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `git diff --no-index --check -- NUL spec/wip/unit_049/IMU_SESSION_AND_ENCODING_REDESIGN.md` | pass | 新規未追跡ファイルにwhitespace errorなし |
 | `rg -n "\\[(?:TO)(?:DO)\\]|(?:T)(?:BD)|(?:x)(?:xx)" spec/wip/unit_049` | pass | 本番用placeholderの残存なし |
