@@ -210,13 +210,13 @@ next_imu_encoding_state = result.state
 | refactor-skipped | standard / quaternion / disabled間の遷移が次のepochへ姿勢を持ち越さない | new | unit | no | expected-green regression。disabled / standard / quaternionの双方向遷移とderived `imu_enabled`を固定 |
 | refactor-skipped | 未対応modeが例外となり、mode、姿勢、前回時刻を変更しない | edge | unit | no | expected-green regression。profile capabilityで検証し、pure transitionの旧state不変を固定 |
 | refactor-skipped | `0x40` ACKが新modeの最初のperiodic `0x30`より先に送られる | regression | integration | no | expected-green regression。fake transportの送信列で`0x21` ACKの次にquaternion `0x30`が続くことを固定 |
-| green | disconnect / close後の新接続がIMU mode、vibration、report mode、quaternion状態を引き継がない | new | integration | no | 同じ`SwitchGamepad`の再openでhost-requested stateとpackerを初期化。新session型への完全移行は後続refactorで行う |
+| refactor-done | disconnect / close後の新接続がIMU mode、vibration、report mode、quaternion状態を引き継がない | new | integration | no | 同じ`SwitchGamepad`の再openで新しい`SwitchHidSession`を生成し、host-requested stateとencoding stateを初期化 |
 | refactor-skipped | disconnect時に`InputStateStore`は従来どおりneutralへ戻り、profile / SPI bytesは変わらない | regression | integration | no | expected-green regression。host disconnect後のneutral snapshotと再open前後のfactory calibration reply一致を確認 |
 | refactor-skipped | `0x10` SPI readの前後でIMU modeとIMU encoding stateが変わらない | regression | unit | no | expected-green regression。quaternionの時刻状態を進めた後のSPI readでsession state全体が不変 |
 | refactor-skipped | `0x40`の前後でfactory calibration bytesとraw `InputState` が変わらない | regression | unit | no | expected-green regression。非ゼロraw 3 frameとSPI `0x6020-0x6037` replyがmode `0x02`要求の前後で一致 |
 | refactor-skipped | public raw / rad/s / G helperの現行契約を維持する | regression | unit | no | expected-green regression。既存13 testでraw境界、rad/s・G相互変換、既存軸保持を確認。public value API変更なし |
 | refactor-skipped | `SwitchGamepad.imu()`がstate update APIとして現行契約を維持する | regression | integration | no | expected-green regression。接続不要、button / stick保持、呼出時の即時interrupt送信なしを既存3 testで確認 |
-| green | diagnosticsがaccepted IMU modeとencoding formatを記録し、reset flagの内部用語を公開しない | new | integration | no | mode `0x02`のquaternion、mode `0x01`のstandardを記録。IMU値そのものは記録しない |
+| refactor-done | diagnosticsがaccepted IMU modeとencoding formatを記録し、reset flagの内部用語を公開しない | new | integration | no | mode `0x02`のquaternion、mode `0x01`のstandardを記録。IMU値そのものは記録しない |
 | deferred | Pro Controllerの正負Zが実機で反映される | regression | hardware | yes | unit_047で確認済み。wire fixture差分がない限り再実行しない |
 
 ## 8. 設計メモ
@@ -254,7 +254,7 @@ Switch host
 - wire値を表すmodeはraw `int`の分岐に散らさず、内部enumまたは同等のvalue objectで分類する。
 - `imu_enabled`は独立mutable fieldにせずmodeから導出する。
 - quaternionとprevious timeはimmutable stateにし、wire生成結果が次stateを返す。
-- `SubcommandResponder`はreply bytes生成とsession遷移の結果を返し、hidden mutable sessionを所有しない。
+- `SubcommandResponder`は接続session actorを引数で受け、reply生成時の遷移を明示的に適用する。hidden mutable sessionは所有しない。
 - `InputReportBuilder`は完成した36 byte IMU blockを受け取り、report全体の配置だけを担当する。
 - profile capabilityとcalibrationは参照だけとし、session stateへ複製しない。
 
@@ -304,7 +304,7 @@ Tidy decision:
 | `src/swbt/protocol/imu_report.py` | new | explicit state / explicit timeの36 byte IMU wire生成 |
 | `src/swbt/protocol/motion.py` | delete | stateful `QuaternionMotionPacker`を置き換える |
 | `src/swbt/protocol/input_report.py` | modify | session / clock依存を削除し、完成IMU blockを配置する |
-| `src/swbt/protocol/subcommand.py` | modify | hidden mutable sessionとone-shot reset flagを削除し、遷移結果を返す |
+| `src/swbt/protocol/subcommand.py` | modify | hidden mutable sessionとone-shot reset flagを削除し、接続session actorを明示引数にする |
 | `src/swbt/gamepad/output.py` | modify | parsed commandをconnection sessionへ渡し、replyを直列化境界でqueueする |
 | `src/swbt/gamepad/runtime.py` | modify | HID接続セッションごとのstate生成 / 破棄 |
 | `src/swbt/report_loop.py` | modify | explicit report time、session状態更新、ACK優先を同一送信境界で扱う |

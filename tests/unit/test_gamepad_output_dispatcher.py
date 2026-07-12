@@ -5,6 +5,8 @@ from io import StringIO
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.gamepad.output import OutputReportDispatcher
+from swbt.protocol.profiles.pro_controller import default_controller_profile
+from swbt.protocol.session import SwitchHidSession
 from swbt.state_store import InputStateStore
 
 
@@ -25,6 +27,7 @@ def test_output_report_dispatcher_records_trace_and_sends_subcommand_reply() -> 
             diagnostics=DiagnosticsRecorder(trace_writer=trace),
             require_reply_sender=require_reply_sender,
             send_subcommand_reply=send_subcommand_reply,
+            session=SwitchHidSession(default_controller_profile()),
             state_store=InputStateStore(),
         )
 

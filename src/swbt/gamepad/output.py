@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.protocol.output_report import OutputReportParser
+from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.subcommand import (
     SESSION_STATE_SUBCOMMANDS,
     SubcommandResponder,
@@ -24,6 +25,7 @@ class OutputReportDispatcher:
     diagnostics: DiagnosticsRecorder
     require_reply_sender: ReplySenderRequirement
     send_subcommand_reply: ReplySender
+    session: SwitchHidSession
     state_store: InputStateStore
     output_report_parser: OutputReportParser = field(default_factory=OutputReportParser)
     subcommand_responder: SubcommandResponder = field(default_factory=SubcommandResponder)
@@ -51,7 +53,11 @@ class OutputReportDispatcher:
         state = await self.state_store.snapshot()
         try:
             reply = await self.send_subcommand_reply(
-                lambda: self.subcommand_responder.respond(output_report, state=state)
+                lambda: self.subcommand_responder.respond(
+                    output_report,
+                    state=state,
+                    session=self.session,
+                )
             )
         except UnsupportedSubcommandError:
             self.diagnostics.record_event(
@@ -62,7 +68,7 @@ class OutputReportDispatcher:
             )
             raise
         if output_report.subcommand_id in SESSION_STATE_SUBCOMMANDS:
-            session_state = self.subcommand_responder.session_state
+            session_state = self.session.state
             self.diagnostics.record_event(
                 "subcommand_session_state",
                 imu_enabled=session_state.imu_enabled,

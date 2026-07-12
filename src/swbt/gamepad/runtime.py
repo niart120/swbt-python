@@ -110,10 +110,10 @@ class ControllerRuntime:
             diagnostics=self._diagnostics,
             require_reply_sender=self._require_subcommand_reply_sender,
             send_subcommand_reply=self._send_subcommand_reply,
+            session=self._protocol_session,
             state_store=self._state_store,
             subcommand_responder=SubcommandResponder(
                 profile=self._controller_profile,
-                session=self._protocol_session,
             ),
         )
         self._report_loop: ReportLoop | None = None
@@ -232,9 +232,9 @@ class ControllerRuntime:
     def _reset_protocol_session(self) -> None:
         """Create fresh host-requested state for the next HID connection."""
         self._protocol_session = SwitchHidSession(self._controller_profile)
+        self._output_report_dispatcher.session = self._protocol_session
         self._output_report_dispatcher.subcommand_responder = SubcommandResponder(
             profile=self._controller_profile,
-            session=self._protocol_session,
         )
         self._configured_device_info_bluetooth_address = None
 

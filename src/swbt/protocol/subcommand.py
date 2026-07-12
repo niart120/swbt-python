@@ -6,7 +6,7 @@ from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport
 from swbt.protocol.profiles.base import ControllerProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
-from swbt.protocol.session import SwitchHidSession, SwitchHidSessionState
+from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.spi import VirtualSpiFlash
 
 SIMPLE_ACK_SUBCOMMANDS = {0x08, 0x30}
@@ -38,19 +38,12 @@ class SubcommandResponder:
         *,
         spi_flash: VirtualSpiFlash | None = None,
         profile: ControllerProfile | None = None,
-        session: SwitchHidSession | None = None,
         device_info_bluetooth_address: bytes = DEFAULT_DEVICE_INFO_BLUETOOTH_ADDRESS,
     ) -> None:
         """Create a responder."""
         self._profile = profile or default_controller_profile()
-        self._session = session or SwitchHidSession(self._profile)
         self._device_info_bluetooth_address = bytes(device_info_bluetooth_address)
         self._spi_flash = spi_flash or VirtualSpiFlash(profile=self._profile)
-
-    @property
-    def session_state(self) -> SwitchHidSessionState:
-        """Return the current immutable connection session state."""
-        return self._session.state
 
     def set_device_info_bluetooth_address(self, bluetooth_address: bytes) -> None:
         """Update the Bluetooth address returned by subcommand 0x02."""
@@ -59,13 +52,20 @@ class SubcommandResponder:
             raise ProtocolError(msg)
         self._device_info_bluetooth_address = bytes(bluetooth_address)
 
-    def respond(self, output_report: OutputReport, *, state: InputState, timer: int = 0) -> bytes:
+    def respond(
+        self,
+        output_report: OutputReport,
+        *,
+        state: InputState,
+        session: SwitchHidSession | None = None,
+        timer: int = 0,
+    ) -> bytes:
         """Return a 0x21 reply for an output report with a subcommand."""
         if output_report.subcommand_id is None:
             msg = "output report does not include a subcommand"
             raise ProtocolError(msg)
 
-        ack, data = self._reply_data(output_report)
+        ack, data = self._reply_data(output_report, session=session)
         return self._build_0x21_reply(
             subcommand_id=output_report.subcommand_id,
             ack=ack,
@@ -74,17 +74,31 @@ class SubcommandResponder:
             timer=timer,
         )
 
-    def _reply_data(self, output_report: OutputReport) -> tuple[int, bytes]:
+    def _reply_data(
+        self,
+        output_report: OutputReport,
+        *,
+        session: SwitchHidSession | None,
+    ) -> tuple[int, bytes]:
         subcommand_id = output_report.subcommand_id
         if subcommand_id is None:
             msg = "output report does not include a subcommand"
             raise ProtocolError(msg)
         if subcommand_id == 0x03:
-            return 0x80, self._set_input_report_mode(output_report.subcommand_payload)
+            return 0x80, self._set_input_report_mode(
+                output_report.subcommand_payload,
+                _require_session(session),
+            )
         if subcommand_id == 0x40:
-            return 0x80, self._set_imu_enabled(output_report.subcommand_payload)
+            return 0x80, self._set_imu_enabled(
+                output_report.subcommand_payload,
+                _require_session(session),
+            )
         if subcommand_id == 0x48:
-            return 0x80, self._set_vibration_enabled(output_report.subcommand_payload)
+            return 0x80, self._set_vibration_enabled(
+                output_report.subcommand_payload,
+                _require_session(session),
+            )
         if subcommand_id in SIMPLE_ACK_SUBCOMMANDS:
             return 0x80, b""
         if subcommand_id == 0x02:
@@ -99,21 +113,21 @@ class SubcommandResponder:
             return 0x80, _nfc_ir_mcu_state_payload(output_report.subcommand_payload)
         raise UnsupportedSubcommandError(subcommand_id, output_report.subcommand_payload)
 
-    def _set_input_report_mode(self, payload: bytes) -> bytes:
+    def _set_input_report_mode(self, payload: bytes, session: SwitchHidSession) -> bytes:
         mode = _first_payload_byte(payload, "set input report mode")
-        self._session.set_report_mode(
+        session.set_report_mode(
             mode,
             supported=mode == SUPPORTED_INPUT_REPORT_MODE,
         )
         return b""
 
-    def _set_imu_enabled(self, payload: bytes) -> bytes:
+    def _set_imu_enabled(self, payload: bytes, session: SwitchHidSession) -> bytes:
         imu_mode = _imu_enable_payload(payload, self._profile.imu_enable_modes)
-        self._session.set_imu_mode(imu_mode)
+        session.set_imu_mode(imu_mode)
         return b""
 
-    def _set_vibration_enabled(self, payload: bytes) -> bytes:
-        self._session.set_vibration_enabled(_enable_payload(payload, "enable vibration"))
+    def _set_vibration_enabled(self, payload: bytes, session: SwitchHidSession) -> bytes:
+        session.set_vibration_enabled(_enable_payload(payload, "enable vibration"))
         return b""
 
     def _spi_read_reply_data(self, payload: bytes) -> bytes:
@@ -152,6 +166,13 @@ def _first_payload_byte(payload: bytes, subcommand_name: str) -> int:
         msg = f"{subcommand_name} subcommand must include one argument byte"
         raise ProtocolError(msg)
     return payload[0]
+
+
+def _require_session(session: SwitchHidSession | None) -> SwitchHidSession:
+    if session is None:
+        msg = "session-state subcommand requires an explicit SwitchHidSession"
+        raise ProtocolError(msg)
+    return session
 
 
 def _enable_payload(payload: bytes, subcommand_name: str) -> bool:
