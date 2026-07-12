@@ -4,6 +4,8 @@
 公開 package は `swbt-python`、import package は `swbt`、公開 CLI は `swbt-probe` である。
 
 production publish は GitHub Actions の `Publish` workflow と PyPI Trusted Publishing で行う。
+workflow は PyPI 公開前に draft GitHub Release を作り、同じ wheel / sdist を添付する。
+PyPI 公開に成功した場合だけ GitHub Release を公開状態にする。
 手元の `twine upload` は使わない。`v*` tag を作るだけでは公開されない。
 
 ## 1. PyPI 側の事前設定
@@ -120,7 +122,26 @@ gh run watch <run-id> --exit-status
 `Publish` workflow は `target=pypi` が `v*` tag ref 以外で実行された場合に失敗する。
 tag push だけでは publish job は実行されない。
 
+workflow は build 済みの wheel / sdist を draft GitHub Release に添付してから、同じ
+Actions artifact を PyPI へ公開する。PyPI job が成功すると draft を公開状態へ変更する。
+既に公開済みの同名 GitHub Release がある場合は、成果物を上書きせず停止する。
+
+PyPI 公開前に workflow が失敗した場合、draft GitHub Release は再実行時に再利用される。
+PyPI 公開後の GitHub Release 公開処理だけが失敗した場合は、次の command で failed job を
+再実行する。PyPI への重複 upload は行わない。
+
+```console
+gh run rerun <run-id> --failed
+gh run watch <run-id> --exit-status
+```
+
 ## 6. 公開後の確認
+
+GitHub Release が draft ではなく、wheel / sdist が添付されていることを確認する。
+
+```console
+gh release view vX.Y.Z --json isDraft,assets,url
+```
 
 PyPI は version-specific endpoint を先に確認する。
 generic latest endpoint は反映が遅れる場合がある。
@@ -136,7 +157,7 @@ uvx --from swbt-python==X.Y.Z python -c "import importlib.metadata, swbt; print(
 uvx --from swbt-python==X.Y.Z swbt-probe --help
 ```
 
-GitHub Release を作る場合は、version、tag、PR、merge commit、PyPI URL、workflow run、local gate、smoke 結果、既知の制約を本文に含める。
+GitHub Release の本文には GitHub の自動生成 release notes を使う。PyPI URL、workflow run、local gate、smoke 結果、既知の制約は release 実行結果として報告する。
 
 ## 7. 中断条件
 
@@ -146,6 +167,7 @@ GitHub Release を作る場合は、version、tag、PR、merge commit、PyPI URL
 - local default branch が `origin/main` と同期していない。
 - candidate version が PyPI または TestPyPI に存在する。
 - local または remote に release tag が既に存在する。
+- 同じ tag の GitHub Release が既に公開されている。
 - `pyproject.toml` と `uv.lock` の version が一致しない。
 - Trusted Publisher 設定が project、owner、repository、workflow、environment と一致しない。
 - CI、local gate、publish workflow が失敗している。

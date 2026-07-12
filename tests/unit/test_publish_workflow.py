@@ -112,6 +112,35 @@ def test_publish_workflow_uses_trusted_publishing_environments() -> None:
     assert "pypa/gh-action-pypi-publish@release/v1" in _uses(pypi)
 
 
+def test_production_publish_stages_distributions_in_github_release_first() -> None:
+    workflow = _load_workflow(PUBLISH_WORKFLOW)
+
+    draft = workflow["jobs"]["create-github-release"]
+    pypi = workflow["jobs"]["publish-to-pypi"]
+    release = workflow["jobs"]["publish-github-release"]
+    draft_commands = _run_commands(draft)
+    release_commands = _run_commands(release)
+
+    production_condition = (
+        "${{ inputs.target == 'pypi' && github.ref_type == 'tag' && "
+        "startsWith(github.ref_name, 'v') }}"
+    )
+    assert draft["if"] == production_condition
+    assert draft["needs"] == ["validate", "build"]
+    assert draft["permissions"] == {"contents": "write"}
+    assert "actions/download-artifact@v6" in _uses(draft)
+    assert 'gh release create "${TAG}" --verify-tag --draft --generate-notes' in draft_commands
+    assert 'gh release upload "${GITHUB_REF_NAME}" dist/* --clobber' in draft_commands
+    assert "already published" in draft_commands
+
+    assert pypi["needs"] == ["create-github-release"]
+
+    assert release["if"] == production_condition
+    assert release["needs"] == ["publish-to-pypi"]
+    assert release["permissions"] == {"contents": "write"}
+    assert 'gh release edit "${GITHUB_REF_NAME}" --draft=false --latest' in release_commands
+
+
 def test_publish_workflow_does_not_use_password_uploads_or_hardware_tests() -> None:
     text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
 
@@ -132,6 +161,8 @@ def test_publishing_doc_records_manual_publish_boundaries() -> None:
     assert "version-specific endpoint" in text
     assert "Trusted Publisher" in text
     assert "実機 smoke" in text
+    assert "draft GitHub Release" in text
+    assert "wheel / sdist" in text
 
 
 def test_pypi_release_skill_delegates_runbook_details_to_internal_doc() -> None:
