@@ -827,6 +827,43 @@ def test_imu_mode_01_ack_switches_next_input_to_standard_raw() -> None:
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("imu_mode", [0x02, 0x03, 0x04, 0x05])
+@pytest.mark.parametrize("controller_kind", ["pro", "left", "right"])
+def test_quaternion_imu_modes_switch_all_profiles_to_mode_2_input(
+    controller_kind: Literal["pro", "left", "right"],
+    imu_mode: int,
+) -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        enable_quaternion_imu = bytes.fromhex(f"01 00 00 00 00 00 00 00 00 00 40 {imu_mode:02x}")
+        if controller_kind == "pro":
+            pad = make_pro_controller(transport=transport, report_period_us=10_000_000)
+            trigger = Button.ZL
+        elif controller_kind == "left":
+            pad = make_joycon_l(transport=transport, report_period_us=10_000_000)
+            trigger = Button.ZL
+        else:
+            pad = make_joycon_r(transport=transport, report_period_us=10_000_000)
+            trigger = Button.ZR
+
+        async with pad:
+            await transport.connect()
+            await pad.imu(IMUFrame.accel(0, 0, 4096))
+            await transport.inject_interrupt_data(enable_quaternion_imu)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            start_count = len(transport.sent_interrupt_reports)
+            await pad.tap(trigger, duration=0)
+            reports = transport.sent_interrupt_reports[start_count:]
+
+            assert reply[14] == 0x40
+            assert reports[0][0] == 0x30
+            assert reports[0][19] & 0x0F == 0x0E
+            assert reports[0][48] >> 2 == 3
+
+    asyncio.run(run())
+
+
 def test_output_report_injection_uses_transport_bluetooth_address_for_device_info() -> None:
     async def run() -> None:
         transport = FakeHidTransport(local_bluetooth_address=bytes.fromhex("00 1b dc f9 9f 7d"))

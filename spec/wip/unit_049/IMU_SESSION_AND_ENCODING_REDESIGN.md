@@ -205,7 +205,7 @@ next_imu_encoding_state = result.state
 | refactor-skipped | quaternion生成の初回時刻差とclock後退を`0`とし、入力stateを変更しない | edge | unit | no | expected-green regression。初回 / 後退のidentity、next timestamp、frame不変を固定。時刻上限は追加しない |
 | refactor-skipped | 初期sessionとmode `0x00`が36 byteゼロのIMU blockを生成する | new | unit | no | initial connection stateをdisabledとし、ゼロblockと初期encoding stateを返す経路を追加。mode dispatchは後続itemで行う |
 | refactor-skipped | `0x40 01`がACKされ、次のperiodic reportがstandard raw形式になる | regression | integration | no | expected-green regression。fake transportでACKと異なるraw 3 frameを確認 |
-| todo | `0x40 02-05`がACKされ、次のperiodic reportがquaternion形式になる | regression | integration | no | 3 profileのmode capabilityを維持 |
+| refactor-skipped | `0x40 02-05`がACKされ、次のperiodic reportがquaternion形式になる | regression | integration | no | expected-green regression。3 profile × 4 modeのACK、packing mode 2、sample countをfake transportで固定 |
 | todo | acceptedな同mode再要求が姿勢と前回時刻を初期化する | regression | unit | no | one-shot reset flagを使わない |
 | todo | standard / quaternion / disabled間の遷移が次のepochへ姿勢を持ち越さない | new | unit | no | mode遷移表を固定 |
 | todo | 未対応modeが例外となり、mode、姿勢、前回時刻を変更しない | edge | unit | no | profile capabilityで検証 |
@@ -353,6 +353,9 @@ Tidy decision:
 | `uv run ruff check src/swbt/protocol/imu_report.py src/swbt/protocol/session.py tests/unit/test_imu_report.py` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_imu_mode_01_ack_switches_next_input_to_standard_raw -q` | pass | 1 passed。`0x40 01` ACK後の次inputがstandard raw 3 frameであることを確認 |
+| `uv run ruff check tests/integration/test_switch_gamepad_fake_transport.py` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_quaternion_imu_modes_switch_all_profiles_to_mode_2_input -q` | pass | 12 passed。Pro / Joy-Con L / Joy-Con Rのmode `0x02-0x05`を確認 |
 | `uv run ruff check tests/integration/test_switch_gamepad_fake_transport.py` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `git diff --no-index --check -- NUL spec/wip/unit_049/IMU_SESSION_AND_ENCODING_REDESIGN.md` | pass | 新規未追跡ファイルにwhitespace errorなし |
