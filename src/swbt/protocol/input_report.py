@@ -5,6 +5,7 @@ from time import monotonic_ns
 from typing import Protocol
 
 from swbt.input import InputState, Stick
+from swbt.protocol.imu_report import encode_standard_imu
 from swbt.protocol.motion import QuaternionMotionPacker
 from swbt.protocol.profiles.base import ControllerProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
@@ -86,15 +87,4 @@ class InputReportBuilder:
                 gyro_calibration=self._profile.gyro_calibration,
             )
             return
-        cursor = 13
-        for frame in state.imu_frames:
-            for value in (
-                frame.accel_x,
-                frame.accel_y,
-                frame.accel_z,
-                frame.gyro_x,
-                frame.gyro_y,
-                frame.gyro_z,
-            ):
-                report[cursor : cursor + 2] = int(value).to_bytes(2, "little", signed=True)
-                cursor += 2
+        report[13:49] = encode_standard_imu(state.imu_frames)

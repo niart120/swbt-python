@@ -27,6 +27,24 @@ class ImuEncodingResult:
     state: ImuEncodingState
 
 
+def encode_standard_imu(frames: tuple[IMUFrame, IMUFrame, IMUFrame]) -> bytes:
+    """Encode three raw six-axis frames as signed Int16LE values."""
+    result = bytearray(36)
+    for offset, frame in zip((0, 12, 24), frames, strict=True):
+        pack_into(
+            "<6h",
+            result,
+            offset,
+            frame.accel_x,
+            frame.accel_y,
+            frame.accel_z,
+            frame.gyro_x,
+            frame.gyro_y,
+            frame.gyro_z,
+        )
+    return bytes(result)
+
+
 def encode_quaternion_imu(
     *,
     state: ImuEncodingState,
