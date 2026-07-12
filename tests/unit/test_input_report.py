@@ -125,6 +125,32 @@ def test_imu_mode_02_packs_identity_quaternion_instead_of_standard_gyro() -> Non
     assert report[48] >> 2 == 3
 
 
+@pytest.mark.parametrize("imu_mode", [0x02, 0x03, 0x04, 0x05])
+def test_quaternion_modes_preserve_the_mode_2_wire_fixture(imu_mode: int) -> None:
+    now_ns = 0
+
+    def clock_ns() -> int:
+        return now_ns
+
+    session_state = SubcommandSessionState(imu_mode=imu_mode, imu_enabled=True)
+    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    builder.build_0x30(InputState.neutral())
+    state = InputState.neutral().with_imu(
+        IMUFrame.raw(accel=(1, 2, 3), gyro=(0, 0, 1000)),
+        IMUFrame.raw(accel=(4, 5, 6), gyro=(0, 0, 1000)),
+        IMUFrame.raw(accel=(7, 8, 9), gyro=(0, 0, 1000)),
+    )
+
+    now_ns = 1_000_000_000
+    report = builder.build_0x30(state)
+
+    assert report[13:49] == bytes.fromhex(
+        "01 00 02 00 03 00 0e 00 00 00 00 80 "
+        "04 00 05 00 06 00 57 4b 02 00 00 00 "
+        "07 00 08 00 09 00 00 00 00 00 f4 0d"
+    )
+
+
 @pytest.mark.parametrize("profile", [JoyConLeftProfile(), JoyConRightProfile()])
 @pytest.mark.parametrize("imu_mode", [0x02, 0x03, 0x04, 0x05])
 def test_joycon_quaternion_modes_use_mode_2_motion_packing(
