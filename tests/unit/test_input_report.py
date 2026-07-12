@@ -22,6 +22,19 @@ def test_neutral_0x30_report_has_report_id_and_49_byte_length() -> None:
     assert len(report) == 49
 
 
+def test_input_report_builder_places_an_explicit_imu_block_deterministically() -> None:
+    builder = InputReportBuilder()
+    state = InputState.neutral().with_buttons([Button.A])
+    imu_block = bytes(range(36))
+
+    first = builder.build_0x30(state, imu_block=imu_block, timer=0x42)
+    second = builder.build_0x30(state, imu_block=imu_block, timer=0x42)
+
+    assert first == second
+    assert first[1] == 0x42
+    assert first[13:49] == imu_block
+
+
 def test_button_a_is_reflected_in_button_byte() -> None:
     report = InputReportBuilder().build_0x30(InputState.neutral().with_buttons([Button.A]))
 

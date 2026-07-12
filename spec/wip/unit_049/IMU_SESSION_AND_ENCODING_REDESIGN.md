@@ -199,7 +199,7 @@ next_imu_encoding_state = result.state
 | refactor-skipped | mode `0x01`が現行のraw 3 frame bytesを変えず生成する | characterization | unit | no | expected-green characterization。異なる3 frameの36 bytesを明示fixtureで固定 |
 | refactor-skipped | mode `0x02-0x05`が現行のidentity、正負Z、3 sample、packing mode 2 bytesを維持する | characterization | unit | no | expected-green characterization。4 mode共通の36 byte fixtureと既存のidentity / 正負Z / 3 sample testsを確認 |
 | refactor-done | 同じIMU encoding state、frame、profile、時刻が同じ36 byte blockと次状態を返す | new | unit | no | immutable state / resultと明示時刻のpure encoderを追加。現行packerは互換wrapperへ縮小 |
-| todo | `InputReportBuilder`が同じinput、IMU block、timerから同じ49 byte reportを返す | regression | unit | no | builderからsession / clockを除く |
+| refactor-skipped | `InputReportBuilder`が同じinput、IMU block、timerから同じ49 byte reportを返す | regression | unit | no | 完成済み36 byte blockの明示配置経路を追加。legacy session / clock経路の削除はconnection session切替itemで行う |
 | todo | standard modeが3つのraw frameを校正変換せずInt16LEで保持する | regression | unit | no | public raw API契約 |
 | todo | quaternion modeがactive profile calibrationでraw gyro 3 sampleを角速度へ戻し、各3 sampleが次姿勢に寄与する | regression | unit | no | accel 3 sampleもそのまま保持 |
 | todo | quaternion生成の初回時刻差とclock後退を`0`とし、入力stateを変更しない | edge | unit | no | 時刻上限は追加しない |
@@ -330,6 +330,11 @@ Tidy decision:
 | `uv run pytest tests/unit/test_imu_report.py tests/unit/test_input_report.py -q` | pass | 54 passed。明示state / timeの決定性と既存wire bytesを確認 |
 | `uv run ruff format --check src/swbt/protocol/imu_report.py src/swbt/protocol/motion.py tests/unit/test_imu_report.py` | pass | 3 files already formatted |
 | `uv run ruff check src/swbt/protocol/imu_report.py src/swbt/protocol/motion.py tests/unit/test_imu_report.py` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit/test_input_report.py::test_input_report_builder_places_an_explicit_imu_block_deterministically -q` | red | `imu_block` が未対応の`TypeError`を確認 |
+| `uv run pytest tests/unit/test_input_report.py -q` | pass | 54 passed。明示IMU blockの決定的配置とlegacy回帰を確認 |
+| `uv run ruff format --check src/swbt/protocol/input_report.py tests/unit/test_input_report.py` | pass | 2 files already formatted |
+| `uv run ruff check src/swbt/protocol/input_report.py tests/unit/test_input_report.py` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `git diff --no-index --check -- NUL spec/wip/unit_049/IMU_SESSION_AND_ENCODING_REDESIGN.md` | pass | 新規未追跡ファイルにwhitespace errorなし |
 | `rg -n "\\[(?:TO)(?:DO)\\]|(?:T)(?:BD)|(?:x)(?:xx)" spec/wip/unit_049` | pass | 本番用placeholderの残存なし |

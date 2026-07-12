@@ -31,7 +31,13 @@ class InputReportBuilder:
         self._session_state = session_state
         self._quaternion_packer = QuaternionMotionPacker(clock_ns=clock_ns)
 
-    def build_0x30(self, state: InputState, *, timer: int = 0) -> bytes:
+    def build_0x30(
+        self,
+        state: InputState,
+        *,
+        timer: int = 0,
+        imu_block: bytes | None = None,
+    ) -> bytes:
         """Build a 0x30 standard full input report."""
         self._profile.validate_input_state(state)
         report = bytearray(49)
@@ -42,8 +48,18 @@ class InputReportBuilder:
         report[6:9] = self._pack_stick(state.left_stick)
         report[9:12] = self._pack_stick(state.right_stick)
         report[12] = self._profile.vibrator_input
-        self._pack_imu_frames(report, state)
+        if imu_block is None:
+            self._pack_imu_frames(report, state)
+        else:
+            self._place_imu_block(report, imu_block)
         return bytes(report)
+
+    @staticmethod
+    def _place_imu_block(report: bytearray, imu_block: bytes) -> None:
+        if len(imu_block) != 36:
+            msg = f"IMU block must be 36 bytes, got {len(imu_block)}"
+            raise ValueError(msg)
+        report[13:49] = imu_block
 
     def _pack_buttons(self, report: bytearray, state: InputState) -> None:
         for button in state.buttons:
