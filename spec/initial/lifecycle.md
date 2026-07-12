@@ -58,7 +58,7 @@ closed
 3. diagnostics を初期化する
 4. transport callback を登録する
 5. transport を open する
-6. protocol と report loop を初期化する
+6. host要求状態とIMU encoding stateが初期値の`SwitchHidSession`、protocol、report loopを初期化する
 7. `opened` 状態に入る
 8. `ReportLoop` task を起動可能な状態にする
 
@@ -200,6 +200,8 @@ M6 では次を追加する。
 
 - `apply()`、`sticks()`、`imu()`、`press()`、`release()`、`neutral()` は `InputStateStore` の lock で保護する
 - `open()` と `close()` は lifecycle lock で直列化する
+- subcommandによるsession遷移、`0x21` ACK送信、周期`0x30`生成は`ReportLoop`の送信lockで直列化する
+- close / disconnect後の次の`open()`では新しい`SwitchHidSession`を作り、前回接続のreport mode、IMU mode、vibration状態、quaternion状態を引き継がない
 - `tap()` は途中で他 task の state update API と競合する可能性があるため、documented behavior を明確にする
 
 初期実装では、同一 `SwitchGamepad` に対する複雑な同時 macro 実行は保証しない。必要になった場合は、上位に macro scheduler を追加する。

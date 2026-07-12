@@ -58,7 +58,10 @@ Unit tests は `tests/unit/` に置く。
 - `Button.L` と `Button.R` が同時に反映される
 - d-pad が期待する bit に反映される
 - stick center が期待する bytes へ pack される
-- IMU neutral frame が期待する bytes になる
+- mode未指定 / `0x00`のIMU blockが36 byteゼロになる
+- mode `0x01`がraw 3 frameをInt16LEで保持する
+- mode `0x02-0x05`がquaternion packing mode 2になる
+- explicit state / timeのIMU encoderが同じ入力から同じbytesと次stateを返す
 
 ### 2.3 output report parse
 
@@ -91,6 +94,9 @@ Unit tests は `tests/unit/` に置く。
 - `0x21` NFC/IR MCU config に reply できる
 - `0x30` set player lights に reply できる
 - `0x40` enable IMU に reply できる
+- `0x40`のaccepted modeがdisabled / standard / quaternionのencoding形式を選び、同一modeの再要求でもencoding stateを初期化する
+- 未対応IMU modeがsession stateを変更しない
+- SPI `0x10` readとIMU mode遷移が互いの状態を変更しない
 - `0x48` enable vibration に reply できる
 - 未対応 subcommand を diagnostics に記録できる
 
@@ -134,6 +140,8 @@ Fake transport integration tests は `tests/integration/` に置く。
 - output report を fake transport から注入できる
 - subcommand reply が reply queue に積まれる
 - reply queue に `0x21` がある場合、次送信で `0x30` より先に送られる
+- `0x40`のsession遷移とACKが周期送信と同じlockで直列化され、新形式の`0x30`がACKを追い越さない
+- close後の再openで前回接続のhost要求状態とquaternion状態を引き継がない
 
 ### 3.4 neutral fail-safe
 
@@ -207,6 +215,7 @@ async def test_switch_pairing_and_tap_a():
 
 - Switch から `0x01` output report を受け取れる
 - `0x02`, `0x03`, `0x04`, `0x08`, `0x10`, `0x21`, `0x30`, `0x40`, `0x48` のうち観測されたものが diagnostics に記録される
+- accepted IMU modeと導出されたencoding形式がトレース出力に記録され、IMU値と内部reset flag用語は記録されない
 - 各 subcommand に `0x21` reply を返せる
 
 ### 5.4 Button A 反映
