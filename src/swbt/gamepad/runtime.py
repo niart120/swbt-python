@@ -1,6 +1,7 @@
 """Stateful runtime for gamepad lifecycle and input behavior."""
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import replace
 from types import TracebackType
 
@@ -601,8 +602,8 @@ class ControllerRuntime:
     def _require_subcommand_reply_sender(self) -> None:
         _ = self._subcommand_reply_sender()
 
-    async def _send_subcommand_reply(self, reply: bytes) -> None:
-        await self._subcommand_reply_sender().send_subcommand_reply(reply)
+    async def _send_subcommand_reply(self, build_reply: Callable[[], bytes]) -> bytes:
+        return await self._subcommand_reply_sender().send_subcommand_reply(build_reply)
 
     def _subcommand_reply_sender(self) -> ReportLoop:
         if self._report_loop is None:

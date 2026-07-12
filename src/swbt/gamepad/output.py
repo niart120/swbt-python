@@ -12,7 +12,8 @@ from swbt.protocol.subcommand import (
 )
 from swbt.state_store import InputStateStore
 
-ReplySender = Callable[[bytes], Awaitable[None]]
+ReplyBuilder = Callable[[], bytes]
+ReplySender = Callable[[ReplyBuilder], Awaitable[bytes]]
 ReplySenderRequirement = Callable[[], None]
 
 
@@ -49,7 +50,9 @@ class OutputReportDispatcher:
         self.require_reply_sender()
         state = await self.state_store.snapshot()
         try:
-            reply = self.subcommand_responder.respond(output_report, state=state)
+            reply = await self.send_subcommand_reply(
+                lambda: self.subcommand_responder.respond(output_report, state=state)
+            )
         except UnsupportedSubcommandError:
             self.diagnostics.record_event(
                 "unsupported_subcommand",
@@ -79,7 +82,6 @@ class OutputReportDispatcher:
             report_id=_format_report_id(reply[0]),
             subcommand_id=subcommand_id,
         )
-        await self.send_subcommand_reply(reply)
 
 
 def _format_report_id(report_id: int) -> str:

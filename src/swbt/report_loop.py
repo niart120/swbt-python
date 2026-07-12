@@ -64,11 +64,13 @@ class ReportLoop:
         async with self._send_lock:
             await self._send_current_input_locked(reason=reason)
 
-    async def send_subcommand_reply(self, report: bytes) -> None:
-        """Send one 0x21 subcommand reply with the shared report timer."""
+    async def send_subcommand_reply(self, build_report: Callable[[], bytes]) -> bytes:
+        """Apply a subcommand transition and send its reply under the send lock."""
         async with self._send_lock:
+            report = build_report()
             await self._send_subcommand_reply_locked(report)
             self._holdoff_periodic_after_reply()
+            return report
 
     def queue_reply(self, report: bytes) -> None:
         """Queue one subcommand reply for priority transmission."""

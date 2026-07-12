@@ -1,5 +1,6 @@
 import asyncio
 import json
+from collections.abc import Callable
 from io import StringIO
 
 from swbt.diagnostics import DiagnosticsRecorder
@@ -15,8 +16,10 @@ def test_output_report_dispatcher_records_trace_and_sends_subcommand_reply() -> 
         def require_reply_sender() -> None:
             return
 
-        async def send_subcommand_reply(reply: bytes) -> None:
+        async def send_subcommand_reply(build_reply: Callable[[], bytes]) -> bytes:
+            reply = build_reply()
             sent_replies.append(reply)
+            return reply
 
         dispatcher = OutputReportDispatcher(
             diagnostics=DiagnosticsRecorder(trace_writer=trace),
