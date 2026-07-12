@@ -383,6 +383,13 @@ Tidy decision:
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `git diff --no-index --check -- NUL spec/wip/unit_049/IMU_SESSION_AND_ENCODING_REDESIGN.md` | pass | 新規未追跡ファイルにwhitespace errorなし |
 | `rg -n "\\[(?:TO)(?:DO)\\]|(?:T)(?:BD)|(?:x)(?:xx)" spec/wip/unit_049` | pass | 本番用placeholderの残存なし |
+| `uv sync --dev` | pass | 53 packages resolved、41 packages checked |
+| `uv run ruff format --check .` | pass | 94 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit` | pass | 442 passed |
+| `uv run pytest tests/integration` | pass | 111 passed |
+| `uv run pytest tests/hardware/test_joycon_profile.py tests/hardware/test_controller_colors.py --collect-only -q` | pass | 14 hardware tests collected。実機処理は未実行 |
 
 ## 11. 実機実行条件
 
@@ -408,13 +415,13 @@ Tidy decision:
 - [x] TDD Test Listの初期案を作成した
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件と未実行理由を記録した
-- [ ] characterization testで現行wire bytesを固定した
-- [ ] explicit state / explicit timeのIMU wire生成を実装した
-- [ ] connection-scoped sessionとmode遷移を実装した
-- [ ] one-shot reset flagとstateful builder依存を削除した
-- [ ] disabled、standard、quaternionのmode分岐を実装した
-- [ ] ACKとperiodic reportの順序をfake transportで固定した
-- [ ] close / reconnectでhost-requested stateを引き継がないことを固定した
-- [ ] public IMU APIとexisting wire fixtureの回帰を確認した
-- [ ] initial designとpublic docsを実装結果へ追従させた
-- [ ] standard gateの結果を記録した
+- [x] characterization testで現行wire bytesを固定した
+- [x] explicit state / explicit timeのIMU wire生成を実装した
+- [x] connection-scoped sessionとmode遷移を実装した
+- [x] one-shot reset flagとstateful builder依存を削除した
+- [x] disabled、standard、quaternionのmode分岐を実装した
+- [x] ACKとperiodic reportの順序をfake transportで固定した
+- [x] close / reconnectでhost-requested stateを引き継がないことを固定した
+- [x] public IMU APIとexisting wire fixtureの回帰を確認した
+- [x] initial designとpublic docsを実装結果へ追従させた
+- [x] standard gateの結果を記録した
