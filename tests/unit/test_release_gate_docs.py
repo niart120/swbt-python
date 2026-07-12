@@ -29,6 +29,12 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
     lock_text = UV_LOCK.read_text(encoding="utf-8")
 
     for token in (
+        "## 0.3.0",
+        "`IMUFrame.gyro_rate()` と `IMUFrame.with_gyro_rate()`",
+        "`IMUFrame.accel_g()` と `IMUFrame.with_accel_g()`",
+        "0.2.0 の公開 API を削除または変更する破壊的変更はありません",
+        "Switch 2 ファームウェア 22.1.0",
+        "別の専用 USB Bluetooth ドングル、OS、Switch 本体、ファームウェアでは未検証",
         "## 0.2.0",
         "Breaking changes",
         "Migration",
@@ -71,6 +77,6 @@ def test_release_notes_document_rearchitecture_breaking_change_and_version_targe
     assert "Joy-Con R、再接続、通常入力反映は未検証" not in text
     assert "`0x22` ACK" not in text
 
-    assert 'version = "0.2.0"' in pyproject_text
+    assert 'version = "0.3.0"' in pyproject_text
     assert 'name = "swbt-python"' in lock_text
-    assert 'version = "0.2.0"' in lock_text
+    assert 'version = "0.3.0"' in lock_text

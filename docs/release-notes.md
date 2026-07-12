@@ -1,5 +1,22 @@
 # Release Notes
 
+## 0.3.0
+
+### 追加機能
+
+- `IMUFrame.gyro_rate()` と `IMUFrame.with_gyro_rate()` を追加しました。ジャイロの角速度を rad/s 単位で指定できます。`to_gyro_rate()` は設定値を同じ単位で返します。
+- `IMUFrame.accel_g()` と `IMUFrame.with_accel_g()` を追加しました。加速度を G 単位で指定できます。`to_accel_g()` は設定値を同じ単位で返します。
+- Pro Controller、Joy-Con L、Joy-Con R の仮想センサー校正値を応答し、設定した加速度とジャイロを接続先が要求する IMU 形式で送信します。
+- トレース出力に、接続先が選択した IMU 形式を記録します。
+
+### 互換性
+
+0.2.0 の公開 API を削除または変更する破壊的変更はありません。角速度と加速度の単位変換で16ビット符号付き整数の範囲を超える値を指定した場合は、丸めずに `InvalidInputError` が送出されます。
+
+### 実機確認範囲
+
+Windows 11 / CSR8510 A10 / WinUSB / Switch 2 ファームウェア 22.1.0 で、Pro Controller 相当の quaternion 形式による正負 Z 方向の回転、停止、静止加速度を確認しました。Joy-Con のセンサー軸方向と、別の専用 USB Bluetooth ドングル、OS、Switch 本体、ファームウェアでは未検証です。詳細は `docs/hardware.md` と `spec/hardware-test-log.md` を参照してください。
+
 ## 0.2.0
 
 ### Breaking changes
