@@ -120,6 +120,15 @@ def test_production_publish_stages_distributions_in_github_release_first() -> No
     release = workflow["jobs"]["publish-github-release"]
     draft_commands = _run_commands(draft)
     release_commands = _run_commands(release)
+    draft_release_steps = {
+        step["name"]: step
+        for step in draft["steps"]
+        if step.get("name")
+        in {"Create or reuse draft release", "Upload distributions to draft release"}
+    }
+    publish_release_step = next(
+        step for step in release["steps"] if step.get("name") == "Publish draft release"
+    )
 
     production_condition = (
         "${{ inputs.target == 'pypi' && github.ref_type == 'tag' && "
@@ -132,6 +141,12 @@ def test_production_publish_stages_distributions_in_github_release_first() -> No
     assert 'gh release create "${TAG}" --verify-tag --draft --generate-notes' in draft_commands
     assert 'gh release upload "${GITHUB_REF_NAME}" dist/* --clobber' in draft_commands
     assert "already published" in draft_commands
+    assert draft_release_steps["Create or reuse draft release"]["env"]["GH_REPO"] == (
+        "${{ github.repository }}"
+    )
+    assert draft_release_steps["Upload distributions to draft release"]["env"]["GH_REPO"] == (
+        "${{ github.repository }}"
+    )
 
     assert pypi["needs"] == ["create-github-release"]
 
@@ -139,6 +154,7 @@ def test_production_publish_stages_distributions_in_github_release_first() -> No
     assert release["needs"] == ["publish-to-pypi"]
     assert release["permissions"] == {"contents": "write"}
     assert 'gh release edit "${GITHUB_REF_NAME}" --draft=false --latest' in release_commands
+    assert publish_release_step["env"]["GH_REPO"] == "${{ github.repository }}"
 
 
 def test_publish_workflow_does_not_use_password_uploads_or_hardware_tests() -> None:
