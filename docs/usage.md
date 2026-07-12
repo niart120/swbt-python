@@ -300,7 +300,7 @@ x_rad_s, y_rad_s, z_rad_s = frame.to_gyro_rate()
 
 `gyro_rate()` の単位は rad/s です。全軸で固定の `0.070 dps/raw` を使って raw 値へ変換します。変換後の値が signed int16 の範囲外になる場合は clamp せず `InvalidInputError` が送出されます。raw 値を直接指定する場合は既存の `IMUFrame.gyro()` を使います。
 
-`ProController`、`JoyConL`、`JoyConR`にSwitchがIMU mode `0x02-0x05`を要求する接続では、runtimeがこの角速度をquaternion形式へ自動変換します。呼び出し側の指定方法は変わりません。Joy-Con L/Rでもwire packingは共通ですが、Joy-Con固有の物理軸方向は実機未検証です。
+`ProController`、`JoyConL`、`JoyConR`にSwitchがIMU mode `0x02-0x05`を要求する接続では、runtimeがこの角速度をquaternion形式へ自動変換します。mode `0x01`ではraw 3 frame、mode未指定または`0x00`ではゼロのIMU領域を送ります。呼び出し側はmodeを指定せず、`imu()`には同じraw値を設定します。接続を開き直した場合、前回接続のmodeとquaternion状態は引き継ぎません。Joy-Con L/Rでもwire packingは共通ですが、Joy-Con固有の物理軸方向は実機未検証です。
 
 ### Set Accel And Gyro In One Frame
 

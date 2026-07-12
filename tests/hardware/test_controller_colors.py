@@ -8,6 +8,7 @@ import pytest
 
 from swbt import ControllerColors, DiagnosticsConfig, InputState, ProController
 from swbt.protocol.output_report import OutputReport
+from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.subcommand import SubcommandResponder
 
 _CONTROLLER_COLOR_ADDRESS = 0x6050
@@ -494,9 +495,16 @@ class RecordingSubcommandResponder(SubcommandResponder):
         self._device_info_data = device_info_data
         self._expected_controller_color_bytes = expected_controller_color_bytes
 
-    def respond(self, output_report: OutputReport, *, state: InputState, timer: int = 0) -> bytes:
+    def respond(
+        self,
+        output_report: OutputReport,
+        *,
+        state: InputState,
+        session: SwitchHidSession | None = None,
+        timer: int = 0,
+    ) -> bytes:
         """Return the inner responder reply and emit SPI read observations."""
-        reply = self._inner.respond(output_report, state=state, timer=timer)
+        reply = self._inner.respond(output_report, state=state, session=session, timer=timer)
         if output_report.subcommand_id == 0x02:
             reply = self._with_device_info_data(reply)
             reply = self._with_device_info_bluetooth_address(reply)

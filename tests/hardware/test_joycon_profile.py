@@ -11,7 +11,8 @@ from swbt import Button, ControllerColors, DiagnosticsConfig, InputState, JoyCon
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
-from swbt.protocol.subcommand import SubcommandResponder, SubcommandSessionState
+from swbt.protocol.session import SwitchHidSession
+from swbt.protocol.subcommand import SubcommandResponder
 
 _OPERATOR_WAIT_SECONDS = 5.0
 _ORDER_BUTTON_HOLD_SECONDS = 5.0
@@ -1126,18 +1127,20 @@ class RecordingDeviceInfoResponder(SubcommandResponder):
         self._expected_controller_color_bytes = expected_controller_color_bytes
         self._side = side
 
-    @property
-    def session_state(self) -> SubcommandSessionState:
-        """Return the wrapped responder session state."""
-        return self._inner.session_state
-
     def set_device_info_bluetooth_address(self, bluetooth_address: bytes) -> None:
         """Forward Device Info address updates to the wrapped responder."""
         self._inner.set_device_info_bluetooth_address(bluetooth_address)
 
-    def respond(self, output_report: OutputReport, *, state: InputState, timer: int = 0) -> bytes:
+    def respond(
+        self,
+        output_report: OutputReport,
+        *,
+        state: InputState,
+        session: SwitchHidSession | None = None,
+        timer: int = 0,
+    ) -> bytes:
         """Return the inner responder reply and emit device-info observations."""
-        reply = self._inner.respond(output_report, state=state, timer=timer)
+        reply = self._inner.respond(output_report, state=state, session=session, timer=timer)
         if output_report.subcommand_id == 0x02:
             self._record_device_info_reply(reply)
         if output_report.subcommand_id == 0x10:

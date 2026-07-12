@@ -1,7 +1,10 @@
 import asyncio
 import inspect
 
+from swbt.input import IMUFrame, InputState
 from swbt.protocol.input_report import InputReportBuilder
+from swbt.protocol.profiles.pro_controller import default_controller_profile
+from swbt.protocol.session import SwitchHidSession
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.fake import FakeHidTransport
@@ -17,10 +20,12 @@ def test_subcommand_reply_uses_shared_timer_sequence() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
         await transport.open()
+        profile = default_controller_profile()
         report_loop = ReportLoop(
             transport=transport,
             state_store=InputStateStore(),
-            input_report_builder=InputReportBuilder(),
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
         )
         reply = bytearray(50)
         reply[0] = 0x21
@@ -44,10 +49,12 @@ def test_subcommand_reply_holds_off_following_periodic_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
         await transport.open()
+        profile = default_controller_profile()
         report_loop = ReportLoop(
             transport=transport,
             state_store=InputStateStore(),
-            input_report_builder=InputReportBuilder(),
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
         )
         reply = bytes([0x21, *([0] * 49)])
 
@@ -58,5 +65,63 @@ def test_subcommand_reply_holds_off_following_periodic_report() -> None:
         await report_loop.send_next_report()
 
         assert len(transport.sent_interrupt_reports) == report_count_after_reply
+
+    asyncio.run(run())
+
+
+def test_imu_mode_transition_and_ack_share_periodic_send_lock() -> None:
+    class BlockingStateStore(InputStateStore):
+        def __init__(self) -> None:
+            super().__init__(InputState.neutral().with_imu(IMUFrame.accel(z=4096)))
+            self.snapshot_entered = asyncio.Event()
+            self.release_snapshot = asyncio.Event()
+            self._block_next_snapshot = True
+
+        async def snapshot(self) -> InputState:
+            if self._block_next_snapshot:
+                self._block_next_snapshot = False
+                self.snapshot_entered.set()
+                await self.release_snapshot.wait()
+            return await super().snapshot()
+
+    async def run() -> None:
+        transport = FakeHidTransport()
+        await transport.open()
+        profile = default_controller_profile()
+        state_store = BlockingStateStore()
+        session = SwitchHidSession(profile)
+        report_loop = ReportLoop(
+            transport=transport,
+            state_store=state_store,
+            input_report_builder=InputReportBuilder(profile),
+            session=session,
+        )
+
+        periodic = asyncio.create_task(report_loop.send_current_input())
+        await state_store.snapshot_entered.wait()
+
+        def enable_quaternion_and_build_ack() -> bytes:
+            session.set_imu_mode(0x02)
+            reply = bytearray(50)
+            reply[0] = 0x21
+            reply[14] = 0x40
+            return bytes(reply)
+
+        ack = asyncio.create_task(
+            report_loop.send_subcommand_reply(enable_quaternion_and_build_ack)
+        )
+        await asyncio.sleep(0)
+        state_store.release_snapshot.set()
+        await periodic
+        await ack
+        await report_loop.send_current_input()
+
+        reports = transport.sent_interrupt_reports
+        assert reports[0][0] == 0x30
+        assert reports[0][13:49] == bytes(36)
+        assert reports[1][0] == 0x21
+        assert reports[1][14] == 0x40
+        assert reports[2][0] == 0x30
+        assert reports[2][19] & 0x0F == 0x0E
 
     asyncio.run(run())

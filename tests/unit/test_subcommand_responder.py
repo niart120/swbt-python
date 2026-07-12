@@ -1,14 +1,15 @@
 import pytest
 
 from swbt.errors import ProtocolError
-from swbt.input import InputState
+from swbt.input import IMUFrame, InputState
+from swbt.protocol.imu_report import ImuEncodingState, ImuMode
 from swbt.protocol.output_report import OutputReport, OutputReportParser
 from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
+from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.subcommand import (
     SubcommandResponder,
-    SubcommandSessionState,
     UnsupportedSubcommandError,
 )
 
@@ -22,8 +23,11 @@ def _subcommand_report(subcommand_id: int, payload: bytes = b"") -> OutputReport
 
 
 def _reply(subcommand_id: int, payload: bytes = b"") -> bytes:
-    return SubcommandResponder().respond(
-        _subcommand_report(subcommand_id, payload), state=InputState.neutral()
+    profile = ProControllerProfile()
+    return SubcommandResponder(profile=profile).respond(
+        _subcommand_report(subcommand_id, payload),
+        state=InputState.neutral(),
+        session=SwitchHidSession(profile),
     )
 
 
@@ -69,13 +73,11 @@ def test_device_info_subcommand_uses_caller_bluetooth_address() -> None:
 
 
 def test_device_info_subcommand_updates_bluetooth_address_without_new_responder() -> None:
-    session_state = SubcommandSessionState(report_mode=0x30, report_mode_supported=True)
-    responder = SubcommandResponder(session_state=session_state)
+    responder = SubcommandResponder()
 
     responder.set_device_info_bluetooth_address(bytes.fromhex("00 1b dc f9 9f 7d"))
     reply = responder.respond(_subcommand_report(0x02), state=InputState.neutral())
 
-    assert responder.session_state is session_state
     assert reply[15:27] == bytes.fromhex("04 00 03 02 00 1b dc f9 9f 7d 03 02")
 
 
@@ -89,60 +91,77 @@ def test_trigger_buttons_elapsed_subcommand_builds_pairing_reply() -> None:
 
 
 def test_set_input_report_mode_updates_session_state() -> None:
-    session_state = SubcommandSessionState()
-    responder = SubcommandResponder(session_state=session_state)
+    responder = SubcommandResponder()
+    session = SwitchHidSession(ProControllerProfile())
 
-    reply = responder.respond(_subcommand_report(0x03, payload=b"\x30"), state=InputState.neutral())
+    reply = responder.respond(
+        _subcommand_report(0x03, payload=b"\x30"),
+        state=InputState.neutral(),
+        session=session,
+    )
 
     assert reply[13] == 0x80
     assert reply[14] == 0x03
-    assert session_state.report_mode == 0x30
-    assert session_state.report_mode_supported is True
-    assert session_state.unsupported_report_mode is None
+    assert session.state.report_mode == 0x30
+    assert session.state.report_mode_supported is True
+    assert session.state.unsupported_report_mode is None
 
 
 def test_unsupported_input_report_mode_is_recorded_without_coercing_to_0x30() -> None:
-    session_state = SubcommandSessionState()
-    responder = SubcommandResponder(session_state=session_state)
+    responder = SubcommandResponder()
+    session = SwitchHidSession(ProControllerProfile())
 
-    reply = responder.respond(_subcommand_report(0x03, payload=b"\x3f"), state=InputState.neutral())
+    reply = responder.respond(
+        _subcommand_report(0x03, payload=b"\x3f"),
+        state=InputState.neutral(),
+        session=session,
+    )
 
     assert reply[13] == 0x80
     assert reply[14] == 0x03
-    assert session_state.report_mode == 0x3F
-    assert session_state.report_mode_supported is False
-    assert session_state.unsupported_report_mode == 0x3F
+    assert session.state.report_mode == 0x3F
+    assert session.state.report_mode_supported is False
+    assert session.state.unsupported_report_mode == 0x3F
 
 
 def test_enable_imu_updates_session_state() -> None:
-    session_state = SubcommandSessionState()
-    responder = SubcommandResponder(session_state=session_state)
+    responder = SubcommandResponder()
+    session = SwitchHidSession(ProControllerProfile())
 
-    responder.respond(_subcommand_report(0x40, payload=b"\x01"), state=InputState.neutral())
-    assert session_state.imu_mode == 0x01
-    assert session_state.imu_enabled is True
-    assert session_state.consume_imu_mode_reset_request() is True
-    assert session_state.consume_imu_mode_reset_request() is False
+    responder.respond(
+        _subcommand_report(0x40, payload=b"\x01"),
+        state=InputState.neutral(),
+        session=session,
+    )
+    assert session.state.imu_mode is ImuMode.STANDARD
+    assert session.state.imu_enabled is True
+    assert session.state.imu_encoding_state == ImuEncodingState()
 
-    responder.respond(_subcommand_report(0x40, payload=b"\x00"), state=InputState.neutral())
-    assert session_state.imu_mode == 0x00
-    assert session_state.imu_enabled is False
-    assert session_state.consume_imu_mode_reset_request() is True
+    responder.respond(
+        _subcommand_report(0x40, payload=b"\x00"),
+        state=InputState.neutral(),
+        session=session,
+    )
+    assert session.state.imu_mode is ImuMode.DISABLED
+    assert session.state.imu_enabled is False
+    assert session.state.imu_encoding_state == ImuEncodingState()
 
 
 def test_joycon_enable_imu_mode_0x02_updates_session_state() -> None:
-    session_state = SubcommandSessionState()
-    responder = SubcommandResponder(
-        profile=JoyConLeftProfile(),
-        session_state=session_state,
-    )
+    profile = JoyConLeftProfile()
+    responder = SubcommandResponder(profile=profile)
+    session = SwitchHidSession(profile)
 
-    reply = responder.respond(_subcommand_report(0x40, payload=b"\x02"), state=InputState.neutral())
+    reply = responder.respond(
+        _subcommand_report(0x40, payload=b"\x02"),
+        state=InputState.neutral(),
+        session=session,
+    )
 
     assert reply[13] == 0x80
     assert reply[14] == 0x40
-    assert session_state.imu_mode == 0x02
-    assert session_state.imu_enabled is True
+    assert session.state.imu_mode is ImuMode.QUATERNION_1
+    assert session.state.imu_enabled is True
 
 
 @pytest.mark.parametrize("profile", [JoyConLeftProfile(), JoyConRightProfile()])
@@ -151,20 +170,22 @@ def test_joycon_profiles_accept_quaternion_imu_modes(
     profile: JoyConLeftProfile | JoyConRightProfile,
     imu_mode: int,
 ) -> None:
-    session_state = SubcommandSessionState()
-    responder = SubcommandResponder(profile=profile, session_state=session_state)
+    responder = SubcommandResponder(profile=profile)
+    session = SwitchHidSession(profile)
 
     reply = responder.respond(
         _subcommand_report(0x40, payload=bytes((imu_mode,))),
         state=InputState.neutral(),
+        session=session,
     )
 
     assert reply[13:15] == bytes.fromhex("80 40")
-    assert session_state.imu_mode == imu_mode
+    assert session.state.imu_mode is ImuMode(imu_mode)
 
 
 def test_enable_imu_rejects_unknown_mode_with_profile_accepted_modes() -> None:
-    responder = SubcommandResponder(profile=JoyConLeftProfile())
+    profile = JoyConLeftProfile()
+    responder = SubcommandResponder(profile=profile)
 
     with pytest.raises(
         ProtocolError,
@@ -173,44 +194,61 @@ def test_enable_imu_rejects_unknown_mode_with_profile_accepted_modes() -> None:
         responder.respond(
             _subcommand_report(0x40, payload=b"\x06"),
             state=InputState.neutral(),
+            session=SwitchHidSession(profile),
         )
 
 
 def test_pro_controller_enable_imu_mode_0x02_updates_session_state() -> None:
-    session_state = SubcommandSessionState()
-    responder = SubcommandResponder(session_state=session_state)
+    profile = ProControllerProfile()
+    responder = SubcommandResponder(profile=profile)
+    session = SwitchHidSession(profile)
 
-    reply = responder.respond(_subcommand_report(0x40, payload=b"\x02"), state=InputState.neutral())
+    reply = responder.respond(
+        _subcommand_report(0x40, payload=b"\x02"),
+        state=InputState.neutral(),
+        session=session,
+    )
 
     assert reply[13] == 0x80
     assert reply[14] == 0x40
-    assert session_state.imu_mode == 0x02
-    assert session_state.imu_enabled is True
+    assert session.state.imu_mode is ImuMode.QUATERNION_1
+    assert session.state.imu_enabled is True
 
 
 @pytest.mark.parametrize("imu_mode", [0x02, 0x03, 0x04, 0x05])
 def test_pro_controller_accepts_quaternion_imu_modes(imu_mode: int) -> None:
-    session_state = SubcommandSessionState()
-    responder = SubcommandResponder(session_state=session_state)
+    profile = ProControllerProfile()
+    responder = SubcommandResponder(profile=profile)
+    session = SwitchHidSession(profile)
 
     reply = responder.respond(
         _subcommand_report(0x40, payload=bytes((imu_mode,))),
         state=InputState.neutral(),
+        session=session,
     )
 
     assert reply[13:15] == bytes.fromhex("80 40")
-    assert session_state.imu_mode == imu_mode
+    assert session.state.imu_mode is ImuMode(imu_mode)
 
 
 def test_enable_vibration_updates_session_state() -> None:
-    session_state = SubcommandSessionState()
-    responder = SubcommandResponder(session_state=session_state)
+    profile = ProControllerProfile()
+    responder = SubcommandResponder(profile=profile)
+    session = SwitchHidSession(profile)
 
-    responder.respond(_subcommand_report(0x48, payload=b"\x01"), state=InputState.neutral())
-    assert session_state.vibration_enabled is True
+    responder.respond(
+        _subcommand_report(0x48, payload=b"\x01"),
+        state=InputState.neutral(),
+        session=session,
+    )
+    assert session.state.vibration_enabled is True
 
-    responder.respond(_subcommand_report(0x48, payload=b"\x00"), state=InputState.neutral())
-    assert session_state.vibration_enabled is False
+    responder.respond(
+        _subcommand_report(0x48, payload=b"\x00"),
+        state=InputState.neutral(),
+        session=session,
+    )
+    assert session.state.vibration_enabled is False
 
 
 def test_controller_profile_does_not_hold_mutable_subcommand_session_state() -> None:
@@ -249,6 +287,54 @@ def test_spi_flash_read_subcommand_returns_custom_controller_colors() -> None:
     assert reply[14] == 0x10
     assert reply[15:32] == bytes.fromhex("50 60 00 00 0c 11 22 33 44 55 66 77 88 99 aa bb cc")
     assert reply[32:] == bytes(18)
+
+
+def test_spi_flash_read_does_not_change_imu_session_state() -> None:
+    profile = ProControllerProfile()
+    session = SwitchHidSession(profile)
+    responder = SubcommandResponder(profile=profile)
+    state = InputState.neutral()
+    session.set_imu_mode(0x02)
+    session.encode_imu(state.imu_frames, now_ns=1_000_000_000)
+    session.encode_imu(state.imu_frames, now_ns=1_015_000_000)
+    before = session.state
+
+    reply = responder.respond(
+        _subcommand_report(0x10, payload=bytes.fromhex("2c 60 00 00 0c")),
+        state=state,
+        session=session,
+    )
+
+    assert reply[13:15] == bytes((0x90, 0x10))
+    assert session.state == before
+
+
+def test_imu_mode_request_does_not_change_factory_calibration_or_raw_input() -> None:
+    profile = ProControllerProfile()
+    session = SwitchHidSession(profile)
+    responder = SubcommandResponder(profile=profile)
+    state = InputState.neutral().with_imu(
+        IMUFrame.raw(accel=(1, 2, 3), gyro=(4, 5, 6)),
+        IMUFrame.raw(accel=(7, 8, 9), gyro=(10, 11, 12)),
+        IMUFrame.raw(accel=(13, 14, 15), gyro=(16, 17, 18)),
+    )
+    spi_read = _subcommand_report(0x10, payload=bytes.fromhex("20 60 00 00 18"))
+    calibration_before = responder.respond(spi_read, state=state, session=session)
+
+    responder.respond(
+        _subcommand_report(0x40, payload=b"\x02"),
+        state=state,
+        session=session,
+    )
+    calibration_after = responder.respond(spi_read, state=state, session=session)
+
+    assert session.state.imu_mode is ImuMode.QUATERNION_1
+    assert calibration_after == calibration_before
+    assert state.imu_frames == (
+        IMUFrame.raw(accel=(1, 2, 3), gyro=(4, 5, 6)),
+        IMUFrame.raw(accel=(7, 8, 9), gyro=(10, 11, 12)),
+        IMUFrame.raw(accel=(13, 14, 15), gyro=(16, 17, 18)),
+    )
 
 
 def test_mcu_config_subcommand_builds_config_reply() -> None:

@@ -1,6 +1,7 @@
 """Stateful runtime for gamepad lifecycle and input behavior."""
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import replace
 from types import TracebackType
 
@@ -26,7 +27,8 @@ from swbt.gamepad.transport_factory import (
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.profiles.base import ControllerColors
-from swbt.protocol.subcommand import SubcommandResponder, SubcommandSessionState
+from swbt.protocol.session import SwitchHidSession
+from swbt.protocol.subcommand import SubcommandResponder
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
@@ -103,15 +105,15 @@ class ControllerRuntime:
             controller_colors=self._config.controller_colors
             or self._config.profile.controller_colors,
         )
-        self._subcommand_session_state = SubcommandSessionState()
+        self._protocol_session = SwitchHidSession(self._controller_profile)
         self._output_report_dispatcher = OutputReportDispatcher(
             diagnostics=self._diagnostics,
             require_reply_sender=self._require_subcommand_reply_sender,
             send_subcommand_reply=self._send_subcommand_reply,
+            session=self._protocol_session,
             state_store=self._state_store,
             subcommand_responder=SubcommandResponder(
                 profile=self._controller_profile,
-                session_state=self._subcommand_session_state,
             ),
         )
         self._report_loop: ReportLoop | None = None
@@ -202,6 +204,7 @@ class ControllerRuntime:
             transport = self._ensure_transport()
             self._record_run_metadata()
             self._connection_state = "opening"
+            self._reset_protocol_session()
             self._register_transport_callbacks()
             self._connected_event.clear()
             try:
@@ -213,8 +216,8 @@ class ControllerRuntime:
                     report_period_us=self._config.report_period_us,
                     input_report_builder=InputReportBuilder(
                         self._controller_profile,
-                        session_state=self._subcommand_session_state,
                     ),
+                    session=self._protocol_session,
                     diagnostics=self._diagnostics,
                 )
                 self._connection_state = "opened"
@@ -225,6 +228,15 @@ class ControllerRuntime:
                 self._report_loop = None
                 self._is_open = False
                 raise
+
+    def _reset_protocol_session(self) -> None:
+        """Create fresh host-requested state for the next HID connection."""
+        self._protocol_session = SwitchHidSession(self._controller_profile)
+        self._output_report_dispatcher.session = self._protocol_session
+        self._output_report_dispatcher.subcommand_responder = SubcommandResponder(
+            profile=self._controller_profile,
+        )
+        self._configured_device_info_bluetooth_address = None
 
     async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
         """Start pairing advertising and wait for a host connection.
@@ -590,8 +602,8 @@ class ControllerRuntime:
     def _require_subcommand_reply_sender(self) -> None:
         _ = self._subcommand_reply_sender()
 
-    async def _send_subcommand_reply(self, reply: bytes) -> None:
-        await self._subcommand_reply_sender().send_subcommand_reply(reply)
+    async def _send_subcommand_reply(self, build_reply: Callable[[], bytes]) -> bytes:
+        return await self._subcommand_reply_sender().send_subcommand_reply(build_reply)
 
     def _subcommand_reply_sender(self) -> ReportLoop:
         if self._report_loop is None:

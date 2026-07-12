@@ -2,10 +2,13 @@
 
 import asyncio
 from collections import deque
+from collections.abc import Callable
 from contextlib import suppress
+from time import monotonic_ns
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.protocol.input_report import InputReportBuilder
+from swbt.protocol.session import SwitchHidSession
 from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
 
@@ -21,14 +24,18 @@ class ReportLoop:
         transport: HidDeviceTransport,
         state_store: InputStateStore,
         input_report_builder: InputReportBuilder,
+        session: SwitchHidSession,
         report_period_us: int = 8000,
         diagnostics: DiagnosticsRecorder | None = None,
+        clock_ns: Callable[[], int] = monotonic_ns,
     ) -> None:
         """Create a report loop helper."""
         self._transport = transport
         self._state_store = state_store
         self._report_period_seconds = report_period_us / 1_000_000
         self._input_report_builder = input_report_builder
+        self._session = session
+        self._clock_ns = clock_ns
         self._diagnostics = diagnostics
         self._reply_queue: deque[bytes] = deque()
         self._timer = 0
@@ -57,11 +64,13 @@ class ReportLoop:
         async with self._send_lock:
             await self._send_current_input_locked(reason=reason)
 
-    async def send_subcommand_reply(self, report: bytes) -> None:
-        """Send one 0x21 subcommand reply with the shared report timer."""
+    async def send_subcommand_reply(self, build_report: Callable[[], bytes]) -> bytes:
+        """Apply a subcommand transition and send its reply under the send lock."""
         async with self._send_lock:
+            report = build_report()
             await self._send_subcommand_reply_locked(report)
             self._holdoff_periodic_after_reply()
+            return report
 
     def queue_reply(self, report: bytes) -> None:
         """Queue one subcommand reply for priority transmission."""
@@ -80,7 +89,12 @@ class ReportLoop:
 
     async def _send_current_input_locked(self, *, reason: str) -> None:
         state = await self._state_store.snapshot()
-        report = self._input_report_builder.build_0x30(state, timer=self._timer)
+        imu_block = self._session.encode_imu(state.imu_frames, now_ns=self._clock_ns())
+        report = self._input_report_builder.build_0x30(
+            state,
+            timer=self._timer,
+            imu_block=imu_block,
+        )
         await self._send_report(report, reason=reason)
         self._advance_timer()
 

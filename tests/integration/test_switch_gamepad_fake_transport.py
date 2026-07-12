@@ -557,9 +557,12 @@ def test_imu_updates_repeat_frame_and_preserves_buttons_and_sticks() -> None:
             )
         )
         frame = IMUFrame.raw(accel=(1, -2, 4096), gyro=(100, -100, 0))
+        enable_standard_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 01")
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
+            await transport.inject_interrupt_data(enable_standard_imu)
+            await transport.wait_for_interrupt_report_id(0x21)
             await pad.apply(initial)
 
             await pad.imu(frame)
@@ -586,9 +589,12 @@ def test_imu_updates_three_frames_in_order() -> None:
             IMUFrame.gyro(120, 0, 0),
             IMUFrame.gyro(140, 0, 0),
         )
+        enable_standard_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 01")
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
             await transport.connect()
+            await transport.inject_interrupt_data(enable_standard_imu)
+            await transport.wait_for_interrupt_report_id(0x21)
 
             await pad.imu(*frames)
 
@@ -793,6 +799,73 @@ def test_imu_mode_02_output_switches_periodic_input_to_quaternion_motion() -> No
 
             assert reports[0][0] == 0x30
             assert reports[0][19] & 0x0F == 0x0E
+
+    asyncio.run(run())
+
+
+def test_imu_mode_01_ack_switches_next_input_to_standard_raw() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        enable_standard_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 01")
+        frames = (
+            IMUFrame.raw(accel=(1, -2, 3), gyro=(-4, 5, -6)),
+            IMUFrame.raw(accel=(7, -8, 9), gyro=(-10, 11, -12)),
+            IMUFrame.raw(accel=(13, -14, 15), gyro=(-16, 17, -18)),
+        )
+
+        async with make_pro_controller(
+            transport=transport,
+            report_period_us=10_000_000,
+        ) as pad:
+            await transport.connect()
+            await pad.imu(*frames)
+            await transport.inject_interrupt_data(enable_standard_imu)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            start_count = len(transport.sent_interrupt_reports)
+            await pad.tap(Button.ZL, duration=0)
+            reports = transport.sent_interrupt_reports[start_count:]
+
+            assert reply[14] == 0x40
+            assert reports[0][0] == 0x30
+            assert reports[0][13:49] == b"".join(_imu_frame_bytes(frame) for frame in frames)
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("imu_mode", [0x02, 0x03, 0x04, 0x05])
+@pytest.mark.parametrize("controller_kind", ["pro", "left", "right"])
+def test_quaternion_imu_modes_switch_all_profiles_to_mode_2_input(
+    controller_kind: Literal["pro", "left", "right"],
+    imu_mode: int,
+) -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        enable_quaternion_imu = bytes.fromhex(f"01 00 00 00 00 00 00 00 00 00 40 {imu_mode:02x}")
+        if controller_kind == "pro":
+            pad = make_pro_controller(transport=transport, report_period_us=10_000_000)
+            trigger = Button.ZL
+        elif controller_kind == "left":
+            pad = make_joycon_l(transport=transport, report_period_us=10_000_000)
+            trigger = Button.ZL
+        else:
+            pad = make_joycon_r(transport=transport, report_period_us=10_000_000)
+            trigger = Button.ZR
+
+        async with pad:
+            await transport.connect()
+            await pad.imu(IMUFrame.accel(0, 0, 4096))
+            await transport.inject_interrupt_data(enable_quaternion_imu)
+            reply = await transport.wait_for_interrupt_report_id(0x21)
+
+            start_count = len(transport.sent_interrupt_reports)
+            await pad.tap(trigger, duration=0)
+            reports = transport.sent_interrupt_reports[start_count:]
+
+            assert reply[14] == 0x40
+            assert reports[0][0] == 0x30
+            assert reports[0][19] & 0x0F == 0x0E
+            assert reports[0][48] >> 2 == 3
 
     asyncio.run(run())
 
@@ -1168,6 +1241,109 @@ def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
     asyncio.run(run())
 
 
+def test_imu_mode_ack_precedes_first_periodic_input_in_the_new_format() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        enable_quaternion_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 02")
+
+        async with make_pro_controller(transport=transport, report_period_us=100_000) as pad:
+            await transport.connect()
+            await pad.imu(IMUFrame.accel(0, 0, 4096))
+
+            start_count = len(transport.sent_interrupt_reports)
+            await transport.inject_interrupt_data(enable_quaternion_imu)
+            reports = await transport.wait_for_interrupt_report_count(start_count + 2)
+
+            ack = reports[start_count]
+            first_new_input = reports[start_count + 1]
+            assert ack[0] == 0x21
+            assert ack[14] == 0x40
+            assert first_new_input[0] == 0x30
+            assert first_new_input[19] & 0x0F == 0x0E
+
+    asyncio.run(run())
+
+
+def test_reopened_connection_does_not_inherit_host_requested_session_state() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        pad = make_pro_controller(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=10_000_000,
+        )
+        set_report_mode = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 03 30")
+        enable_quaternion_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 02")
+        enable_vibration = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 48 01")
+        disable_vibration = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 48 00")
+
+        await pad.open()
+        await transport.connect()
+        await transport.inject_interrupt_data(set_report_mode)
+        await transport.inject_interrupt_data(enable_quaternion_imu)
+        await transport.inject_interrupt_data(enable_vibration)
+        await pad.close(neutral=True)
+
+        await pad.open()
+        await transport.connect()
+        try:
+            start_count = len(transport.sent_interrupt_reports)
+            await pad.tap(Button.ZL, duration=0)
+            first_new_input = transport.sent_interrupt_reports[start_count]
+
+            assert first_new_input[0] == 0x30
+            assert first_new_input[13:49] == bytes(36)
+
+            await transport.inject_interrupt_data(disable_vibration)
+            events = [json.loads(line) for line in trace.getvalue().splitlines()]
+            session_events = [
+                event for event in events if event["event"] == "subcommand_session_state"
+            ]
+            assert session_events[-1]["report_mode"] is None
+            assert session_events[-1]["imu_mode"] == "0x00"
+            assert session_events[-1]["imu_enabled"] is False
+            assert session_events[-1]["vibration_enabled"] is False
+        finally:
+            await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+
+def test_disconnect_neutralizes_input_without_changing_profile_spi_data() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = make_pro_controller(transport=transport, report_period_us=10_000_000)
+        read_factory_calibration = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 20 60 00 00 18")
+
+        await pad.open()
+        await transport.connect()
+        await transport.inject_interrupt_data(read_factory_calibration)
+        first_reply = transport.sent_interrupt_reports[-1]
+
+        await pad.apply(
+            InputState.neutral()
+            .with_buttons([Button.A])
+            .with_imu(IMUFrame.accel(0, 0, 4096).with_gyro(100, 200, 300))
+        )
+        await transport.disconnect(reason=0x13)
+
+        assert pad.snapshot() == InputState.neutral()
+        assert transport.is_open is False
+
+        await pad.open()
+        await transport.connect()
+        try:
+            await transport.inject_interrupt_data(read_factory_calibration)
+            second_reply = transport.sent_interrupt_reports[-1]
+
+            assert first_reply[15:44] == second_reply[15:44]
+        finally:
+            await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+
 def test_report_tx_counter_distinguishes_0x21_and_0x30() -> None:
     async def run() -> None:
         trace = StringIO()
@@ -1270,7 +1446,8 @@ def test_output_report_injection_records_subcommand_session_state() -> None:
         assert {
             "event": "subcommand_session_state",
             "imu_enabled": False,
-            "imu_mode": None,
+            "imu_encoding_format": "disabled",
+            "imu_mode": "0x00",
             "packet_id": 0x21,
             "report_mode": "0x3f",
             "report_mode_supported": False,
@@ -1278,6 +1455,38 @@ def test_output_report_injection_records_subcommand_session_state() -> None:
             "unsupported_report_mode": "0x3f",
             "vibration_enabled": False,
         } in events
+
+    asyncio.run(run())
+
+
+def test_imu_mode_diagnostics_record_accepted_mode_and_encoding_format() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+        pad = make_pro_controller(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+            report_period_us=10_000_000,
+        )
+
+        await pad.open()
+        await transport.connect()
+        await transport.inject_interrupt_data(bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 02"))
+        await transport.inject_interrupt_data(bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 01"))
+        await pad.close(neutral=True)
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        imu_events = [
+            event
+            for event in events
+            if event["event"] == "subcommand_session_state" and event["subcommand_id"] == "0x40"
+        ]
+
+        assert [(event["imu_mode"], event["imu_encoding_format"]) for event in imu_events] == [
+            ("0x02", "quaternion"),
+            ("0x01", "standard"),
+        ]
+        assert all(not any("reset" in key for key in event) for event in imu_events)
 
     asyncio.run(run())
 

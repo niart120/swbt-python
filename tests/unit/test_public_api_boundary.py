@@ -505,9 +505,10 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
             state_store: object,
             report_period_us: int,
             input_report_builder: object | None = None,
+            session: object | None = None,
             diagnostics: object | None = None,
         ) -> None:
-            _ = (transport, state_store, input_report_builder, diagnostics)
+            _ = (transport, state_store, input_report_builder, session, diagnostics)
             captured_periods.append(report_period_us)
 
         async def stop(self) -> None:
@@ -554,9 +555,10 @@ def test_public_constructor_uses_profile_default_report_period(
             state_store: object,
             report_period_us: int,
             input_report_builder: object | None = None,
+            session: object | None = None,
             diagnostics: object | None = None,
         ) -> None:
-            _ = (transport, state_store, input_report_builder, diagnostics)
+            _ = (transport, state_store, input_report_builder, session, diagnostics)
             captured_periods.append(report_period_us)
 
         async def stop(self) -> None:
