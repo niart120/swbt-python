@@ -2,6 +2,8 @@ import asyncio
 import inspect
 
 from swbt.protocol.input_report import InputReportBuilder
+from swbt.protocol.profiles.pro_controller import default_controller_profile
+from swbt.protocol.session import SwitchHidSession
 from swbt.report_loop import ReportLoop
 from swbt.state_store import InputStateStore
 from swbt.transport.fake import FakeHidTransport
@@ -17,10 +19,12 @@ def test_subcommand_reply_uses_shared_timer_sequence() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
         await transport.open()
+        profile = default_controller_profile()
         report_loop = ReportLoop(
             transport=transport,
             state_store=InputStateStore(),
-            input_report_builder=InputReportBuilder(),
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
         )
         reply = bytearray(50)
         reply[0] = 0x21
@@ -44,10 +48,12 @@ def test_subcommand_reply_holds_off_following_periodic_report() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
         await transport.open()
+        profile = default_controller_profile()
         report_loop = ReportLoop(
             transport=transport,
             state_store=InputStateStore(),
-            input_report_builder=InputReportBuilder(),
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
         )
         reply = bytes([0x21, *([0] * 49)])
 

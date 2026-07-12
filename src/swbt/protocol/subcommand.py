@@ -1,13 +1,12 @@
 """Subcommand reply generation."""
 
-from dataclasses import dataclass, field
-
 from swbt.errors import ProtocolError
 from swbt.input import InputState
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport
 from swbt.protocol.profiles.base import ControllerProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
+from swbt.protocol.session import SwitchHidSession, SwitchHidSessionState
 from swbt.protocol.spi import VirtualSpiFlash
 
 SIMPLE_ACK_SUBCOMMANDS = {0x08, 0x30}
@@ -19,31 +18,6 @@ MCU_CONFIG_DATA = bytes.fromhex(
     "01 00 ff 00 08 00 1b 01 00 00 00 00 00 00 00 00 00 00 00 00 "
     "00 00 00 00 00 00 00 00 00 00 00 00 00 c8"
 )
-
-
-@dataclass
-class SubcommandSessionState:
-    """Mutable host-requested subcommand state for one responder lifetime."""
-
-    report_mode: int | None = None
-    report_mode_supported: bool = False
-    unsupported_report_mode: int | None = None
-    imu_mode: int | None = 0x00
-    imu_enabled: bool = False
-    _imu_mode_reset_requested: bool = field(default=False, init=False, repr=False, compare=False)
-    vibration_enabled: bool = False
-
-    def record_imu_mode_request(self, imu_mode: int) -> None:
-        """Record one host IMU mode request and request motion-state reset."""
-        self.imu_mode = imu_mode
-        self.imu_enabled = imu_mode != 0x00
-        self._imu_mode_reset_requested = True
-
-    def consume_imu_mode_reset_request(self) -> bool:
-        """Return and clear the pending motion-state reset request."""
-        reset_requested = self._imu_mode_reset_requested
-        self._imu_mode_reset_requested = False
-        return reset_requested
 
 
 class UnsupportedSubcommandError(ProtocolError):
@@ -64,21 +38,19 @@ class SubcommandResponder:
         *,
         spi_flash: VirtualSpiFlash | None = None,
         profile: ControllerProfile | None = None,
-        session_state: SubcommandSessionState | None = None,
+        session: SwitchHidSession | None = None,
         device_info_bluetooth_address: bytes = DEFAULT_DEVICE_INFO_BLUETOOTH_ADDRESS,
     ) -> None:
         """Create a responder."""
         self._profile = profile or default_controller_profile()
-        self._session_state = (
-            session_state if session_state is not None else SubcommandSessionState()
-        )
+        self._session = session or SwitchHidSession(self._profile)
         self._device_info_bluetooth_address = bytes(device_info_bluetooth_address)
         self._spi_flash = spi_flash or VirtualSpiFlash(profile=self._profile)
 
     @property
-    def session_state(self) -> SubcommandSessionState:
-        """Return the mutable subcommand state owned by this responder."""
-        return self._session_state
+    def session_state(self) -> SwitchHidSessionState:
+        """Return the current immutable connection session state."""
+        return self._session.state
 
     def set_device_info_bluetooth_address(self, bluetooth_address: bytes) -> None:
         """Update the Bluetooth address returned by subcommand 0x02."""
@@ -129,20 +101,19 @@ class SubcommandResponder:
 
     def _set_input_report_mode(self, payload: bytes) -> bytes:
         mode = _first_payload_byte(payload, "set input report mode")
-        self._session_state.report_mode = mode
-        self._session_state.report_mode_supported = mode == SUPPORTED_INPUT_REPORT_MODE
-        self._session_state.unsupported_report_mode = (
-            None if self._session_state.report_mode_supported else mode
+        self._session.set_report_mode(
+            mode,
+            supported=mode == SUPPORTED_INPUT_REPORT_MODE,
         )
         return b""
 
     def _set_imu_enabled(self, payload: bytes) -> bytes:
         imu_mode = _imu_enable_payload(payload, self._profile.imu_enable_modes)
-        self._session_state.record_imu_mode_request(imu_mode)
+        self._session.set_imu_mode(imu_mode)
         return b""
 
     def _set_vibration_enabled(self, payload: bytes) -> bytes:
-        self._session_state.vibration_enabled = _enable_payload(payload, "enable vibration")
+        self._session.set_vibration_enabled(_enable_payload(payload, "enable vibration"))
         return b""
 
     def _spi_read_reply_data(self, payload: bytes) -> bytes:

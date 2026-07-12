@@ -344,7 +344,7 @@ def test_subcommand_imu_vibration_enable_state_is_source_audited() -> None:
     assert "0x48" in value
     assert "0x00" in value
     assert "0x01" in value
-    assert "SubcommandSessionState" in value
+    assert "SwitchHidSessionState" in value
 
 
 def test_factory_gyro_calibration_layout_is_source_audited() -> None:
@@ -444,7 +444,7 @@ def test_pro_controller_imu_enable_mode_02_observation_is_hardware_observed() ->
     assert "0x02" in value
     assert "a2010400014040000140404002" in value
     assert "hardware-observed compatibility mode" in value
-    assert "SubcommandSessionState.imu_mode" in value
+    assert "SwitchHidSessionState.imu_mode" in value
     assert "does not supersede the 0x00/0x01 source fact" in value
 
 

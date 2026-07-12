@@ -11,7 +11,8 @@ from swbt import Button, ControllerColors, DiagnosticsConfig, InputState, JoyCon
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
-from swbt.protocol.subcommand import SubcommandResponder, SubcommandSessionState
+from swbt.protocol.session import SwitchHidSessionState
+from swbt.protocol.subcommand import SubcommandResponder
 
 _OPERATOR_WAIT_SECONDS = 5.0
 _ORDER_BUTTON_HOLD_SECONDS = 5.0
@@ -1127,7 +1128,7 @@ class RecordingDeviceInfoResponder(SubcommandResponder):
         self._side = side
 
     @property
-    def session_state(self) -> SubcommandSessionState:
+    def session_state(self) -> SwitchHidSessionState:
         """Return the wrapped responder session state."""
         return self._inner.session_state
 

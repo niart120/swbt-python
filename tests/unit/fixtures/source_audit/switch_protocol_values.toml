@@ -216,7 +216,7 @@ handoff = ["unit_047"]
 id = "subcommand_report_mode_session_state"
 fixture_name = "subcommand_report_mode_session_state"
 area = "protocol"
-value = "Subcommand 0x03 Set input report mode takes one argument byte; documented modes include 0x30 standard full mode, 0x31 NFC/IR mode, and 0x3F simple HID mode. swbt-python records the requested byte in SubcommandSessionState; only 0x30 is supported by the periodic ReportLoop for now, so unsupported modes such as 0x3F are ACK-compatible but marked unsupported and not coerced to 0x30."
+value = "Subcommand 0x03 Set input report mode takes one argument byte; documented modes include 0x30 standard full mode, 0x31 NFC/IR mode, and 0x3F simple HID mode. swbt-python records the requested byte in the connection-scoped SwitchHidSessionState; only 0x30 is supported by the periodic ReportLoop for now, so unsupported modes such as 0x3F are ACK-compatible but marked unsupported and not coerced to 0x30."
 classification = "implementation fact"
 source = [
     'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
@@ -229,7 +229,7 @@ handoff = ["unit_032"]
 id = "subcommand_imu_vibration_enable_state"
 fixture_name = "subcommand_imu_vibration_enable_state"
 area = "protocol"
-value = "Subcommand 0x40 Enable IMU and 0x48 Enable vibration each take one argument byte, with 0x00 disable and 0x01 enable. swbt-python stores these as booleans in SubcommandSessionState and does not put them in ControllerProfile or InputState."
+value = "Subcommand 0x40 Enable IMU and 0x48 Enable vibration each take one argument byte, with 0x00 disable and 0x01 enable. swbt-python stores the requested IMU mode and vibration enable state in the connection-scoped SwitchHidSessionState and does not put them in ControllerProfile or InputState."
 classification = "source fact"
 source = [
     'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/master/bluetooth_hid_subcommands_notes.md',
@@ -267,7 +267,7 @@ handoff = ["unit_046"]
 id = "joycon_imu_enable_mode_02"
 fixture_name = "joycon_imu_enable_mode_02"
 area = "protocol"
-value = "Joy-Con (L) hardware runs on Windows 11 / CSR8510 A10 / WinUSB / Bumble 0.0.230 observed subcommand 0x40 Enable IMU with first payload byte 0x02 during pairing handshake. swbt-python accepts 0x02 for Joy-Con profiles, records it as SubcommandSessionState.imu_mode, and treats it as IMU enabled for session-state diagnostics. The later SR+SL-after-observed-window run completed pairing, but the Switch toast still identified the registration as Pro Controller while the controller order screen treated it as Joy-Con L. The trace still used local Bluetooth address 00:1B:DC:F9:9F:7D on-air but zero bytes in the 0x02 Device Info payload. This is hardware-observed only and does not change the Pro Controller 0x00/0x01 source fact. ProController 0x02 compatibility is tracked separately by pro_controller_imu_enable_mode_02_observation."
+value = "Joy-Con (L) hardware runs on Windows 11 / CSR8510 A10 / WinUSB / Bumble 0.0.230 observed subcommand 0x40 Enable IMU with first payload byte 0x02 during pairing handshake. swbt-python accepts 0x02 for Joy-Con profiles, records it as SwitchHidSessionState.imu_mode, and treats it as IMU enabled for session-state diagnostics. The later SR+SL-after-observed-window run completed pairing, but the Switch toast still identified the registration as Pro Controller while the controller order screen treated it as Joy-Con L. The trace still used local Bluetooth address 00:1B:DC:F9:9F:7D on-air but zero bytes in the 0x02 Device Info payload. This is hardware-observed only and does not change the Pro Controller 0x00/0x01 source fact. ProController 0x02 compatibility is tracked separately by pro_controller_imu_enable_mode_02_observation."
 classification = "hardware observation"
 source = [
     'spec\hardware-test-log.md',
@@ -286,7 +286,7 @@ handoff = ["joycon-profile-hardware"]
 id = "pro_controller_imu_enable_mode_02_observation"
 fixture_name = "pro_controller_imu_enable_mode_02_observation"
 area = "protocol"
-value = "ProController P2 hardware reruns observed subcommand 0x40 Enable IMU with first payload byte 0x02 after Bumble initialized device_name=Pro Controller and class_of_device=0x002508. The rerun after deleting Switch-side connection information showed user-visible ProCon toast and ProCon pairing, but still produced repeated 0x40 payload 0x02 and ProtocolError before the implementation change. Debug log raw HID interrupt PDU includes a2010400014040000140404002... for the first failed 0x40. swbt-python now accepts 0x02 for ProControllerProfile as a hardware-observed compatibility mode, records it as SubcommandSessionState.imu_mode, and treats it as IMU enabled for session-state diagnostics. This entry is hardware-observed only, does not supersede the 0x00/0x01 source fact, and does not prove cross-firmware behavior."
+value = "ProController P2 hardware reruns observed subcommand 0x40 Enable IMU with first payload byte 0x02 after Bumble initialized device_name=Pro Controller and class_of_device=0x002508. The rerun after deleting Switch-side connection information showed user-visible ProCon toast and ProCon pairing, but still produced repeated 0x40 payload 0x02 and ProtocolError before the implementation change. Debug log raw HID interrupt PDU includes a2010400014040000140404002... for the first failed 0x40. swbt-python now accepts 0x02 for ProControllerProfile as a hardware-observed compatibility mode, records it as SwitchHidSessionState.imu_mode, and treats it as IMU enabled for session-state diagnostics. This entry is hardware-observed only, does not supersede the 0x00/0x01 source fact, and does not prove cross-firmware behavior."
 classification = "hardware observation"
 source = [
     'spec\hardware-test-log.md',

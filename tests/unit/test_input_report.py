@@ -4,9 +4,11 @@ import pytest
 
 from swbt.errors import UnsupportedInputError
 from swbt.input import Button, IMUFrame, InputState, Stick
+from swbt.protocol.imu_report import ImuEncodingState, ImuMode, encode_imu_block
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
-from swbt.protocol.subcommand import SubcommandSessionState
+from swbt.protocol.profiles.pro_controller import default_controller_profile
+from swbt.protocol.session import SwitchHidSessionState, apply_imu_mode_request
 
 
 def _mode_2_component_2(report: bytes) -> int:
@@ -108,14 +110,13 @@ def test_imu_frames_are_packed_as_i16_little_endian_values() -> None:
 
 
 def test_imu_mode_01_preserves_three_distinct_raw_frames() -> None:
-    session_state = SubcommandSessionState(imu_mode=0x01, imu_enabled=True)
     state = InputState.neutral().with_imu(
         IMUFrame.raw(accel=(1, -2, 3), gyro=(-4, 5, -6)),
         IMUFrame.raw(accel=(7, -8, 9), gyro=(-10, 11, -12)),
         IMUFrame.raw(accel=(13, -14, 15), gyro=(-16, 17, -18)),
     )
 
-    report = InputReportBuilder(session_state=session_state).build_0x30(state)
+    report = InputReportBuilder().build_0x30(state)
 
     assert report[13:49] == bytes.fromhex(
         "01 00 fe ff 03 00 fc ff 05 00 fa ff "
@@ -125,11 +126,17 @@ def test_imu_mode_01_preserves_three_distinct_raw_frames() -> None:
 
 
 def test_imu_mode_02_packs_identity_quaternion_instead_of_standard_gyro() -> None:
-    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
-    builder = InputReportBuilder(session_state=session_state, clock_ns=lambda: 0)
+    profile = default_controller_profile()
     state = InputState.neutral().with_accel((0, 0, 4096)).with_gyro((0, 0, 1234))
+    encoded = encode_imu_block(
+        state=ImuEncodingState(),
+        mode=ImuMode.QUATERNION_1,
+        frames=state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=0,
+    )
 
-    report = builder.build_0x30(state)
+    report = InputReportBuilder(profile).build_0x30(state, imu_block=encoded.block)
 
     assert report[13:19] == bytes.fromhex("00 00 00 00 00 10")
     assert report[19] & 0x0F == 0x0E
@@ -140,22 +147,21 @@ def test_imu_mode_02_packs_identity_quaternion_instead_of_standard_gyro() -> Non
 
 @pytest.mark.parametrize("imu_mode", [0x02, 0x03, 0x04, 0x05])
 def test_quaternion_modes_preserve_the_mode_2_wire_fixture(imu_mode: int) -> None:
-    now_ns = 0
-
-    def clock_ns() -> int:
-        return now_ns
-
-    session_state = SubcommandSessionState(imu_mode=imu_mode, imu_enabled=True)
-    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
-    builder.build_0x30(InputState.neutral())
+    profile = default_controller_profile()
     state = InputState.neutral().with_imu(
         IMUFrame.raw(accel=(1, 2, 3), gyro=(0, 0, 1000)),
         IMUFrame.raw(accel=(4, 5, 6), gyro=(0, 0, 1000)),
         IMUFrame.raw(accel=(7, 8, 9), gyro=(0, 0, 1000)),
     )
 
-    now_ns = 1_000_000_000
-    report = builder.build_0x30(state)
+    encoded = encode_imu_block(
+        state=ImuEncodingState(previous_report_ns=0),
+        mode=ImuMode(imu_mode),
+        frames=state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=1_000_000_000,
+    )
+    report = InputReportBuilder(profile).build_0x30(state, imu_block=encoded.block)
 
     assert report[13:49] == bytes.fromhex(
         "01 00 02 00 03 00 0e 00 00 00 00 80 "
@@ -170,37 +176,46 @@ def test_joycon_quaternion_modes_use_mode_2_motion_packing(
     profile: JoyConLeftProfile | JoyConRightProfile,
     imu_mode: int,
 ) -> None:
-    session_state = SubcommandSessionState(imu_mode=imu_mode, imu_enabled=True)
-    builder = InputReportBuilder(
-        profile,
-        session_state=session_state,
-        clock_ns=lambda: 0,
-    )
     state = InputState.neutral().with_accel((0, 0, 4096))
+    encoded = encode_imu_block(
+        state=ImuEncodingState(),
+        mode=ImuMode(imu_mode),
+        frames=state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=0,
+    )
 
-    report = builder.build_0x30(state)
+    report = InputReportBuilder(profile).build_0x30(state, imu_block=encoded.block)
 
     assert report[19] & 0x0F == 0x0E
     assert report[48] >> 2 == 3
 
 
 def test_imu_mode_02_quaternion_distinguishes_positive_and_negative_z_rotation() -> None:
-    now_ns = 0
-
-    def clock_ns() -> int:
-        return now_ns
-
-    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
-    positive = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
-    negative = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    profile = default_controller_profile()
     positive_state = InputState.neutral().with_gyro((0, 0, 1000))
     negative_state = InputState.neutral().with_gyro((0, 0, -1000))
-    positive.build_0x30(positive_state)
-    negative.build_0x30(negative_state)
-
-    now_ns = 1_000_000_000
-    positive_report = positive.build_0x30(positive_state)
-    negative_report = negative.build_0x30(negative_state)
+    encoding_state = ImuEncodingState(previous_report_ns=0)
+    positive = encode_imu_block(
+        state=encoding_state,
+        mode=ImuMode.QUATERNION_1,
+        frames=positive_state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=1_000_000_000,
+    )
+    negative = encode_imu_block(
+        state=encoding_state,
+        mode=ImuMode.QUATERNION_1,
+        frames=negative_state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=1_000_000_000,
+    )
+    positive_report = InputReportBuilder(profile).build_0x30(
+        positive_state, imu_block=positive.block
+    )
+    negative_report = InputReportBuilder(profile).build_0x30(
+        negative_state, imu_block=negative.block
+    )
 
     assert positive_report[13:49] != negative_report[13:49]
 
@@ -213,14 +228,7 @@ def test_imu_mode_02_quaternion_distinguishes_positive_and_negative_z_rotation()
 
 @pytest.mark.parametrize("active_sample_index", range(3))
 def test_quaternion_mode_integrates_all_three_gyro_samples(active_sample_index: int) -> None:
-    now_ns = 0
-
-    def clock_ns() -> int:
-        return now_ns
-
-    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
-    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
-    builder.build_0x30(InputState.neutral())
+    profile = default_controller_profile()
     frames = tuple(
         IMUFrame.gyro(0, 0, 1000 if index == active_sample_index else 0) for index in range(3)
     )
@@ -230,48 +238,71 @@ def test_quaternion_mode_integrates_all_three_gyro_samples(active_sample_index: 
         frames[2],
     )
 
-    now_ns = 1_000_000_000
-    report = builder.build_0x30(state)
+    encoded = encode_imu_block(
+        state=ImuEncodingState(previous_report_ns=0),
+        mode=ImuMode.QUATERNION_1,
+        frames=state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=1_000_000_000,
+    )
+    report = InputReportBuilder(profile).build_0x30(state, imu_block=encoded.block)
 
     assert _mode_2_component_2(report) > 0
 
 
 def test_quaternion_mode_divides_elapsed_time_across_duplicate_samples() -> None:
-    now_ns = 0
-
-    def clock_ns() -> int:
-        return now_ns
-
-    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
-    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    profile = default_controller_profile()
     state = InputState.neutral().with_gyro((0, 0, 1000))
-    builder.build_0x30(state)
-
-    now_ns = 1_000_000_000
-    report = builder.build_0x30(state)
+    encoded = encode_imu_block(
+        state=ImuEncodingState(previous_report_ns=0),
+        mode=ImuMode.QUATERNION_1,
+        frames=state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=1_000_000_000,
+    )
+    report = InputReportBuilder(profile).build_0x30(state, imu_block=encoded.block)
     expected_component = int(sin(radians(70.0) / 2) * 0x40000000) >> 10
 
     assert abs(_mode_2_component_2(report) - expected_component) <= 1
 
 
 def test_repeated_imu_mode_02_request_resets_quaternion_orientation() -> None:
-    now_ns = 0
-
-    def clock_ns() -> int:
-        return now_ns
-
-    session_state = SubcommandSessionState(imu_mode=0x02, imu_enabled=True)
-    builder = InputReportBuilder(session_state=session_state, clock_ns=clock_ns)
+    profile = default_controller_profile()
     state = InputState.neutral().with_gyro((0, 0, 1000))
-    initial_report = builder.build_0x30(state)
-
-    now_ns = 1_000_000_000
-    rotated_report = builder.build_0x30(state)
+    initial = encode_imu_block(
+        state=ImuEncodingState(),
+        mode=ImuMode.QUATERNION_1,
+        frames=state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=0,
+    )
+    rotated = encode_imu_block(
+        state=initial.state,
+        mode=ImuMode.QUATERNION_1,
+        frames=state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=1_000_000_000,
+    )
+    initial_report = InputReportBuilder(profile).build_0x30(state, imu_block=initial.block)
+    rotated_report = InputReportBuilder(profile).build_0x30(state, imu_block=rotated.block)
     assert _mode_2_component_2(rotated_report) > 0
 
-    session_state.record_imu_mode_request(0x02)
-    now_ns = 2_000_000_000
-    reset_report = builder.build_0x30(state)
+    reset_session = apply_imu_mode_request(
+        SwitchHidSessionState(
+            imu_mode=ImuMode.QUATERNION_1,
+            imu_encoding_state=rotated.state,
+        ),
+        requested_mode=0x02,
+        accepted_modes=profile.imu_enable_modes,
+    )
+    reset = encode_imu_block(
+        state=reset_session.imu_encoding_state,
+        mode=reset_session.imu_mode,
+        frames=state.imu_frames,
+        gyro_calibration=profile.gyro_calibration,
+        now_ns=2_000_000_000,
+    )
+    reset_report = InputReportBuilder(profile).build_0x30(state, imu_block=reset.block)
 
     assert _mode_2_component_2(initial_report) == 0
     assert _mode_2_component_2(reset_report) == 0
