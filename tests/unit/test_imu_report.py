@@ -100,3 +100,28 @@ def test_quaternion_encoding_uses_the_active_gyro_calibration() -> None:
 
     assert default_result.state.orientation[2] > 0
     assert offset_result.state.orientation == (0.0, 0.0, 0.0, 1.0)
+
+
+def test_quaternion_encoding_uses_zero_elapsed_time_initially_and_when_clock_recedes() -> None:
+    frame = IMUFrame.raw(accel=(1, 2, 3), gyro=(0, 0, 1000))
+    frames = (frame, frame, frame)
+    original_frames = frames
+
+    initial = encode_quaternion_imu(
+        state=ImuEncodingState(),
+        frames=frames,
+        gyro_calibration=GyroCalibration(),
+        now_ns=100,
+    )
+    receded = encode_quaternion_imu(
+        state=ImuEncodingState(previous_report_ns=200),
+        frames=frames,
+        gyro_calibration=GyroCalibration(),
+        now_ns=100,
+    )
+
+    assert initial.state.orientation == (0.0, 0.0, 0.0, 1.0)
+    assert receded.state.orientation == (0.0, 0.0, 0.0, 1.0)
+    assert initial.state.previous_report_ns == 100
+    assert receded.state.previous_report_ns == 100
+    assert frames == original_frames

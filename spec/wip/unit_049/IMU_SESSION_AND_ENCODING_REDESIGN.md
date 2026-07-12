@@ -202,7 +202,7 @@ next_imu_encoding_state = result.state
 | refactor-skipped | `InputReportBuilder`が同じinput、IMU block、timerから同じ49 byte reportを返す | regression | unit | no | 完成済み36 byte blockの明示配置経路を追加。legacy session / clock経路の削除はconnection session切替itemで行う |
 | refactor-done | standard modeが3つのraw frameを校正変換せずInt16LEで保持する | regression | unit | no | pure standard encoderを追加し、legacy builderの重複packingも同関数へ集約 |
 | refactor-skipped | quaternion modeがactive profile calibrationでraw gyro 3 sampleを角速度へ戻し、各3 sampleが次姿勢に寄与する | regression | unit | no | expected-green regression。custom zero offset、各sample位置、accel 3 sample保持をpure encoderで固定 |
-| todo | quaternion生成の初回時刻差とclock後退を`0`とし、入力stateを変更しない | edge | unit | no | 時刻上限は追加しない |
+| refactor-skipped | quaternion生成の初回時刻差とclock後退を`0`とし、入力stateを変更しない | edge | unit | no | expected-green regression。初回 / 後退のidentity、next timestamp、frame不変を固定。時刻上限は追加しない |
 | todo | 初期sessionとmode `0x00`が36 byteゼロのIMU blockを生成する | new | unit | no | 現行raw fallbackをsource-backed null behaviorへ修正 |
 | todo | `0x40 01`がACKされ、次のperiodic reportがstandard raw形式になる | regression | integration | no | fake transport |
 | todo | `0x40 02-05`がACKされ、次のperiodic reportがquaternion形式になる | regression | integration | no | 3 profileのmode capabilityを維持 |
@@ -342,6 +342,9 @@ Tidy decision:
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run pytest tests/unit/test_imu_report.py -q` | pass | 6 passed。active gyro calibration、3 gyro sampleの寄与、accel 3 sample保持を確認 |
 | `uv run ruff format --check tests/unit/test_imu_report.py` | pass | 1 file already formatted |
+| `uv run ruff check tests/unit/test_imu_report.py` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit/test_imu_report.py -q` | pass | 7 passed。初回とclock後退時の経過時間0、入力frame不変を確認 |
 | `uv run ruff check tests/unit/test_imu_report.py` | pass | All checks passed |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `git diff --no-index --check -- NUL spec/wip/unit_049/IMU_SESSION_AND_ENCODING_REDESIGN.md` | pass | 新規未追跡ファイルにwhitespace errorなし |
