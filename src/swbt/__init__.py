@@ -15,8 +15,13 @@ from swbt.errors import (
 )
 from swbt.gamepad import (
     ConnectionResult,
+    DirectJoyConL,
+    DirectJoyConR,
+    DirectProController,
+    DirectSwitchGamepad,
     JoyConL,
     JoyConR,
+    PeriodicSwitchGamepad,
     ProController,
     SwitchGamepad,
 )
@@ -33,6 +38,10 @@ __all__ = (
     "ConnectionTimeoutError",
     "ControllerColors",
     "DiagnosticsConfig",
+    "DirectJoyConL",
+    "DirectJoyConR",
+    "DirectProController",
+    "DirectSwitchGamepad",
     "GamepadStatus",
     "IMUFrame",
     "InputState",
@@ -40,6 +49,7 @@ __all__ = (
     "InvalidKeyStoreError",
     "JoyConL",
     "JoyConR",
+    "PeriodicSwitchGamepad",
     "ProController",
     "Stick",
     "SwbtError",

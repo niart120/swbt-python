@@ -93,13 +93,13 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | 公開 root が Periodic / Direct 抽象型と Direct 3具象型を公開し、既存3具象型を Periodic として分類する | new | unit | no | class hierarchy と `__all__` を固定する |
-| todo | Periodic だけが `apply(state)` と `report_period_us` を公開し、Direct だけが `send(state)` を公開する | new | unit | no | 無効操作を runtime validation へ落とさない |
-| todo | 既存3具象型の状態操作が即時送信せず、周期 report と snapshot の現行契約を維持する | regression | integration | no | 現行 fake transport test を回帰させる |
-| todo | Direct の `send(state)` が送信完了まで待ち、指定状態の `0x30` をちょうど1件送ってから snapshot を更新する | new | integration | no | 制御可能な fake transport で完了前 snapshot も確認する |
-| todo | Direct は接続後に周期 `0x30` を開始せず、host output には自動応答する | new | integration | no | 待機中0件と `0x21` reply を確認する |
-| todo | Direct の未接続、送信失敗、profile validation 失敗が current state を変更しない | edge | integration | no | full send と意味操作の rollback を固定する |
-| todo | Direct の press / release / sticks / imu / neutral が各1件送信し、成功後だけ状態を確定する | new | integration | no | held button / stick / IMU 保持を含める |
+| refactor-done | 公開 root が Periodic / Direct 抽象型と Direct 3具象型を公開し、既存3具象型を Periodic として分類する | new | unit | no | 共通 interface と reporting type 固有 interface を分離し、class hierarchy と `__all__` を固定 |
+| refactor-skipped | Periodic だけが `apply(state)` と `report_period_us` を公開し、Direct だけが `send(state)` を公開する | new | unit | no | 公開型分離の実装で expected-green。無効操作を runtime validation へ落とさない signature を固定 |
+| refactor-skipped | 既存3具象型の状態操作が即時送信せず、周期 report と snapshot の現行契約を維持する | regression | integration | no | expected-green regression。press / apply / 非即時送信 / tap held input を確認 |
+| refactor-done | Direct の `send(state)` が送信完了まで待ち、指定状態の `0x30` をちょうど1件送ってから snapshot を更新する | new | integration | no | 共通 `ReportSender` を抽出し、制御可能な fake transport で完了前後の snapshot と1件送信を確認 |
+| refactor-skipped | Direct は接続後に周期 `0x30` を開始せず、host output には自動応答する | new | integration | no | send transaction の runtime 分岐で expected-green。待機中0件と `0x21` reply のみを確認 |
+| refactor-skipped | Direct の未接続、送信失敗、profile validation 失敗が current state を変更しない | edge | integration | no | send transaction 実装で expected-green。full send と press の transport error、未接続、Joy-Con L unsupported state を固定 |
+| refactor-done | Direct の press / release / sticks / imu / neutral が各1件送信し、成功後だけ状態を確定する | new | integration | no | candidate 生成、profile validation、送信成功後 commit を `_send_direct_update()` に集約 |
 | todo | Direct の同時入力操作が直列化され、開始順の候補状態と送信順を失わない | edge | integration | no | blocking fake transport で順序を固定する |
 | todo | `tap()` が両 reporting type で held input を維持し、Direct の押下・解放を直列化する | regression | integration | no | Periodic の既存契約と Direct の2送信を確認する |
 | todo | Direct の tap release 失敗時に押下済み current state を維持し、release 再試行で neutral へ戻せる | edge | integration | no | last successfully sent state を固定する |
@@ -186,6 +186,18 @@ Tidy decision:
 | command | result | notes |
 |---|---|---|
 | `uv run pytest tests/unit/test_public_api_boundary.py tests/unit/test_package_import.py -q` | not run | 公開型と signature の TDD |
+| `uv run pytest tests/unit/test_public_api_boundary.py::test_reporting_types_and_direct_controllers_are_public_and_classified -q` | red | `PeriodicSwitchGamepad` が root に未公開の `AttributeError` を確認 |
+| `uv run pytest tests/unit/test_public_api_boundary.py::test_reporting_types_and_direct_controllers_are_public_and_classified -q` | pass | 1 passed。2抽象型、既存 Periodic 3型、Direct 3型の階層と root export を確認 |
+| `uv run pytest tests/unit/test_public_api_boundary.py::test_reporting_types_expose_only_their_owned_full_state_operation tests/unit/test_package_import.py -q` | pass | 5 passed。`apply` / `send` と `report_period_us` の排他性、root export 一覧を確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_press_buttons_are_reflected_in_periodic_report tests/integration/test_switch_gamepad_fake_transport.py::test_apply_updates_snapshot_and_next_periodic_report tests/integration/test_switch_gamepad_fake_transport.py::test_state_update_apis_do_not_send_immediate_interrupt_reports tests/integration/test_switch_gamepad_fake_transport.py::test_tap_releases_only_tapped_button_and_preserves_held_buttons -q` | pass | 4 passed。Periodic の周期送信、snapshot、非即時送信、held input を確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_waits_for_transport_and_commits_exactly_one_report -q` | red | Direct send が transport へ到達せず、送信開始待ち timeout になる未実装状態を確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_waits_for_transport_and_commits_exactly_one_report -q` | pass | 1 passed。transport 完了前は未完了かつ neutral、完了後は指定 `0x30` 1件と state commit を確認 |
+| `uv run pytest tests/unit/test_report_loop.py tests/integration/test_switch_gamepad_fake_transport.py::test_press_buttons_are_reflected_in_periodic_report tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_sends_subcommand_reply -q` | red | sender 抽出直後に snapshot が lock 外となり `0x21` が周期 `0x30` より先行する回帰を検出 |
+| `uv run pytest tests/unit/test_report_loop.py tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_waits_for_transport_and_commits_exactly_one_report tests/integration/test_switch_gamepad_fake_transport.py::test_press_buttons_are_reflected_in_periodic_report tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_sends_subcommand_reply -q` | pass | 7 passed。snapshot から送信までの周期 lock、Direct commit、subcommand 回帰を確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_connection_is_non_periodic_and_still_replies_to_subcommands -q` | pass | 1 passed。接続後60msに自動 `0x30` がなく、Device Info に `0x21` だけを返すことを確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_failures_do_not_change_last_successfully_sent_state tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_rejects_unsupported_profile_state_without_sending -q` | pass | 2 passed。未接続、transport error、profile validation error で last successfully sent state を維持 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_semantic_operations_send_once_and_commit_after_success -q` | red | 未接続 `press()` が `ClosedError` を出さず local state を更新する Periodic 挙動を確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_semantic_operations_send_once_and_commit_after_success tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_waits_for_transport_and_commits_exactly_one_report tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_failures_do_not_change_last_successfully_sent_state -q` | pass | 3 passed。7意味操作の1操作1送信、未接続拒否、full send / press failure rollback を確認 |
 | `uv run pytest tests/unit/test_report_loop.py -q` | not run | 共通 sender の timer / lock 回帰 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | not run | Periodic / Direct の fake transport 契約 |
 | `uv sync --dev` | not run | 標準 gate |

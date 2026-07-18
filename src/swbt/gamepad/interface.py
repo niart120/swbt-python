@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from types import TracebackType
+from typing import Self
 
 from swbt.diagnostics import GamepadStatus
 from swbt.gamepad.connection import ConnectionResult
@@ -16,7 +17,7 @@ class SwitchGamepad(ABC):
     controller.
     """
 
-    async def __aenter__(self) -> "SwitchGamepad":
+    async def __aenter__(self) -> Self:
         """Open the gamepad for an async context manager.
 
         Returns:
@@ -164,19 +165,6 @@ class SwitchGamepad(ABC):
         """
 
     @abstractmethod
-    async def apply(self, state: InputState) -> None:
-        """Replace the current input state without immediate transmission.
-
-        Args:
-            state: Complete input state to commit.
-
-        Raises:
-            InvalidInputError: ``state`` is not an ``InputState``.
-            UnsupportedInputError: The controller profile does not support part of
-                the supplied state.
-        """
-
-    @abstractmethod
     async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
         """Replace one or both stick positions without immediate transmission.
 
@@ -270,4 +258,39 @@ class SwitchGamepad(ABC):
 
         Returns:
             InputState: Immutable snapshot of the current input state.
+        """
+
+
+class PeriodicSwitchGamepad(SwitchGamepad):
+    """Abstract gamepad whose input report schedule is owned by the library."""
+
+    @abstractmethod
+    async def apply(self, state: InputState) -> None:
+        """Replace the current local input state without immediate transmission.
+
+        Args:
+            state: Complete input state to commit.
+
+        Raises:
+            InvalidInputError: ``state`` is not an ``InputState``.
+            UnsupportedInputError: The controller profile does not support part of
+                the supplied state.
+        """
+
+
+class DirectSwitchGamepad(SwitchGamepad):
+    """Abstract gamepad whose input report schedule is owned by the caller."""
+
+    @abstractmethod
+    async def send(self, state: InputState) -> None:
+        """Send one complete input state and commit it after transmission.
+
+        Args:
+            state: Complete input state to send.
+
+        Raises:
+            ClosedError: The gamepad is not connected.
+            InvalidInputError: ``state`` is not an ``InputState``.
+            UnsupportedInputError: The controller profile does not support part of
+                the supplied state.
         """
