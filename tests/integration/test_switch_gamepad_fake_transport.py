@@ -25,7 +25,13 @@ from swbt import (
     Stick,
     SwitchGamepad,
 )
-from swbt._testing.gamepad import make_joycon_l, make_joycon_r, make_pro_controller
+from swbt._testing.gamepad import (
+    make_direct_joycon_l,
+    make_direct_pro_controller,
+    make_joycon_l,
+    make_joycon_r,
+    make_pro_controller,
+)
 from swbt.errors import (
     ClosedError,
     ConnectionFailedError,
@@ -412,10 +418,7 @@ def test_direct_connection_is_non_periodic_and_still_replies_to_subcommands() ->
     async def run() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
 
         await pad.open()
         await transport.connect()
@@ -466,6 +469,11 @@ def test_direct_send_failures_do_not_change_last_successfully_sent_state() -> No
         await pad.open()
         await transport.connect()
         await pad.send(sent)
+
+        with pytest.raises(InvalidInputError):
+            await pad.send(cast("InputState", object()))
+        assert pad.snapshot() == sent
+
         transport.fail_send = True
 
         with pytest.raises(ExpectedSendError):
@@ -484,10 +492,7 @@ def test_direct_send_failures_do_not_change_last_successfully_sent_state() -> No
 def test_direct_send_rejects_unsupported_profile_state_without_sending() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        pad = DirectJoyConL._from_config(
-            _SwitchGamepadConfig(profile=JoyConLeftProfile()),
-            transport=transport,
-        )
+        pad = make_direct_joycon_l(transport=transport)
         unsupported = InputState.neutral().with_buttons([Button.A])
 
         await pad.open()
