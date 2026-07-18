@@ -10,6 +10,9 @@ from swbt import (
     AdapterInfo,
     ControllerColors,
     DiagnosticsConfig,
+    DirectJoyConL,
+    DirectJoyConR,
+    DirectProController,
     DirectSwitchGamepad,
     GamepadStatus,
     IMUFrame,
@@ -200,7 +203,12 @@ def test_public_error_docstrings_describe_constructor_arguments() -> None:
 
 
 def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors() -> None:
-    _assert_doc_contains(SwitchGamepad, "abstract", "ProController", "JoyConL", "JoyConR")
+    _assert_doc_contains(
+        SwitchGamepad,
+        "abstract",
+        "PeriodicSwitchGamepad",
+        "DirectSwitchGamepad",
+    )
 
     expected_method_tokens: tuple[tuple[object, tuple[str, ...]], ...] = (
         (SwitchGamepad.__aenter__, ("Returns:", "SwitchGamepad")),
@@ -240,7 +248,7 @@ def test_switch_gamepad_docstrings_describe_public_arguments_results_and_errors(
         (SwitchGamepad.rstick, ("right stick", "Args:", "stick")),
         (SwitchGamepad.imu, ("IMU", "Args:", "frames")),
         (SwitchGamepad.release, ("buttons", "input state", "Args:", "buttons")),
-        (SwitchGamepad.neutral, ("InputState.neutral()", "without immediate transmission")),
+        (SwitchGamepad.neutral, ("InputState.neutral()", "reporting type")),
         (
             SwitchGamepad.tap,
             ("connected button action", "Args:", "buttons", "duration", "Raises:"),
@@ -288,3 +296,19 @@ def test_concrete_controller_docstrings_describe_constructor_arguments() -> None
         assert "device_name" not in constructor_doc
         assert "transport:" not in constructor_doc
         assert "Optional HID transport instance" not in constructor_doc
+
+    for controller_cls in (DirectProController, DirectJoyConL, DirectJoyConR):
+        _assert_doc_contains(
+            controller_cls.__init__,
+            "direct-reporting",
+            "Args:",
+            "adapter",
+            "key_store_path",
+            "controller_colors",
+            "diagnostics",
+            "Raises:",
+            "InvalidInputError",
+        )
+        constructor_doc = inspect.getdoc(controller_cls.__init__)
+        assert constructor_doc is not None
+        assert "report_period_us" not in constructor_doc

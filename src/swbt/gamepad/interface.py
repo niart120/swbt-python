@@ -10,11 +10,12 @@ from swbt.input import Button, IMUFrame, InputState, Stick
 
 
 class SwitchGamepad(ABC):
-    """Shared public interface for NX-compatible virtual gamepads.
+    """Shared abstract public interface for NX-compatible virtual gamepads.
 
-    Use this abstract base class for type annotations. Construct
-    ``ProController``, ``JoyConL``, or ``JoyConR`` for a concrete virtual
-    controller.
+    Use ``PeriodicSwitchGamepad`` or ``DirectSwitchGamepad`` when a type
+    annotation must express who owns the input-report schedule. Common input
+    operations commit local state on periodic gamepads; on direct gamepads they
+    send one input report and commit only after transmission succeeds.
     """
 
     async def __aenter__(self) -> Self:
@@ -46,8 +47,9 @@ class SwitchGamepad(ABC):
     async def open(self) -> None:
         """Open the configured transport.
 
-        Opening prepares transport callbacks, diagnostics metadata, and the report
-        loop. It does not start HID advertising, pairing, or active reconnect.
+        Opening prepares transport callbacks, diagnostics metadata, and the
+        reporting-type resources. It does not start HID advertising, pairing,
+        or active reconnect.
 
         Raises:
             TransportOpenError: The configured transport cannot be opened.
@@ -161,12 +163,13 @@ class SwitchGamepad(ABC):
             InvalidInputError: Any value is not a ``Button``.
             UnsupportedInputError: The controller profile does not support a button.
 
-        This updates local state only and does not send an immediate input report.
+        Completion follows the reporting type: periodic gamepads commit local
+        state, while direct gamepads send one input report and then commit.
         """
 
     @abstractmethod
     async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
-        """Replace one or both stick positions without immediate transmission.
+        """Replace one or both stick positions according to the reporting type.
 
         Args:
             left: Optional replacement for the left stick.
@@ -179,7 +182,7 @@ class SwitchGamepad(ABC):
 
     @abstractmethod
     async def lstick(self, stick: Stick) -> None:
-        """Replace the left stick position without immediate transmission.
+        """Replace the left stick position according to the reporting type.
 
         Args:
             stick: Replacement for the left stick.
@@ -191,7 +194,7 @@ class SwitchGamepad(ABC):
 
     @abstractmethod
     async def rstick(self, stick: Stick) -> None:
-        """Replace the right stick position without immediate transmission.
+        """Replace the right stick position according to the reporting type.
 
         Args:
             stick: Replacement for the right stick.
@@ -203,7 +206,7 @@ class SwitchGamepad(ABC):
 
     @abstractmethod
     async def imu(self, *frames: IMUFrame) -> None:
-        """Replace IMU frames without immediate transmission.
+        """Replace IMU frames according to the reporting type.
 
         Args:
             frames: One ``IMUFrame`` to repeat across all three IMU slots, or exactly
@@ -228,7 +231,7 @@ class SwitchGamepad(ABC):
 
     @abstractmethod
     async def neutral(self) -> None:
-        """Return local input state to ``InputState.neutral()`` without immediate transmission."""
+        """Apply ``InputState.neutral()`` according to the reporting type."""
 
     @abstractmethod
     async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
@@ -255,6 +258,9 @@ class SwitchGamepad(ABC):
     @abstractmethod
     def snapshot(self) -> InputState:
         """Return the latest committed input state.
+
+        A periodic gamepad returns its latest local state. A direct gamepad
+        returns the last state whose input report was sent successfully.
 
         Returns:
             InputState: Immutable snapshot of the current input state.

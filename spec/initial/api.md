@@ -4,13 +4,14 @@
 
 ## 1. API 設計の方針
 
-- 利用者が最初に触る入口は `SwitchGamepad` にする
-- 単体 Joy-Con L/R の短い入口は `JoyCon("left", ...)` / `JoyCon("right", ...)` にする
+- lifecycle と意味的入力操作の共通型は `SwitchGamepad` にする
+- 周期送信の共通型は `PeriodicSwitchGamepad`、具象型は `ProController` / `JoyConL` / `JoyConR` にする
+- 利用者所有の Direct 送信の共通型は `DirectSwitchGamepad`、具象型は `DirectProController` / `DirectJoyConL` / `DirectJoyConR` にする
 - Bluetooth や Bumble の詳細は public API に露出させない
 - USB Bluetooth adapter 候補の確認は `list_adapters()` に分け、adapter open とは別の no-open API とする
 - 入力状態は `InputState` として明示的に扱う
 - 短い操作には `tap()`、`press()`、`release()` を提供する
-- 完全な状態更新には `apply()` を提供する
+- 完全な状態更新には Periodic の `apply()` と Direct の `send()` を提供する
 - stick だけの状態更新には `lstick()`、`rstick()`、`sticks()` を提供し、axis 値は `Stick` に閉じ込める
 - 終了時は `neutral()` または `close(neutral=True)` により入力を戻せるようにする
 - API は `asyncio` 前提にする
@@ -22,10 +23,10 @@
 
 ```python
 import asyncio
-from swbt import SwitchGamepad, Button
+from swbt import Button, ProController
 
 async def main() -> None:
-    async with SwitchGamepad(
+    async with ProController(
         adapter="usb:0",
         key_store_path="switch-bond.json",
     ) as pad:
@@ -44,10 +45,10 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from swbt import SwitchGamepad, Button
+from swbt import Button, ProController
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+    async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
         await pad.connect(timeout=30.0)
 
         await pad.press(Button.L, Button.R)
@@ -62,10 +63,10 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from swbt import SwitchGamepad, Stick
+from swbt import ProController, Stick
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+    async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
         await pad.connect(timeout=30.0)
 
         await pad.lstick(Stick.up())
@@ -81,10 +82,10 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from swbt import Button, InputState, Stick, SwitchGamepad
+from swbt import Button, InputState, ProController, Stick
 
 async def main() -> None:
-    async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+    async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
         await pad.connect(timeout=30.0)
 
         state = InputState.neutral().with_buttons([Button.L, Button.R]).with_sticks(
@@ -104,13 +105,14 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from swbt import SwitchGamepad, Button
+from swbt import Button
+from swbt._testing.gamepad import make_pro_controller
 from swbt.transport.fake import FakeHidTransport
 
 async def main() -> None:
     transport = FakeHidTransport()
 
-    async with SwitchGamepad(transport=transport) as pad:
+    async with make_pro_controller(transport=transport) as pad:
         pairing = asyncio.create_task(pad.pair(timeout=1.0))
         await transport.connect()
         await pairing
@@ -123,55 +125,66 @@ asyncio.run(main())
 
 fake transport は unit test と integration test 用であり、実機接続には使わない。
 
-## 3. `SwitchGamepad`
+## 3. controller 型
+
+`SwitchGamepad` は lifecycle、connection、status、意味的入力操作を共有する抽象型であり、直接生成しない。`PeriodicSwitchGamepad` と `DirectSwitchGamepad` が入力レポートの送信所有者を型として固定する。
+
+```text
+SwitchGamepad
+├── PeriodicSwitchGamepad
+│   ├── ProController
+│   ├── JoyConL
+│   └── JoyConR
+└── DirectSwitchGamepad
+    ├── DirectProController
+    ├── DirectJoyConL
+    └── DirectJoyConR
+```
+
+Periodic の入力操作は local state の確定で正常終了し、レポートループが後続の入力レポートを送る。Direct の入力操作は入力レポート1件の送信完了後に state を確定して正常終了する。Direct の transport 送信が失敗した場合は、最後に正常送信した state を維持する。
 
 ### 3.1 初期化
 
 ```python
-class SwitchGamepad:
+class ProController(PeriodicSwitchGamepad):
     def __init__(
         self,
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
         report_period_us: int | None = None,
-        device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
     ) -> None: ...
 
-    @classmethod
-    def from_config(
-        cls,
-        config: SwitchGamepadConfig,
+class DirectProController(DirectSwitchGamepad):
+    def __init__(
+        self,
         *,
+        adapter: str | None = None,
+        key_store_path: str | None = None,
+        controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
-    ) -> "SwitchGamepad": ...
+    ) -> None: ...
 ```
 
-引数の意味は次の通り。
+`JoyConL` / `JoyConR` は `ProController` と同じ constructor 引数を持つ。`DirectJoyConL` / `DirectJoyConR` は `DirectProController` と同じ constructor 引数を持つ。
 
 | 引数 | 意味 |
 |---|---|
 | `adapter` | Bumble transport に渡す adapter moniker |
 | `key_store_path` | default Bumble transport が pairing key を保存する JSON key store path |
-| `report_period_us` | periodic input report の送信周期。`None` は profile の既定値 |
-| `device_name` | HID Device として使う表示名。`None` は profile の既定名 |
+| `report_period_us` | Periodic だけが受け取る入力レポートの送信周期。`None` は profile の既定値 |
 | `controller_colors` | SPI profile で返す controller body / buttons / left grip / right grip の固定色 |
 | `diagnostics` | trace と counter の設定 |
-| `transport` | テストや別 transport 実装を注入するための引数 |
 
-default transport を使う場合、`adapter` は必須である。`transport` が指定された場合、`adapter` は省略できる。この場合、diagnostics の adapter metadata は `"custom"` とする。
+公開 constructor では `adapter` は必須である。transport 注入と profile 差し替えは内部 test helper に限定し、公開 extension point としない。
 
-`key_store_path` は 1 つの仮想 Pro Controller の pairing storage を定義する構成値である。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。pairing 自体は可能だが、プロセス終了後の reconnect は期待しない。
+`key_store_path` は 1 つの仮想 controller と対象機器の pairing storage を定義する構成値である。controller profile が異なる場合は同じ対象機器でも分ける。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。
 
-`report_period_us=None` は profile が持つ既定周期を使う。`device_name=None` は profile の `device_name` を使う。Pro Controller の既定 profile では `8000us` と `"Pro Controller"` になる。
+Periodic の `report_period_us=None` は profile が持つ既定周期を使う。Pro Controller の既定 profile では `8000us` になる。Direct はレポートループを持たず、`report_period_us` を受け取らない。
 
 `controller_colors=None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使う。`body`、`buttons`、`left_grip`、`right_grip` はそれぞれ独立した既定値を持つ。色は作成時に固定し、接続後の `set_color()`、`controller_colors=` setter、profile mutation API は提供しない。
-
-`transport` 注入は public extension point として扱う。`SwitchGamepad` は injected transport を後から再設定しない。key store を必要とする custom transport は、その transport 自身の constructor で設定を受ける。`SwitchGamepadConfig.key_store_path` は default Bumble transport の構築と diagnostics metadata に使う。
 
 ### 3.2 接続操作
 
@@ -195,7 +208,7 @@ async def try_connect(
 async def close(self, *, neutral: bool = True) -> None: ...
 ```
 
-`open()` は transport を開き、callback、diagnostics、report loop などの内部 resource を準備する。`open()` だけでは HID advertising、pairing、reconnect を開始しない。
+`open()` は transport、callback、diagnostics、共通 sender を準備する。Periodic だけが report loop を準備し、Direct は周期 task を作らない。`open()` だけでは HID advertising、pairing、reconnect を開始しない。
 
 `pair()` は初回 pairing のための入口である。内部では HID advertising と incoming 接続待ちを開始する。
 
@@ -203,7 +216,7 @@ async def close(self, *, neutral: bool = True) -> None: ...
 
 `connect()` は通常利用向けの入口である。保存済み bond があれば `reconnect()` を優先し、bond がない場合は `allow_pairing=True` のときだけ `pair()` へ進む。
 
-`close()` は送信 loop と transport を停止する。
+`close()` は Periodic の送信 loop と共通 transport を停止する。`neutral=True` かつ接続中の場合、Direct でも終了処理の例外としてニュートラル入力を1件送信し、成功後に state を確定する。`neutral=False` は終了用入力レポートを追加しない。
 
 `connect()` / `reconnect()` は成功した場合だけ戻る。接続できない場合は `ConnectionFailedError`、timeout は `ConnectionTimeoutError` を投げる。接続失敗の詳細 status が必要な場合は `try_connect()` / `try_reconnect()` を使い、`ConnectionResult` を読む。`pair()` は初回 pairing の明示入口であり、接続戦略の選択結果は返さない。
 
@@ -215,6 +228,7 @@ async def close(self, *, neutral: bool = True) -> None: ...
 
 ```python
 async def apply(self, state: InputState) -> None: ...
+async def send(self, state: InputState) -> None: ...
 async def sticks(
     self,
     *,
@@ -231,11 +245,13 @@ async def release(self, *buttons: Button) -> None: ...
 async def tap(self, *buttons: Button, duration: float = 0.08) -> None: ...
 ```
 
-`press()`、`release()`、`lstick()`、`rstick()`、`sticks()`、`imu()`、`neutral()`、`apply()` は state update API である。接続は要求せず、即時送信もしない。接続中は次の periodic report で反映される。
+`apply()` は Periodic だけ、`send()` は Direct だけが提供する。Periodic の `press()`、`release()`、`lstick()`、`rstick()`、`sticks()`、`imu()`、`neutral()`、`apply()` は接続を要求せず、即時送信もしない。接続中は次の periodic report で反映される。
 
-`apply()` は完成済みの `InputState` で現在入力全体を置き換える。差分適用ではない。`lstick()` は left stick だけを置き換え、`rstick()` は right stick だけを置き換える。`sticks()` は左右どちらか、または両方の stick だけを置き換える。stick API は `Stick` だけを受け、tuple や raw int tuple は受けない。profile が対応しない button / stick update は state store へ commit する前に `UnsupportedInputError` とする。`imu()` は IMU 3 frame だけを置き換える。1 frame を渡した場合は 3 frame すべてに複製し、3 frame を渡した場合は順に設定する。0 個、2 個、4 個以上、`IMUFrame` 以外は `InvalidInputError` とする。
+`apply()` と `send()` は完成済みの `InputState` で現在入力全体を置き換える。差分適用ではない。Direct の `send()` と意味的入力操作は接続済みを要求し、1操作につき入力レポートを1件送ってから state を確定する。未接続、profile validation、transport 送信失敗では state を変更しない。Direct の input operation は直列化し、候補 state の更新を失わない。
 
-`tap()` は action API である。接続済みを要求し、押下 report と release report を即時送信する。release 対象は `tap()` に渡した button だけであり、既に押されていた他の button は維持する。
+`lstick()` は left stick だけを置き換え、`rstick()` は right stick だけを置き換える。`sticks()` は左右どちらか、または両方の stick だけを置き換える。stick API は `Stick` だけを受け、tuple や raw int tuple は受けない。profile が対応しない button / stick update は state store へ commit する前に `UnsupportedInputError` とする。`imu()` は IMU 3 frame だけを置き換える。1 frame を渡した場合は 3 frame すべてに複製し、3 frame を渡した場合は順に設定する。0 個、2 個、4 個以上、`IMUFrame` 以外は `InvalidInputError` とする。
+
+`tap()` は action API である。接続済みを要求し、押下 report と release report を即時送信する。release 対象は `tap()` に渡した button だけであり、既に押されていた他の button は維持する。Direct は押下から解放まで同じ input operation lock を保持する。解放送信に失敗した場合は、最後に正常送信した押下 state を維持する。
 
 `tap()` の `duration` は秒単位とする。packet protocol へ duration を埋め込まない。
 
@@ -246,43 +262,40 @@ def snapshot(self) -> InputSnapshot: ...
 def status(self) -> GamepadStatus: ...
 ```
 
-`snapshot()` は現在入力の snapshot を返す。`status()` は接続状態、送信 report 数、最後に受け取った subcommand、最後の disconnect 理由などを返す。
+`snapshot()` は現在入力の snapshot を返す。Periodic は最新の local state、Direct は最後に正常送信した state を返す。新しい接続 session は neutral baseline から始める。`status()` は接続状態、送信 report 数、最後に受け取った subcommand、最後の disconnect 理由などを返す。
 
 `status()` は実機検証と利用者側の監視に使う。高頻度 control path では使わない。
 
 ### 3.5 context manager
 
 ```python
-async with SwitchGamepad(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
     await pad.connect(timeout=30.0)
     await pad.tap(Button.A)
 ```
 
 `async with` は `open()` と `close(neutral=True)` を呼ぶ resource scope である。`__aenter__()` は HID advertising、pairing、reconnect を開始しない。
 
-## 3.6 `JoyCon`
+## 3.6 Joy-Con L / R
 
 ```python
-class JoyCon(SwitchGamepad):
-    def __init__(
-        self,
-        side: Literal["left", "right"],
-        *,
-        adapter: str | None = None,
-        key_store_path: str | None = None,
-        report_period_us: int | None = None,
-        device_name: str | None = None,
-        controller_colors: ControllerColors | None = None,
-        diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
-    ) -> None: ...
+left = JoyConL(adapter="usb:0", key_store_path="switch-left-joycon-bond.json")
+right = JoyConR(adapter="usb:0", key_store_path="switch-right-joycon-bond.json")
+
+direct_left = DirectJoyConL(
+    adapter="usb:0",
+    key_store_path="switch-direct-left-joycon-bond.json",
+)
+direct_right = DirectJoyConR(
+    adapter="usb:0",
+    key_store_path="switch-direct-right-joycon-bond.json",
+)
 ```
 
-`JoyCon` は単体 Joy-Con L/R 相当の薄い wrapper である。`side="left"` は Joy-Con L profile、`side="right"` は Joy-Con R profile を選ぶ。接続、入力、diagnostics、`close(neutral=True)` の契約は `SwitchGamepad` と同じにする。
+`JoyConL` / `DirectJoyConL` は Joy-Con L profile、`JoyConR` / `DirectJoyConR` は Joy-Con R profile を固定する。side string を受け取る wrapper は公開しない。接続、入力、diagnostics、`close(neutral=True)` の lifecycle は共通にする。
 
 ```python
-async with JoyCon(
-    "left",
+async with JoyConL(
     adapter="usb:0",
     key_store_path="switch-left-joycon-bond.json",
 ) as left:
@@ -290,7 +303,7 @@ async with JoyCon(
     await left.tap(Button.L)
 ```
 
-片側 Joy-Con が持たない button / stick は `UnsupportedInputError` とする。左 Joy-Con は A/B/X/Y、right stick などを扱わない。右 Joy-Con は D-pad、left stick などを扱わない。`InputState` を `apply()` する場合も同じ検査を行い、不正 state は commit しない。
+片側 Joy-Con が持たない button / stick は `UnsupportedInputError` とする。左 Joy-Con は A/B/X/Y、right stick などを扱わない。右 Joy-Con は D-pad、left stick などを扱わない。`InputState` を `apply()` または `send()` する場合も同じ検査を行い、不正 state は送信・commit しない。
 
 Pro Controller、Joy-Con L、Joy-Con R は HID identity と pairing key の対応を分けるため、別々の `key_store_path` を使う。同じ対象機器でも profile を変える場合は key store を共有しない。
 
@@ -319,7 +332,7 @@ class AdapterInfo:
 def list_adapters() -> tuple[AdapterInfo, ...]: ...
 ```
 
-`list_adapters()` は `SwitchGamepad(adapter=...)` に渡す USB Bluetooth adapter 候補を返す。Nintendo Switch 本体や周辺 Bluetooth host は列挙しない。
+`list_adapters()` は `ProController(adapter=...)` などの公開具象型に渡す USB Bluetooth adapter 候補を返す。Nintendo Switch 本体や周辺 Bluetooth host は列挙しない。
 
 この API は libusb の USB device enumeration と descriptor 読み取りを行うが、Bumble transport として adapter を開かない。Bluetooth controller power on、HID advertising、pairing、report loop も開始しない。
 
@@ -554,8 +567,8 @@ no-open adapter 列挙の失敗は `AdapterDiscoveryError` とする。利用者
 すべての I/O と時間待ちは `asyncio` coroutine とする。
 
 - `tap()` は内部で `asyncio.sleep(duration)` を使う
-- `ReportLoop` は独立した task として動く
-- `close()` は `ReportLoop` task を停止し、transport を閉じる
+- Periodic の `ReportLoop` は独立した task として動く
+- `close()` は Periodic の `ReportLoop` task を停止し、transport を閉じる
 - callback 例外は diagnostics に記録し、必要に応じて接続を failed 状態へ遷移させる
 
 ## 11. 初期 API で公開しないもの

@@ -47,6 +47,7 @@ def test_api_doc_covers_top_level_public_exports_and_methods() -> None:
         "`tap(*buttons, duration=0.08)`",
         "`neutral()`",
         "`apply(state)`",
+        "`send(state)`",
         "`sticks(left=None, right=None)`",
         "`lstick(stick)`",
         "`rstick(stick)`",
@@ -80,6 +81,12 @@ def test_api_doc_covers_top_level_public_exports_and_methods() -> None:
         "action API",
         "complete state",
         "即時送信を保証しない",
+        "Periodic の正常終了は local state の確定",
+        "Direct の正常終了は入力レポート1件の送信完了と state の確定",
+        "Direct は `report_period_us` を受け取りません",
+        "Direct の `snapshot()` は最後に正常送信した入力状態",
+        "Direct でも subcommand reply は自動送信",
+        "Direct の `close(neutral=True)` は例外としてニュートラル入力を1件送信",
         "接続できない場合は `ConnectionFailedError`",
         "`ProController`、`JoyConL`、`JoyConR` 生成用の具象クラス",
         "`JoyConL` と `JoyConR` は単体 Joy-Con L/R 相当の concrete controller",
@@ -159,6 +166,10 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
         "pad.status()",
         "即時送信は保証しません",
         "同じ HID レポートに入る保証はありません",
+        "DirectProController",
+        "await pad.send(state)",
+        "Direct では入力レポートの送信頻度を利用者が管理します",
+        "各正常終了につき入力レポートを1件送信",
     ):
         assert token in text
 
@@ -285,8 +296,8 @@ def test_agent_brief_keeps_generation_on_implemented_public_api() -> None:
     text = _read(AGENT_BRIEF)
 
     for token in (
-        "from swbt import Button, InputState, JoyConL, JoyConR, "
-        "ProController, Stick, SwitchGamepad",
+        "DirectJoyConL, DirectJoyConR, DirectProController",
+        "PeriodicSwitchGamepad, DirectSwitchGamepad",
         "allow_pairing=True",
         "await pad.tap(Button.A)",
         "await pad.neutral()",
@@ -310,10 +321,12 @@ def test_agent_brief_keeps_generation_on_implemented_public_api() -> None:
         "`IMUFrame.with_accel()`",
         "`IMUFrame.to_gyro_rate()`",
         "`InputState` + `apply()`",
+        "`InputState` + `send()`",
         'async with ProController(adapter="usb:0"',
         'JoyConL(adapter="usb:0"',
         "Use a separate `key_store_path` for Pro Controller, Joy-Con L, and Joy-Con R profiles",
-        "Use `SwitchGamepad` as a shared type annotation only",
+        "Use `PeriodicSwitchGamepad` or `DirectSwitchGamepad` when the sending contract matters",
+        "Do not call `apply()` on Direct types or `send()` on Periodic types",
         "Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`",
         "Do not pass tuples",
         "Do not invent `pad.gyro()`",

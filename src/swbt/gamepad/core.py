@@ -118,8 +118,9 @@ class _RuntimeBackedGamepad:
     async def open(self) -> None:
         """Open the configured transport.
 
-        Opening prepares transport callbacks, diagnostics metadata, and the report
-        loop. It does not start HID advertising, pairing, or active reconnect.
+        Opening prepares transport callbacks, diagnostics metadata, and the
+        reporting-type resources. It does not start HID advertising, pairing,
+        or active reconnect.
 
         Raises:
             TransportOpenError: Raised by the transport when the adapter cannot be opened.
@@ -223,12 +224,13 @@ class _RuntimeBackedGamepad:
         Args:
             buttons: Buttons to add to the current button set.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.press(*buttons)
 
     async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
-        """Replace one or both stick positions without immediate transmission.
+        """Replace one or both stick positions according to the reporting type.
 
         Args:
             left: Optional replacement for the left stick.
@@ -237,12 +239,13 @@ class _RuntimeBackedGamepad:
         Raises:
             InvalidInputError: ``left`` or ``right`` is not a ``Stick``.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.sticks(left=left, right=right)
 
     async def lstick(self, stick: Stick) -> None:
-        """Replace the left stick position without immediate transmission.
+        """Replace the left stick position according to the reporting type.
 
         Args:
             stick: Replacement for the left stick.
@@ -250,12 +253,13 @@ class _RuntimeBackedGamepad:
         Raises:
             InvalidInputError: ``stick`` is not a ``Stick``.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.lstick(stick)
 
     async def rstick(self, stick: Stick) -> None:
-        """Replace the right stick position without immediate transmission.
+        """Replace the right stick position according to the reporting type.
 
         Args:
             stick: Replacement for the right stick.
@@ -263,12 +267,13 @@ class _RuntimeBackedGamepad:
         Raises:
             InvalidInputError: ``stick`` is not a ``Stick``.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.rstick(stick)
 
     async def imu(self, *frames: IMUFrame) -> None:
-        """Replace IMU frames without immediate transmission.
+        """Replace IMU frames according to the reporting type.
 
         Args:
             frames: One ``IMUFrame`` to repeat across all three IMU slots, or exactly
@@ -288,12 +293,13 @@ class _RuntimeBackedGamepad:
         Args:
             buttons: Buttons to remove from the current button set.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.release(*buttons)
 
     async def neutral(self) -> None:
-        """Return local input state to ``InputState.neutral()`` without immediate transmission."""
+        """Apply ``InputState.neutral()`` according to the reporting type."""
         await self._runtime.neutral()
 
     async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
@@ -321,6 +327,9 @@ class _RuntimeBackedGamepad:
 
     def snapshot(self) -> InputState:
         """Return the latest committed input state.
+
+        A periodic controller returns its latest local state. A direct
+        controller returns the last state sent successfully.
 
         Returns:
             InputState: Immutable snapshot of the current input state.
