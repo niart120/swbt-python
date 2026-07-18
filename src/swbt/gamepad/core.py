@@ -1,12 +1,15 @@
 """Public gamepad API."""
 
-from typing import Self
+from typing import ClassVar, Literal, Self
 
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
 from swbt.errors import InvalidInputError
 from swbt.gamepad._config import _ControllerSpec, _SwitchGamepadConfig
 from swbt.gamepad.connection import ConnectionResult
-from swbt.gamepad.interface import SwitchGamepad
+from swbt.gamepad.interface import (
+    DirectSwitchGamepad,
+    PeriodicSwitchGamepad,
+)
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.runtime import ControllerRuntime
 from swbt.input import Button, IMUFrame, InputState, Stick
@@ -17,7 +20,7 @@ from swbt.state_store import InputStateStore
 from swbt.transport.base import HidDeviceTransport
 
 
-class _RuntimeBackedGamepad(SwitchGamepad):
+class _RuntimeBackedGamepad:
     """Runtime-backed concrete gamepad base.
 
     The object owns the public API surface and delegates stateful
@@ -25,6 +28,7 @@ class _RuntimeBackedGamepad(SwitchGamepad):
     """
 
     _controller_spec = _ControllerSpec(profile=default_controller_profile())
+    _reporting_mode: ClassVar[Literal["periodic", "direct"]] = "periodic"
 
     def __init__(
         self,
@@ -65,6 +69,7 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         self._runtime = ControllerRuntime.from_config(
             config,
             diagnostics=diagnostics,
+            reporting_mode=self._reporting_mode,
             transport=transport,
         )
 
@@ -113,8 +118,9 @@ class _RuntimeBackedGamepad(SwitchGamepad):
     async def open(self) -> None:
         """Open the configured transport.
 
-        Opening prepares transport callbacks, diagnostics metadata, and the report
-        loop. It does not start HID advertising, pairing, or active reconnect.
+        Opening prepares transport callbacks, diagnostics metadata, and the
+        reporting-type resources. It does not start HID advertising, pairing,
+        or active reconnect.
 
         Raises:
             TransportOpenError: Raised by the transport when the adapter cannot be opened.
@@ -218,22 +224,13 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         Args:
             buttons: Buttons to add to the current button set.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.press(*buttons)
 
-    async def apply(self, state: InputState) -> None:
-        """Replace the current input state without immediate transmission.
-
-        Args:
-            state: Complete input state to commit.
-
-        This updates local state only and does not send an immediate input report.
-        """
-        await self._runtime.apply(state)
-
     async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
-        """Replace one or both stick positions without immediate transmission.
+        """Replace one or both stick positions according to the reporting type.
 
         Args:
             left: Optional replacement for the left stick.
@@ -242,12 +239,13 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         Raises:
             InvalidInputError: ``left`` or ``right`` is not a ``Stick``.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.sticks(left=left, right=right)
 
     async def lstick(self, stick: Stick) -> None:
-        """Replace the left stick position without immediate transmission.
+        """Replace the left stick position according to the reporting type.
 
         Args:
             stick: Replacement for the left stick.
@@ -255,12 +253,13 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         Raises:
             InvalidInputError: ``stick`` is not a ``Stick``.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.lstick(stick)
 
     async def rstick(self, stick: Stick) -> None:
-        """Replace the right stick position without immediate transmission.
+        """Replace the right stick position according to the reporting type.
 
         Args:
             stick: Replacement for the right stick.
@@ -268,12 +267,13 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         Raises:
             InvalidInputError: ``stick`` is not a ``Stick``.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.rstick(stick)
 
     async def imu(self, *frames: IMUFrame) -> None:
-        """Replace IMU frames without immediate transmission.
+        """Replace IMU frames according to the reporting type.
 
         Args:
             frames: One ``IMUFrame`` to repeat across all three IMU slots, or exactly
@@ -293,12 +293,13 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         Args:
             buttons: Buttons to remove from the current button set.
 
-        This updates local state only and does not send an immediate input report.
+        A periodic controller commits local state. A direct controller sends one
+        input report and commits only after transmission succeeds.
         """
         await self._runtime.release(*buttons)
 
     async def neutral(self) -> None:
-        """Return local input state to ``InputState.neutral()`` without immediate transmission."""
+        """Apply ``InputState.neutral()`` according to the reporting type."""
         await self._runtime.neutral()
 
     async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
@@ -327,19 +328,77 @@ class _RuntimeBackedGamepad(SwitchGamepad):
     def snapshot(self) -> InputState:
         """Return the latest committed input state.
 
+        A periodic controller returns its latest local state. A direct
+        controller returns the last state sent successfully.
+
         Returns:
             InputState: Immutable snapshot of the current input state.
         """
         return self._runtime.snapshot()
 
 
-class ProController(_RuntimeBackedGamepad):
+class _PeriodicRuntimeBackedGamepad(_RuntimeBackedGamepad, PeriodicSwitchGamepad):
+    """Runtime-backed gamepad with library-owned periodic input transmission."""
+
+    async def apply(self, state: InputState) -> None:
+        """Replace the current input state without immediate transmission.
+
+        Args:
+            state: Complete input state to commit.
+
+        This updates local state only and does not send an immediate input report.
+        """
+        await self._runtime.apply(state)
+
+
+class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
+    """Runtime-backed gamepad with caller-owned input transmission."""
+
+    _reporting_mode = "direct"
+
+    def __init__(
+        self,
+        *,
+        adapter: str | None = None,
+        key_store_path: str | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+    ) -> None:
+        """Create a direct-reporting gamepad object.
+
+        Args:
+            adapter: Bumble adapter moniker used for the Bluetooth backend.
+            key_store_path: Optional path used by the Bluetooth backend to persist keys.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+
+        Raises:
+            InvalidInputError: ``adapter`` is omitted.
+        """
+        config = self._controller_spec.build_config(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            report_period_us=None,
+            controller_colors=controller_colors,
+        )
+        self._init_from_config(config, diagnostics=diagnostics, transport=None)
+
+    async def send(self, state: InputState) -> None:
+        """Send one complete input state and commit it after transmission.
+
+        Args:
+            state: Complete input state to send.
+        """
+        await self._runtime.send(state)
+
+
+class ProController(_PeriodicRuntimeBackedGamepad):
     """Runtime-backed Pro Controller-compatible gamepad."""
 
     _controller_spec = _ControllerSpec(profile=default_controller_profile())
 
 
-class JoyConL(_RuntimeBackedGamepad):
+class JoyConL(_PeriodicRuntimeBackedGamepad):
     """Runtime-backed Joy-Con L-compatible gamepad."""
 
     _controller_spec = _ControllerSpec(profile=JoyConLeftProfile())
@@ -374,7 +433,7 @@ class JoyConL(_RuntimeBackedGamepad):
         self._init_from_config(config, diagnostics=diagnostics, transport=None)
 
 
-class JoyConR(_RuntimeBackedGamepad):
+class JoyConR(_PeriodicRuntimeBackedGamepad):
     """Runtime-backed Joy-Con R-compatible gamepad."""
 
     _controller_spec = _ControllerSpec(profile=JoyConRightProfile())
@@ -407,3 +466,21 @@ class JoyConR(_RuntimeBackedGamepad):
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=None)
+
+
+class DirectProController(_DirectRuntimeBackedGamepad):
+    """Direct-reporting Pro Controller-compatible gamepad."""
+
+    _controller_spec = _ControllerSpec(profile=default_controller_profile())
+
+
+class DirectJoyConL(_DirectRuntimeBackedGamepad):
+    """Direct-reporting Joy-Con L-compatible gamepad."""
+
+    _controller_spec = _ControllerSpec(profile=JoyConLeftProfile())
+
+
+class DirectJoyConR(_DirectRuntimeBackedGamepad):
+    """Direct-reporting Joy-Con R-compatible gamepad."""
+
+    _controller_spec = _ControllerSpec(profile=JoyConRightProfile())

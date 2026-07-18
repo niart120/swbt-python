@@ -7,7 +7,7 @@
 | 分類 | 実機 | Bumble | 目的 |
 |---|---:|---:|---|
 | Unit tests | 不要 | 不要 | 入力状態、report 生成、parser、subcommand を固定する |
-| Fake transport integration tests | 不要 | 不要 | `SwitchGamepad` と `ReportLoop` の振る舞いを検証する |
+| Fake transport integration tests | 不要 | 不要 | Periodic / Direct gamepad、`ReportSender`、`ReportLoop` の振る舞いを検証する |
 | Bumble adapter tests | 不要または adapter のみ | 必要 | adapter open、power on、close を検証する |
 | Hardware tests | 必要 | 必要 | Switch との pairing、L2CAP、入力反映を確認する |
 
@@ -112,20 +112,30 @@ Unit tests は `tests/unit/` に置く。
 - 範囲外 address の扱いが明確である
 - 読み取り size が過大な場合に例外または切り詰めが定義通りになる
 
+### 2.6 公開 reporting type と共通 sender
+
+検証項目:
+
+- root export に `PeriodicSwitchGamepad` / `DirectSwitchGamepad` と6具象型が含まれる
+- Periodic だけが `apply(state)` と `report_period_us`、Direct だけが `send(state)` を公開する
+- `ReportSender` が input report と subcommand reply の送信を直列化する
+- timer byte と接続 session の IMU encoding state が送信順に更新される
+- subcommand reply の state prefix が sender lock 内の current state と一致する
+
 ## 3. Fake transport integration tests
 
 Fake transport integration tests は `tests/integration/` に置く。
 
-### 3.1 `SwitchGamepad` の open / close
+### 3.1 gamepad の open / close
 
 検証項目:
 
-- `async with SwitchGamepad(transport=fake)` が動く
+- internal fake transport constructor で Periodic / Direct の `async with` が動く
 - `open()` 後に fake transport が open 済みになる
 - `close()` 後に fake transport が closed になる
 - `close()` を複数回呼んでも破綻しない
 
-### 3.2 `ReportLoop` の周期送信
+### 3.2 Periodic `ReportLoop` の周期送信
 
 検証項目:
 
@@ -133,14 +143,14 @@ Fake transport integration tests は `tests/integration/` に置く。
 - `report_period_us` を短くした test clock で決定的に検証できる
 - 遅延時に過去 tick 分をまとめて送らない
 
-### 3.3 reply queue 優先
+### 3.3 input report と reply の共通送信順
 
 検証項目:
 
 - output report を fake transport から注入できる
-- subcommand reply が reply queue に積まれる
-- reply queue に `0x21` がある場合、次送信で `0x30` より先に送られる
-- `0x40`のsession遷移とACKが周期送信と同じlockで直列化され、新形式の`0x30`がACKを追い越さない
+- subcommand reply が reporting type に関係なく自動送信される
+- `0x40` の session 遷移と ACK が input report と同じ sender lock で直列化され、新形式の `0x30` が ACK を追い越さない
+- Direct input の直後に並ぶ reply の state prefix と timer が実際の送信順に一致する
 - close後の再openで前回接続のhost要求状態とquaternion状態を引き継がない
 
 ### 3.4 neutral fail-safe
@@ -148,9 +158,22 @@ Fake transport integration tests は `tests/integration/` に置く。
 検証項目:
 
 - `close(neutral=True)` で trailing neutral report が送られる
+- Direct の `close(neutral=False)` は input report を追加しない
 - disconnect callback で `InputStateStore` が neutral へ戻る
 - 例外発生時にも内部 state が neutral へ戻る
 - `SwitchGamepad.imu()` が IMU だけを更新し、接続不要かつ即時送信しない state update API として振る舞う
+
+### 3.5 Direct transaction
+
+検証項目:
+
+- 接続後に待機しても周期 `0x30` を送らない
+- `send(state)` が transport 完了まで待ち、成功後だけ state を commit する
+- Direct の意味的入力操作が各正常終了につき `0x30` を1件送る
+- 未接続、profile validation、transport 送信失敗で last successfully sent state を維持する
+- concurrent input operation が直列化され、開始順の候補 state を失わない
+- `tap()` が押下から解放まで input operation lock を保持し、解放失敗時は押下 state を維持する
+- Pro Controller / Joy-Con L / Joy-Con R が同じ transaction と profile validation を共有する
 
 ### 3.5 callback 例外
 

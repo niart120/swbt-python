@@ -14,6 +14,10 @@ def test_package_exports_public_gamepad_surface() -> None:
         "ConnectionTimeoutError",
         "ControllerColors",
         "DiagnosticsConfig",
+        "DirectJoyConL",
+        "DirectJoyConR",
+        "DirectProController",
+        "DirectSwitchGamepad",
         "GamepadStatus",
         "IMUFrame",
         "InputState",
@@ -21,6 +25,7 @@ def test_package_exports_public_gamepad_surface() -> None:
         "InvalidKeyStoreError",
         "JoyConL",
         "JoyConR",
+        "PeriodicSwitchGamepad",
         "ProController",
         "Stick",
         "SwbtError",
@@ -35,9 +40,14 @@ def test_rearchitecture_target_root_exports_controller_api() -> None:
     public_exports = set(swbt.__all__)
 
     assert {
+        "DirectJoyConL",
+        "DirectJoyConR",
+        "DirectProController",
+        "DirectSwitchGamepad",
         "JoyConL",
         "JoyConR",
         "ProController",
+        "PeriodicSwitchGamepad",
         "SwitchGamepad",
     }.issubset(public_exports)
     assert "JoyCon" not in public_exports

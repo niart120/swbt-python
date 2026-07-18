@@ -1,9 +1,10 @@
 """Stateful runtime for gamepad lifecycle and input behavior."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from types import TracebackType
+from typing import Literal
 
 import swbt.gamepad as gamepad_module
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
@@ -29,7 +30,7 @@ from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.subcommand import SubcommandResponder
-from swbt.report_loop import ReportLoop
+from swbt.report_loop import ReportLoop, ReportSender
 from swbt.state_store import InputStateStore
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
 
@@ -83,6 +84,7 @@ class ControllerRuntime:
         config: _SwitchGamepadConfig,
         *,
         diagnostics: DiagnosticsConfig | None,
+        reporting_mode: Literal["periodic", "direct"] = "periodic",
         transport: HidDeviceTransport | None,
     ) -> None:
         runtime_config = _RuntimeConfig.from_public_config(config)
@@ -90,6 +92,7 @@ class ControllerRuntime:
             msg = "adapter is required when no custom transport is supplied"
             raise InvalidInputError(msg)
         self._config = runtime_config
+        self._reporting_mode = reporting_mode
         self._transport = transport
         self._transport_was_injected = transport is not None
         if transport is None:
@@ -117,6 +120,8 @@ class ControllerRuntime:
             ),
         )
         self._report_loop: ReportLoop | None = None
+        self._report_sender: ReportSender | None = None
+        self._input_operation_lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
         self._disconnect_event = asyncio.Event()
@@ -143,6 +148,7 @@ class ControllerRuntime:
         config: _SwitchGamepadConfig,
         *,
         diagnostics: DiagnosticsConfig | None = None,
+        reporting_mode: Literal["periodic", "direct"] = "periodic",
         transport: HidDeviceTransport | None = None,
     ) -> "ControllerRuntime":
         """Create a runtime from an explicit resource configuration.
@@ -150,6 +156,7 @@ class ControllerRuntime:
         Args:
             config: Resource configuration for the runtime.
             diagnostics: Optional diagnostics configuration for trace output.
+            reporting_mode: Internal owner of normal input report scheduling.
             transport: Optional HID transport instance.
 
         Returns:
@@ -159,6 +166,7 @@ class ControllerRuntime:
         runtime._init_from_config(
             config,
             diagnostics=diagnostics,
+            reporting_mode=reporting_mode,
             transport=transport,
         )
         return runtime
@@ -210,22 +218,36 @@ class ControllerRuntime:
             try:
                 await transport.open()
                 self._configure_device_info_bluetooth_address(transport)
-                self._report_loop = ReportLoop(
+                report_sender = ReportSender(
                     transport=transport,
-                    state_store=self._state_store,
-                    report_period_us=self._config.report_period_us,
                     input_report_builder=InputReportBuilder(
                         self._controller_profile,
                     ),
                     session=self._protocol_session,
                     diagnostics=self._diagnostics,
                 )
+                self._report_sender = report_sender
+                if self._reporting_mode == "periodic":
+                    self._report_loop = ReportLoop(
+                        transport=transport,
+                        state_store=self._state_store,
+                        report_period_us=self._config.report_period_us,
+                        input_report_builder=InputReportBuilder(
+                            self._controller_profile,
+                        ),
+                        session=self._protocol_session,
+                        diagnostics=self._diagnostics,
+                        sender=report_sender,
+                    )
+                else:
+                    self._report_loop = None
                 self._connection_state = "opened"
                 self._is_open = True
             except Exception:
                 self._connection_state = "failed"
                 await transport.close()
                 self._report_loop = None
+                self._report_sender = None
                 self._is_open = False
                 raise
 
@@ -393,6 +415,7 @@ class ControllerRuntime:
                         )
                 await self._transport.close()
                 self._report_loop = None
+                self._report_sender = None
                 self._is_open = False
                 self._connection_state = "closed"
             finally:
@@ -406,8 +429,15 @@ class ControllerRuntime:
 
         This updates local state only and does not send an immediate input report.
         """
+
+        def transform(current: InputState) -> InputState:
+            return current.with_buttons((*current.buttons, *buttons))
+
+        if self._reporting_mode == "direct":
+            await self._send_direct_update(transform)
+            return
         await self._state_store.update(
-            lambda current: current.with_buttons((*current.buttons, *buttons)),
+            transform,
             validate=self._controller_profile.validate_input_state,
         )
 
@@ -421,6 +451,14 @@ class ControllerRuntime:
         """
         self._controller_profile.validate_input_state(state)
         await self._state_store.apply(state)
+
+    async def send(self, state: InputState) -> None:
+        """Send one complete state through a direct-reporting runtime."""
+        if self._reporting_mode != "direct":
+            msg = "send is only available for direct reporting"
+            raise InvalidInputError(msg)
+        self._validate_input_state(state)
+        await self._send_direct_update(lambda _current: state)
 
     async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
         """Replace one or both stick positions without immediate transmission.
@@ -440,8 +478,15 @@ class ControllerRuntime:
             left=left is not None,
             right=right is not None,
         )
+
+        def transform(current: InputState) -> InputState:
+            return current.with_sticks(left_stick=left, right_stick=right)
+
+        if self._reporting_mode == "direct":
+            await self._send_direct_update(transform)
+            return
         await self._state_store.update(
-            lambda current: current.with_sticks(left_stick=left, right_stick=right),
+            transform,
             validate=self._controller_profile.validate_input_state,
         )
 
@@ -484,6 +529,9 @@ class ControllerRuntime:
 
         This updates local IMU state only and does not send an immediate input report.
         """
+        if self._reporting_mode == "direct":
+            await self._send_direct_update(lambda current: current.with_imu(*frames))
+            return
         await self._state_store.imu(*frames)
 
     async def release(self, *buttons: Button) -> None:
@@ -495,13 +543,23 @@ class ControllerRuntime:
         This updates local state only and does not send an immediate input report.
         """
         self._controller_profile.validate_buttons(buttons)
+
+        def transform(current: InputState) -> InputState:
+            return current.with_buttons(current.buttons.difference(buttons))
+
+        if self._reporting_mode == "direct":
+            await self._send_direct_update(transform)
+            return
         await self._state_store.update(
-            lambda current: current.with_buttons(current.buttons.difference(buttons)),
+            transform,
             validate=self._controller_profile.validate_input_state,
         )
 
     async def neutral(self) -> None:
         """Return local input state to ``InputState.neutral()`` without immediate transmission."""
+        if self._reporting_mode == "direct":
+            await self._send_direct_update(lambda _current: InputState.neutral())
+            return
         await self._state_store.neutral()
 
     async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
@@ -517,6 +575,9 @@ class ControllerRuntime:
         The tap sends immediate press and release input reports. The release step
         removes only the buttons supplied to this call, preserving other held buttons.
         """
+        if self._reporting_mode == "direct":
+            await self._tap_direct(*buttons, duration=duration)
+            return
         self._require_connected_for_input()
         await self.press(*buttons)
         primary_error: BaseException | None = None
@@ -588,33 +649,93 @@ class ControllerRuntime:
         )
 
     async def _send_trailing_neutral_if_connected(self) -> None:
+        if self._reporting_mode == "direct":
+            async with self._input_operation_lock:
+                if self._report_sender is None or not self._connected_event.is_set():
+                    return
+                await self._send_direct_candidate(InputState.neutral())
+            return
         await self._state_store.neutral()
         if self._report_loop is None or not self._connected_event.is_set():
             return
         await self._report_loop.send_current_input()
 
     async def _send_current_input(self) -> None:
-        if self._report_loop is None:
-            msg = "gamepad is not open"
-            raise ClosedError(msg)
-        await self._report_loop.send_current_input()
+        state = await self._state_store.snapshot()
+        await self._require_report_sender().send_input(state)
 
     def _require_subcommand_reply_sender(self) -> None:
-        _ = self._subcommand_reply_sender()
+        _ = self._require_report_sender()
 
-    async def _send_subcommand_reply(self, build_reply: Callable[[], bytes]) -> bytes:
-        return await self._subcommand_reply_sender().send_subcommand_reply(build_reply)
+    async def _send_subcommand_reply(
+        self,
+        build_reply: Callable[[], bytes | Awaitable[bytes]],
+    ) -> bytes:
+        if self._report_loop is not None:
+            return await self._report_loop.send_subcommand_reply(build_reply)
+        return await self._require_report_sender().send_subcommand_reply(build_reply)
 
-    def _subcommand_reply_sender(self) -> ReportLoop:
-        if self._report_loop is None:
+    def _require_report_sender(self) -> ReportSender:
+        if self._report_sender is None:
             msg = "gamepad is not open"
             raise ClosedError(msg)
-        return self._report_loop
+        return self._report_sender
 
     def _require_connected_for_input(self) -> None:
-        if self._report_loop is None or not self._connected_event.is_set():
+        if self._report_sender is None or not self._connected_event.is_set():
             msg = "gamepad is not connected"
             raise ClosedError(msg)
+
+    async def _send_direct_update(
+        self,
+        transform: Callable[[InputState], InputState],
+    ) -> None:
+        async with self._input_operation_lock:
+            self._require_connected_for_input()
+            candidate = transform(self._state_store.current)
+            await self._send_direct_candidate(candidate)
+
+    async def _send_direct_candidate(self, candidate: InputState) -> None:
+        self._controller_profile.validate_input_state(candidate)
+        await self._require_report_sender().send_input(
+            candidate,
+            reason="direct",
+            commit_state_store=self._state_store,
+        )
+
+    async def _tap_direct(self, *buttons: Button, duration: float) -> None:
+        async with self._input_operation_lock:
+            self._require_connected_for_input()
+            pressed = False
+            primary_error: BaseException | None = None
+            try:
+                press_state = self._state_store.current.with_buttons(
+                    (*self._state_store.current.buttons, *buttons)
+                )
+                await self._send_direct_candidate(press_state)
+                pressed = True
+                if duration > 0:
+                    await asyncio.sleep(duration)
+            except BaseException as error:
+                primary_error = error
+                raise
+            finally:
+                if pressed:
+                    release_state = self._state_store.current.with_buttons(
+                        self._state_store.current.buttons.difference(buttons)
+                    )
+                    try:
+                        await self._send_direct_candidate(release_state)
+                    except Exception as error:
+                        self._diagnostics.record_error(error, recoverable=True)
+                        if primary_error is None:
+                            raise
+
+    @staticmethod
+    def _validate_input_state(state: InputState) -> None:
+        if not isinstance(state, InputState):
+            msg = "state must be an InputState"
+            raise InvalidInputError(msg)
 
     @staticmethod
     def _validate_stick(name: str, value: Stick | None) -> None:
@@ -735,6 +856,7 @@ class ControllerRuntime:
             if self._report_loop is not None:
                 await self._report_loop.stop()
                 self._report_loop = None
+            self._report_sender = None
             if self._close_in_progress:
                 return
             if self._transport is not None and self._is_open:

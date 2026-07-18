@@ -26,6 +26,39 @@ asyncio.run(main())
 
 `async with` の終了時には、`close(neutral=True)` 相当の処理が自動で実行されます。`neutral()` は入力状態をニュートラルに戻す state update API です。即時送信は保証せず、接続中の後続の入力レポートで反映されます。
 
+## Direct Reporting
+
+Direct では入力レポートの送信頻度を利用者が管理します。周期 task は開始されないため、対象機器が必要とする最低送信頻度も利用者側の処理で満たしてください。ライブラリは送信間隔を補完しません。
+
+```python
+import asyncio
+from swbt import Button, DirectProController, InputState, Stick
+
+
+async def main() -> None:
+    async with DirectProController(
+        adapter="usb:0",
+        key_store_path="switch-direct-bond.json",
+    ) as pad:
+        await pad.connect(timeout=30.0, allow_pairing=True)
+
+        state = InputState.neutral().with_buttons([Button.B]).with_sticks(
+            left_stick=Stick.up(),
+        )
+        await pad.send(state)
+        await pad.release(Button.B)
+        await pad.neutral()
+
+
+asyncio.run(main())
+```
+
+`send(state)` は入力レポートを1件送り、transport の送信完了後に状態を確定します。`press()`、`release()`、`sticks()`、`lstick()`、`rstick()`、`imu()`、`neutral()` も、Direct では各正常終了につき入力レポートを1件送信します。未接続、profile 検査、transport 送信で失敗した場合、`snapshot()` は最後に正常送信した状態を維持します。
+
+Direct の `tap()` は押下と解放の2件を送ります。host から届く subcommand への reply は Direct でも自動送信されます。`close(neutral=True)` は終了時の例外としてニュートラル入力を1件試み、`close(neutral=False)` は入力レポートを追加しません。
+
+Joy-Con の Direct 型には `DirectJoyConL(...)` と `DirectJoyConR(...)` を使います。対応するボタンとスティック、`UnsupportedInputError` の条件は Periodic の `JoyConL(...)` / `JoyConR(...)` と同じです。
+
 ## Connection
 
 ### First-Run Pairing Or Reconnect Fallback

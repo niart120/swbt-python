@@ -7,10 +7,15 @@ from swbt import (
     AdapterInfo,
     Button,
     ControllerColors,
+    DirectJoyConL,
+    DirectJoyConR,
+    DirectProController,
+    DirectSwitchGamepad,
     IMUFrame,
     InputState,
     JoyConL,
     JoyConR,
+    PeriodicSwitchGamepad,
     ProController,
     Stick,
     SwitchGamepad,
@@ -25,10 +30,15 @@ from swbt import (
 |---|---|
 | `list_adapters` | concrete controller の `adapter=...` に渡せる USB Bluetooth adapter 候補の列挙 |
 | `AdapterInfo` | adapter 候補の no-open snapshot |
-| `SwitchGamepad` | concrete controller 共通の abstract interface |
-| `ProController` | Pro Controller 相当の concrete controller |
-| `JoyConL` | 単体 Joy-Con L 相当の concrete controller |
-| `JoyConR` | 単体 Joy-Con R 相当の concrete controller |
+| `SwitchGamepad` | lifecycle、接続、意味的入力操作を共有する抽象 interface |
+| `PeriodicSwitchGamepad` | ライブラリが入力レポートの送信周期を管理する抽象 interface |
+| `DirectSwitchGamepad` | 利用者が入力レポートの送信頻度を管理する抽象 interface |
+| `ProController` | Pro Controller 相当の Periodic 具象クラス |
+| `JoyConL` | 単体 Joy-Con L 相当の Periodic 具象クラス |
+| `JoyConR` | 単体 Joy-Con R 相当の Periodic 具象クラス |
+| `DirectProController` | Pro Controller 相当の Direct 具象クラス |
+| `DirectJoyConL` | 単体 Joy-Con L 相当の Direct 具象クラス |
+| `DirectJoyConR` | 単体 Joy-Con R 相当の Direct 具象クラス |
 | `ControllerColors` | controller body / buttons / left grip / right grip の固定 profile 色 |
 | `ConnectionResult` | `try_connect()` / `try_reconnect()` の結果 |
 | `Button` | 対応する各種ボタン |
@@ -71,6 +81,16 @@ else:
 
 ## Controller Classes
 
+### Reporting Types
+
+`SwitchGamepad` は lifecycle、接続、状態参照、意味的入力操作を共有する抽象型です。送信契約を型注釈で区別する場合は `PeriodicSwitchGamepad` または `DirectSwitchGamepad` を使います。
+
+Periodic の正常終了は local state の確定を表します。`ProController`、`JoyConL`、`JoyConR` はレポートループを持ち、状態更新後の入力レポートを周期送信します。完全な状態は `apply(state)` で確定します。状態更新 API は接続を要求せず、即時送信を保証しない契約です。
+
+Direct の正常終了は入力レポート1件の送信完了と state の確定を表します。`DirectProController`、`DirectJoyConL`、`DirectJoyConR` はレポートループを持ちません。完全な状態は `send(state)` で送信します。意味的入力操作も、最後に正常送信した状態から候補を作り、送信に成功した場合だけ確定します。未接続、profile 検査、transport 送信で失敗した場合、`snapshot()` は直前の正常送信状態を維持します。
+
+Direct でも subcommand reply は自動送信されます。入力レポートと reply は同じ送信直列化境界と timer を使うため、利用者が host output report を処理する必要はありません。
+
 ### Construction
 
 ```python
@@ -86,15 +106,22 @@ pad = ProController(
     ),
     diagnostics=None,
 )
+
+direct_pad = DirectProController(
+    adapter="usb:0",
+    key_store_path="switch-direct-bond.json",
+    controller_colors=None,
+    diagnostics=None,
+)
 ```
 
-`ProController`、`JoyConL`、`JoyConR` 生成用の具象クラスです。`SwitchGamepad` は直接生成せず、関数引数や型注釈で共通 interface として使います。
+`ProController`、`JoyConL`、`JoyConR` 生成用の具象クラスです。対応する Direct 具象クラスは `DirectProController`、`DirectJoyConL`、`DirectJoyConR` です。`SwitchGamepad` は直接生成しません。
 
 `adapter` は Bumble transport に渡す アダプタの名称です。
 
 `key_store_path` は Bumble transport がペアリングキーを保存する JSON key store のファイルパス です。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに分けてください。`None` を指定した場合はペアリング情報を永続化しない一時的なコントローラーとして扱われます。
 
-`report_period_us` は レポートループの送信周期です。`None` が指定された場合既定周期 (8 ms) を使います。
+`report_period_us` は Periodic 具象クラスのレポートループ送信周期です。`None` が指定された場合既定周期 (8 ms) を使います。Direct は `report_period_us` を受け取りません。Direct では入力レポートの送信頻度を利用者が管理します。
 
 `controller_colors` は controller body / buttons / left grip / right grip のプロファイルカラーです。`None` は既定の Joy-Con-ish profile `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使います。それぞれの値は独立した既定値を持ちます。
 
@@ -110,9 +137,9 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 `async with` は `open()` と `close(neutral=True)` の resource scope です。`__aenter__()` は HID 接続待ち受け、ペアリング、(ペアリング情報を用いた)再接続を開始しません。
 
-`open()` は transport、下位レイヤーのコールバック、トレース出力、レポートループを準備します。 HID 接続待ち受けは開始しません。transport open に失敗した場合は `TransportOpenError` または 下位レイヤーの例外を返します。
+`open()` は transport、下位レイヤーのコールバック、トレース出力、送信処理を準備します。Periodic ではレポートループも準備し、Direct では周期 task を作りません。HID 接続待ち受けは開始しません。transport open に失敗した場合は `TransportOpenError` または下位レイヤーの例外を返します。
 
-`close(neutral=True)` は接続中ならニュートラル入力を試み、レポートループを停止し、接続先に対する切断要求を試み、最終的に transport を閉じます。複数回呼んでも未完了の後処理のみを実行します。
+`close(neutral=True)` は接続中ならニュートラル入力を試み、Periodic のレポートループを停止し、接続先に対する切断要求を試み、最終的に transport を閉じます。Direct の `close(neutral=True)` は例外としてニュートラル入力を1件送信し、成功後に state を確定します。`close(neutral=False)` は終了処理用の入力レポートを追加しません。
 
 ### Connection
 
@@ -142,7 +169,10 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 | `imu(*frames)` | state update API | 6軸センサー入力を置き換える。1入力分を渡すと3入力分に複製し、3入力分を渡すと順に設定する。即時送信を保証しない。 |
 | `neutral()` | state update API | `InputState.neutral()` 相当に戻す。即時送信を保証しない。 |
 | `apply(state)` | complete state | 構築済みの `InputState` で現在入力全体を置き換える。 |
+| `send(state)` | complete state | Direct で構築済みの `InputState` を1件送信し、成功後に現在入力全体を置き換える。 |
 | `tap(*buttons, duration=0.08)` | action API | 押下レポートを即時送信後、 `duration` 秒待機して押上レポートを送信する。 |
+
+表中の「即時送信を保証しない」は Periodic の状態更新 API に対する契約です。Direct では `press()`、`release()`、`sticks()`、`lstick()`、`rstick()`、`imu()`、`neutral()` が各正常終了につき入力レポートを1件送信します。Direct の `send(state)` と意味的入力操作は接続済みであることを要求し、送信失敗時は state を確定しません。
 
 `tap()` 内で呼び出される `release` は、この呼び出しで渡したボタンだけを解除します。事前に `press()` していた他のボタンは維持されます。
 
@@ -150,7 +180,7 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 `imu(*frames)` は現在の6軸センサー入力だけを置き換えます。`imu(frame)` は同じ値を3入力分に設定し、`imu(frame1, frame2, frame3)` は3つの値を順に設定します。引数の数が1個または3個でない場合や、`IMUFrame` 以外を渡した場合は `InvalidInputError` が送出されます。
 
-`press()` の直後に `lstick()`、`rstick()`、`sticks()`、`imu()` を呼んでも、同一 HID report に入る保証はありません。button、stick、IMU を完全な同時入力として扱う場合は 構築済みの `InputState` を作り、`apply(state)` に渡してください。
+Periodic で `press()` の直後に `lstick()`、`rstick()`、`sticks()`、`imu()` を呼んでも、同一 HID report に入る保証はありません。button、stick、IMU を完全な同時入力として扱う場合は構築済みの `InputState` を作り、Periodic では `apply(state)`、Direct では `send(state)` に渡してください。
 
 ```python
 state = InputState.neutral().with_buttons([Button.B]).with_sticks(
@@ -160,6 +190,8 @@ state = InputState.neutral().with_buttons([Button.B]).with_sticks(
 )
 await pad.apply(state)
 ```
+
+Direct では同じ状態を `await pad.send(state)` で1件送信します。Direct の `tap()` は押下と解放の2件を送り、押下から解放まで他の入力操作を割り込ませません。解放送信が失敗した場合、`snapshot()` は最後に正常送信した押下状態を返します。
 
 ## Input Model
 
@@ -186,13 +218,13 @@ await pad.apply(state)
 
 ### Observation
 
-`snapshot()` は現在の `InputState` を返します。`status()` は `GamepadStatus` を返します。
+`snapshot()` は現在の `InputState` を返します。Periodic の `snapshot()` は最新の local state、Direct の `snapshot()` は最後に正常送信した入力状態を返します。`status()` は `GamepadStatus` を返します。
 
 `GamepadStatus` は `connection_state`、`report_counters`、`last_subcommand_id`、`raw_rumble`、`last_error` を持ちます。
 
 ## JoyConL / JoyConR
 
-`JoyConL` と `JoyConR` は単体 Joy-Con L/R 相当の concrete controller です。`side` 引数はありません。接続、入力、トレース出力、`close()` の契約は `SwitchGamepad` interface と同じです。
+`JoyConL` と `JoyConR` は単体 Joy-Con L/R 相当の concrete controller です。Direct の単体型には `DirectJoyConL` と `DirectJoyConR` を使います。`side` 引数はありません。profile ごとの対応入力は reporting type に関係なく同じです。
 
 ```python
 from swbt import Button, JoyConL, JoyConR, Stick
@@ -222,7 +254,7 @@ async with JoyConL(
     await left.rstick(Stick.right())  # UnsupportedInputError
 ```
 
-`apply(state)` でも同じ制約を検査します。 `JoyConL` に 右スティック入力や `A`, `B`, `X`, `Y` 入力を含む `InputState`、 `JoyConR` に左スティック入力や十字キー入力を含む `InputState` を渡すと `UnsupportedInputError` が送出されます
+`apply(state)` と `send(state)` でも同じ制約を検査します。`JoyConL` または `DirectJoyConL` に右スティック入力や `A`, `B`, `X`, `Y` 入力を含む `InputState`、`JoyConR` または `DirectJoyConR` に左スティック入力や十字キー入力を含む `InputState` を渡すと `UnsupportedInputError` が送出されます。
 
 Pro Controller、Joy-Con L、Joy-Con R は HID identity と pairing key の対応を分けるため、別々の `key_store_path` を使ってください。
 Change Grip/Order 画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送る必要があります。

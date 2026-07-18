@@ -3,7 +3,15 @@
 Use public imports:
 
 ```python
-from swbt import Button, InputState, JoyConL, JoyConR, ProController, Stick, SwitchGamepad
+from swbt import (
+    Button,
+    DirectJoyConL, DirectJoyConR, DirectProController,
+    InputState,
+    JoyConL, JoyConR, ProController,
+    PeriodicSwitchGamepad, DirectSwitchGamepad,
+    Stick,
+    SwitchGamepad,
+)
 ```
 
 Prefer this minimal pattern:
@@ -24,6 +32,15 @@ async with JoyConL(adapter="usb:0", key_store_path="switch-left-joycon-bond.json
     await left.neutral()
 ```
 
+Use `DirectProController(...)`, `DirectJoyConL(...)`, or `DirectJoyConR(...)`
+when caller code owns every input-report trigger:
+
+```python
+async with DirectProController(adapter="usb:0", key_store_path="switch-direct.json") as pad:
+    await pad.connect(timeout=30.0, allow_pairing=True)
+    await pad.send(InputState.neutral().with_buttons([Button.A]))
+```
+
 Rules:
 
 - Use `connect(..., allow_pairing=True)` for first-run examples.
@@ -42,10 +59,14 @@ Rules:
 - Treat an unspecified host IMU mode or mode `0x00` as disabled; the runtime sends a zero IMU block and does not carry host mode or quaternion state across reopen.
 - Use `IMUFrame.accel_g()` or `IMUFrame.with_accel_g()` for acceleration in G, and `IMUFrame.to_accel_g()` for conversion back to G. The scale is fixed at `1/4096 G/raw`.
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
+- Use `InputState` + `send()` for one complete Direct input report. Awaiting it includes transport completion and state commit.
 - Use a separate `key_store_path` for Pro Controller, Joy-Con L, and Joy-Con R profiles, even when the target device is the same.
 - Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`: left does not support right stick or A/B/X/Y, right does not support left stick or D-pad.
-- Use `SwitchGamepad` as a shared type annotation only; instantiate `ProController`, `JoyConL`, or `JoyConR`.
-- Do not assume `press()` / `release()` / `lstick()` / `rstick()` / `sticks()` / `imu()` / `neutral()` send immediately.
+- Use `SwitchGamepad` only when code accepts either reporting contract. Use `PeriodicSwitchGamepad` or `DirectSwitchGamepad` when the sending contract matters.
+- Instantiate `ProController`, `JoyConL`, or `JoyConR` for Periodic reporting. Instantiate the corresponding `Direct*` class for Direct reporting.
+- Do not call `apply()` on Direct types or `send()` on Periodic types.
+- Do not assume Periodic `press()` / `release()` / `lstick()` / `rstick()` / `sticks()` / `imu()` / `neutral()` send immediately.
+- Direct semantic input operations send one report and commit only after successful transport completion.
 - Do not pass tuples or raw tuples to stick APIs.
 - Do not invent `pad.gyro()` or `pad.accel()`.
 - Do not invent `hold()`, `sequence()`, `send_current_input()`, fluent builder APIs, or macro helpers.

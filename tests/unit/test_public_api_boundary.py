@@ -138,6 +138,58 @@ def test_rearchitecture_target_public_concrete_controllers_share_interface() -> 
         assert issubclass(controller_cls, SwitchGamepad)
 
 
+def test_reporting_types_and_direct_controllers_are_public_and_classified() -> None:
+    periodic_type = swbt.PeriodicSwitchGamepad
+    direct_type = swbt.DirectSwitchGamepad
+
+    assert inspect.isabstract(periodic_type)
+    assert inspect.isabstract(direct_type)
+    assert issubclass(periodic_type, SwitchGamepad)
+    assert issubclass(direct_type, SwitchGamepad)
+
+    for controller_name in ("ProController", "JoyConL", "JoyConR"):
+        controller_cls = getattr(swbt, controller_name)
+        assert issubclass(controller_cls, periodic_type)
+        assert not issubclass(controller_cls, direct_type)
+
+    for controller_name in (
+        "DirectProController",
+        "DirectJoyConL",
+        "DirectJoyConR",
+    ):
+        controller_cls = getattr(swbt, controller_name)
+        assert controller_name in swbt.__all__
+        assert issubclass(controller_cls, direct_type)
+        assert not issubclass(controller_cls, periodic_type)
+        assert not inspect.isabstract(controller_cls)
+
+
+def test_reporting_types_expose_only_their_owned_full_state_operation() -> None:
+    periodic_type = swbt.PeriodicSwitchGamepad
+    direct_type = swbt.DirectSwitchGamepad
+
+    assert hasattr(periodic_type, "apply")
+    assert not hasattr(periodic_type, "send")
+    assert hasattr(direct_type, "send")
+    assert not hasattr(direct_type, "apply")
+
+    for controller_name in ("ProController", "JoyConL", "JoyConR"):
+        controller_cls = getattr(swbt, controller_name)
+        assert hasattr(controller_cls, "apply")
+        assert not hasattr(controller_cls, "send")
+        assert "report_period_us" in inspect.signature(controller_cls).parameters
+
+    for controller_name in (
+        "DirectProController",
+        "DirectJoyConL",
+        "DirectJoyConR",
+    ):
+        controller_cls = getattr(swbt, controller_name)
+        assert hasattr(controller_cls, "send")
+        assert not hasattr(controller_cls, "apply")
+        assert "report_period_us" not in inspect.signature(controller_cls).parameters
+
+
 def test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams() -> None:
     expected_parameters = {
         "adapter",
@@ -507,8 +559,9 @@ def test_from_config_uses_profile_report_period_unless_user_overrides(
             input_report_builder: object | None = None,
             session: object | None = None,
             diagnostics: object | None = None,
+            sender: object | None = None,
         ) -> None:
-            _ = (transport, state_store, input_report_builder, session, diagnostics)
+            _ = (transport, state_store, input_report_builder, session, diagnostics, sender)
             captured_periods.append(report_period_us)
 
         async def stop(self) -> None:
@@ -557,8 +610,9 @@ def test_public_constructor_uses_profile_default_report_period(
             input_report_builder: object | None = None,
             session: object | None = None,
             diagnostics: object | None = None,
+            sender: object | None = None,
         ) -> None:
-            _ = (transport, state_store, input_report_builder, session, diagnostics)
+            _ = (transport, state_store, input_report_builder, session, diagnostics, sender)
             captured_periods.append(report_period_us)
 
         async def stop(self) -> None:
