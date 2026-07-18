@@ -1,7 +1,7 @@
 """Stateful runtime for gamepad lifecycle and input behavior."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from types import TracebackType
 from typing import Literal
@@ -429,6 +429,7 @@ class ControllerRuntime:
 
         This updates local state only and does not send an immediate input report.
         """
+
         def transform(current: InputState) -> InputState:
             return current.with_buttons((*current.buttons, *buttons))
 
@@ -477,6 +478,7 @@ class ControllerRuntime:
             left=left is not None,
             right=right is not None,
         )
+
         def transform(current: InputState) -> InputState:
             return current.with_sticks(left_stick=left, right_stick=right)
 
@@ -541,6 +543,7 @@ class ControllerRuntime:
         This updates local state only and does not send an immediate input report.
         """
         self._controller_profile.validate_buttons(buttons)
+
         def transform(current: InputState) -> InputState:
             return current.with_buttons(current.buttons.difference(buttons))
 
@@ -572,6 +575,9 @@ class ControllerRuntime:
         The tap sends immediate press and release input reports. The release step
         removes only the buttons supplied to this call, preserving other held buttons.
         """
+        if self._reporting_mode == "direct":
+            await self._tap_direct(*buttons, duration=duration)
+            return
         self._require_connected_for_input()
         await self.press(*buttons)
         primary_error: BaseException | None = None
@@ -643,6 +649,12 @@ class ControllerRuntime:
         )
 
     async def _send_trailing_neutral_if_connected(self) -> None:
+        if self._reporting_mode == "direct":
+            async with self._input_operation_lock:
+                if self._report_sender is None or not self._connected_event.is_set():
+                    return
+                await self._send_direct_candidate(InputState.neutral())
+            return
         await self._state_store.neutral()
         if self._report_loop is None or not self._connected_event.is_set():
             return
@@ -655,7 +667,10 @@ class ControllerRuntime:
     def _require_subcommand_reply_sender(self) -> None:
         _ = self._require_report_sender()
 
-    async def _send_subcommand_reply(self, build_reply: Callable[[], bytes]) -> bytes:
+    async def _send_subcommand_reply(
+        self,
+        build_reply: Callable[[], bytes | Awaitable[bytes]],
+    ) -> bytes:
         if self._report_loop is not None:
             return await self._report_loop.send_subcommand_reply(build_reply)
         return await self._require_report_sender().send_subcommand_reply(build_reply)
@@ -678,12 +693,43 @@ class ControllerRuntime:
         async with self._input_operation_lock:
             self._require_connected_for_input()
             candidate = transform(self._state_store.current)
-            self._controller_profile.validate_input_state(candidate)
-            await self._require_report_sender().send_input(
-                candidate,
-                reason="direct",
-                commit_state_store=self._state_store,
-            )
+            await self._send_direct_candidate(candidate)
+
+    async def _send_direct_candidate(self, candidate: InputState) -> None:
+        self._controller_profile.validate_input_state(candidate)
+        await self._require_report_sender().send_input(
+            candidate,
+            reason="direct",
+            commit_state_store=self._state_store,
+        )
+
+    async def _tap_direct(self, *buttons: Button, duration: float) -> None:
+        async with self._input_operation_lock:
+            self._require_connected_for_input()
+            pressed = False
+            primary_error: BaseException | None = None
+            try:
+                press_state = self._state_store.current.with_buttons(
+                    (*self._state_store.current.buttons, *buttons)
+                )
+                await self._send_direct_candidate(press_state)
+                pressed = True
+                if duration > 0:
+                    await asyncio.sleep(duration)
+            except BaseException as error:
+                primary_error = error
+                raise
+            finally:
+                if pressed:
+                    release_state = self._state_store.current.with_buttons(
+                        self._state_store.current.buttons.difference(buttons)
+                    )
+                    try:
+                        await self._send_direct_candidate(release_state)
+                    except Exception as error:
+                        self._diagnostics.record_error(error, recoverable=True)
+                        if primary_error is None:
+                            raise
 
     @staticmethod
     def _validate_input_state(state: InputState) -> None:

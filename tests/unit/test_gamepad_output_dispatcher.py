@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from io import StringIO
 
 from swbt.diagnostics import DiagnosticsRecorder
@@ -18,8 +18,11 @@ def test_output_report_dispatcher_records_trace_and_sends_subcommand_reply() -> 
         def require_reply_sender() -> None:
             return
 
-        async def send_subcommand_reply(build_reply: Callable[[], bytes]) -> bytes:
-            reply = build_reply()
+        async def send_subcommand_reply(
+            build_reply: Callable[[], bytes | Awaitable[bytes]],
+        ) -> bytes:
+            built_reply = build_reply()
+            reply = built_reply if isinstance(built_reply, bytes) else await built_reply
             sent_replies.append(reply)
             return reply
 

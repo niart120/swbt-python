@@ -15,6 +15,7 @@ from swbt import (
     ControllerColors,
     DiagnosticsConfig,
     DirectJoyConL,
+    DirectJoyConR,
     DirectProController,
     IMUFrame,
     InputState,
@@ -34,7 +35,7 @@ from swbt.errors import (
     UnsupportedInputError,
 )
 from swbt.gamepad._config import _SwitchGamepadConfig
-from swbt.protocol.profiles.joycon import JoyConLeftProfile
+from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
 
@@ -550,6 +551,269 @@ def test_direct_semantic_operations_send_once_and_commit_after_success() -> None
         assert all(report[0] == 0x30 for report in reports)
         assert reports[0][3:6] == bytes.fromhex("08 00 00")
         assert reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_direct_concurrent_operations_are_serialized_without_lost_state() -> None:
+    class SequencedFakeHidTransport(FakeHidTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.send_started = (asyncio.Event(), asyncio.Event())
+            self.release_send = (asyncio.Event(), asyncio.Event())
+            self.send_count = 0
+
+        async def send_interrupt(self, payload: bytes) -> None:
+            index = self.send_count
+            self.send_count += 1
+            self.send_started[index].set()
+            await self.release_send[index].wait()
+            await super().send_interrupt(payload)
+
+    async def run() -> None:
+        transport = SequencedFakeHidTransport()
+        pad = DirectProController._from_config(
+            _SwitchGamepadConfig(),
+            transport=transport,
+        )
+        await pad.open()
+        await transport.connect()
+
+        press_a = asyncio.create_task(pad.press(Button.A))
+        await asyncio.wait_for(transport.send_started[0].wait(), timeout=0.1)
+
+        press_b = asyncio.create_task(pad.press(Button.B))
+        await asyncio.sleep(0)
+        assert transport.send_started[1].is_set() is False
+
+        transport.release_send[0].set()
+        await asyncio.wait_for(transport.send_started[1].wait(), timeout=0.1)
+        transport.release_send[1].set()
+        await asyncio.gather(press_a, press_b)
+
+        reports = transport.sent_interrupt_reports
+        assert reports[0][3:6] == bytes.fromhex("08 00 00")
+        assert reports[1][3:6] == bytes.fromhex("0c 00 00")
+        assert pad.snapshot().buttons == frozenset({Button.A, Button.B})
+
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_direct_tap_sends_press_and_release_once_while_preserving_held_input() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = DirectProController._from_config(
+            _SwitchGamepadConfig(),
+            transport=transport,
+        )
+        held = InputState.neutral().with_buttons([Button.ZL])
+
+        await pad.open()
+        await transport.connect()
+        await pad.send(held)
+        start_count = len(transport.sent_interrupt_reports)
+
+        await pad.tap(Button.A, duration=0)
+
+        reports = transport.sent_interrupt_reports[start_count:]
+        assert len(reports) == 2
+        assert reports[0][3:6] == bytes.fromhex("08 00 80")
+        assert reports[1][3:6] == bytes.fromhex("00 00 80")
+        assert pad.snapshot() == held
+
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_direct_tap_keeps_pressed_state_when_release_send_fails() -> None:
+    class ExpectedReleaseError(RuntimeError):
+        pass
+
+    class FailSecondSendFakeHidTransport(FakeHidTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.send_count = 0
+            self.fail_second_send = True
+
+        async def send_interrupt(self, payload: bytes) -> None:
+            self.send_count += 1
+            if self.fail_second_send and self.send_count == 2:
+                raise ExpectedReleaseError
+            await super().send_interrupt(payload)
+
+    async def run() -> None:
+        transport = FailSecondSendFakeHidTransport()
+        pad = DirectProController._from_config(
+            _SwitchGamepadConfig(),
+            transport=transport,
+        )
+        pressed = InputState.neutral().with_buttons([Button.A])
+
+        await pad.open()
+        await transport.connect()
+
+        with pytest.raises(ExpectedReleaseError):
+            await pad.tap(Button.A, duration=0)
+
+        assert pad.snapshot() == pressed
+        assert len(transport.sent_interrupt_reports) == 1
+        assert transport.sent_interrupt_reports[0][3:6] == bytes.fromhex("08 00 00")
+
+        transport.fail_second_send = False
+        await pad.release(Button.A)
+        assert pad.snapshot() == InputState.neutral()
+        assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_direct_tap_serializes_concurrent_input_until_release() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = DirectProController._from_config(
+            _SwitchGamepadConfig(),
+            transport=transport,
+        )
+        await pad.open()
+        await transport.connect()
+
+        tap = asyncio.create_task(pad.tap(Button.A, duration=0.02))
+        await transport.wait_for_interrupt_report_count(1)
+        press_b = asyncio.create_task(pad.press(Button.B))
+        await asyncio.sleep(0)
+
+        assert len(transport.sent_interrupt_reports) == 1
+
+        await asyncio.gather(tap, press_b)
+        reports = transport.sent_interrupt_reports
+        assert [report[3:6] for report in reports] == [
+            bytes.fromhex("08 00 00"),
+            bytes.fromhex("00 00 00"),
+            bytes.fromhex("04 00 00"),
+        ]
+        assert pad.snapshot().buttons == frozenset({Button.B})
+
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_direct_subcommand_reply_uses_state_committed_by_prior_serialized_input() -> None:
+    class BlockFirstSendFakeHidTransport(FakeHidTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.first_send_started = asyncio.Event()
+            self.release_first_send = asyncio.Event()
+            self.send_count = 0
+
+        async def send_interrupt(self, payload: bytes) -> None:
+            self.send_count += 1
+            if self.send_count == 1:
+                self.first_send_started.set()
+                await self.release_first_send.wait()
+            await super().send_interrupt(payload)
+
+    async def run() -> None:
+        transport = BlockFirstSendFakeHidTransport()
+        pad = DirectProController._from_config(
+            _SwitchGamepadConfig(),
+            transport=transport,
+        )
+        state = InputState.neutral().with_buttons([Button.A])
+        request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
+
+        await pad.open()
+        await transport.connect()
+
+        input_send = asyncio.create_task(pad.send(state))
+        await asyncio.wait_for(transport.first_send_started.wait(), timeout=0.1)
+        reply_send = asyncio.create_task(transport.inject_interrupt_data(request_device_info))
+        await asyncio.sleep(0)
+
+        transport.release_first_send.set()
+        await asyncio.gather(input_send, reply_send)
+
+        reports = transport.sent_interrupt_reports
+        assert [report[0] for report in reports] == [0x30, 0x21]
+        assert reports[0][1] == 0
+        assert reports[1][1] == 1
+        assert reports[1][3:6] == bytes.fromhex("08 00 00")
+
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_direct_close_controls_trailing_neutral_report() -> None:
+    async def close_with(neutral: bool) -> tuple[FakeHidTransport, int]:
+        transport = FakeHidTransport()
+        pad = DirectProController._from_config(
+            _SwitchGamepadConfig(),
+            transport=transport,
+        )
+        held = InputState.neutral().with_buttons([Button.A])
+
+        await pad.open()
+        await transport.connect()
+        await pad.send(held)
+        before_close = len(transport.sent_interrupt_reports)
+        await pad.close(neutral=neutral)
+
+        assert pad.snapshot() == InputState.neutral()
+        return transport, before_close
+
+    async def run() -> None:
+        neutral_transport, neutral_before = await close_with(True)
+        assert len(neutral_transport.sent_interrupt_reports) == neutral_before + 1
+        assert neutral_transport.sent_interrupt_reports[-1][0] == 0x30
+        assert neutral_transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("00 00 00")
+        assert neutral_transport.disconnect_request_sent_interrupt_count == neutral_before + 1
+
+        unchanged_transport, unchanged_before = await close_with(False)
+        assert len(unchanged_transport.sent_interrupt_reports) == unchanged_before
+        assert unchanged_transport.disconnect_request_sent_interrupt_count == unchanged_before
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("controller_cls", "profile", "supported", "unsupported"),
+    [
+        (DirectProController, ProControllerProfile(), Button.A, Button.SL),
+        (DirectJoyConL, JoyConLeftProfile(), Button.L, Button.A),
+        (DirectJoyConR, JoyConRightProfile(), Button.R, Button.DPAD_LEFT),
+    ],
+)
+def test_direct_controller_profiles_share_send_and_validation_contract(
+    controller_cls: type[DirectProController | DirectJoyConL | DirectJoyConR],
+    profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
+    supported: Button,
+    unsupported: Button,
+) -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = controller_cls._from_config(
+            _SwitchGamepadConfig(profile=profile),
+            transport=transport,
+        )
+        await pad.open()
+        await transport.connect()
+
+        await pad.press(supported)
+        before = pad.snapshot()
+
+        with pytest.raises(UnsupportedInputError):
+            await pad.press(unsupported)
+
+        assert pad.snapshot() == before
+        assert len(transport.sent_interrupt_reports) == 1
 
         await pad.close(neutral=False)
 
