@@ -106,7 +106,7 @@
 | refactor-done | Direct input と subcommand reply が共通 timer / send lock を通り、prefix と送信順が一致する | new | unit | no | reply builder 内の state snapshot を共通 sender lock の内側へ移し、timerとprefixを送信順へ一致させた |
 | refactor-done | Direct の `close(neutral=True/False)` が trailing neutral の有無、commit、cleanup を契約どおり処理する | new | integration | no | Direct close を operation lock と共通 sender に接続し、`True` だけが送信成功後 neutral を commit |
 | refactor-skipped | Direct Pro / Joy-Con L / Joy-Con R が同じ runtime と profile validation を共有する | new | integration | no | `_ControllerSpec` と共通runtime実装で expected-green。3 profile の正常入力と unsupported input を確認 |
-| todo | API docs、usage、agent brief、initial design が送信所有者、完了条件、snapshot、close の違いを説明する | new | unit | no | public docs test と placeholder residue check を更新する |
+| refactor-skipped | API docs、usage、agent brief、initial design が送信所有者、完了条件、snapshot、close の違いを説明する | new | unit | no | public docs test に完了条件、送信頻度所有者、subcommand、close の必須語を追加。文書だけの変更で追加 refactor は不要 |
 
 ## 8. 設計メモ
 
@@ -185,7 +185,7 @@ Tidy decision:
 
 | command | result | notes |
 |---|---|---|
-| `uv run pytest tests/unit/test_public_api_boundary.py tests/unit/test_package_import.py -q` | not run | 公開型と signature の TDD |
+| `uv run pytest tests/unit/test_public_api_boundary.py tests/unit/test_package_import.py -q` | pass | 個別 TDD と全 unit gate で公開型、signature、root exports を確認 |
 | `uv run pytest tests/unit/test_public_api_boundary.py::test_reporting_types_and_direct_controllers_are_public_and_classified -q` | red | `PeriodicSwitchGamepad` が root に未公開の `AttributeError` を確認 |
 | `uv run pytest tests/unit/test_public_api_boundary.py::test_reporting_types_and_direct_controllers_are_public_and_classified -q` | pass | 1 passed。2抽象型、既存 Periodic 3型、Direct 3型の階層と root export を確認 |
 | `uv run pytest tests/unit/test_public_api_boundary.py::test_reporting_types_expose_only_their_owned_full_state_operation tests/unit/test_package_import.py -q` | pass | 5 passed。`apply` / `send` と `report_period_us` の排他性、root export 一覧を確認 |
@@ -207,14 +207,15 @@ Tidy decision:
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_close_controls_trailing_neutral_report -q` | red | `close(neutral=True)` が local neutral だけを行い trailing `0x30` を追加しない状態を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_close_controls_trailing_neutral_report tests/integration/test_switch_gamepad_fake_transport.py::test_close_with_neutral_records_trailing_neutral_report tests/integration/test_switch_gamepad_fake_transport.py::test_connected_close_requests_disconnect_after_trailing_neutral tests/integration/test_switch_gamepad_fake_transport.py::test_close_treats_trailing_neutral_send_failure_as_best_effort -q` | pass | 4 passed。Direct `True/False` の追加report数とPeriodic close回帰を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_controller_profiles_share_send_and_validation_contract -q` | pass | 3 passed。Pro / Joy-Con L / Joy-Con R の supported 1件送信と unsupported rollback を確認 |
-| `uv run pytest tests/unit/test_report_loop.py -q` | not run | 共通 sender の timer / lock 回帰 |
-| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | not run | Periodic / Direct の fake transport 契約 |
-| `uv sync --dev` | not run | 標準 gate |
-| `uv run ruff format --check .` | not run | 標準 gate |
-| `uv run ruff check .` | not run | 標準 gate |
-| `uv run ty check --no-progress` | not run | 標準 gate |
-| `uv run pytest tests/unit` | not run | 標準 gate |
-| `uv run pytest tests/integration` | not run | 対象 integration tree |
+| `uv run pytest tests/unit/test_public_api_docstrings.py tests/unit/test_public_docs.py -q` | pass | 15 passed。公開 docstring、API docs、usage、agent brief の送信型契約を確認 |
+| `uv run pytest tests/unit/test_report_loop.py -q` | pass | 4 passed。共通 sender の timer / lock 回帰を確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py -q` | pass | 123 passed。Periodic / Direct の fake transport 契約を確認 |
+| `uv sync --dev` | pass | 53 packages resolved |
+| `uv run ruff format --check .` | pass | 94 files already formatted |
+| `uv run ruff check .` | pass | All checks passed |
+| `uv run ty check --no-progress` | pass | All checks passed |
+| `uv run pytest tests/unit` | pass | 445 passed |
+| `uv run pytest tests/integration` | pass | 125 passed |
 
 ## 11. 実機実行条件
 
@@ -237,10 +238,23 @@ Tidy decision:
 - [x] TDD Test List を作成した
 - [x] 根拠監査が追加不要である理由を記録した
 - [x] 実機実行条件を記録した
-- [ ] 公開型と constructor / method の排他性を実装した
-- [ ] 共通 sender と Direct transaction を実装した
-- [ ] Periodic の後方互換を確認した
-- [ ] Direct の rollback、直列化、tap、subcommand、close を確認した
-- [ ] 3 controller profile の Direct 型を確認した
-- [ ] initial design と public docs を更新した
-- [ ] 標準 gate と integration gate の結果を記録した
+- [x] 公開型と constructor / method の排他性を実装した
+- [x] 共通 sender と Direct transaction を実装した
+- [x] Periodic の後方互換を確認した
+- [x] Direct の rollback、直列化、tap、subcommand、close を確認した
+- [x] 3 controller profile の Direct 型を確認した
+- [x] initial design と public docs を更新した
+- [x] 標準 gate と integration gate の結果を記録した
+
+## 14. Self-review
+
+| 観点 | 結果 | 根拠 |
+|---|---|---|
+| scope | pass | 公開 reporting type、共通 sender、Direct transaction、文書更新に限定。raw report API、mode 切替、scheduler 精度、macro は追加していない |
+| 公開 API | pass | unit test で2抽象型、6具象型、`apply` / `send`、`report_period_us` の排他性と root export を固定 |
+| transaction | pass | fake transport で transport 完了後 commit、未接続・入力型・profile・送信失敗 rollback、1操作1送信を確認 |
+| concurrency | pass | input operation lock と sender lock の順序を確認。concurrent operation、Direct `tap()`、input / subcommand 競合テストが pass |
+| lifecycle | pass | Direct の非周期性、subcommand 自動応答、`close(neutral=True/False)`、新 session の neutral baseline を確認 |
+| Periodic 回帰 | pass | 既存状態更新の非即時送信、周期 report、held input、close、全 unit / integration gate が pass |
+| 根拠 / 実機 | pass | wire layout、Bumble 仮定、実機条件を変更していない。実機・専用 USB Bluetooth ドングルは未使用で、今回の acceptance に不要 |
+| 未解決指摘 | none | self-review で追加修正を要する不整合なし |
