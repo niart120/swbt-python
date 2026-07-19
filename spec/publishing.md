@@ -21,8 +21,8 @@ PyPI と TestPyPI の Trusted Publisher は、次の値で登録する。
 | environment | `pypi` または `testpypi` |
 
 GitHub repository 側では `pypi` と `testpypi` environment を作る。
-production 用の `pypi` environment は manual approval を要求する設定にする。
-TestPyPI の approval は必須ではないが、初回は人間が workflow run を確認する。
+environment の手動承認ルールは必須にしない。production publish の承認境界は、
+tag push と `target=pypi` workflow 実行前に同じ会話 turn で得る明示確認とする。
 
 ## 2. 公開前の確認
 
@@ -30,7 +30,7 @@ release 実行前に、次を確認する。
 
 ```console
 git status --short --branch
-git fetch --tags origin
+git fetch --prune --tags origin
 git tag --list "v*" --sort=-version:refname
 ```
 

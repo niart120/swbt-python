@@ -1,5 +1,29 @@
 # Release Notes
 
+## 0.4.0
+
+### 追加機能
+
+- `DirectProController`、`DirectJoyConL`、`DirectJoyConR` を追加しました。これらの直接送信型では、利用者が入力レポートの送信頻度を管理します。`send(state)` と各入力操作は接続済みであることを要求し、入力レポート 1 件の送信完了後に入力状態を確定します。
+- `PeriodicSwitchGamepad` と `DirectSwitchGamepad` を公開しました。入力レポートをライブラリが周期送信する型と、利用者の操作ごとに送信する型を型注釈で区別できます。
+- 直接送信型の `snapshot()` は最後に正常送信した入力状態を返します。未接続、非対応入力、transport の送信失敗では、直前に正常送信した状態を維持します。
+
+### 互換性と移行
+
+`ProController`、`JoyConL`、`JoyConR` は従来どおり周期送信型です。生成時の引数、`apply(state)`、各入力操作の契約は 0.3.0 から変更していません。
+
+`SwitchGamepad` は生成から終了までの管理、接続、共通の入力操作を表す抽象型になりました。0.3.0 で `SwitchGamepad` 型の値に対して `apply(state)` を呼んでいたコードは、入力レポートの送信方式に応じて型注釈と呼び出しを変更してください。
+
+| 0.3.0 | 0.4.0 | 備考 |
+|---|---|---|
+| `pad: SwitchGamepad` から `apply(state)` を呼ぶ | `pad: PeriodicSwitchGamepad` から `apply(state)` を呼ぶ | 従来の周期送信を維持します。 |
+| 利用者の操作ごとに入力レポートを送る公開 API はなし | `pad: DirectSwitchGamepad` から `send(state)` を呼ぶ | 具象クラスは `DirectProController`、`DirectJoyConL`、`DirectJoyConR` です。 |
+| `ProController(..., report_period_us=...)` | 変更なし | 直接送信型は `report_period_us` を受け取りません。 |
+
+### 実機確認範囲
+
+直接送信型は fake transport を使った単体テストと統合テストで、送信件数、送信成功後の状態確定、失敗時の状態維持、サブコマンド応答、終了時のニュートラル入力を確認しました。専用 USB Bluetooth ドングルと Switch 実機を使った確認は実施していません。HID レポートのバイト配置と Bumble の通信条件は 0.3.0 から変更していません。
+
 ## 0.3.0
 
 ### 追加機能
