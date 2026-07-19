@@ -189,7 +189,7 @@
 | `uv run pytest tests/unit/test_csr_bd_addr_switch_pair_probe.py tests/unit/test_bumble_transport.py -q` | pass | 45 passed。power-on address 不一致時は可視化前に拒否し、dry-run / fresh key store guard を確認 |
 | `uv run pytest tests/unit -q -p no:cacheprovider --basetemp=tmp/pytest-unit-csr-switch-pair-final` | pass | 428 passed。並列 basetemp 競合の修正後に直列再実行 |
 | `uv run pytest tests/integration -q -p no:cacheprovider --basetemp=tmp/pytest-integration-csr-switch-pair-final` | pass | 125 passed。unit と別 basetemp で直列実行 |
-| local address の承認済み warm-reset + guarded pairing probe | pass / visual pending | standard HCI / CSR / Bumble power-on address が `02:1B:DC:F9:9F:7D` で一致。Classic pairing、fresh key store、HID connected、neutral `0x30`、clean close。別登録の目視は未確認 |
+| local address の承認済み warm-reset + guarded pairing probe | pass / initial visual unobserved | standard HCI / CSR / Bumble power-on address が `02:1B:DC:F9:9F:7D` で一致。Classic pairing、fresh key store、HID connected、neutral `0x30`、clean close。目視は後続5秒rerunで確認 |
 | `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --hci-reset --timeout 2 --output tmp/hardware/unit_051/local-address-post-pair-recovery.json` | pass | power cycle 後、standard HCI / CSR default-store が元の `00:1B:DC:F9:9F:7D` で一致、clean close |
 | 同 read-only recovery command の `local-address-post-pair-recovery-recheck.json` 再確認 | pass | 2回目も standard HCI / CSR default-store が元 address で一致、clean close |
 | 観測窓 / key store reuse 追加前の対象 test | red | dry-run に `observation_seconds` がなく1 failed。`--reuse-key-store` 未実装で1 failed |
