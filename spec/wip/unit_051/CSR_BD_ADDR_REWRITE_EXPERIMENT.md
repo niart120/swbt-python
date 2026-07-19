@@ -106,7 +106,7 @@
 | green | warm reset 後の別プロセス identity read | characterization | bumble | yes | standard HCI / CSR default-store が sentinel `02:1B:DC:F9:9F:7D` で一致、clean close |
 | green | expected address 不一致時は可視化前に pairing を拒否する | safety | unit | no | Bumble `power_on()` は実行するが connectable / discoverable は設定しない |
 | green | Switch pairing probe の dry-run は adapter を開かない | safety | unit | no | fresh key store、二段階 address guard、cleanup sequence を出力 |
-| planned | local address で Switch pairing が成立する | characterization | hardware | yes | `02:1B:DC:F9:9F:7D`、専用 key store、目視結果を記録 |
+| green | local address で Switch pairing が成立する | characterization | hardware | yes | `02:1B:DC:F9:9F:7D`、fresh key store、Classic pairing / HID connected / clean close が pass。別登録の目視は実施できず unobserved |
 | planned | dummy address が local address / original と別 device として登録される | characterization | hardware | yes | `00:11:22:33:44:55`、別 key store、local 試験の復旧確認後だけ実行 |
 
 ## 8. 文書検証計画
@@ -130,6 +130,8 @@
 - sentinel active identity の観測後に dongle を物理 power cycle すると、standard HCI / CSR default-store の双方が元の `00:1B:DC:F9:9F:7D` へ復帰した。対象個体では volatile change と physical recovery の一連を observed-pass とする。
 - Switch-facing probe は raw HCI の standard / CSR address 一致を確認して adapter を閉じ、Bumble transport を開き直す。Bumble `power_on()` 後にも address を再取得し、一致しなければ connectable / discoverable を有効にしない。preflight 後の HCI Reset による address 変化もこの二段目の guard で遮断する。
 - identity ごとに存在しない key store path を要求する。既存 key store がある場合は adapter を開かず失敗する。これにより元 address、local address、dummy address の link key を混在させない。
+- 対象 Switch は local address `02:1B:DC:F9:9F:7D` を Classic pairing と HID connection まで受理した。Bumble `power_on()` 後の address、Device Info address ともに local address であり、fresh key store 保存と neutral input report 送信後に clean close した。元 address の登録と別 device に見えたかは目視確認を逃したため unobserved である。
+- local-address pairing 後に dongle を物理 power cycleすると、2回の read-only recovery probe で standard HCI / CSR default-store の双方が元の `00:1B:DC:F9:9F:7D` へ復帰していた。対象個体では Switch-facing pairing 後も volatile identity の physical recovery が observed-pass である。
 - BlueZ の CSR 対応は source fact だが、VID:PID `0a12:0001` の全個体が受理することは未検証仮説である。
 
 ## 10. 対象ファイル
@@ -179,6 +181,9 @@
 | `uv run pytest tests/unit/test_csr_bd_addr_switch_pair_probe.py tests/unit/test_bumble_transport.py -q` | pass | 45 passed。power-on address 不一致時は可視化前に拒否し、dry-run / fresh key store guard を確認 |
 | `uv run pytest tests/unit -q -p no:cacheprovider --basetemp=tmp/pytest-unit-csr-switch-pair-final` | pass | 428 passed。並列 basetemp 競合の修正後に直列再実行 |
 | `uv run pytest tests/integration -q -p no:cacheprovider --basetemp=tmp/pytest-integration-csr-switch-pair-final` | pass | 125 passed。unit と別 basetemp で直列実行 |
+| local address の承認済み warm-reset + guarded pairing probe | pass / visual pending | standard HCI / CSR / Bumble power-on address が `02:1B:DC:F9:9F:7D` で一致。Classic pairing、fresh key store、HID connected、neutral `0x30`、clean close。別登録の目視は未確認 |
+| `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --hci-reset --timeout 2 --output tmp/hardware/unit_051/local-address-post-pair-recovery.json` | pass | power cycle 後、standard HCI / CSR default-store が元の `00:1B:DC:F9:9F:7D` で一致、clean close |
+| 同 read-only recovery command の `local-address-post-pair-recovery-recheck.json` 再確認 | pass | 2回目も standard HCI / CSR default-store が元 address で一致、clean close |
 | Bumble / hardware pytest | not run | 今回は専用 probe command のみ承認範囲として実行 |
 
 ## 12. 実機実行条件
