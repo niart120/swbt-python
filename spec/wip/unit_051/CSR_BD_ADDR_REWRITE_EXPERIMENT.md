@@ -139,6 +139,7 @@
 - dummy address `00:11:22:33:44:55` もstandard HCI / CSR / Bumble `power_on()`後のaddressが一致し、fresh pairingとkey reuse rerunの双方でfull initial subcommand列とclean closeまでpassした。fresh runのUIは反応なしだったが、再適用+reuse rerunではユーザが登録を目視した。
 - dummy fresh pairing processのclose後、物理power cycleなしの次preflightでは元addressへ戻っていた。Bumble `Device.power_off()`はhost flushのみで明示HCI Resetを送らないため、復帰原因は未確定。Switch-facing probeを別processで繰り返す場合、expected address preflightを省略せず、必要なら各run前にvolatile addressを再適用する。
 - CSR warm reset直後のUSB transfer未完了警告は、resetに伴う再列挙後の古いhandle失効と整合する。ただし警告単独を成功扱いせず、別processのstandard HCI / CSR / Bumble address一致を必須判定にする。
+- dummy-address登録後のphysical power cycle / read-only recoveryでも、standard HCI / CSR default-storeの双方が元の`00:1B:DC:F9:9F:7D`へ復帰した。local / dummyの両Switch-facing実験でvolatile変更とphysical recoveryがobserved-passである。
 - BlueZ の CSR 対応は source fact だが、VID:PID `0a12:0001` の全個体が受理することは未検証仮説である。
 
 ## 10. 対象ファイル
@@ -197,6 +198,7 @@
 | local address 5秒再試験 command の dry-run | pass | `adapter_opened=false`、`key_store_mode=reuse`、`observation_seconds=5.0`、RF / Switch-facing false |
 | local address の承認済み5秒 registration rerun | pass | standard HCI / CSR / Bumble power-on address が local address で一致。既存 key store、Classic pairing、HID connected、periodic neutral 107件、clean close。Switch UI 登録をユーザ目視確認 |
 | dummy address の承認済みfresh pairing / reuse rerun | pass / first visual fail | fresh runはprotocol passだがUI反応なし。close後reuse attemptは元addressをguardしてRF動作なし。再適用+reuse rerunはdummy address一致、protocol pass、Switch UI登録を目視 |
+| `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --hci-reset --timeout 2 --output tmp/hardware/unit_051/dummy-address-post-pair-recovery.json` | pass | power cycle後、standard HCI / CSR default-storeが元addressで一致、clean close |
 | Bumble / hardware pytest | not run | 今回は専用 probe command のみ承認範囲として実行 |
 
 ## 12. 実機実行条件
