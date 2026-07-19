@@ -5,6 +5,8 @@ from swbt.transport._csr_bd_addr import (
     CsrBdAddrStore,
     build_csr_bd_addr_read_command,
     build_csr_bd_addr_rewrite_plan,
+    build_csr_bd_addr_volatile_experiment_plan,
+    matches_csr_vendor_response,
     parse_csr_bccmd_response,
     parse_csr_bd_addr_read_response,
 )
@@ -62,6 +64,55 @@ def test_csr_bd_addr_read_response_rejects_failed_or_short_getresp() -> None:
         )
     with pytest.raises(ValueError, match="at least 25 bytes"):
         parse_csr_bd_addr_read_response(bytes.fromhex("c201000c00114703700000"))
+
+
+def test_volatile_experiment_plan_applies_and_restores_only_psram() -> None:
+    plan = build_csr_bd_addr_volatile_experiment_plan(
+        original_address="00:1B:DC:F9:9F:7D",
+        requested_address="02:1B:DC:F9:9F:7D",
+    )
+
+    assert plan.original_address == "00:1B:DC:F9:9F:7D"
+    assert plan.requested_address == "02:1B:DC:F9:9F:7D"
+    assert plan.apply.store is CsrBdAddrStore.VOLATILE
+    assert plan.restore.store is CsrBdAddrStore.VOLATILE
+    assert plan.apply.address == plan.requested_address
+    assert plan.restore.address == plan.original_address
+    assert plan.apply.write_command.parameters[15] == 0x08
+    assert plan.restore.write_command.parameters[15] == 0x08
+    assert plan.apply.write_command.parameters[5:7] == bytes.fromhex("1147")
+    assert plan.restore.write_command.parameters[5:7] == bytes.fromhex("1347")
+    assert plan.apply.reset_command.parameters[7] == 0x02
+    assert plan.restore.reset_command.parameters[7] == 0x02
+
+
+def test_volatile_experiment_plan_rejects_noop_address() -> None:
+    with pytest.raises(ValueError, match="must differ"):
+        build_csr_bd_addr_volatile_experiment_plan(
+            original_address="00:1B:DC:F9:9F:7D",
+            requested_address="00:1b:dc:f9:9f:7d",
+        )
+
+
+def test_csr_response_match_accepts_getresp_for_getreq_and_setreq() -> None:
+    get_command = build_csr_bd_addr_read_command(store=0x0008, sequence_number=0x4712)
+    set_command = build_csr_bd_addr_rewrite_plan(
+        "02:1B:DC:F9:9F:7D",
+        store=CsrBdAddrStore.VOLATILE,
+        sequence_number=0x4711,
+    ).write_command
+    get_response = bytes.fromhex("c201000c00124703700000010004000800f9007d9fdc001b02")
+    set_response = bytes.fromhex("c201000c00114703700000010004000800f9007d9fdc001b02")
+
+    assert matches_csr_vendor_response(get_command, get_response) is True
+    assert matches_csr_vendor_response(set_command, set_response) is True
+
+
+def test_csr_response_match_rejects_delayed_response_from_another_stage() -> None:
+    get_command = build_csr_bd_addr_read_command(store=0x0008, sequence_number=0x4712)
+    delayed_set_response = bytes.fromhex("c201000c00114703700000010004000800f9007d9fdc001b02")
+
+    assert matches_csr_vendor_response(get_command, delayed_set_response) is False
 
 
 @pytest.mark.parametrize(

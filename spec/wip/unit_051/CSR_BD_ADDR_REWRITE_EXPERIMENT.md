@@ -17,6 +17,8 @@
 | BlueZ source | CSR に opcode `0xFC00` の BCCMD を送る | https://kernel.googlesource.com/pub/scm/bluetooth/bluez/+/5.7/tools/bdaddr.c |
 | BlueZ docs | CSR は一時変更、不揮発変更、soft reset を区別する | https://kernel.googlesource.com/pub/scm/bluetooth/bluez/+/refs/tags/5.66/tools/bdaddr.rst |
 | vendor document | CSR8510 A10 は full HCI mode と external EEPROM interface を持つ | https://docs.qualcomm.com/bundle/publicresource/80-CT903-1_REV_AC_CSR8510_A10_Product_Brief.pdf |
+| Bluetooth Core | BR/EDR の BD_ADDR は IEEE 802 universal EUI-48 とし、予約 LAP を使わない | https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Core-61/out/en/br-edr-controller/baseband-specification.html#UUID-6c866fc7-2884-01bc-03f5-7e5a90ec76a6 |
+| IEEE guideline | EUI-48 の先頭 octet bit 1 は universal / local administration を示す | https://standards.ieee.org/wp-content/uploads/import/documents/tutorials/eui.pdf |
 | PyPI / latest source | 最新 Bumble は 0.0.233。CSR vendor module と CSR Vendor Event command completion は追加されていない | https://pypi.org/project/bumble/, Bumble 0.0.233 wheel source |
 | hardware observation | `usb:0` / `0a12:0001` / CSR8510 A10 / WinUSB、BD_ADDR `00:1B:DC:F9:9F:7D` | `spec/hardware-test-log.md` |
 
@@ -26,7 +28,7 @@
 |---|---|---|---|
 | maintainer | BD_ADDR と volatile / persistent | BlueZ と同じ write/reset bytes を得る | adapter を開かない |
 | hardware operator | read-only probe | manufacturer、現在値、Vendor Event 経路を確認する | HCI Reset 後に pass。standard HCI と CSR PSKEY の address が一致 |
-| hardware operator | 後続 volatile rewrite | reset 後の変更と再挿入後の復帰を確認する | 復旧手順まで承認が必要 |
+| hardware operator | 後続 volatile rewrite | PSRAM write / read-back を先に確認し、別実験で reset 後の active address と再挿入後の復帰を確認する | 各 write と復旧手順に個別承認が必要 |
 
 ### 1.4 Intent Delta
 
@@ -38,6 +40,8 @@
 - CSR write/reset command の純粋な byte builder と Vendor Event status parser。
 - adapter を開かない dry-run command。
 - 承認済み `usb:0` での HCI Reset、standard identity read、CSR `PSKEY_BDADDR GETREQ`、clean close。
+- warm reset を送らない PSRAM SETREQ / GETREQ / 元値 restore probe の準備。
+- PSRAM sentinel を確認して CSR warm reset を enqueue し、USB 再列挙後の identity read を別プロセスへ分離する probe の準備。
 - Bumble 0.0.230 と最新版で不足する送受信経路の比較。
 
 ## 3. 対象外
@@ -61,9 +65,11 @@
 |---|---|---|---|
 | Switch HID / report bytes | not applicable | not applicable | HID report は変更しない |
 | Bumble / transport | required | done for dry-run | 0.0.230 と 0.0.233 のどちらにも CSR vendor module はない。通常 command は Command Complete / Status を待つため、CSR Vendor Event には専用経路が必要 |
-| OS / driver / adapter | required | partial | Windows / WinUSB / 対象 `usb:0` で CSR GETREQ は受理された。volatile SETREQ と CSR warm reset は未検証 |
+| OS / driver / adapter | required | partial | Windows / WinUSB / 対象 `usb:0` で CSR GETREQ、PSRAM SETREQ / read-back は受理された。CSR warm reset による USB 再列挙は観測済みだが、再列挙後の active identity は未確認 |
 | CSR write bytes | required | done | BlueZ 5.7 `csr_write_bd_addr()` / `csr_reset_device()` を固定 |
-| 対象個体の書き換え可否 | required | todo | product brief だけでは対象個体の PSKEY 書き込み可否を確定できない |
+| BCCMD response type | required | done | GETREQ `0x0000` / SETREQ `0x0002` の server-to-client response は GETRESP `0x0001`。BlueZ HCI 経路は response type を検査せず channel と status を扱う |
+| 対象個体の書き換え可否 | required | partial | PSRAM SETREQ status `0` と sentinel の GETREQ read-back は実機 pass。warm reset 後の active identity 変更、persistent store は未検証 |
+| lab sentinel address | required | inference | `02:1B:DC:F9:9F:7D` は local bit を立てた非 universal address。RF 送信を伴わない volatile read-back に限定し、Switch-facing identity には使わない |
 
 ## 6. 振る舞い仕様
 
@@ -74,6 +80,8 @@
 | invalid address | 6 octet colon notation 以外 | `ValueError` | address 割り当ては別途検討 |
 | response parse | `0xC2` Vendor Event | byte 9-10 の status を返す | BlueZ と同じ判定 |
 | dry-run CLI | address と store | raw packet と `adapter_opened=false` を JSON 出力 | USB I/O なし |
+| PSRAM-only probe | original と lab sentinel | warm reset なしで SETREQ / GETREQ / restore / GETREQ を行い、active standard address が不変であることを確認する | persistent write、RF 動作なし |
+| staged warm-reset probe | original と lab sentinel | PSRAM read-back 後に warm reset を enqueue し、再列挙後の identity read を別プロセスで行う | automatic restore なし、物理 power cycle 必須、RF 動作なし |
 
 ## 7. TDD Test List
 
@@ -84,7 +92,11 @@
 | green | 不正な BD_ADDR 表記を拒否する | edge | unit | no | 6 octet colon notation |
 | green | Vendor Event status を parse する | characterization | unit | no | non-CSR / short event も拒否 |
 | green | Bumble Host で read-only CSR probe の Vendor Event を受ける | characterization | bumble | yes | company identifier `10`、CSR status `0`、standard HCI / PSKEY address 一致、clean close |
-| deferred | volatile write/reset/read-back/replug rollback | characterization | bumble | yes | read-only probe 後 |
+| green | volatile apply / restore plan が persistent selector を選べない | new | unit | no | apply / restore とも PSRAM selector、同一 address は拒否 |
+| partial | volatile write/reset/read-back/replug rollback | characterization | bumble | yes | 初回は apply 中 timeout。同一 process 再 open 失敗、別 process で元 address を確認。write 適用は inconclusive |
+| partial | warm reset なしの PSRAM SETREQ / GETREQ / restore roundtrip | characterization | bumble | yes | 修正版で apply / read-back / active address 不変は pass。same-session restore 確認は status `0x0008`。power cycle 後の元 identity read は再度 pass |
+| green | staged warm-reset probe の dry-run が process boundary と physical recovery を示す | new | unit | no | adapter open false、automatic restore false、persistent / RF false |
+| deferred | warm reset 後の別プロセス identity read | characterization | bumble | yes | tool / gate / dry-run は green。write + warm reset の新しい実機承認待ち |
 | deferred | BD_ADDR ごとに Switch が別 device として登録する | characterization | hardware | yes | volatile write 成功後 |
 
 ## 8. 文書検証計画
@@ -98,6 +110,12 @@
 - 0.0.233 への upgrade はこの機能を直接提供しない。対象 Bumble unit tests 61 件は依存ファイルを変更しない隔離環境で通ったが、version bump は取りやめ、現行 0.0.230 で実験を続ける。
 - `DeviceConfiguration.address` は LE random/static address 用であり、Classic public BD_ADDR の上書きではない。
 - 最初の write は volatile のみとする。不揮発書き込みは真正 CSR8510 の確認、元 BD_ADDR の記録、再挿入による復旧確認まで実行しない。
+- 最初の lab sentinel は `02:1B:DC:F9:9F:7D` とする。これは Bluetooth Core が要求する universal EUI-48 ではないため、advertising / pairing / Switch-facing 動作には使わず、adapter 内部の write / read-back / restore だけに限定する。
+- CSR warm reset は対象 `usb:0` を USB 再列挙させ、同一 Python process の libusb handle では再 open できなかった。次は warm reset なしの PSRAM SETREQ / GETREQ / restore で write 応答を切り分ける。active address の変更は、その結果を得た後に process boundary を分けて観測する。
+- PSRAM-only probe は各 SETREQ / GETREQ に別の sequence number を使い、応答の GETRESP type `0x0001`、sequence number、VARID を照合する。BCCMD に server-to-client の SETRESP type はなく、SETREQ に request type `0x0002` が返ると仮定してはいけない。timeout 後の遅延応答を次 stage の成功応答として扱わない。
+- 対象 CSR8510 A10 は warm reset なしで PSRAM BD_ADDR SETREQ を受理し、GETREQ で sentinel を返す。active standard HCI address は warm reset 前には変化しない。元値 restore SETREQ は status `0` だったが、その後の PSRAM GETREQ は status `0x0008` であり、same-session restore 成否は確定できない。
+- BlueZ HCI 経路は CSR warm reset に対して応答を待たず command を送る。Bumble 0.0.230 の USB sink は `Host.send_hci_packet()` を queue に積んで非同期 transfer するため、staged probe は reset enqueue 後 0.5 秒待って close する。transfer 完了は直接判定せず、USB 再列挙と別プロセス read を実機の判定根拠にする。
+- staged probe は同一 session restore を行わない。warm reset 後の観測に成功しても失敗しても物理 power cycle を必須とし、その後の read-only probe で元 identity を確認する。
 - BlueZ の CSR 対応は source fact だが、VID:PID `0a12:0001` の全個体が受理することは未検証仮説である。
 
 ## 10. 対象ファイル
@@ -107,6 +125,8 @@
 | `src/swbt/transport/_csr_bd_addr.py` | new | command plan と response parser。I/O なし |
 | `tools/csr_bd_addr_plan.py` | new | adapter を開かない dry-run |
 | `tools/csr_bd_addr_probe.py` | new | standard HCI identity read と CSR GETREQ の承認済み実機 probe |
+| `tools/csr_bd_addr_volatile_probe.py` | new | dry-run 既定、warm reset なし、自動 restore 必須の PSRAM SETREQ / GETREQ probe |
+| `tools/csr_bd_addr_warm_reset_probe.py` | new | dry-run 既定、PSRAM apply / warm reset enqueue と別プロセス read を分離する probe |
 | `tests/unit/test_csr_bd_addr_experiment.py` | new | BlueZ layout の characterization |
 | `spec/wip/unit_051/CSR_BD_ADDR_REWRITE_EXPERIMENT.md` | new | 根拠、実機境界、探索結果 |
 
@@ -124,6 +144,18 @@
 | `uv run pytest tests/unit -q -p no:cacheprovider --basetemp=tmp/pytest-unit-csr-hardware-final-20260719` | pass | 421 passed |
 | `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --timeout 2 --output tmp/hardware/unit_051/csr-bd-addr-read-probe.json` | probe bug | `Host.ready=False` のため Reset 以外の応答を Bumble が破棄。controller capability の失敗根拠にはしない |
 | `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --hci-reset --timeout 2 --output tmp/hardware/unit_051/csr-bd-addr-read-probe-success.json` | pass | company identifier `10`、standard HCI / CSR PSKEY address `00:1B:DC:F9:9F:7D`、CSR status `0`、clean close |
+| `uv run pytest tests/unit/test_csr_bd_addr_experiment.py -q` | pass | GETREQ / SETREQ に対する GETRESP と遅延応答拒否を追加後 15 passed |
+| `uv run python tools/csr_bd_addr_volatile_probe.py --expected-original 00:1B:DC:F9:9F:7D --requested-address 02:1B:DC:F9:9F:7D` | pass | `adapter_opened=false`、apply / restore とも volatile、persistent write false |
+| 同 command に `--execute` と artifact options を追加 | inconclusive | baseline pass。apply 中 timeout、USB device address `11` から `16` へ再列挙。同一 process restore は失敗。別 process read-only probe で元 address と clean close を確認 |
+| warm reset なしの PSRAM-only tool へ変更後、同 dry-run command | pass | `adapter_opened=false`、`warm_reset=false`、PSRAM SETREQ / GETREQ / restore / GETREQ / close の順序を出力 |
+| PSRAM-only tool 変更後の `uv run ruff format --check .` / `ruff check .` / `ty check --no-progress` | pass | 92 files formatted、lint / type check pass |
+| `uv run pytest tests/unit -q -p no:cacheprovider --basetemp=tmp/pytest-unit-csr-getresp-20260719` | pass | response type 修正後 425 passed |
+| 承認済み PSRAM-only command | harness fail / hardware inconclusive | baseline pass、apply / best-effort restore timeout、adapter close pass。SETREQ response type filter の誤りを確認したため、write 適用可否の根拠にはしない。後続 power-cycle read は pass |
+| `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --hci-reset --timeout 2 --output tmp/hardware/unit_051/csr-bd-addr-post-psram-power-cycle.json` | pass | 抜き差し後、standard HCI / CSR default-store address `00:1B:DC:F9:9F:7D`、CSR status `0`、一致、clean close |
+| 修正版の承認済み PSRAM-only retry command | partial | apply SETREQ / PSRAM sentinel read-back / active standard address 不変は pass。restore SETREQ status `0` 後の GETREQ と best-effort restore は status `0x0008`、adapter close pass。後続 power-cycle read は pass |
+| `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --hci-reset --timeout 2 --output tmp/hardware/unit_051/csr-bd-addr-post-psram-retry-power-cycle.json` | pass | 抜き差し後、standard HCI / CSR default-store address `00:1B:DC:F9:9F:7D`、CSR status `0`、一致、clean close。PSRAM volatile 復帰を再確認 |
+| `uv run python tools/csr_bd_addr_warm_reset_probe.py --adapter usb:0 --expected-original 00:1B:DC:F9:9F:7D --requested-address 02:1B:DC:F9:9F:7D` | pass | dry-run。`adapter_opened=false`、persistent / advertising / Switch-facing false、automatic restore false、physical power cycle 必須、process boundary を出力 |
+| staged warm-reset tool 追加後の standard gate | pass | 93 files formatted、ruff / ty pass、425 unit tests pass |
 | Bumble / hardware pytest | not run | 今回は専用 probe command のみ承認範囲として実行 |
 
 ## 12. 実機実行条件
@@ -135,13 +167,16 @@
 | adapter | 候補は専用 `usb:0` / CSR8510 A10 / `0a12:0001` / WinUSB。実行直前に再確認する |
 | 実行遮断 | 環境変数ではなく、会話上の明示承認で管理する |
 | log / artifact | raw HCI trace、前後の BD_ADDR、manufacturer/version、USB 再列挙を保存する |
-| cleanup | advertising なし。volatile 実験は read-back、close、再挿入、元 BD_ADDR read-backまで行う |
+| cleanup | advertising なし。PSRAM-only roundtrip の restore 確認失敗時と staged warm-reset 実験は追加 write を止め、物理 power cycle と read-only recovery check を必須にする |
 
 ## 13. 先送り事項
 
 - volatile selector が対象個体で address を一時変更できるか。
 - volatile selector が対象個体で再挿入後に復帰するか。
-- 衝突しない実験用 address の割り当て。
+- restore SETREQ status `0` 後に PSRAM GETREQ が status `0x0008` となる意味と、same-session restore の扱い。
+- SETREQ 成功確認後、warm reset と USB transfer loss を別 stage / process で観測する。
+- warm reset 後の active standard HCI / CSR default-store address が sentinel へ変わるか。
+- Switch-facing 検証に使える universal EUI-48 の割り当て。lab sentinel は RF 送信に使わない。
 - BD_ADDR ごとの key store path 導出。
 - Switch が同一ドングルの複数 BD_ADDR を独立登録できるか。
 

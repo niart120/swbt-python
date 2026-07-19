@@ -50,6 +50,16 @@ class CsrBdAddrRewritePlan:
 
 
 @dataclass(frozen=True)
+class CsrBdAddrVolatileExperimentPlan:
+    """Apply and mandatory restoration plans for one volatile experiment."""
+
+    original_address: str
+    requested_address: str
+    apply: CsrBdAddrRewritePlan
+    restore: CsrBdAddrRewritePlan
+
+
+@dataclass(frozen=True)
 class CsrBccmdResponse:
     """Status extracted from a CSR BCCMD vendor event."""
 
@@ -92,10 +102,38 @@ def build_csr_bd_addr_read_command(
     return _vendor_command(payload)
 
 
+def build_csr_bd_addr_volatile_experiment_plan(
+    *,
+    original_address: str,
+    requested_address: str,
+) -> CsrBdAddrVolatileExperimentPlan:
+    """Build an apply/restore pair that cannot select persistent storage."""
+    apply = build_csr_bd_addr_rewrite_plan(
+        requested_address,
+        store=CsrBdAddrStore.VOLATILE,
+        sequence_number=0x4711,
+    )
+    restore = build_csr_bd_addr_rewrite_plan(
+        original_address,
+        store=CsrBdAddrStore.VOLATILE,
+        sequence_number=0x4713,
+    )
+    if apply.address == restore.address:
+        msg = "requested_address must differ from original_address"
+        raise ValueError(msg)
+    return CsrBdAddrVolatileExperimentPlan(
+        original_address=restore.address,
+        requested_address=apply.address,
+        apply=apply,
+        restore=restore,
+    )
+
+
 def build_csr_bd_addr_rewrite_plan(
     address: str,
     *,
     store: CsrBdAddrStore,
+    sequence_number: int = 0x4711,
 ) -> CsrBdAddrRewritePlan:
     """Build the BlueZ-compatible CSR write and reset command bytes.
 
@@ -105,8 +143,10 @@ def build_csr_bd_addr_rewrite_plan(
     """
     display_bytes = _parse_display_address(address)
     bluez_bdaddr = display_bytes[::-1]
+    sequence_bytes = _uint16_bytes(sequence_number, name="sequence_number")
 
     write_payload = bytearray(bytes.fromhex("02000c001147037000000100040000000000000000000000"))
+    write_payload[4:6] = sequence_bytes
     if store is CsrBdAddrStore.VOLATILE:
         write_payload[14] = 0x08
     write_payload[16] = bluez_bdaddr[2]
@@ -139,6 +179,24 @@ def parse_csr_bccmd_response(event_parameters: bytes) -> CsrBccmdResponse:
         msg = "vendor event is not a CSR BCCMD response"
         raise ValueError(msg)
     return CsrBccmdResponse(status=int.from_bytes(event_parameters[9:11], "little"))
+
+
+def matches_csr_vendor_response(
+    command: CsrVendorCommand,
+    event_parameters: bytes,
+) -> bool:
+    """Match a CSR response by channel, command type, sequence, and VARID."""
+    if len(command.parameters) < 9 or len(event_parameters) < 9:
+        return False
+    request_type = int.from_bytes(command.parameters[1:3], "little")
+    if request_type not in {0x0000, 0x0002}:
+        return False
+    return (
+        event_parameters[0] == _CSR_BCCMD_CHANNEL
+        and int.from_bytes(event_parameters[1:3], "little") == 0x0001
+        and event_parameters[5:7] == command.parameters[5:7]
+        and event_parameters[7:9] == command.parameters[7:9]
+    )
 
 
 def parse_csr_bd_addr_read_response(event_parameters: bytes) -> CsrBdAddrReadResponse:

@@ -16,6 +16,7 @@ from bumble.transport import open_transport
 from swbt.transport._csr_bd_addr import (
     CsrVendorCommand,
     build_csr_bd_addr_read_command,
+    matches_csr_vendor_response,
     parse_csr_bd_addr_read_response,
 )
 
@@ -56,16 +57,10 @@ async def _send_csr_vendor_command(
     """Send one command while correlating its CSR Vendor Event by sequence number."""
     await host.command_semaphore.acquire()
     response: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
-    expected_sequence = command.parameters[5:7]
 
     def on_vendor_event(event: hci.HCI_Vendor_Event) -> None:
         data = bytes(event.data)
-        if (
-            len(data) >= 7
-            and data[0] == 0xC2
-            and data[5:7] == expected_sequence
-            and not response.done()
-        ):
+        if matches_csr_vendor_response(command, data) and not response.done():
             response.set_result(data)
 
     host.on("vendor_event", on_vendor_event)
