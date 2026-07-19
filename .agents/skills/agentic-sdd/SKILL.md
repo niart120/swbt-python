@@ -38,6 +38,7 @@ Agentic SDD bootstrap:
 | spec TDD item | `spec/wip` の TDD Test List にある小さい振る舞い。 |
 | source audit item | report bytes、subcommand、Bumble、driver 仮定の根拠が必要。 |
 | hardware-gated item | Bumble adapter または Switch 実機が必要。 |
+| public docs work | README、利用者向け docs、公開 API docstring、release notes の品質確認。 |
 
 - 選択していない milestone、daemon、GUI、複数 controller、amiibo、NFC、IR camera は実装しない。
 - 大きい作業は TDD item へ分割する。
@@ -47,7 +48,7 @@ Agentic SDD bootstrap:
 ## Implementation Loop
 
 1. 作業仕様がなければ `spec-format` で `spec/wip` を作る。
-2. TDD が適する場合は `tdd-workflow` を使う。
+2. TDD が適する場合は `tdd-workflow` を使う。公開文書だけの作業では `docs-quality-review` と文書検証計画を使う。
 3. red の理由が期待した失敗であることを確認する。
 4. green を作る。
 5. green 後に必要な構造変更だけ `tidy-first` と `refactor-after-green` で分ける。

@@ -48,23 +48,31 @@
 |---|---|---|---|---|---|
 | todo |  | new / regression / edge / characterization | unit / integration / bumble / hardware | no / yes |  |
 
-status は `todo`、`red`、`green`、`refactor-done`、`refactor-skipped`、`deferred` を使う。
+status は `todo`、`red`、`green`、`refactor-done`、`refactor-skipped`、`deferred` を使う。公開文書だけの作業では `not applicable` と書く。
 
-## 8. 設計メモ
+## 8. 文書検証計画
 
-## 9. 対象ファイル
+公開文書を変更しない場合は `not applicable` と書く。
+
+| document | audience / task | source of truth | mechanical check | review result | unresolved |
+|---|---|---|---|---|---|
+|  |  |  |  | todo / done |  |
+
+## 9. 設計メモ
+
+## 10. 対象ファイル
 
 | path | change | 内容 |
 |---|---|---|
 |  | new / modify / delete |  |
 
-## 10. 検証
+## 11. 検証
 
 | command | result | notes |
 |---|---|---|
 |  | not run |  |
 
-## 11. 実機実行条件
+## 12. 実機実行条件
 
 | 項目 | 内容 |
 |---|---|
@@ -75,14 +83,14 @@ status は `todo`、`red`、`green`、`refactor-done`、`refactor-skipped`、`de
 | log / artifact |  |
 | cleanup |  |
 
-## 12. 先送り事項
+## 13. 先送り事項
 
 - none
 
-## 13. チェックリスト
+## 14. チェックリスト
 
 - [ ] 対象範囲と対象外を確認した
-- [ ] TDD Test List を更新した
+- [ ] TDD Test List または文書検証計画を更新した
 - [ ] 必要な根拠監査を記録した
 - [ ] 実機実行条件を記録した
 - [ ] 検証結果または未実行理由を記録した
