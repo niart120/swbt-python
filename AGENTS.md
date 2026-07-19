@@ -77,9 +77,17 @@
 | 実機観測 | `spec/hardware-test-log.md` |
 | 初期設計 | `spec/initial/` |
 
-作業仕様には、対象範囲、対象外、関連 docs、根拠監査、TDD Test List、検証、実機実行条件、先送り事項、チェックリストを含める。
+作業仕様には、対象範囲、対象外、関連 docs、根拠監査、TDD Test List または文書検証計画、検証、実機実行条件、先送り事項、チェックリストを含める。
 
 複数の作業仕様から参照する安定した判断は、既存の `spec/initial/` を更新するか、必要に応じて `spec/` 配下へ分ける。未確定の観測は `spec/dev-journal.md` に置く。
+
+## 文書の検証
+
+- 自然言語の意味要件を、固定語句の存在・不在 assertion に置き換えない。正しい言い換えを落とす検査、または誤った説明を通す検査は追加しない。
+- 自動検査の対象は、生成、構造、リンク、参照先、front matter、構造化データ、生成元との対応など、機械的に観測でき、失敗原因を切り分けられる契約に限る。
+- 説明の事実性、読者が手順を完了するための前提・操作・終了後の復帰手順、未検証範囲の伝達は、正本との照合を伴うレビューで検証する。pytest の成功をその根拠にしない。
+- docs / spec / skill だけの作業では、TDD Test List と pytest を必須にしない。選んだ自動検査、レビュー、未実行の検証を理由付きで記録する。
+- README、利用者向け docs、公開 API docstring、release notes を変更した場合は `docs-quality-review` を使い、未解決の修正必須事項を handoff または PR 本文に残す。
 
 ## Agent Skills
 
@@ -92,6 +100,7 @@ repo-local skill は `.agents/skills` を正本として管理する。`.github/
 - `spec-format`: `spec/wip` / `spec/complete` の作業仕様を作成、更新、完了移動する。
 - `dev-journal`: 小さい設計観測や先送り事項を `spec/dev-journal.md` に記録する。
 - `docs-wording`: README、docs、release notes の文言整理で、swbt-python 固有の訳語と残す英語表記をそろえる。
+- `docs-quality-review`: README、利用者向け docs、公開 API docstring、release notes を、対象読者の利用手順、根拠、未検証範囲、読みやすさの観点で確認する。
 - `source-audit`: Switch HID、Bumble、既存実装、実機ログ由来の値を根拠分類して記録する。
 - `hardware-harness`: Bumble adapter、Bluetooth dongle、Switch 実機を使う検証の承認境界と記録項目を確認する。
 - `tdd-workflow`: TDD Test List から red / green / refactor を進める。

@@ -14,8 +14,9 @@ description: "swbt-python の仕様変更、実装、TDD cycle、PR 前に品質
 3. 実行した command、validator、test、hook を evidence として記録する。
 4. 未実行 gate は `not run`、対象外は `not applicable` と書く。
 5. `source-audit`、`hardware-harness`、Subagent review の有無を分ける。
-6. 問題がある場合は findings を先に出す。
-7. 問題がない場合も、残る test gap と実機未検証を明記する。
+6. 公開文書を変更した場合は `docs-quality-review` の対象、正本、findings、未解決事項を確認する。
+7. 問題がある場合は findings を先に出す。
+8. 問題がない場合も、残る test gap と実機未検証を明記する。
 
 ## Gates
 
@@ -25,6 +26,7 @@ description: "swbt-python の仕様変更、実装、TDD cycle、PR 前に品質
 | Scope | 対象範囲、対象外、先送り事項。 |
 | Source Audit | protocol / Bumble / driver 値の根拠、または該当なし。 |
 | TDD / Tests | red / green 履歴、pytest 結果、未実行理由。 |
+| Documentation Review | 公開文書の対象、正本、`docs-quality-review` の findings と採否。 |
 | Static | ruff format、ruff check、ty check、skill validation。 |
 | Hardware | 実機使用有無、承認有無、adapter identity、artifact。 |
 | Integration Review | diff、scope drift、指摘の採否。 |
@@ -61,4 +63,5 @@ description: "swbt-python の仕様変更、実装、TDD cycle、PR 前に品質
 
 - evidence が弱い項目を pass にしない。
 - docs / skill のみ変更では Python test を省略できるが、skill validation と residue check は実行する。
+- 公開文書を変更した場合、未解決の `must-fix` がある状態を pass としない。修正しない場合は人間の判断と理由を記録する。
 - 実機 gate は承認がなければ `not run` とする。

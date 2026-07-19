@@ -1,0 +1,4 @@
+interface:
+  display_name: "Docs Quality Review"
+  short_description: "README と利用者向け公開文書の根拠、手順、未検証範囲を確認する"
+  default_prompt: "Use $docs-quality-review to review changed public documentation for source-backed accuracy, usability, and clearly stated unknowns."

@@ -27,7 +27,7 @@ description: "swbt-python の作業仕様を spec/wip/unit_XXX または spec/co
 
 - source、use case、対象範囲、対象外を分ける。
 - 事実、推論、未検証仮説を分ける。
-- TDD Test List は観測可能な振る舞いで書く。実装ファイル名や内部構造だけを item にしない。
+- TDD Test List は観測可能な振る舞いで書く。実装ファイル名や内部構造だけを item にしない。公開文書だけの作業では `not applicable` とし、文書検証計画を使う。
 - Switch HID、Bumble、report byte、driver、adapter、実機観測を含む場合は `source-audit` の要否を書く。
 - Bumble adapter、Switch pairing、HID advertising、report loop を含む場合は `hardware-harness` の承認条件を書く。
 - 検証には実行 command、結果、未実行理由を残す。
@@ -39,7 +39,7 @@ description: "swbt-python の作業仕様を spec/wip/unit_XXX または spec/co
 2. 既存 `spec/wip` / `spec/complete` を確認する。
 3. 新規か更新か完了移動かを決める。
 4. 新規なら `references/template.md` を使って作成する。
-5. TDD で進める作業では `tdd-test-list` と接続する。
+5. TDD で進める作業では `tdd-test-list` と接続する。README、利用者向け docs、公開 API docstring、release notes だけの作業では `docs-quality-review` と文書検証計画へ接続する。
 6. 根拠が必要な値は `source-audit` へ渡す。
 7. 実機や dongle が関係する項目は `hardware-harness` の承認境界を記録する。
 8. 実装後は検証結果と checklist を更新し、完了条件が揃った場合だけ `spec/complete` へ移す。
@@ -48,6 +48,7 @@ description: "swbt-python の作業仕様を spec/wip/unit_XXX または spec/co
 
 - checklist が更新されている。
 - 検証 command と結果、または未実行理由がある。
+- 公開文書を変更した場合は、文書検証計画と `docs-quality-review` の結果、または未解決事項の判断がある。
 - 根拠監査の状態が `done`、`not applicable`、または未完了理由付きで明示されている。
 - 実機状態が `not required`、`not run`、または承認範囲と結果付きで明示されている。
 - 先送り事項が `none` か、後続 source として使える粒度になっている。
