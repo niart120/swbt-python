@@ -81,16 +81,6 @@ else:
 
 ## コントローラー
 
-### 送信方式
-
-`SwitchGamepad` は、生成から終了までの管理、接続、状態参照、意味的な入力操作を共有する抽象型です。送信契約を型注釈で区別する場合は、`PeriodicSwitchGamepad` または `DirectSwitchGamepad` を使います。
-
-周期送信型の操作が正常終了すると、ライブラリ内部の入力状態が確定します。`ProController`、`JoyConL`、`JoyConR` はレポートループを持ち、状態更新後の入力レポートを周期送信します。完全な入力状態は `apply(state)` で確定します。状態更新 API は接続を必要とせず、即時送信を保証しません。
-
-直接送信型の操作が正常終了すると、入力レポート 1 件の送信と入力状態の確定が完了します。`DirectProController`、`DirectJoyConL`、`DirectJoyConR` はレポートループを持ちません。完全な入力状態は `send(state)` で送信します。意味的な入力操作も、最後に正常送信した状態から候補を作り、送信に成功した場合だけ確定します。未接続、プロファイル検査、transport 送信で失敗した場合、`snapshot()` は直前に正常送信した状態を維持します。
-
-直接送信型でも、サブコマンド応答は自動送信されます。入力レポートとサブコマンド応答は同じ送信直列化処理とタイマーを使うため、利用者がホストからの出力レポートを処理する必要はありません。
-
 ### 生成
 
 ```python
@@ -155,7 +145,15 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 `ConnectionResult` は、`route`、`status`、`peer_address`、`peer_count` を持ちます。`status` は `"connected"`（接続済み）、`"no_bond"`（接続先なし）、`"timeout"`（タイムアウト）、`"failed"`（接続失敗）のいずれかです。
 
-### 入力
+### 状態の取得
+
+`snapshot()` は現在の `InputState` を返します。周期送信型の `snapshot()` はライブラリ内部の最新の入力状態、直接送信型の `snapshot()` は最後に正常送信した入力状態を返します。`status()` は `GamepadStatus` を返します。
+
+`GamepadStatus` は `connection_state`、`report_counters`、`last_subcommand_id`、`raw_rumble`、`last_error` を持ちます。
+
+## 入力
+
+### 共通の入力操作
 
 入力 API は、状態更新 API、操作 API、完全入力状態 API に分類されます。
 
@@ -168,8 +166,6 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 | `rstick(stick)` | 状態更新 API | 右スティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。 |
 | `imu(*frames)` | 状態更新 API | 6 軸センサー入力を置き換える。1 入力分を渡すと 3 入力分に複製し、3 入力分を渡すと順に設定する。 |
 | `neutral()` | 状態更新 API | `InputState.neutral()` 相当に戻す。 |
-| `apply(state)` | 完全入力状態 API | 構築済みの `InputState` で現在の入力全体を置き換える。 |
-| `send(state)` | 完全入力状態 API | 直接送信型で構築済みの `InputState` を 1 件送信し、成功後に現在の入力全体を置き換える。 |
 | `tap(*buttons, duration=0.08)` | 操作 API | 押下レポートを即時送信し、`duration` 秒待機してから解放レポートを送信する。 |
 
 `tap()` 内で呼び出される `release()` は、この呼び出しで渡したボタンだけを解除します。事前に `press()` していた他のボタンは維持されます。
@@ -178,11 +174,27 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 `imu(*frames)` は、現在の 6 軸センサー入力だけを置き換えます。`imu(frame)` は同じ値を 3 入力分に設定し、`imu(frame1, frame2, frame3)` は 3 つの値を順に設定します。引数の数が 1 個または 3 個でない場合や、`IMUFrame` 以外を渡した場合は `InvalidInputError` が送出されます。
 
-直接送信型では、同じ状態を `await pad.send(state)` で 1 件送信します。直接送信型の `tap()` は押下と解放の 2 件を送り、押下から解放まで他の入力操作を割り込ませません。解放送信に失敗した場合、`snapshot()` は最後に正常送信した押下状態を返します。
+### 周期送信型
+
+周期送信型の操作が正常終了すると、ライブラリ内部の入力状態が確定します。`ProController`、`JoyConL`、`JoyConR` はレポートループを持ち、状態更新後の入力レポートを周期送信します。状態更新 API は接続を必要とせず、即時送信を保証しません。
+
+完全な入力状態は `apply(state)` で確定します。
+
+周期送信型で `press()` の直後に `lstick()`、`rstick()`、`sticks()`、`imu()` を呼んでも、同じ HID 入力レポートに入る保証はありません。
+
+### 直接送信型
+
+直接送信型の操作が正常終了すると、入力レポート 1 件の送信と入力状態の確定が完了します。`DirectProController`、`DirectJoyConL`、`DirectJoyConR` はレポートループを持ちません。完全な入力状態は `send(state)` で送信します。意味的な入力操作も、最後に正常送信した状態から候補を作り、送信に成功した場合だけ確定します。未接続、プロファイル検査、transport 送信で失敗した場合、`snapshot()` は直前に正常送信した状態を維持します。
 
 直接送信型では、`press()`、`release()`、`sticks()`、`lstick()`、`rstick()`、`imu()`、`neutral()` が正常終了するたびに入力レポートを 1 件送信します。直接送信型の `send(state)` と意味的な入力操作は接続済みであることを必要とし、送信に失敗した場合は入力状態を確定しません。
 
-周期送信型で `press()` の直後に `lstick()`、`rstick()`、`sticks()`、`imu()` を呼んでも、同じ HID 入力レポートに入る保証はありません。ボタン、スティック、IMU を同じ入力レポートに含める必要がある場合は、構築済みの `InputState` を作り、周期送信型では `apply(state)`、直接送信型では `send(state)` に渡してください。
+直接送信型でも、サブコマンド応答は自動送信されます。入力レポートとサブコマンド応答は同じ送信直列化処理とタイマーを使うため、利用者がホストからの出力レポートを処理する必要はありません。
+
+直接送信型の `tap()` は押下と解放の 2 件を送り、押下から解放まで他の入力操作を割り込ませません。解放送信に失敗した場合、`snapshot()` は最後に正常送信した押下状態を返します。
+
+### 完全入力状態の送信
+
+ボタン、スティック、IMU を同じ入力レポートに含める必要がある場合は、構築済みの `InputState` を作り、周期送信型では `apply(state)`、直接送信型では `send(state)` に渡してください。
 
 ```python
 state = InputState.neutral().with_buttons([Button.B]).with_sticks(
@@ -215,12 +227,6 @@ await pad.apply(state)
 `InputState.neutral()` は、ボタン入力なし、左右のスティックが中央、IMU がニュートラルの状態を返します。`InputState.with_buttons(...)`、`InputState.with_sticks(...)`、`InputState.with_imu(...)`、`InputState.with_gyro(...)`、`InputState.with_accel(...)` は、新しい `InputState` を返します。`with_imu(frame)` は 1 入力分を 3 入力分に複製し、`with_imu(frame1, frame2, frame3)` は 3 つの値を順に設定します。`with_gyro((x, y, z))` と `with_accel((x, y, z))` も、1 組の値を 3 入力分に複製します。3 組を渡した場合は、順に片方のセンサー値だけを置き換えます。
 
 `ControllerColors(body=..., buttons=..., left_grip=..., right_grip=...)` は、24 ビット RGB だけを受け取ります。範囲外の値、文字列、`bytes`、`tuple` を渡すと `InvalidInputError` が送出されます。
-
-### 状態の取得
-
-`snapshot()` は現在の `InputState` を返します。周期送信型の `snapshot()` はライブラリ内部の最新の入力状態、直接送信型の `snapshot()` は最後に正常送信した入力状態を返します。`status()` は `GamepadStatus` を返します。
-
-`GamepadStatus` は `connection_state`、`report_counters`、`last_subcommand_id`、`raw_rumble`、`last_error` を持ちます。
 
 ## JoyConL / JoyConR
 
