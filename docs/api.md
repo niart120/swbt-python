@@ -34,11 +34,11 @@ from swbt import (
 | `PeriodicSwitchGamepad` | 入力レポートの送信周期をライブラリが管理する抽象型 |
 | `DirectSwitchGamepad` | 入力レポートの送信頻度を利用者が管理する抽象型 |
 | `ProController` | Pro Controller 相当の周期送信型の具象クラス |
-| `JoyConL` | 単体 Joy-Con L 相当の周期送信型の具象クラス |
-| `JoyConR` | 単体 Joy-Con R 相当の周期送信型の具象クラス |
+| `JoyConL` | Joy-Con L 相当の周期送信型の具象クラス |
+| `JoyConR` | Joy-Con R 相当の周期送信型の具象クラス |
 | `DirectProController` | Pro Controller 相当の直接送信型の具象クラス |
-| `DirectJoyConL` | 単体 Joy-Con L 相当の直接送信型の具象クラス |
-| `DirectJoyConR` | 単体 Joy-Con R 相当の直接送信型の具象クラス |
+| `DirectJoyConL` | Joy-Con L 相当の直接送信型の具象クラス |
+| `DirectJoyConR` | Joy-Con R 相当の直接送信型の具象クラス |
 | `ControllerColors` | `body` / `buttons` / `left_grip` / `right_grip` に対応する固定プロファイル色 |
 | `ConnectionResult` | `try_connect()` / `try_reconnect()` の結果 |
 | `Button` | 対応する各種ボタン |
@@ -161,24 +161,26 @@ async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as 
 
 | メソッド | 種別 | 契約 |
 |---|---|---|
-| `press(*buttons)` | 状態更新 API | 現在のボタン入力状態に指定されたボタンを追加する。即時送信を保証しない。 |
-| `release(*buttons)` | 状態更新 API | 現在のボタン入力状態から指定されたボタンを取り除く。即時送信を保証しない。 |
-| `sticks(left=None, right=None)` | 状態更新 API | 指定されたスティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
-| `lstick(stick)` | 状態更新 API | 左スティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
-| `rstick(stick)` | 状態更新 API | 右スティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。即時送信を保証しない。 |
-| `imu(*frames)` | 状態更新 API | 6 軸センサー入力を置き換える。1 入力分を渡すと 3 入力分に複製し、3 入力分を渡すと順に設定する。即時送信を保証しない。 |
-| `neutral()` | 状態更新 API | `InputState.neutral()` 相当に戻す。即時送信を保証しない。 |
+| `press(*buttons)` | 状態更新 API | 現在のボタン入力状態に指定されたボタンを追加する。 |
+| `release(*buttons)` | 状態更新 API | 現在のボタン入力状態から指定されたボタンを取り除く。 |
+| `sticks(left=None, right=None)` | 状態更新 API | 指定されたスティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。 |
+| `lstick(stick)` | 状態更新 API | 左スティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。 |
+| `rstick(stick)` | 状態更新 API | 右スティック入力だけを置き換える。`Stick` 以外は `InvalidInputError`。 |
+| `imu(*frames)` | 状態更新 API | 6 軸センサー入力を置き換える。1 入力分を渡すと 3 入力分に複製し、3 入力分を渡すと順に設定する。 |
+| `neutral()` | 状態更新 API | `InputState.neutral()` 相当に戻す。 |
 | `apply(state)` | 完全入力状態 API | 構築済みの `InputState` で現在の入力全体を置き換える。 |
 | `send(state)` | 完全入力状態 API | 直接送信型で構築済みの `InputState` を 1 件送信し、成功後に現在の入力全体を置き換える。 |
 | `tap(*buttons, duration=0.08)` | 操作 API | 押下レポートを即時送信し、`duration` 秒待機してから解放レポートを送信する。 |
-
-直接送信型では、`press()`、`release()`、`sticks()`、`lstick()`、`rstick()`、`imu()`、`neutral()` が正常終了するたびに入力レポートを 1 件送信します。直接送信型の `send(state)` と意味的な入力操作は接続済みであることを必要とし、送信に失敗した場合は入力状態を確定しません。
 
 `tap()` 内で呼び出される `release()` は、この呼び出しで渡したボタンだけを解除します。事前に `press()` していた他のボタンは維持されます。
 
 `lstick(stick)` は `sticks(left=stick)`、`rstick(stick)` は `sticks(right=stick)` と同じ状態更新 API です。左右を同じ状態更新で置き換える場合は、`sticks(left=..., right=...)` を使います。
 
 `imu(*frames)` は、現在の 6 軸センサー入力だけを置き換えます。`imu(frame)` は同じ値を 3 入力分に設定し、`imu(frame1, frame2, frame3)` は 3 つの値を順に設定します。引数の数が 1 個または 3 個でない場合や、`IMUFrame` 以外を渡した場合は `InvalidInputError` が送出されます。
+
+直接送信型では、同じ状態を `await pad.send(state)` で 1 件送信します。直接送信型の `tap()` は押下と解放の 2 件を送り、押下から解放まで他の入力操作を割り込ませません。解放送信に失敗した場合、`snapshot()` は最後に正常送信した押下状態を返します。
+
+直接送信型では、`press()`、`release()`、`sticks()`、`lstick()`、`rstick()`、`imu()`、`neutral()` が正常終了するたびに入力レポートを 1 件送信します。直接送信型の `send(state)` と意味的な入力操作は接続済みであることを必要とし、送信に失敗した場合は入力状態を確定しません。
 
 周期送信型で `press()` の直後に `lstick()`、`rstick()`、`sticks()`、`imu()` を呼んでも、同じ HID 入力レポートに入る保証はありません。ボタン、スティック、IMU を同じ入力レポートに含める必要がある場合は、構築済みの `InputState` を作り、周期送信型では `apply(state)`、直接送信型では `send(state)` に渡してください。
 
@@ -190,8 +192,6 @@ state = InputState.neutral().with_buttons([Button.B]).with_sticks(
 )
 await pad.apply(state)
 ```
-
-直接送信型では、同じ状態を `await pad.send(state)` で 1 件送信します。直接送信型の `tap()` は押下と解放の 2 件を送り、押下から解放まで他の入力操作を割り込ませません。解放送信に失敗した場合、`snapshot()` は最後に正常送信した押下状態を返します。
 
 ## 入力モデル
 
@@ -224,7 +224,7 @@ await pad.apply(state)
 
 ## JoyConL / JoyConR
 
-`JoyConL` と `JoyConR` は、単体 Joy-Con L/R 相当の具象クラスです。直接送信型には `DirectJoyConL` と `DirectJoyConR` を使います。`side` 引数はありません。プロファイルごとの対応入力は、送信方式にかかわらず同じです。
+`JoyConL` と `JoyConR` は、Joy-Con L/R 相当の具象クラスです。直接送信型には `DirectJoyConL` と `DirectJoyConR` を使います。`side` 引数はありません。プロファイルごとの対応入力は、送信方式にかかわらず同じです。
 ```python
 from swbt import Button, JoyConL, JoyConR, Stick
 

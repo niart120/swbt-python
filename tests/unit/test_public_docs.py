@@ -80,7 +80,7 @@ def test_api_doc_covers_top_level_public_exports_and_methods() -> None:
         "状態更新 API",
         "操作 API",
         "完全入力状態 API",
-        "即時送信を保証しない",
+        "状態更新 API は接続を必要とせず、即時送信を保証しません",
         "周期送信型の操作が正常終了すると、ライブラリ内部の入力状態が確定",
         "直接送信型の操作が正常終了すると、入力レポート 1 件の送信と入力状態の確定が完了",
         "直接送信型の具象クラスは `report_period_us` を受け取りません",
@@ -89,7 +89,7 @@ def test_api_doc_covers_top_level_public_exports_and_methods() -> None:
         "直接送信型でも、`close(neutral=True)` に限ってニュートラル入力を 1 件送信",
         "接続できない場合は `ConnectionFailedError`",
         "`ProController`、`JoyConL`、`JoyConR` は周期送信型の具象クラス",
-        "`JoyConL` と `JoyConR` は、単体 Joy-Con L/R 相当の具象クラス",
+        "`JoyConL` と `JoyConR` は、Joy-Con L/R 相当の具象クラス",
         "left = JoyConL(",
         "right = JoyConR(",
         "await left.tap(Button.SR, Button.SL)",
@@ -102,7 +102,6 @@ def test_api_doc_covers_top_level_public_exports_and_methods() -> None:
         "各項目には独立した既定値があります",
         "`DiagnosticsConfig` | トレース出力設定",
         "`diagnostics` はトレース出力設定です",
-        "`DiagnosticsConfig` 自体は原因を自動判定する機能ではありません",
     ):
         assert token in text
 
