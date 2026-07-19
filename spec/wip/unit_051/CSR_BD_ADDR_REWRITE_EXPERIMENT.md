@@ -108,7 +108,7 @@
 | green | Switch pairing probe の dry-run は adapter を開かない | safety | unit | no | fresh key store、二段階 address guard、cleanup sequence を出力 |
 | green | 接続後5秒の観測窓を維持する | new | unit | no | 既定 `observation_seconds=5.0`、neutral report loop のまま保持してから close |
 | green | 明示指定時だけ同一 identity の key store を再利用できる | safety | unit | no | `--reuse-key-store` は既存ファイル必須。fresh / reuse の不整合は adapter open 前に拒否 |
-| green | local address で Switch pairing が成立する | characterization | hardware | yes | `02:1B:DC:F9:9F:7D`、fresh key store、Classic pairing / HID connected / clean close が pass。別登録の目視は実施できず unobserved |
+| green | local address で Switch pairing が成立する | characterization | hardware | yes | 初回 protocol pass 後、5秒 rerun で Switch UI の登録を目視。元登録を残した条件から別 identity 扱いは inference |
 | planned | dummy address が local address / original と別 device として登録される | characterization | hardware | yes | `00:11:22:33:44:55`、別 key store、local 試験の復旧確認後だけ実行 |
 
 ## 8. 文書検証計画
@@ -134,7 +134,7 @@
 - identity ごとに存在しない key store path を要求する。既存 key store がある場合は adapter を開かず失敗する。これにより元 address、local address、dummy address の link key を混在させない。
 - 初回 pairing は fresh key store を要求する。同じ expected address の目視再試験に限り `--reuse-key-store` で既存 key store を明示再利用できる。reuse 指定時にファイルがなければ adapter を開かない。
 - pairing probe は `connected` 直後に閉じず、既定5秒の観測窓を維持する。この間の periodic input は neutral のみとする。
-- 対象 Switch は local address `02:1B:DC:F9:9F:7D` を Classic pairing と HID connection まで受理した。Bumble `power_on()` 後の address、Device Info address ともに local address であり、fresh key store 保存と neutral input report 送信後に clean close した。元 address の登録と別 device に見えたかは目視確認を逃したため unobserved である。
+- 対象 Switch は local address `02:1B:DC:F9:9F:7D` を Classic pairing と HID connection まで受理した。5秒観測 rerun ではユーザが Switch UI で登録されたことを目視確認した。元 address の登録を削除していない条件から別 identity として扱われた可能性は強いが、UI は BD_ADDR を表示しないため inference とする。
 - local-address pairing 後に dongle を物理 power cycleすると、2回の read-only recovery probe で standard HCI / CSR default-store の双方が元の `00:1B:DC:F9:9F:7D` へ復帰していた。対象個体では Switch-facing pairing 後も volatile identity の physical recovery が observed-pass である。
 - BlueZ の CSR 対応は source fact だが、VID:PID `0a12:0001` の全個体が受理することは未検証仮説である。
 
@@ -192,6 +192,7 @@
 | `uv run pytest tests/unit/test_csr_bd_addr_switch_pair_probe.py tests/unit/test_bumble_transport.py -q -p no:cacheprovider --basetemp=tmp/pytest-csr-observation-reuse-green` | pass | 46 passed。既定5秒、明示 reuse、address guard の非実機 contract を確認 |
 | `uv run pytest tests/unit -q -p no:cacheprovider --basetemp=tmp/pytest-unit-csr-observation-final` | pass | 429 passed |
 | local address 5秒再試験 command の dry-run | pass | `adapter_opened=false`、`key_store_mode=reuse`、`observation_seconds=5.0`、RF / Switch-facing false |
+| local address の承認済み5秒 registration rerun | pass | standard HCI / CSR / Bumble power-on address が local address で一致。既存 key store、Classic pairing、HID connected、periodic neutral 107件、clean close。Switch UI 登録をユーザ目視確認 |
 | Bumble / hardware pytest | not run | 今回は専用 probe command のみ承認範囲として実行 |
 
 ## 12. 実機実行条件
