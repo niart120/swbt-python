@@ -29,11 +29,13 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--adapter", default="usb:0")
     parser.add_argument("--expected-address", required=True)
     parser.add_argument("--key-store", required=True, type=Path)
+    parser.add_argument("--reuse-key-store", action="store_true")
     parser.add_argument("--trace", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--preflight-timeout", type=float, default=2.0)
     parser.add_argument("--pair-timeout", type=float, default=60.0)
+    parser.add_argument("--observation-seconds", type=float, default=5.0)
     return parser
 
 
@@ -55,27 +57,31 @@ def _display_address(address: bytes) -> str:
 
 
 def _dry_run_payload(args: argparse.Namespace, expected_address: bytes) -> dict[str, object]:
+    key_store_mode = "reuse" if args.reuse_key_store else "fresh"
     return {
         "adapter_opened": False,
         "execute": False,
         "adapter": args.adapter,
         "expected_address": _display_address(expected_address),
         "key_store": str(args.key_store),
-        "key_store_must_be_fresh": True,
+        "key_store_mode": key_store_mode,
+        "key_store_must_be_fresh": not args.reuse_key_store,
         "trace": str(args.trace),
         "output": str(args.output),
         "persistent_write": False,
         "advertising": False,
         "switch_facing": False,
         "periodic_input": "neutral_only_after_connection",
+        "observation_seconds": args.observation_seconds,
         "sequence": [
-            "reject_existing_key_store",
+            ("require_existing_key_store" if args.reuse_key_store else "reject_existing_key_store"),
             "read_standard_and_csr_address_without_hci_reset",
             "require_both_addresses_to_match_expected",
             "bumble_power_on",
             "require_powered_on_address_to_match_expected_before_visibility",
             "enable_connectable_and_discoverable",
             "wait_for_switch_pairing",
+            "hold_connected_for_observation",
             "close_controller_and_adapter",
             "physical_power_cycle",
             "run_read_only_recovery_check",
@@ -105,6 +111,8 @@ async def _execute(
     trace_path: Path,
     preflight_timeout: float,
     pair_timeout: float,
+    observation_seconds: float,
+    reuse_key_store: bool,
 ) -> dict[str, object]:
     expected_text = _display_address(expected_address)
     result: dict[str, object] = {
@@ -115,11 +123,13 @@ async def _execute(
         "bumble": version("bumble"),
         "expected_address": expected_text,
         "key_store": str(key_store_path),
+        "key_store_mode": "reuse" if reuse_key_store else "fresh",
         "trace": str(trace_path),
         "persistent_write": False,
         "advertising": False,
         "switch_facing": False,
         "periodic_input": "neutral_only_after_connection",
+        "observation_seconds": observation_seconds,
         "status": "started",
         "stage": "reject_existing_key_store",
         "cleanup": "adapter_not_opened",
@@ -173,6 +183,8 @@ async def _execute(
                     }
                 )
                 await pad.pair(timeout=pair_timeout)
+                result["stage"] = "observation"
+                await asyncio.sleep(observation_seconds)
         result.update(
             {
                 "status": "paired",
@@ -208,26 +220,44 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--preflight-timeout must be greater than zero")
     if args.pair_timeout <= 0:
         parser.error("--pair-timeout must be greater than zero")
+    if args.observation_seconds <= 0:
+        parser.error("--observation-seconds must be greater than zero")
     try:
         expected_address = _parse_address(args.expected_address)
     except ValueError as error:
         parser.error(str(error))
 
-    if args.execute and args.key_store.exists():
+    key_store_exists = args.key_store.exists()
+    invalid_key_store_state = args.execute and (
+        (args.reuse_key_store and not key_store_exists)
+        or (not args.reuse_key_store and key_store_exists)
+    )
+    if invalid_key_store_state:
+        error = (
+            f"existing key store required: {args.key_store}"
+            if args.reuse_key_store
+            else f"fresh key store required: {args.key_store}"
+        )
         result = {
             "timestamp": datetime.now(UTC).isoformat(),
             "adapter": args.adapter,
             "expected_address": _display_address(expected_address),
             "key_store": str(args.key_store),
+            "key_store_mode": "reuse" if args.reuse_key_store else "fresh",
             "trace": str(args.trace),
             "persistent_write": False,
             "advertising": False,
             "switch_facing": False,
+            "observation_seconds": args.observation_seconds,
             "status": "failed",
-            "stage": "reject_existing_key_store",
+            "stage": (
+                "require_existing_key_store"
+                if args.reuse_key_store
+                else "reject_existing_key_store"
+            ),
             "cleanup": "adapter_not_opened",
-            "error_type": "FileExistsError",
-            "error": f"fresh key store required: {args.key_store}",
+            "error_type": "FileNotFoundError" if args.reuse_key_store else "FileExistsError",
+            "error": error,
         }
     elif args.execute:
         result = asyncio.run(
@@ -238,6 +268,8 @@ def main(argv: list[str] | None = None) -> int:
                 trace_path=args.trace,
                 preflight_timeout=args.preflight_timeout,
                 pair_timeout=args.pair_timeout,
+                observation_seconds=args.observation_seconds,
+                reuse_key_store=args.reuse_key_store,
             )
         )
     else:

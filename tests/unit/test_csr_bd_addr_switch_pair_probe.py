@@ -33,6 +33,8 @@ def test_switch_pair_probe_defaults_to_non_hardware_dry_run(tmp_path: Path) -> N
     assert payload["switch_facing"] is False
     assert payload["key_store_must_be_fresh"] is True
     assert payload["expected_address"] == "02:1B:DC:F9:9F:7D"
+    assert payload["observation_seconds"] == 5.0
+    assert "hold_connected_for_observation" in payload["sequence"]
     assert output_path.read_text(encoding="utf-8") == result.stdout
 
 
@@ -69,3 +71,35 @@ def test_switch_pair_probe_rejects_existing_key_store_before_adapter_open(
     assert payload["cleanup"] == "adapter_not_opened"
     assert payload["advertising"] is False
     assert payload["switch_facing"] is False
+
+
+def test_switch_pair_probe_dry_run_can_plan_explicit_key_store_reuse(
+    tmp_path: Path,
+) -> None:
+    key_store_path = tmp_path / "keys.json"
+    key_store_path.write_text("{}\n", encoding="utf-8")
+    result = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            str(TOOL),
+            "--expected-address",
+            "02:1B:DC:F9:9F:7D",
+            "--key-store",
+            str(key_store_path),
+            "--reuse-key-store",
+            "--trace",
+            str(tmp_path / "trace.jsonl"),
+            "--output",
+            str(tmp_path / "result.json"),
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["adapter_opened"] is False
+    assert payload["key_store_mode"] == "reuse"
+    assert payload["key_store_must_be_fresh"] is False
+    assert payload["sequence"][0] == "require_existing_key_store"
