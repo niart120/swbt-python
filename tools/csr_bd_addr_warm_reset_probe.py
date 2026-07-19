@@ -8,24 +8,20 @@ import sys
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-from bumble import hci
-from bumble.transport import open_transport
-from csr_bd_addr_volatile_probe import (
-    _command_payload,
-    _initialize_host,
-    _read_csr_address,
-    _read_standard_address,
-    _require_csr_company_identifier,
-    _require_equal,
-    _send_write,
-)
 
 from swbt.transport._csr_bd_addr import build_csr_bd_addr_volatile_experiment_plan
-
-if TYPE_CHECKING:
-    from bumble.transport.common import Transport
+from swbt.transport._csr_bd_addr_harness import (
+    CsrAdapterSession,
+)
+from swbt.transport._csr_bd_addr_harness import (
+    command_payload as _command_payload,
+)
+from swbt.transport._csr_bd_addr_harness import (
+    require_csr_company_identifier as _require_csr_company_identifier,
+)
+from swbt.transport._csr_bd_addr_harness import (
+    require_equal as _require_equal,
+)
 
 _CSR_DEFAULT_STORE = 0x0000
 _CSR_PSRAM_STORE = 0x0008
@@ -79,24 +75,22 @@ async def _execute(
         "stage": "open_adapter",
         "cleanup": "not_started",
     }
-    transport: Transport | None = None
+    session: CsrAdapterSession | None = None
     psram_changed = False
     warm_reset_enqueued = False
     try:
-        transport = await open_transport(adapter)
-        host, company_identifier = await _initialize_host(
-            transport,
+        session = await CsrAdapterSession.open(adapter)
+        metadata = await session.initialize(
             response_timeout=response_timeout,
+            hci_reset=True,
         )
-        _require_csr_company_identifier(company_identifier)
+        _require_csr_company_identifier(metadata.company_identifier)
 
         result["stage"] = "verify_baseline"
-        standard_before = await _read_standard_address(
-            host,
+        standard_before = await session.read_standard_address(
             response_timeout=response_timeout,
         )
-        csr_before, baseline_event = await _read_csr_address(
-            host,
+        csr_before, baseline_event = await session.read_csr_address(
             store=_CSR_DEFAULT_STORE,
             sequence_number=0x4710,
             response_timeout=response_timeout,
@@ -115,19 +109,17 @@ async def _execute(
             "standard_address": standard_before,
             "csr_address": csr_before,
             "csr_vendor_event_hex": baseline_event,
-            "company_identifier": company_identifier,
+            "company_identifier": metadata.company_identifier,
         }
 
         result["stage"] = "apply_psram_write"
-        result["apply_write"] = await _send_write(
-            host,
+        result["apply_write"] = await session.send_write(
             experiment.apply,
             response_timeout=response_timeout,
         )
 
         result["stage"] = "verify_psram_requested"
-        psram_address, changed_event = await _read_csr_address(
-            host,
+        psram_address, changed_event = await session.read_csr_address(
             store=_CSR_PSRAM_STORE,
             sequence_number=0x4712,
             response_timeout=response_timeout,
@@ -138,8 +130,7 @@ async def _execute(
             source="CSR PSRAM address",
         )
         psram_changed = True
-        standard_during = await _read_standard_address(
-            host,
+        standard_during = await session.read_standard_address(
             response_timeout=response_timeout,
         )
         _require_equal(
@@ -154,12 +145,7 @@ async def _execute(
         }
 
         result["stage"] = "enqueue_csr_warm_reset"
-        host.send_hci_packet(
-            hci.HCI_Command(
-                experiment.apply.reset_command.parameters,
-                op_code=experiment.apply.reset_command.opcode,
-            )
-        )
+        session.enqueue_warm_reset(experiment.apply.reset_command)
         warm_reset_enqueued = True
         result["warm_reset_command"] = _command_payload(experiment.apply.reset_command)
         result["warm_reset_enqueued"] = True
@@ -177,11 +163,11 @@ async def _execute(
             }
         )
     finally:
-        if transport is None:
+        if session is None:
             result["cleanup"] = "adapter_not_opened"
         else:
             try:
-                await transport.close()
+                await session.close()
                 result["cleanup"] = "adapter_closed_or_reenumerated"
             except Exception as error:  # noqa: BLE001
                 result["cleanup"] = {

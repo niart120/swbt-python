@@ -9,21 +9,23 @@ from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
 
-from bumble import hci
-from bumble.host import Host
-from bumble.transport import open_transport
-from bumble.transport.common import Transport
-
 from swbt.transport._csr_bd_addr import (
     CsrBdAddrRewritePlan,
     CsrBdAddrStore,
-    CsrVendorCommand,
-    build_csr_bd_addr_read_command,
     build_csr_bd_addr_rewrite_plan,
     build_csr_bd_addr_volatile_experiment_plan,
-    matches_csr_vendor_response,
-    parse_csr_bccmd_response,
-    parse_csr_bd_addr_read_response,
+)
+from swbt.transport._csr_bd_addr_harness import (
+    CsrAdapterSession,
+)
+from swbt.transport._csr_bd_addr_harness import (
+    command_payload as _command_payload,
+)
+from swbt.transport._csr_bd_addr_harness import (
+    require_csr_company_identifier as _require_csr_company_identifier,
+)
+from swbt.transport._csr_bd_addr_harness import (
+    require_equal as _require_equal,
 )
 
 _CSR_PSRAM_STORE = 0x0008
@@ -45,125 +47,12 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _command_payload(command: CsrVendorCommand) -> dict[str, object]:
-    return {
-        "opcode": f"0x{command.opcode:04x}",
-        "expected_event_code": f"0x{command.expected_event_code:02x}",
-        "parameters_hex": command.parameters.hex(),
-        "hci_packet_hex": command.hci_packet.hex(),
-    }
-
-
 def _write_payload(plan: CsrBdAddrRewritePlan) -> dict[str, object]:
     return {
         "address": plan.address,
         "store": plan.store,
         "write": _command_payload(plan.write_command),
     }
-
-
-async def _send_csr_vendor_command(
-    host: Host,
-    command: CsrVendorCommand,
-    *,
-    response_timeout: float,
-) -> bytes:
-    await host.command_semaphore.acquire()
-    response: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
-
-    def on_vendor_event(event: hci.HCI_Vendor_Event) -> None:
-        data = bytes(event.data)
-        if matches_csr_vendor_response(command, data) and not response.done():
-            response.set_result(data)
-
-    host.on("vendor_event", on_vendor_event)
-    try:
-        host.send_hci_packet(hci.HCI_Command(command.parameters, op_code=command.opcode))
-        return await asyncio.wait_for(response, timeout=response_timeout)
-    finally:
-        host.remove_listener("vendor_event", on_vendor_event)
-        if host.command_semaphore.locked():
-            host.command_semaphore.release()
-
-
-async def _initialize_host(
-    transport: Transport,
-    *,
-    response_timeout: float,
-) -> tuple[Host, int]:
-    host = Host(transport.source, transport.sink)
-    await host.send_sync_command(
-        hci.HCI_Reset_Command(),
-        response_timeout=response_timeout,
-    )
-    host.ready = True
-    await host.send_sync_command(
-        hci.HCI_Read_Local_Supported_Commands_Command(),
-        response_timeout=response_timeout,
-    )
-    local_version = await host.send_sync_command(
-        hci.HCI_Read_Local_Version_Information_Command(),
-        response_timeout=response_timeout,
-    )
-    return host, local_version.company_identifier
-
-
-async def _read_standard_address(host: Host, *, response_timeout: float) -> str:
-    response = await host.send_sync_command(
-        hci.HCI_Read_BD_ADDR_Command(),
-        response_timeout=response_timeout,
-    )
-    return response.bd_addr.to_string(with_type_qualifier=False)
-
-
-async def _read_csr_address(
-    host: Host,
-    *,
-    store: int,
-    sequence_number: int,
-    response_timeout: float,
-) -> tuple[str, str]:
-    command = build_csr_bd_addr_read_command(
-        store=store,
-        sequence_number=sequence_number,
-    )
-    event = await _send_csr_vendor_command(
-        host,
-        command,
-        response_timeout=response_timeout,
-    )
-    response = parse_csr_bd_addr_read_response(event)
-    return response.address, event.hex()
-
-
-async def _send_write(
-    host: Host,
-    plan: CsrBdAddrRewritePlan,
-    *,
-    response_timeout: float,
-) -> dict[str, str | int]:
-    event = await _send_csr_vendor_command(
-        host,
-        plan.write_command,
-        response_timeout=response_timeout,
-    )
-    response = parse_csr_bccmd_response(event)
-    if not response.succeeded:
-        msg = f"CSR write failed with status 0x{response.status:04x}"
-        raise RuntimeError(msg)
-    return {"vendor_event_hex": event.hex(), "status": response.status}
-
-
-def _require_equal(*, actual: str, expected: str, source: str) -> None:
-    if actual != expected:
-        msg = f"expected {source} {expected}, got {actual}"
-        raise RuntimeError(msg)
-
-
-def _require_csr_company_identifier(company_identifier: int) -> None:
-    if company_identifier != 10:
-        msg = f"expected CSR company identifier 10, got {company_identifier}"
-        raise RuntimeError(msg)
 
 
 async def _execute(
@@ -194,24 +83,21 @@ async def _execute(
         "cleanup": "not_started",
         "restoration": "not_required",
     }
-    transport: Transport | None = None
-    host: Host | None = None
+    session: CsrAdapterSession | None = None
     restore_required = False
     try:
-        transport = await open_transport(adapter)
-        host, company_identifier = await _initialize_host(
-            transport,
+        session = await CsrAdapterSession.open(adapter)
+        metadata = await session.initialize(
             response_timeout=response_timeout,
+            hci_reset=True,
         )
-        _require_csr_company_identifier(company_identifier)
+        _require_csr_company_identifier(metadata.company_identifier)
 
         result["stage"] = "verify_baseline"
-        standard_before = await _read_standard_address(
-            host,
+        standard_before = await session.read_standard_address(
             response_timeout=response_timeout,
         )
-        csr_before, baseline_event = await _read_csr_address(
-            host,
+        csr_before, baseline_event = await session.read_csr_address(
             store=0x0000,
             sequence_number=0x4710,
             response_timeout=response_timeout,
@@ -230,21 +116,19 @@ async def _execute(
             "standard_address": standard_before,
             "csr_address": csr_before,
             "csr_vendor_event_hex": baseline_event,
-            "company_identifier": company_identifier,
+            "company_identifier": metadata.company_identifier,
         }
 
         result["stage"] = "apply_psram_write"
         restore_required = True
         result["restoration"] = "required"
-        result["apply_write"] = await _send_write(
-            host,
+        result["apply_write"] = await session.send_write(
             experiment.apply,
             response_timeout=response_timeout,
         )
 
         result["stage"] = "verify_psram_requested"
-        psram_changed, changed_event = await _read_csr_address(
-            host,
+        psram_changed, changed_event = await session.read_csr_address(
             store=_CSR_PSRAM_STORE,
             sequence_number=0x4712,
             response_timeout=response_timeout,
@@ -254,8 +138,7 @@ async def _execute(
             expected=experiment.requested_address,
             source="CSR PSRAM address",
         )
-        standard_during = await _read_standard_address(
-            host,
+        standard_during = await session.read_standard_address(
             response_timeout=response_timeout,
         )
         _require_equal(
@@ -270,15 +153,13 @@ async def _execute(
         }
 
         result["stage"] = "restore_psram_write"
-        result["restore_write"] = await _send_write(
-            host,
+        result["restore_write"] = await session.send_write(
             experiment.restore,
             response_timeout=response_timeout,
         )
 
         result["stage"] = "verify_psram_restored"
-        psram_restored, restored_event = await _read_csr_address(
-            host,
+        psram_restored, restored_event = await session.read_csr_address(
             store=_CSR_PSRAM_STORE,
             sequence_number=0x4714,
             response_timeout=response_timeout,
@@ -288,8 +169,7 @@ async def _execute(
             expected=experiment.original_address,
             source="restored CSR PSRAM address",
         )
-        standard_after = await _read_standard_address(
-            host,
+        standard_after = await session.read_standard_address(
             response_timeout=response_timeout,
         )
         _require_equal(
@@ -315,17 +195,17 @@ async def _execute(
             }
         )
     finally:
-        if restore_required and host is not None:
+        if restore_required and session is not None:
             result["restoration"] = await _best_effort_restore(
-                host,
+                session,
                 original_address=experiment.original_address,
                 response_timeout=response_timeout,
             )
-        if transport is None:
+        if session is None:
             result["cleanup"] = "adapter_not_opened"
         else:
             try:
-                await transport.close()
+                await session.close()
                 result["cleanup"] = "adapter_closed"
             except Exception as error:  # noqa: BLE001
                 result["cleanup"] = {
@@ -338,7 +218,7 @@ async def _execute(
 
 
 async def _best_effort_restore(
-    host: Host,
+    session: CsrAdapterSession,
     *,
     original_address: str,
     response_timeout: float,
@@ -349,13 +229,11 @@ async def _best_effort_restore(
         sequence_number=0x4715,
     )
     try:
-        write = await _send_write(
-            host,
+        write = await session.send_write(
             plan,
             response_timeout=response_timeout,
         )
-        address, event = await _read_csr_address(
-            host,
+        address, event = await session.read_csr_address(
             store=_CSR_PSRAM_STORE,
             sequence_number=0x4716,
             response_timeout=response_timeout,

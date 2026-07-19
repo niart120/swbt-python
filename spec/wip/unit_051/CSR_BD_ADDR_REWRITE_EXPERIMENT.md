@@ -115,6 +115,7 @@
 | green | dummy address がSwitchの登録経路に受理される | characterization | hardware | yes | fresh初回はUI反応なし、再適用+key reuse rerunでUI登録を目視。元/localとの別identity扱いはinference |
 | green | pairing probe が通常 close 後に同一プロセスで address を再読出しする | characterization | unit | no | dry-run の順序と、fake probe による controller context close 後 / HCI Reset なしの2回目 readを確認 |
 | green | Bumble通常closeをまたいでvolatile active addressが保持される | characterization | hardware | yes | dummy addressのpairing / 5秒neutral保持後、同一processのHCI Resetなしreadでstandard HCI / CSRがdummy addressのまま一致。後続physical power cycleで元addressへ復帰 |
+| green | raw CSR I/Oをtransport内の非公開harnessへ集約してCLI出力を維持する | refactor | unit / integration | no | tools間のprivate importとBumble直接依存を解消。read-only成功形 / 失敗stage、全dry-runを維持 |
 
 ## 8. 文書検証計画
 
@@ -155,12 +156,14 @@
 | path | change | 内容 |
 |---|---|---|
 | `src/swbt/transport/_csr_bd_addr.py` | new | command plan と response parser。I/O なし |
+| `src/swbt/transport/_csr_bd_addr_harness.py` | new | 実験tool共通のBumble adapter session、CSR Vendor Event待機、identity read、volatile write |
 | `tools/csr_bd_addr_plan.py` | new | adapter を開かない dry-run |
 | `tools/csr_bd_addr_probe.py` | new | standard HCI identity read と CSR GETREQ の承認済み実機 probe |
 | `tools/csr_bd_addr_volatile_probe.py` | new | dry-run 既定、warm reset なし、自動 restore 必須の PSRAM SETREQ / GETREQ probe |
 | `tools/csr_bd_addr_warm_reset_probe.py` | new | dry-run 既定、PSRAM apply / warm reset enqueue と別プロセス read を分離する probe |
 | `tools/csr_bd_addr_switch_pair_probe.py` | new | fresh key store と二段階 address guard を持つ Switch pairing probe |
 | `tests/unit/test_csr_bd_addr_experiment.py` | new | BlueZ layout の characterization |
+| `tests/unit/test_csr_bd_addr_harness.py` | new | read-only result shape、failure stage、adapter closeのcharacterization |
 | `tests/unit/test_csr_bd_addr_switch_pair_probe.py` | new | pairing probe の dry-run と既存 key store 拒否 |
 | `src/swbt/transport/bumble.py` | update | power-on 後、可視化前の expected local address guard |
 | `spec/wip/unit_051/CSR_BD_ADDR_REWRITE_EXPERIMENT.md` | new | 根拠、実機境界、探索結果 |
@@ -213,6 +216,10 @@
 | dummy address close保持試験の2 command dry-run | pass | warm-reset apply、key reuse pairing、5秒neutral保持、通常close直後のread、physical recoveryの順序を確認。adapter open / RF動作なし |
 | dummy addressの承認済みnormal-close retention試験 | pass | pairing前と通常close直後のstandard HCI / CSRがともに`00:11:22:33:44:55`で一致。HCI Resetなし、`post_close_matches_expected=true`、controllerとpost-close adapterをclean close |
 | `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --hci-reset --timeout 2 --output tmp/hardware/unit_051/dummy-address-close-retention-post-power-cycle-recovery.json` | pass | physical power cycle後、standard HCI / CSRが元の`00:1B:DC:F9:9F:7D`で一致、CSR status `0`、adapter close |
+| CSR harness refactor後の4 dry-run | pass | plan / PSRAM-only / warm-reset / Switch-pairingのJSON field、command bytes、sequenceを維持。adapter openなし |
+| `uv run pytest tests/unit -q -p no:cacheprovider --basetemp=tmp/pytest-unit-csr-refactor-final` | pass | 433 passed |
+| `uv run pytest tests/integration -q -p no:cacheprovider --basetemp=tmp/pytest-integration-csr-refactor-final` | pass | 125 passed |
+| CSR harness refactor後のstatic gate | pass | 97 files formatted、ruff / ty pass |
 | Bumble / hardware pytest | not run | 今回は専用 probe command のみ承認範囲として実行 |
 
 ## 12. 実機実行条件

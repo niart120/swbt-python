@@ -9,11 +9,10 @@ from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
 
-from csr_bd_addr_probe import _probe
-
 from swbt import DiagnosticsConfig, ProController
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.gamepad._config import _SwitchGamepadConfig
+from swbt.transport._csr_bd_addr_harness import probe_csr_identity as _probe
 from swbt.transport.bumble import BumbleHidTransport
 
 
