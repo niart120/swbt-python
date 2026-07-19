@@ -36,6 +36,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--preflight-timeout", type=float, default=2.0)
     parser.add_argument("--pair-timeout", type=float, default=60.0)
     parser.add_argument("--observation-seconds", type=float, default=5.0)
+    parser.add_argument("--post-close-address-read", action="store_true")
     return parser
 
 
@@ -58,6 +59,25 @@ def _display_address(address: bytes) -> str:
 
 def _dry_run_payload(args: argparse.Namespace, expected_address: bytes) -> dict[str, object]:
     key_store_mode = "reuse" if args.reuse_key_store else "fresh"
+    sequence = [
+        ("require_existing_key_store" if args.reuse_key_store else "reject_existing_key_store"),
+        "read_standard_and_csr_address_without_hci_reset",
+        "require_both_addresses_to_match_expected",
+        "bumble_power_on",
+        "require_powered_on_address_to_match_expected_before_visibility",
+        "enable_connectable_and_discoverable",
+        "wait_for_switch_pairing",
+        "hold_connected_for_observation",
+        "close_controller_and_adapter",
+    ]
+    if args.post_close_address_read:
+        sequence.append("read_standard_and_csr_address_after_close_without_hci_reset")
+    sequence.extend(
+        [
+            "physical_power_cycle",
+            "run_read_only_recovery_check",
+        ]
+    )
     return {
         "adapter_opened": False,
         "execute": False,
@@ -73,20 +93,23 @@ def _dry_run_payload(args: argparse.Namespace, expected_address: bytes) -> dict[
         "switch_facing": False,
         "periodic_input": "neutral_only_after_connection",
         "observation_seconds": args.observation_seconds,
-        "sequence": [
-            ("require_existing_key_store" if args.reuse_key_store else "reject_existing_key_store"),
-            "read_standard_and_csr_address_without_hci_reset",
-            "require_both_addresses_to_match_expected",
-            "bumble_power_on",
-            "require_powered_on_address_to_match_expected_before_visibility",
-            "enable_connectable_and_discoverable",
-            "wait_for_switch_pairing",
-            "hold_connected_for_observation",
-            "close_controller_and_adapter",
-            "physical_power_cycle",
-            "run_read_only_recovery_check",
-        ],
+        "post_close_address_read": args.post_close_address_read,
+        "sequence": sequence,
     }
+
+
+def _identity_read_completed(identity_read: dict[str, object]) -> bool:
+    standard = identity_read.get("standard_hci")
+    csr = identity_read.get("csr")
+    if not isinstance(standard, dict) or not isinstance(csr, dict):
+        return False
+    return (
+        identity_read.get("status") == "passed"
+        and isinstance(standard.get("address"), str)
+        and isinstance(csr.get("address"), str)
+        and csr.get("matches_standard_hci") is True
+        and identity_read.get("cleanup") == "adapter_closed"
+    )
 
 
 def _preflight_matches_expected(preflight: dict[str, object], expected: str) -> bool:
@@ -95,11 +118,9 @@ def _preflight_matches_expected(preflight: dict[str, object], expected: str) -> 
     if not isinstance(standard, dict) or not isinstance(csr, dict):
         return False
     return (
-        preflight.get("status") == "passed"
+        _identity_read_completed(preflight)
         and standard.get("address") == expected
         and csr.get("address") == expected
-        and csr.get("matches_standard_hci") is True
-        and preflight.get("cleanup") == "adapter_closed"
     )
 
 
@@ -113,6 +134,7 @@ async def _execute(
     pair_timeout: float,
     observation_seconds: float,
     reuse_key_store: bool,
+    post_close_address_read: bool,
 ) -> dict[str, object]:
     expected_text = _display_address(expected_address)
     result: dict[str, object] = {
@@ -130,6 +152,7 @@ async def _execute(
         "switch_facing": False,
         "periodic_input": "neutral_only_after_connection",
         "observation_seconds": observation_seconds,
+        "post_close_address_read": post_close_address_read,
         "status": "started",
         "stage": "reject_existing_key_store",
         "cleanup": "adapter_not_opened",
@@ -193,13 +216,54 @@ async def _execute(
                 "key_store_created": await asyncio.to_thread(key_store_path.exists),
             }
         )
+        if post_close_address_read:
+            result["stage"] = "post_close_identity_read"
+            post_close_read = await _probe(
+                adapter,
+                response_timeout=preflight_timeout,
+                hci_reset=False,
+            )
+            result["post_close_read"] = post_close_read
+            if not _identity_read_completed(post_close_read):
+                result.update(
+                    {
+                        "status": "failed",
+                        "stage": "post_close_identity_read_failed",
+                        "error_type": "RuntimeError",
+                        "error": "post-close CSR identity read did not complete",
+                        "cleanup": (
+                            "controller_closed_post_close_cleanup_"
+                            f"{post_close_read.get('cleanup', 'unknown')}"
+                        ),
+                    }
+                )
+            else:
+                retained = _preflight_matches_expected(
+                    post_close_read,
+                    expected_text,
+                )
+                result.update(
+                    {
+                        "stage": "complete",
+                        "cleanup": "controller_and_post_close_adapter_closed",
+                        "post_close_matches_expected": retained,
+                        "post_close_status": (
+                            "expected_address_retained" if retained else "address_changed"
+                        ),
+                    }
+                )
     except Exception as error:  # noqa: BLE001
+        cleanup = (
+            "controller_closed_post_close_probe_exit_attempted"
+            if result.get("stage") == "post_close_identity_read"
+            else "controller_context_exit_attempted"
+        )
         result.update(
             {
                 "status": "failed",
                 "error_type": type(error).__name__,
                 "error": str(error),
-                "cleanup": "controller_context_exit_attempted",
+                "cleanup": cleanup,
                 "key_store_created": await asyncio.to_thread(key_store_path.exists),
             }
         )
@@ -249,6 +313,7 @@ def main(argv: list[str] | None = None) -> int:
             "advertising": False,
             "switch_facing": False,
             "observation_seconds": args.observation_seconds,
+            "post_close_address_read": args.post_close_address_read,
             "status": "failed",
             "stage": (
                 "require_existing_key_store"
@@ -270,6 +335,7 @@ def main(argv: list[str] | None = None) -> int:
                 pair_timeout=args.pair_timeout,
                 observation_seconds=args.observation_seconds,
                 reuse_key_store=args.reuse_key_store,
+                post_close_address_read=args.post_close_address_read,
             )
         )
     else:

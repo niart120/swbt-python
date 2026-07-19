@@ -44,6 +44,7 @@
 - warm reset を送らない PSRAM SETREQ / GETREQ / 元値 restore probe の準備。
 - PSRAM sentinel を確認して CSR warm reset を enqueue し、USB 再列挙後の identity read を別プロセスへ分離する probe の準備。
 - active address を preflight と Bumble `power_on()` 後の二段階で照合し、一致した場合だけ Switch pairing を開始する probe。
+- pairing probe の通常 close 直後に、同一プロセスから HCI Reset なしで standard HCI / CSR address を再読出しする経路。
 - local address `02:1B:DC:F9:9F:7D`、次いで dummy address `00:11:22:33:44:55` を使う Switch 登録 identity の characterization。
 - Bumble 0.0.230 と最新版で不足する送受信経路の比較。
 
@@ -75,6 +76,7 @@
 | lab sentinel address | required | inference | `02:1B:DC:F9:9F:7D` は local bit を立てた非 universal address。Switch-facing 実験は規格適合性の確認ではなく、対象 Switch の受理挙動だけを観測する |
 | dummy address | required | unverified hypothesis | `00:11:22:33:44:55` は universal bit の形式だが、この実験用に割り当てられた address ではない。同一 address の別機器が存在しない閉じた試験条件に限定する |
 | power-on address guard | required | implementation fact | Bumble `power_on()` 後、connectable / discoverable を有効にする前に controller の public address を expected value と比較し、不一致なら pairing へ進まない |
+| 通常 close 後の address read | required | implementation fact / hardware unverified | `--post-close-address-read` は controller context を閉じた後、同一プロセス内で `_probe(..., hci_reset=False)` を実行する。物理 power cycle と明示 HCI Reset は介在しないが、raw adapter の再 open は介在する |
 
 ## 6. 振る舞い仕様
 
@@ -88,6 +90,7 @@
 | PSRAM-only probe | original と lab sentinel | warm reset なしで SETREQ / GETREQ / restore / GETREQ を行い、active standard address が不変であることを確認する | persistent write、RF 動作なし |
 | staged warm-reset probe | original と lab sentinel | PSRAM read-back 後に warm reset を enqueue し、再列挙後の identity read を別プロセスで行う | automatic restore なし、物理 power cycle 必須、RF 動作なし |
 | guarded Switch pairing | active address と expected address | read-only preflight と Bumble `power_on()` 後の双方が一致した場合だけ advertising / pairing を開始する | 新規 key store 必須、neutral report のみ、終了後に物理 power cycle |
+| post-close identity read | `--post-close-address-read` | pairing、5秒観測、controller / adapter close の直後に、HCI Reset なしで standard HCI / CSR address を再読出しする | expected address の保持と address change はどちらも有効な観測。read / cleanup 失敗だけを command failure とする |
 | identity comparison | local address、次いで dummy address | Switch 上の登録表示、再接続先、既存登録との分離を人間が観測する | address ごとに key store / trace / result artifact を分離 |
 
 ## 7. TDD Test List
@@ -110,6 +113,7 @@
 | green | 明示指定時だけ同一 identity の key store を再利用できる | safety | unit | no | `--reuse-key-store` は既存ファイル必須。fresh / reuse の不整合は adapter open 前に拒否 |
 | green | local address で Switch pairing が成立する | characterization | hardware | yes | 初回 protocol pass 後、5秒 rerun で Switch UI の登録を目視。元登録を残した条件から別 identity 扱いは inference |
 | green | dummy address がSwitchの登録経路に受理される | characterization | hardware | yes | fresh初回はUI反応なし、再適用+key reuse rerunでUI登録を目視。元/localとの別identity扱いはinference |
+| green | pairing probe が通常 close 後に同一プロセスで address を再読出しする | characterization | unit | no | dry-run の順序と、fake probe による controller context close 後 / HCI Reset なしの2回目 readを確認 |
 
 ## 8. 文書検証計画
 
@@ -138,6 +142,7 @@
 - local-address pairing 後に dongle を物理 power cycleすると、2回の read-only recovery probe で standard HCI / CSR default-store の双方が元の `00:1B:DC:F9:9F:7D` へ復帰していた。対象個体では Switch-facing pairing 後も volatile identity の physical recovery が observed-pass である。
 - dummy address `00:11:22:33:44:55` もstandard HCI / CSR / Bumble `power_on()`後のaddressが一致し、fresh pairingとkey reuse rerunの双方でfull initial subcommand列とclean closeまでpassした。fresh runのUIは反応なしだったが、再適用+reuse rerunではユーザが登録を目視した。
 - dummy fresh pairing process後、ユーザがdongleを物理power cycleしていたため、次preflightは元addressを返した。これは既知のphysical recoveryと一致し、transport closeだけでvolatile addressが戻る根拠にはしない。Bumble `Device.power_off()`がhost flushのみで明示HCI Resetを送らないことはsource factだが、通常closeをまたぐvolatile address保持は未検証である。Switch-facing probeを別processで繰り返す場合もexpected address preflightは省略しない。
+- `--post-close-address-read` は pairing と5秒観測を終えて controller context と adapter を閉じた直後、同じ process から raw adapter を再 open し、HCI Reset なしで standard HCI / CSR address を読む。これにより物理抜き差しの混入は排除できる。通常 close と raw adapter 再 open は一続きなので、address が変わった場合に close と再 open のどちらが契機かまでは分離できない。
 - CSR warm reset直後のUSB transfer未完了警告は、resetに伴う再列挙後の古いhandle失効と整合する。ただし警告単独を成功扱いせず、別processのstandard HCI / CSR / Bumble address一致を必須判定にする。
 - dummy-address登録後のphysical power cycle / read-only recoveryでも、standard HCI / CSR default-storeの双方が元の`00:1B:DC:F9:9F:7D`へ復帰した。local / dummyの両Switch-facing実験でvolatile変更とphysical recoveryがobserved-passである。
 - BlueZ の CSR 対応は source fact だが、VID:PID `0a12:0001` の全個体が受理することは未検証仮説である。
@@ -199,6 +204,10 @@
 | local address の承認済み5秒 registration rerun | pass | standard HCI / CSR / Bumble power-on address が local address で一致。既存 key store、Classic pairing、HID connected、periodic neutral 107件、clean close。Switch UI 登録をユーザ目視確認 |
 | dummy address の承認済みfresh pairing / reuse rerun | pass / first visual fail | fresh runはprotocol passだがUI反応なし。物理power cycle後のreuse attemptは元addressをguardしてRF動作なし。再適用+reuse rerunはdummy address一致、protocol pass、Switch UI登録を目視 |
 | `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --hci-reset --timeout 2 --output tmp/hardware/unit_051/dummy-address-post-pair-recovery.json` | pass | power cycle後、standard HCI / CSR default-storeが元addressで一致、clean close |
+| post-close address read 追加前の対象 test | red | `--post-close-address-read` が未定義で1 failed |
+| `uv run pytest tests/unit/test_csr_bd_addr_switch_pair_probe.py -q -p no:cacheprovider --basetemp=tmp/pytest-csr-post-close-execute` | pass | 5 passed。dry-run順序、controller context close後、HCI Resetなしの2回目readを確認 |
+| post-close address read 追加後の standard gate | pass | 95 files formatted、ruff / ty pass、431 unit tests pass |
+| dummy address close保持試験の2 command dry-run | pass | warm-reset apply、key reuse pairing、5秒neutral保持、通常close直後のread、physical recoveryの順序を確認。adapter open / RF動作なし |
 | Bumble / hardware pytest | not run | 今回は専用 probe command のみ承認範囲として実行 |
 
 ## 12. 実機実行条件
