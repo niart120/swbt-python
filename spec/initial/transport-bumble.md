@@ -119,6 +119,23 @@ BumbleHidTransport(
 
 constructor / open 時点では key store file の作成までは要求しない。実際の読み書きは Bumble key store が必要とする reconnect / pairing key update のタイミングで行う。
 
+### 3.1.1 接続情報と local BD_ADDR
+
+`key_store_path` は bond / link key の保存先を選ぶ。local Bluetooth identity は変更しないため、異なる key store を選ぶだけでは Switch に別の物理デバイスとして提示できない。
+
+CSR8510 A10 / WinUSB / Bumble 0.0.230 の専用実験環境では、CSR PSRAMへのwriteとwarm resetによりcontroller-reported BD_ADDRを一時変更できた。変更後のaddressはBumble transportの通常closeとraw adapter再openをまたいで保持され、USB power cycle後に元addressへ戻った。これは対象個体でのhardware observationであり、他adapterやdriverへの保証ではない。
+
+実験用 `BumbleHidTransport` は `expected_local_bluetooth_address` を受け取れる。指定時は `power_on()` 後、discoverable / connectableを有効にする前にcontrollerのpublic addressを照合し、不一致なら可視化へ進まない。この引数はpublic `SwitchGamepad` APIには露出しない。
+
+接続情報ごとのidentity切替を後続で公開する場合は、key store選択に加えて次の順序を一体として扱う。
+
+1. 対象profileへ割り当てた正規のBD_ADDRをvolatile適用する。
+2. warm reset後のstandard HCI / vendor readでaddressを照合する。
+3. expected-address guard付きtransportを開く。
+4. USB power cycle後はaddressを再適用する。
+
+実験で使ったlocal / dummy addressは製品設定に使わない。Switch UIはBD_ADDRを表示せず、on-air captureも行っていないため、複数登録がBD_ADDRだけで分離されたことはinferenceに留める。
+
 ### 3.2 Bumble device 生成
 
 `BumbleHidTransport.open()` では次の初期化を行う。

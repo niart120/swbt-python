@@ -150,11 +150,14 @@ Switch の初期化 sequence で必要な subcommand への応答が不足する
 
 pairing 情報の保存、link key の扱い、active reconnect / incoming reconnect の挙動は Bumble と OS / dongle の組み合わせに依存する。
 
+key storeはbond情報のnamespaceであり、local BD_ADDRを変更しない。複数のkey storeを用意しても、同じlocal BD_ADDRのままならSwitchから見た物理device identityは分離できない。
+
 ### 8.2 影響
 
 - 初回 pairing は成功するが reconnect できない
 - reconnect 失敗後に明示 API で再 pairing できない
 - key store が壊れた場合に復旧手順が必要になる
+- profileごとにkey storeだけを分け、local BD_ADDRを同じまま使うと、Switch側の登録が衝突する可能性がある
 
 ### 8.3 対策
 
@@ -163,6 +166,10 @@ pairing 情報の保存、link key の扱い、active reconnect / incoming recon
 - reconnect 失敗時は failure diagnostics を残して clean close する
 - 自動 advertising recovery と retry loop は、pre-host-connection timeout 再発リスクを別途監査するまで M6 に含めない
 - key store 削除による再 pairing 手順を文書化する
+- BD_ADDR切替はCSR8510 A10のvolatile実験経路に限定し、public APIにはまだ露出しない
+- address変更後はBumbleの可視化前にstandard HCI addressを照合し、不一致ならpairingを拒否する
+- USB power cycleでvolatile addressが元へ戻るため、後続のidentity切替機能では起動時の再適用と復旧確認を必須にする
+- 実運用addressは正規に割り当てられたuniversal EUI-48を使い、実験用local / dummy addressを流用しない
 
 ## 9. scope creep
 

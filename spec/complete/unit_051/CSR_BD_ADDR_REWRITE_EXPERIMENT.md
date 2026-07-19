@@ -6,7 +6,7 @@
 
 同じ USB Bluetooth ドングルで controller profile ごとに異なる Bluetooth Classic device identity を持てるか調べる。最初の対象は確認済み構成の CSR8510 A10 とする。
 
-この unit では CSR vendor command を再現し、実機 I/O なしの byte 検査から承認済み adapter での段階的な characterization まで進める。read-only probe は完了済みであり、BD_ADDR の変更と Switch pairing は別の明示承認を必要とする。
+この unit では CSR vendor command を再現し、実機 I/O なしの byte 検査から承認済み adapter での段階的な characterization まで進めた。対象CSR8510 A10ではvolatile BD_ADDR変更、Switch登録、通常closeをまたぐ保持、physical power cycle後の復旧を確認済みである。一般機能化は後続unitへ分離する。
 
 ### 1.2 起点 / source
 
@@ -34,6 +34,7 @@
 
 - 2026-07-19: Bumble 0.0.233 への version bump は取りやめ、現行の `0.0.230` で CSR 実機検証を継続する。0.0.233 との source / unit test 比較は、upgrade が CSR 経路の必須条件ではない根拠として残す。
 - 2026-07-20: controller-reported active BD_ADDR と物理復旧が確認できたため、`02:1B:DC:F9:9F:7D`、次いで `00:11:22:33:44:55` を使う短時間の Switch-facing characterization を対象に加える。前者は local bit を持ち BR/EDR の universal address 要件に適合しない。後者も割り当てを受けた address ではない。どちらも製品設定ではなく、専用 dongle、Switch 1 台、新規 key store、試験後の物理 power cycle に限定する。
+- 2026-07-20: 検証完了後、raw CSR I/Oをtransport内の非公開harnessへ集約し、確定したkey store / local identity境界を`spec/initial/transport-bumble.md`と`risks.md`へ反映する。public API化と一般adapter対応は対象外のままunitを完了する。
 
 ## 2. 対象範囲
 
@@ -119,7 +120,7 @@
 
 ## 8. 文書検証計画
 
-公開文書は変更しない。探索結果はこの仕様、実機結果は `spec/hardware-test-log.md` で管理する。
+公開文書は変更しない。探索結果はこの仕様、実機結果は `spec/hardware-test-log.md` で管理する。完了時に `spec/initial/transport-bumble.md` と `risks.md` を両正本と照合し、key store / local identity境界、対象個体だけのhardware observation、未検証範囲を反映した。
 
 ## 9. 設計メモ
 
@@ -166,7 +167,7 @@
 | `tests/unit/test_csr_bd_addr_harness.py` | new | read-only result shape、failure stage、adapter closeのcharacterization |
 | `tests/unit/test_csr_bd_addr_switch_pair_probe.py` | new | pairing probe の dry-run と既存 key store 拒否 |
 | `src/swbt/transport/bumble.py` | update | power-on 後、可視化前の expected local address guard |
-| `spec/wip/unit_051/CSR_BD_ADDR_REWRITE_EXPERIMENT.md` | new | 根拠、実機境界、探索結果 |
+| `spec/complete/unit_051/CSR_BD_ADDR_REWRITE_EXPERIMENT.md` | new | 根拠、実機境界、探索結果 |
 
 ## 11. 検証
 
@@ -175,6 +176,8 @@
 | `uv run pytest tests/unit/test_csr_bd_addr_experiment.py -q` | red | module 未実装の `ModuleNotFoundError` |
 | 同 command | pass | write plan 追加時 8 passed、read GETREQ 追加後 11 passed |
 | `uv run python tools/csr_bd_addr_plan.py 01:23:45:67:89:AB` | pass | `adapter_opened=false`、volatile plan を出力 |
+| plan verification metadata追加前の対象test | red | volatile planが`verified_on_dongle=false`のままで2 failed |
+| `uv run pytest tests/unit/test_csr_bd_addr_experiment.py -q -p no:cacheprovider --basetemp=tmp/pytest-csr-plan-verification-scoped` | pass | 19 passed。実機観測済み2 address、未試験volatile address、persistentを区別 |
 | Bumble 0.0.233 隔離環境で対象 unit tests | pass | 61 passed。初回は共有 basetemp の権限競合、固有 basetemp で再実行 |
 | `uv run ty check --no-progress` | pass | All checks passed |
 | `uv run ruff format --check .` | pass | 91 files already formatted |
@@ -220,6 +223,8 @@
 | `uv run pytest tests/unit -q -p no:cacheprovider --basetemp=tmp/pytest-unit-csr-refactor-final` | pass | 433 passed |
 | `uv run pytest tests/integration -q -p no:cacheprovider --basetemp=tmp/pytest-integration-csr-refactor-final` | pass | 125 passed |
 | CSR harness refactor後のstatic gate | pass | 97 files formatted、ruff / ty pass |
+| plan metadata修正後のvolatile / persistent dry-run | pass | 実機で使ったlocal / dummy volatile addressだけを`verified_on_dongle=true`とし、未試験addressとpersistentは`false` / `not_run`。adapter openなし |
+| unit_051完了時のstandard gate | pass | 97 files formatted、ruff / ty pass、437 unit tests pass、125 integration tests pass |
 | Bumble / hardware pytest | not run | 今回は専用 probe command のみ承認範囲として実行 |
 
 ## 12. 実機実行条件
@@ -235,10 +240,7 @@
 
 ## 13. 先送り事項
 
-- volatile selector が対象個体で address を一時変更できるか。
-- volatile selector が対象個体で再挿入後に復帰するか。
 - restore SETREQ status `0` 後に PSRAM GETREQ が status `0x0008` となる意味と、same-session restore の扱い。
-- SETREQ 成功確認後、warm reset と USB transfer loss を別 stage / process で観測する。
 - controller-reported active BD_ADDR の変更が on-air BD_ADDR に反映されるか。
 - Switch-facing 検証に使える正規割り当て済み universal EUI-48 の確保。
 - BD_ADDR ごとの key store path の公開 API / CLI での導出。
@@ -252,3 +254,5 @@
 - [x] 実機実行条件を記録した
 - [x] Bumble 最新版との比較を記録した
 - [x] format / lint / type gate を記録した
+- [x] 実機観測を初期設計とリスクへ反映した
+- [x] 実験I/Oの重複を整理し、unit / integration gateを再実行した
