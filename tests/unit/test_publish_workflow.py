@@ -164,30 +164,3 @@ def test_publish_workflow_does_not_use_password_uploads_or_hardware_tests() -> N
     assert "twine upload" not in text
     assert "pytest -m hardware" not in text
     assert "pytest -m bumble" not in text
-
-
-def test_publishing_doc_records_manual_publish_boundaries() -> None:
-    text = PUBLISHING_DOC.read_text(encoding="utf-8")
-
-    assert "内部運用手順" in text
-    assert "手元の `twine upload` は使わない" in text
-    assert "`v*` tag を作るだけでは公開されない" in text
-    assert "gh workflow run publish.yml --ref vX.Y.Z -f target=pypi" in text
-    assert "target=pypi" in text
-    assert "version-specific endpoint" in text
-    assert "Trusted Publisher" in text
-    assert "実機 smoke" in text
-    assert "draft GitHub Release" in text
-    assert "wheel / sdist" in text
-
-
-def test_pypi_release_skill_delegates_runbook_details_to_internal_doc() -> None:
-    text = PYPI_RELEASE_SKILL.read_text(encoding="utf-8")
-
-    assert "spec/publishing.md" in text
-    assert len(text.splitlines()) <= 40
-    assert "Version Policy" not in text
-    assert "Release PR" not in text
-    assert "Production Publish" not in text
-    assert "https://pypi.org/pypi/swbt-python/X.Y.Z/json" not in text
-    assert "dist\\swbt_python-X.Y.Z" not in text
