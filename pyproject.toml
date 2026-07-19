@@ -141,7 +141,7 @@ error-on-warning = true
 output-format = "concise"
 
 [tool.pytest.ini_options]
-addopts = "-ra --strict-config --strict-markers"
+addopts = "-ra --strict-config --strict-markers --basetemp=tmp/pytest"
 testpaths = ["tests"]
 markers = [
     "bumble: requires a dedicated USB Bluetooth dongle opened through Bumble",
