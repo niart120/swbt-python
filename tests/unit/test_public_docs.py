@@ -143,7 +143,8 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
         "await pad.try_reconnect(",
         "ペアリングが必要です",
         "## クイックスタート",
-        "## 直接送信型の利用例",
+        "### 周期送信型",
+        "### 直接送信型",
         'key_store_path="switch-bond.json"',
         'key_store_path="switch-2-fw-22-1-0.json"',
         "await pad.tap(Button.A)",
@@ -155,7 +156,8 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
         "await pad.rstick(Stick.right())",
         "await pad.sticks(left=Stick.tilt(",
         "await pad.imu(IMUFrame.gyro(100, 0, 0))",
-        "IMUFrame.gyro_rate(x_rad_s=omega_x, y_rad_s=omega_y, z_rad_s=omega_z)",
+        "frame = IMUFrame.gyro_rate(",
+        "x_rad_s=omega_x",
         "frame.to_gyro_rate()",
         "IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)",
         ".with_accel((0, 0, 4096))",
@@ -174,19 +176,29 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
         "await left.tap(Button.SR, Button.SL)",
         "`JoyConPair` は未実装",
         "「持ちかた/順番を変える」画面で Joy-Con として登録",
-        "Joy-Con R に左スティック入力や十字キー入力",
+        "対応しない入力を検出する場合は、`UnsupportedInputError` を捕捉",
+        "## 完全入力状態の送信",
+        "周期送信型では `apply(state)` を使います",
+        "直接送信型では `send(state)` を使います",
         "DiagnosticsConfig(trace_writer=trace)",
-        "JSON Lines のトレースログを出力します",
-        "原因を自動判定する機能ではありません",
+        "実行記録をトレースログへ出力します",
         "pad.status()",
-        "即時送信は保証しません",
-        "同じ HID レポートに入る保証はありません",
         "DirectProController",
         "await pad.send(state)",
+    ):
+        assert token in text
+
+    for stale_token in (
+        "## 直接送信型の利用例",
+        "即時送信は保証しません",
+        "同じ HID レポートに入る保証はありません",
+        "レポートループから送信される",
+        "0.070 dps/raw",
+        "1/4096 G/raw",
         "直接送信型では入力レポートの送信頻度を利用者が管理します",
         "各正常終了につき入力レポートを 1 件送信",
     ):
-        assert token in text
+        assert stale_token not in text
 
     assert "set_input" not in text
     assert "hold(" not in text
