@@ -22,7 +22,7 @@ from swbt import (
 )
 ```
 
-## トップレベルの公開項目
+## top-level export
 
 トップレベルの公開 API と主な用途を説明します。
 
@@ -114,6 +114,8 @@ direct_pad = DirectProController(
 `report_period_us` は、周期送信型の具象クラスが使うレポートループの送信周期です。`None` を指定した場合は、既定周期（8 ms）を使います。直接送信型の具象クラスは `report_period_us` を受け取りません。入力レポートの送信頻度は利用者が管理します。
 
 `controller_colors` は、`body` / `buttons` / `left_grip` / `right_grip` に対応するプロファイル色です。`None` を指定した場合は、Joy-Con 風の既定プロファイル `ControllerColors(body=0x323232, buttons=0xFFFFFF, left_grip=0x00B2FF, right_grip=0xFF3B30)` を使います。各項目には独立した既定値があります。
+
+`ControllerColors(body=..., buttons=..., left_grip=..., right_grip=...)` は、24 ビット RGB だけを受け取ります。範囲外の値、文字列、`bytes`、`tuple` を渡すと `InvalidInputError` が送出されます。
 
 `diagnostics` はトレース出力設定です。`DiagnosticsConfig(trace_writer=...)` を渡すと、接続、送信レポート、サブコマンド、エラー、実行時のメタデータを指定したトレースログ出力先へ JSON 形式で出力します。`None` を指定した場合はトレースログを出力しません。
 
@@ -225,8 +227,6 @@ await pad.apply(state)
 既存の `IMUFrame` の一部だけを変更することもできます。`IMUFrame.with_gyro(x=0, y=0, z=0)` と `IMUFrame.with_gyro_rate(x_rad_s=0.0, y_rad_s=0.0, z_rad_s=0.0)` は加速度を維持してジャイロを置き換えます。`IMUFrame.with_accel(x=0, y=0, z=0)` と `IMUFrame.with_accel_g(x_g=0.0, y_g=0.0, z_g=0.0)` はジャイロを維持して加速度を置き換えます。
 
 `InputState.neutral()` は、ボタン入力なし、左右のスティックが中央、IMU がニュートラルの状態を返します。`InputState.with_buttons(...)`、`InputState.with_sticks(...)`、`InputState.with_imu(...)`、`InputState.with_gyro(...)`、`InputState.with_accel(...)` は、新しい `InputState` を返します。`with_imu(frame)` は 1 入力分を 3 入力分に複製し、`with_imu(frame1, frame2, frame3)` は 3 つの値を順に設定します。`with_gyro((x, y, z))` と `with_accel((x, y, z))` も、1 組の値を 3 入力分に複製します。3 組を渡した場合は、順に片方のセンサー値だけを置き換えます。
-
-`ControllerColors(body=..., buttons=..., left_grip=..., right_grip=...)` は、24 ビット RGB だけを受け取ります。範囲外の値、文字列、`bytes`、`tuple` を渡すと `InvalidInputError` が送出されます。
 
 ## JoyConL / JoyConR
 
