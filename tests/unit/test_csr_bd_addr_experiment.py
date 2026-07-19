@@ -1,3 +1,8 @@
+import json
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from swbt.transport._csr_bd_addr import (
@@ -10,6 +15,8 @@ from swbt.transport._csr_bd_addr import (
     parse_csr_bccmd_response,
     parse_csr_bd_addr_read_response,
 )
+
+PLAN_TOOL = Path(__file__).resolve().parents[2] / "tools" / "csr_bd_addr_plan.py"
 
 
 def test_csr_bd_addr_plan_matches_bluez_persistent_command_layout() -> None:
@@ -37,6 +44,41 @@ def test_csr_bd_addr_plan_marks_volatile_store_and_reset() -> None:
 
     assert plan.write_command.parameters[15] == 0x08
     assert plan.reset_command.parameters[7] == 0x02
+
+
+@pytest.mark.parametrize(
+    ("address", "store", "verified_on_dongle"),
+    [
+        ("00:11:22:33:44:55", "volatile", True),
+        ("02:1B:DC:F9:9F:7D", "volatile", True),
+        ("01:23:45:67:89:AB", "volatile", False),
+        ("00:11:22:33:44:55", "persistent", False),
+    ],
+)
+def test_csr_bd_addr_plan_reports_target_dongle_verification(
+    address: str,
+    store: str,
+    verified_on_dongle: bool,
+) -> None:
+    result = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            str(PLAN_TOOL),
+            address,
+            "--store",
+            store,
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["verified_on_dongle"] is verified_on_dongle
+    assert payload["verification_scope"] == (
+        "target_csr8510_a10_hardware_observation" if verified_on_dongle else "not_run"
+    )
 
 
 def test_csr_bd_addr_read_command_matches_bluez_getreq_layout() -> None:

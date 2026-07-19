@@ -6,6 +6,13 @@ import sys
 
 from swbt.transport._csr_bd_addr import CsrBdAddrStore, build_csr_bd_addr_rewrite_plan
 
+_HARDWARE_OBSERVED_VOLATILE_ADDRESSES = frozenset(
+    {
+        "02:1B:DC:F9:9F:7D",
+        "00:11:22:33:44:55",
+    }
+)
+
 
 def main(argv: list[str] | None = None) -> int:
     """Print raw command bytes for source review and return without I/O."""
@@ -22,12 +29,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     plan = build_csr_bd_addr_rewrite_plan(args.address, store=args.store)
+    verified_on_dongle = (
+        plan.store is CsrBdAddrStore.VOLATILE
+        and plan.address in _HARDWARE_OBSERVED_VOLATILE_ADDRESSES
+    )
     output = {
         "adapter_opened": False,
         "address": plan.address,
         "store": plan.store,
         "source": "BlueZ tools/bdaddr.c CSR path",
-        "verified_on_dongle": False,
+        "verified_on_dongle": verified_on_dongle,
+        "verification_scope": (
+            "target_csr8510_a10_hardware_observation" if verified_on_dongle else "not_run"
+        ),
         "write": {
             "opcode": f"0x{plan.write_command.opcode:04x}",
             "expected_event_code": f"0x{plan.write_command.expected_event_code:02x}",
