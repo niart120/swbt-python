@@ -1297,6 +1297,43 @@ def test_bumble_start_advertising_refreshes_local_bluetooth_address_after_power_
     asyncio.run(run())
 
 
+def test_bumble_start_advertising_rejects_unexpected_address_before_visibility() -> None:
+    async def run() -> None:
+        class AddressAfterPowerOnDevice(FakeBumbleDevice):
+            async def power_on(self) -> None:
+                await super().power_on()
+                self.public_address = Address("00:11:22:33:44:55")
+
+        device = AddressAfterPowerOnDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            expected_local_bluetooth_address=bytes.fromhex("02 1b dc f9 9f 7d"),
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        with pytest.raises(RuntimeError, match="expected local Bluetooth address"):
+            await transport.start_advertising()
+
+        assert device.power_on_count == 1
+        assert device.connectable_calls == []
+        assert device.discoverable_calls == []
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
 def test_bumble_start_advertising_configures_reference_classic_link_policy() -> None:
     async def run() -> None:
         trace = StringIO()

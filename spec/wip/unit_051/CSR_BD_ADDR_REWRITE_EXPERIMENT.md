@@ -33,6 +33,7 @@
 ### 1.4 Intent Delta
 
 - 2026-07-19: Bumble 0.0.233 への version bump は取りやめ、現行の `0.0.230` で CSR 実機検証を継続する。0.0.233 との source / unit test 比較は、upgrade が CSR 経路の必須条件ではない根拠として残す。
+- 2026-07-20: controller-reported active BD_ADDR と物理復旧が確認できたため、`02:1B:DC:F9:9F:7D`、次いで `00:11:22:33:44:55` を使う短時間の Switch-facing characterization を対象に加える。前者は local bit を持ち BR/EDR の universal address 要件に適合しない。後者も割り当てを受けた address ではない。どちらも製品設定ではなく、専用 dongle、Switch 1 台、新規 key store、試験後の物理 power cycle に限定する。
 
 ## 2. 対象範囲
 
@@ -42,14 +43,16 @@
 - 承認済み `usb:0` での HCI Reset、standard identity read、CSR `PSKEY_BDADDR GETREQ`、clean close。
 - warm reset を送らない PSRAM SETREQ / GETREQ / 元値 restore probe の準備。
 - PSRAM sentinel を確認して CSR warm reset を enqueue し、USB 再列挙後の identity read を別プロセスへ分離する probe の準備。
+- active address を preflight と Bumble `power_on()` 後の二段階で照合し、一致した場合だけ Switch pairing を開始する probe。
+- local address `02:1B:DC:F9:9F:7D`、次いで dummy address `00:11:22:33:44:55` を使う Switch 登録 identity の characterization。
 - Bumble 0.0.230 と最新版で不足する送受信経路の比較。
 
 ## 3. 対象外
 
 - persistent store への PSKEY 書き込み。
-- HID advertising、Switch pairing、report loop。
 - public API への BD_ADDR 設定追加。
 - CSR 以外の vendor command、複数 controller の同時接続保証。
+- address の規格適合性、割り当ての正当性、Switch firmware 間の同一挙動、一般利用可能性の保証。
 
 ## 4. 関連 docs
 
@@ -69,7 +72,9 @@
 | CSR write bytes | required | done | BlueZ 5.7 `csr_write_bd_addr()` / `csr_reset_device()` を固定 |
 | BCCMD response type | required | done | GETREQ `0x0000` / SETREQ `0x0002` の server-to-client response は GETRESP `0x0001`。BlueZ HCI 経路は response type を検査せず channel と status を扱う |
 | 対象個体の書き換え可否 | required | done for volatile controller identity | PSRAM SETREQ status `0`、sentinel read-back、warm reset 後の standard HCI / CSR default-store sentinel 一致が pass。persistent store と on-air identity は未検証 |
-| lab sentinel address | required | inference | `02:1B:DC:F9:9F:7D` は local bit を立てた非 universal address。RF 送信を伴わない volatile read-back に限定し、Switch-facing identity には使わない |
+| lab sentinel address | required | inference | `02:1B:DC:F9:9F:7D` は local bit を立てた非 universal address。Switch-facing 実験は規格適合性の確認ではなく、対象 Switch の受理挙動だけを観測する |
+| dummy address | required | unverified hypothesis | `00:11:22:33:44:55` は universal bit の形式だが、この実験用に割り当てられた address ではない。同一 address の別機器が存在しない閉じた試験条件に限定する |
+| power-on address guard | required | implementation fact | Bumble `power_on()` 後、connectable / discoverable を有効にする前に controller の public address を expected value と比較し、不一致なら pairing へ進まない |
 
 ## 6. 振る舞い仕様
 
@@ -82,6 +87,8 @@
 | dry-run CLI | address と store | raw packet と `adapter_opened=false` を JSON 出力 | USB I/O なし |
 | PSRAM-only probe | original と lab sentinel | warm reset なしで SETREQ / GETREQ / restore / GETREQ を行い、active standard address が不変であることを確認する | persistent write、RF 動作なし |
 | staged warm-reset probe | original と lab sentinel | PSRAM read-back 後に warm reset を enqueue し、再列挙後の identity read を別プロセスで行う | automatic restore なし、物理 power cycle 必須、RF 動作なし |
+| guarded Switch pairing | active address と expected address | read-only preflight と Bumble `power_on()` 後の双方が一致した場合だけ advertising / pairing を開始する | 新規 key store 必須、neutral report のみ、終了後に物理 power cycle |
+| identity comparison | local address、次いで dummy address | Switch 上の登録表示、再接続先、既存登録との分離を人間が観測する | address ごとに key store / trace / result artifact を分離 |
 
 ## 7. TDD Test List
 
@@ -97,7 +104,10 @@
 | partial | warm reset なしの PSRAM SETREQ / GETREQ / restore roundtrip | characterization | bumble | yes | 修正版で apply / read-back / active address 不変は pass。same-session restore 確認は status `0x0008`。power cycle 後の元 identity read は再度 pass |
 | green | staged warm-reset probe の dry-run が process boundary と physical recovery を示す | new | unit | no | adapter open false、automatic restore false、persistent / RF false |
 | green | warm reset 後の別プロセス identity read | characterization | bumble | yes | standard HCI / CSR default-store が sentinel `02:1B:DC:F9:9F:7D` で一致、clean close |
-| deferred | BD_ADDR ごとに Switch が別 device として登録する | characterization | hardware | yes | volatile write 成功後 |
+| green | expected address 不一致時は可視化前に pairing を拒否する | safety | unit | no | Bumble `power_on()` は実行するが connectable / discoverable は設定しない |
+| green | Switch pairing probe の dry-run は adapter を開かない | safety | unit | no | fresh key store、二段階 address guard、cleanup sequence を出力 |
+| planned | local address で Switch pairing が成立する | characterization | hardware | yes | `02:1B:DC:F9:9F:7D`、専用 key store、目視結果を記録 |
+| planned | dummy address が local address / original と別 device として登録される | characterization | hardware | yes | `00:11:22:33:44:55`、別 key store、local 試験の復旧確認後だけ実行 |
 
 ## 8. 文書検証計画
 
@@ -110,7 +120,7 @@
 - 0.0.233 への upgrade はこの機能を直接提供しない。対象 Bumble unit tests 61 件は依存ファイルを変更しない隔離環境で通ったが、version bump は取りやめ、現行 0.0.230 で実験を続ける。
 - `DeviceConfiguration.address` は LE random/static address 用であり、Classic public BD_ADDR の上書きではない。
 - 最初の write は volatile のみとする。不揮発書き込みは真正 CSR8510 の確認、元 BD_ADDR の記録、再挿入による復旧確認まで実行しない。
-- 最初の lab sentinel は `02:1B:DC:F9:9F:7D` とする。これは Bluetooth Core が要求する universal EUI-48 ではないため、advertising / pairing / Switch-facing 動作には使わず、adapter 内部の write / read-back / restore だけに限定する。
+- 最初の lab sentinel は `02:1B:DC:F9:9F:7D` とする。これは Bluetooth Core が要求する universal EUI-48 ではない。adapter 内部の write / read-back / restore を確認した後、ユーザ承認下の短時間 Switch-facing characterization に限って使い、一般利用可能な address とは扱わない。
 - CSR warm reset は対象 `usb:0` を USB 再列挙させ、同一 Python process の libusb handle では再 open できなかった。次は warm reset なしの PSRAM SETREQ / GETREQ / restore で write 応答を切り分ける。active address の変更は、その結果を得た後に process boundary を分けて観測する。
 - PSRAM-only probe は各 SETREQ / GETREQ に別の sequence number を使い、応答の GETRESP type `0x0001`、sequence number、VARID を照合する。BCCMD に server-to-client の SETRESP type はなく、SETREQ に request type `0x0002` が返ると仮定してはいけない。timeout 後の遅延応答を次 stage の成功応答として扱わない。
 - 対象 CSR8510 A10 は warm reset なしで PSRAM BD_ADDR SETREQ を受理し、GETREQ で sentinel を返す。active standard HCI address は warm reset 前には変化しない。元値 restore SETREQ は status `0` だったが、その後の PSRAM GETREQ は status `0x0008` であり、same-session restore 成否は確定できない。
@@ -118,6 +128,8 @@
 - staged probe は同一 session restore を行わない。warm reset 後の観測に成功しても失敗しても物理 power cycle を必須とし、その後の read-only probe で元 identity を確認する。
 - 対象 CSR8510 A10 は PSRAM write + CSR warm reset 後、別プロセスの standard HCI Read BD_ADDR と CSR default-store GETREQ の双方で sentinel を返した。これは controller-reported active BD_ADDR の一時変更が可能という hardware observation であり、on-air identity や Switch の登録分離までは示さない。
 - sentinel active identity の観測後に dongle を物理 power cycle すると、standard HCI / CSR default-store の双方が元の `00:1B:DC:F9:9F:7D` へ復帰した。対象個体では volatile change と physical recovery の一連を observed-pass とする。
+- Switch-facing probe は raw HCI の standard / CSR address 一致を確認して adapter を閉じ、Bumble transport を開き直す。Bumble `power_on()` 後にも address を再取得し、一致しなければ connectable / discoverable を有効にしない。preflight 後の HCI Reset による address 変化もこの二段目の guard で遮断する。
+- identity ごとに存在しない key store path を要求する。既存 key store がある場合は adapter を開かず失敗する。これにより元 address、local address、dummy address の link key を混在させない。
 - BlueZ の CSR 対応は source fact だが、VID:PID `0a12:0001` の全個体が受理することは未検証仮説である。
 
 ## 10. 対象ファイル
@@ -129,7 +141,10 @@
 | `tools/csr_bd_addr_probe.py` | new | standard HCI identity read と CSR GETREQ の承認済み実機 probe |
 | `tools/csr_bd_addr_volatile_probe.py` | new | dry-run 既定、warm reset なし、自動 restore 必須の PSRAM SETREQ / GETREQ probe |
 | `tools/csr_bd_addr_warm_reset_probe.py` | new | dry-run 既定、PSRAM apply / warm reset enqueue と別プロセス read を分離する probe |
+| `tools/csr_bd_addr_switch_pair_probe.py` | new | fresh key store と二段階 address guard を持つ Switch pairing probe |
 | `tests/unit/test_csr_bd_addr_experiment.py` | new | BlueZ layout の characterization |
+| `tests/unit/test_csr_bd_addr_switch_pair_probe.py` | new | pairing probe の dry-run と既存 key store 拒否 |
+| `src/swbt/transport/bumble.py` | update | power-on 後、可視化前の expected local address guard |
 | `spec/wip/unit_051/CSR_BD_ADDR_REWRITE_EXPERIMENT.md` | new | 根拠、実機境界、探索結果 |
 
 ## 11. 検証
@@ -161,6 +176,9 @@
 | 承認済み staged warm-reset apply command | pass | baseline / PSRAM apply / sentinel read-back pass、warm reset enqueue 後 USB transfer status `4`、process exit `0`。後続の別プロセス read で active sentinel を確認 |
 | `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --timeout 2 --output tmp/hardware/unit_051/csr-bd-addr-warm-reset-active-read.json` | pass | HCI Reset なし。standard HCI / CSR default-store address が sentinel `02:1B:DC:F9:9F:7D`、status `0`、一致、clean close |
 | `uv run python tools/csr_bd_addr_probe.py --adapter usb:0 --hci-reset --timeout 2 --output tmp/hardware/unit_051/csr-bd-addr-post-warm-reset-recovery.json` | pass | power cycle 後、standard HCI / CSR default-store address が元の `00:1B:DC:F9:9F:7D`、status `0`、一致、clean close |
+| `uv run pytest tests/unit/test_csr_bd_addr_switch_pair_probe.py tests/unit/test_bumble_transport.py -q` | pass | 45 passed。power-on address 不一致時は可視化前に拒否し、dry-run / fresh key store guard を確認 |
+| `uv run pytest tests/unit -q -p no:cacheprovider --basetemp=tmp/pytest-unit-csr-switch-pair-final` | pass | 428 passed。並列 basetemp 競合の修正後に直列再実行 |
+| `uv run pytest tests/integration -q -p no:cacheprovider --basetemp=tmp/pytest-integration-csr-switch-pair-final` | pass | 125 passed。unit と別 basetemp で直列実行 |
 | Bumble / hardware pytest | not run | 今回は専用 probe command のみ承認範囲として実行 |
 
 ## 12. 実機実行条件
@@ -172,7 +190,7 @@
 | adapter | 候補は専用 `usb:0` / CSR8510 A10 / `0a12:0001` / WinUSB。実行直前に再確認する |
 | 実行遮断 | 環境変数ではなく、会話上の明示承認で管理する |
 | log / artifact | raw HCI trace、前後の BD_ADDR、manufacturer/version、USB 再列挙を保存する |
-| cleanup | advertising なし。PSRAM-only roundtrip の restore 確認失敗時と staged warm-reset 実験は追加 write を止め、物理 power cycle と read-only recovery check を必須にする |
+| cleanup | Switch-facing probe は controller context で discoverable / connectable を解除して adapter を閉じる。各 address 試験後に物理 power cycle と read-only recovery check を必須にし、復旧確認前に次 address を試さない |
 
 ## 13. 先送り事項
 
@@ -181,8 +199,8 @@
 - restore SETREQ status `0` 後に PSRAM GETREQ が status `0x0008` となる意味と、same-session restore の扱い。
 - SETREQ 成功確認後、warm reset と USB transfer loss を別 stage / process で観測する。
 - controller-reported active BD_ADDR の変更が on-air BD_ADDR に反映されるか。
-- Switch-facing 検証に使える universal EUI-48 の割り当て。lab sentinel は RF 送信に使わない。
-- BD_ADDR ごとの key store path 導出。
+- Switch-facing 検証に使える正規割り当て済み universal EUI-48 の確保。
+- BD_ADDR ごとの key store path の公開 API / CLI での導出。
 - Switch が同一ドングルの複数 BD_ADDR を独立登録できるか。
 
 ## 14. チェックリスト

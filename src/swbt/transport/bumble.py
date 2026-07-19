@@ -171,6 +171,7 @@ class BumbleHidTransport:
         profile: ControllerProfile | None = None,
         key_store_path: str | None = None,
         diagnostics: DiagnosticsRecorder | None = None,
+        expected_local_bluetooth_address: bytes | None = None,
         _open_transport: _OpenTransport | None = None,
         _initialize_device: _InitializeDevice | None = None,
         _start_advertising: _StartAdvertising | None = None,
@@ -182,6 +183,17 @@ class BumbleHidTransport:
         self._profile = profile or default_controller_profile()
         self._key_store_path = key_store_path
         self._diagnostics = diagnostics
+        if (
+            expected_local_bluetooth_address is not None
+            and len(expected_local_bluetooth_address) != 6
+        ):
+            msg = "expected_local_bluetooth_address must contain 6 bytes"
+            raise ValueError(msg)
+        self._expected_local_bluetooth_address = (
+            None
+            if expected_local_bluetooth_address is None
+            else bytes(expected_local_bluetooth_address)
+        )
         self._open_transport = _open_transport or _default_open_transport
         if _initialize_device is None:
 
@@ -196,7 +208,17 @@ class BumbleHidTransport:
             self._initialize_device = initialize_device
         else:
             self._initialize_device = _initialize_device
-        self._start_advertising = _start_advertising or _default_start_advertising
+        if _start_advertising is None:
+
+            async def start_advertising(runtime: _BumbleRuntime) -> None:
+                await _default_start_advertising(
+                    runtime,
+                    expected_local_bluetooth_address=self._expected_local_bluetooth_address,
+                )
+
+            self._start_advertising = start_advertising
+        else:
+            self._start_advertising = _start_advertising
         self._close_runtime = _close_runtime or _default_close_runtime
         self._handle: _BumbleHandle | None = None
         self._runtime: _BumbleRuntime | None = None
@@ -704,9 +726,28 @@ async def _default_initialize_device(
     )
 
 
-async def _default_start_advertising(runtime: _BumbleRuntime) -> None:
+async def _default_start_advertising(
+    runtime: _BumbleRuntime,
+    *,
+    expected_local_bluetooth_address: bytes | None = None,
+) -> None:
     if not runtime.device.powered_on:
         await runtime.device.power_on()
+    actual_local_bluetooth_address = _device_info_bluetooth_address_from_bumble_address(
+        getattr(runtime.device, "public_address", None)
+    )
+    if (
+        expected_local_bluetooth_address is not None
+        and actual_local_bluetooth_address != expected_local_bluetooth_address
+    ):
+        actual_text = (
+            "unavailable"
+            if actual_local_bluetooth_address is None
+            else actual_local_bluetooth_address.hex(":").upper()
+        )
+        expected_text = expected_local_bluetooth_address.hex(":").upper()
+        msg = f"expected local Bluetooth address {expected_text} after power_on, got {actual_text}"
+        raise RuntimeError(msg)
     link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
     if link_policy_settings is not None:
         runtime.classic_link_policy_settings = link_policy_settings
