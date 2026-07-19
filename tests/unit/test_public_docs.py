@@ -141,6 +141,9 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
         "await pad.reconnect(timeout=10.0)",
         "await pad.try_connect(",
         "await pad.try_reconnect(",
+        "ペアリングが必要です",
+        "## クイックスタート",
+        "## 直接送信型の利用例",
         'key_store_path="switch-bond.json"',
         'key_store_path="switch-2-fw-22-1-0.json"',
         "await pad.tap(Button.A)",
@@ -161,7 +164,7 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
         "await pad.apply(state)",
         "await pad.neutral()",
         "close(neutral=True)",
-        "## Single Joy-Con L/R",
+        "## Joy-Con L/R",
         "JoyConL(...)",
         "JoyConR(...)",
         'key_store_path="switch-left-joycon-bond.json"',
@@ -170,7 +173,7 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
         "`UnsupportedInputError`",
         "await left.tap(Button.SR, Button.SL)",
         "`JoyConPair` は未実装",
-        '"持ち方/順番を変える" 画面で Joy-Con として登録',
+        "「持ちかた/順番を変える」画面で Joy-Con として登録",
         "Joy-Con R に左スティック入力や十字キー入力",
         "DiagnosticsConfig(trace_writer=trace)",
         "JSON Lines のトレースログを出力します",
@@ -180,8 +183,8 @@ def test_usage_doc_covers_connection_input_neutral_and_diagnostics_examples() ->
         "同じ HID レポートに入る保証はありません",
         "DirectProController",
         "await pad.send(state)",
-        "Direct では入力レポートの送信頻度を利用者が管理します",
-        "各正常終了につき入力レポートを1件送信",
+        "直接送信型では入力レポートの送信頻度を利用者が管理します",
+        "各正常終了につき入力レポートを 1 件送信",
     ):
         assert token in text
 

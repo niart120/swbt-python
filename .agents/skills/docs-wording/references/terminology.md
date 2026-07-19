@@ -26,14 +26,16 @@
 | pairing | ペアリング | `allow_pairing`、`pair()` | 地の文の `pairing` | 説明文では「ペアリング」を使う。 |
 | reconnect | 再接続 | `reconnect()` | 地の文の `reconnect` | 説明文では「再接続」を使う。 |
 | bond | 保存済みペアリング情報 / ペアリング情報 | — | `bond`、`保存済み接続情報` | ペアリング後に保存される鍵と相手機器情報を指す。 |
-| current peer | 現在の接続先 / 現在の接続先情報 | — | `current peer` | key store の状態を利用者向けに説明する。 |
+| current peer | 現在の接続先 / 現在の接続先情報 | — | `current peer` | ペアリング情報の保存ファイルに記録された接続先を利用者向けに説明する。 |
 | pairing key | ペアリングキー | — | `pairing key` | HID 識別情報との対応を説明する。 |
+| key store | ペアリング情報の保存ファイル | `key_store_path` | 地の文の `key store` | 保存済みのペアリング情報と相手機器情報を保持するファイルを指す。 |
 | HID identity | HID 識別情報 | `HID` | `HID identity` | `HID` は残し、`identity` を日本語化する。 |
 | HID advertising | HID 接続待ち受け | `HID` | `advertising`、`HID advertising`、`広告` | 対象機器からの接続を待つ動作として説明する。 |
 | periodic report loop | レポートループ | — | `periodic report loop`、`report loop` | 入力レポートを周期送信する処理を指す。 |
 | input report | 入力レポート / レポート | `report` | 地の文の `input report` | HID 入力であることが文脈から明らかでない場合は「入力レポート」と書く。 |
 | output report | 出力レポート / ホストからの出力レポート | `report` | 地の文の `output report`、`host output report` | 送信元を区別する必要がある箇所では「ホストからの」を付ける。 |
 | subcommand reply | サブコマンド応答 / 応答 | `subcommand` | `subcommand reply`、地の文の `reply` | 識別子ではない説明語を日本語化する。 |
+| raw rumble | 振動の生値 | `raw_rumble` | 地の文の `raw rumble` | ステータスに含まれる未加工の振動データを説明する。 |
 | button | ボタン | `Button`、`button` 引数 | 地の文の `button` | enum 名や引数名は残す。説明文では「ボタン」を使う。 |
 | stick | スティック入力 / スティック | `Stick`、`stick` 引数 | 地の文の `stick` | 入力種別の説明では「スティック入力」を使う。 |
 | D-pad | 十字キー | `D-pad` を引用する場合 | 地の文の `D-pad` | Joy-Con や入力操作の説明では「十字キー」を使う。 |
