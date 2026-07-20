@@ -133,7 +133,7 @@ await pad.connect(allow_pairing=False)
 | refactor-skipped | current = target なら volatile write と warm reset を省略する | new | unit | no | 1 test pass。比較結果を immutable result に閉じており追加 refactor なし |
 | refactor-done | current != target では write、reset、再列挙後 read-back を順に要求する | new | unit | no | 2 tests pass。CSR 初期化と再列挙 retry を helper へ分離 |
 | refactor-done | write 後の結果不明は `ExpLocalAddressRecoveryRequired` となり pairing を始めない | edge | unit | no | 5 targeted tests pass。stage state と runtime preparation を分離 |
-| todo | Bumble power-on 後の address 不一致は advertising / pairing / reconnect を開始しない | regression | unit | no | guard を固定 |
+| refactor-done | Bumble power-on 後の address 不一致は advertising / pairing / reconnect を開始しない | regression | unit | no | 51 tests pass。advertising / reconnect の照合を共通 helper へ統合 |
 | todo | pairing key 保存後も envelope identity と namespace map が保持される | new | integration | no | Bumble KeyStore contract |
 | todo | pairing 失敗後、同じ profile で pairing を再試行できる | regression | integration | no | recovery-required にしない |
 | todo | `close()` 後に target が残る profile を次の controller が再利用できる | characterization | bumble | yes | known CSR8510 A10 の実機 gate と結ぶ |
@@ -209,6 +209,9 @@ await pad.connect(allow_pairing=False)
 | `uv run pytest tests/unit/test_exp_local_identity.py tests/unit/test_exp_local_profile_runtime.py tests/unit/test_gamepad_transport_factory.py tests/unit/test_public_api_boundary.py tests/unit/test_exp_local_address.py -q` | pass | recovery-required surrounding regression: 68 passed |
 | `uv run ruff check src/swbt/errors.py src/swbt/__init__.py src/swbt/transport/_exp_local_identity.py src/swbt/gamepad/transport_factory.py src/swbt/gamepad/runtime.py tests/unit/test_exp_local_identity.py tests/unit/test_exp_local_profile_runtime.py` | pass | recovery-required runtime cycle |
 | `uv run ty check --no-progress` | pass | recovery-required runtime cycle |
+| `uv run pytest tests/unit/test_bumble_transport.py tests/unit/test_exp_local_profile_runtime.py tests/unit/test_gamepad_transport_factory.py -q` | pass | Bumble power-on guard cycle: 51 passed |
+| `uv run ruff check src/swbt/transport/bumble.py tests/unit/test_bumble_transport.py tests/unit/test_exp_local_profile_runtime.py` | pass | Bumble power-on guard cycle |
+| `uv run ty check --no-progress` | pass | Bumble power-on guard cycle |
 
 ## 12. 実機実行条件
 

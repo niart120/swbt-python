@@ -634,6 +634,10 @@ class BumbleHidTransport:
     async def _ensure_classic_runtime_ready(self, runtime: _BumbleRuntime) -> None:
         if not runtime.device.powered_on:
             await runtime.device.power_on()
+        _require_expected_local_bluetooth_address(
+            runtime.device,
+            self._expected_local_bluetooth_address,
+        )
         self._refresh_local_bluetooth_address(runtime)
         if runtime.classic_link_policy_settings is None:
             link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
@@ -733,26 +737,37 @@ async def _default_start_advertising(
 ) -> None:
     if not runtime.device.powered_on:
         await runtime.device.power_on()
-    actual_local_bluetooth_address = _device_info_bluetooth_address_from_bumble_address(
-        getattr(runtime.device, "public_address", None)
+    _require_expected_local_bluetooth_address(
+        runtime.device,
+        expected_local_bluetooth_address,
     )
-    if (
-        expected_local_bluetooth_address is not None
-        and actual_local_bluetooth_address != expected_local_bluetooth_address
-    ):
-        actual_text = (
-            "unavailable"
-            if actual_local_bluetooth_address is None
-            else actual_local_bluetooth_address.hex(":").upper()
-        )
-        expected_text = expected_local_bluetooth_address.hex(":").upper()
-        msg = f"expected local Bluetooth address {expected_text} after power_on, got {actual_text}"
-        raise RuntimeError(msg)
     link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
     if link_policy_settings is not None:
         runtime.classic_link_policy_settings = link_policy_settings
     await runtime.device.set_connectable(True)
     await runtime.device.set_discoverable(True)
+
+
+def _require_expected_local_bluetooth_address(
+    device: _BumbleDeviceRuntime,
+    expected_local_bluetooth_address: bytes | None,
+) -> None:
+    actual_local_bluetooth_address = _device_info_bluetooth_address_from_bumble_address(
+        getattr(device, "public_address", None)
+    )
+    if (
+        expected_local_bluetooth_address is None
+        or actual_local_bluetooth_address == expected_local_bluetooth_address
+    ):
+        return
+    actual_text = (
+        "unavailable"
+        if actual_local_bluetooth_address is None
+        else actual_local_bluetooth_address.hex(":").upper()
+    )
+    expected_text = expected_local_bluetooth_address.hex(":").upper()
+    msg = f"expected local Bluetooth address {expected_text} after power_on, got {actual_text}"
+    raise RuntimeError(msg)
 
 
 async def _default_close_runtime(runtime: _BumbleRuntime) -> None:

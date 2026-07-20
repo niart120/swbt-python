@@ -7,6 +7,8 @@ from swbt import ExpLocalAddressRecoveryRequired, InvalidProfileError, ProContro
 from swbt.gamepad import runtime as gamepad_runtime
 from swbt.gamepad import transport_factory as gamepad_transport_factory
 from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
+from swbt.transport.base import HidDeviceTransport
+from swbt.transport.fake import FakeHidTransport
 
 
 def test_recovery_required_stops_before_bumble_transport_creation(
@@ -83,3 +85,63 @@ def test_invalid_profile_stops_before_preparation_and_transport_creation(
         asyncio.run(pad.open())
 
     assert events == []
+
+
+def test_profile_target_is_forwarded_to_bumble_power_on_guard(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile_path = tmp_path / "pro.json"
+    target = ExpLocalAddress.parse("02:12:34:56:78:9A")
+    ExpLocalProfile.create_new(profile_path, target)
+    captured: dict[str, object] = {}
+    expected_transport = FakeHidTransport()
+
+    async def successful_preparation(
+        *,
+        adapter: str,
+        target: ExpLocalAddress,
+    ) -> object:
+        captured["prepared"] = (adapter, str(target))
+        return object()
+
+    def create_transport(
+        *,
+        adapter: str,
+        device_name: str,
+        profile: object,
+        diagnostics: object,
+        key_store_path: str | None,
+        expected_local_bluetooth_address: bytes | None,
+    ) -> HidDeviceTransport:
+        captured.update(
+            {
+                "adapter": adapter,
+                "device_name": device_name,
+                "profile": profile,
+                "diagnostics": diagnostics,
+                "key_store_path": key_store_path,
+                "expected_local_bluetooth_address": expected_local_bluetooth_address,
+            }
+        )
+        return expected_transport
+
+    monkeypatch.setattr(
+        gamepad_runtime,
+        "prepare_exp_local_identity",
+        successful_preparation,
+    )
+    monkeypatch.setattr(
+        gamepad_transport_factory,
+        "create_default_transport",
+        create_transport,
+    )
+    pad = ProController(adapter="usb:0", profile_path=str(profile_path))
+
+    asyncio.run(pad._runtime._prepare_exp_local_profile())
+    transport = pad._runtime._ensure_transport()
+
+    assert transport is expected_transport
+    assert captured["prepared"] == ("usb:0", "02:12:34:56:78:9A")
+    assert captured["key_store_path"] is None
+    assert captured["expected_local_bluetooth_address"] == bytes.fromhex("02 12 34 56 78 9A")
