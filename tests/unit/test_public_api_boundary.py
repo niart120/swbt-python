@@ -28,6 +28,7 @@ from swbt.gamepad import ConnectionResult, ConnectionStatus
 from swbt.gamepad import _config as gamepad_config
 from swbt.gamepad import core as gamepad_core
 from swbt.gamepad import runtime as gamepad_runtime
+from swbt.gamepad import transport_factory as gamepad_transport_factory
 from swbt.gamepad._config import _SwitchGamepadConfig
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
@@ -90,7 +91,7 @@ def test_public_api_import_does_not_resolve_bumble(monkeypatch: pytest.MonkeyPat
     __import__("swbt")
 
 
-def test_only_bumble_transport_module_may_resolve_bumble(
+def test_only_bumble_transport_and_csr_harness_may_resolve_bumble(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     original_import = builtins.__import__
@@ -110,7 +111,10 @@ def test_only_bumble_transport_module_may_resolve_bumble(
     monkeypatch.setattr(builtins, "__import__", guarded_import)
 
     for module in pkgutil.walk_packages(swbt.__path__, f"{swbt.__name__}."):
-        if module.name == "swbt.transport.bumble":
+        if module.name in {
+            "swbt.transport.bumble",
+            "swbt.transport._csr_bd_addr_harness",
+        }:
             continue
         importlib.import_module(module.name)
 
@@ -191,21 +195,24 @@ def test_reporting_types_expose_only_their_owned_full_state_operation() -> None:
 
 
 def test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams() -> None:
-    expected_parameters = {
+    common_parameters = {
         "adapter",
         "controller_colors",
         "diagnostics",
-        "key_store_path",
         "report_period_us",
     }
     forbidden_parameters = {"device_name", "profile", "transport"}
 
-    for controller_name in ("ProController", "JoyConL", "JoyConR"):
+    pro_parameters = set(inspect.signature(ProController).parameters)
+    assert common_parameters | {"profile_path"} <= pro_parameters
+    assert (forbidden_parameters | {"key_store_path"}).isdisjoint(pro_parameters)
+
+    for controller_name in ("JoyConL", "JoyConR"):
         controller_cls = getattr(swbt, controller_name)
         parameters = set(inspect.signature(controller_cls).parameters)
 
-        assert expected_parameters.issubset(parameters)
-        assert forbidden_parameters.isdisjoint(parameters)
+        assert common_parameters | {"key_store_path"} <= parameters
+        assert (forbidden_parameters | {"profile_path"}).isdisjoint(parameters)
 
 
 def test_rearchitecture_target_public_controller_constructors_hide_transport_seam() -> None:
@@ -215,10 +222,50 @@ def test_rearchitecture_target_public_controller_constructors_hide_transport_sea
         assert "transport" not in inspect.signature(controller_cls).parameters
 
 
-def test_pro_controller_constructor_accepts_key_store_path() -> None:
+def test_pro_controller_constructor_accepts_profile_path_instead_of_key_store_path() -> None:
     signature = inspect.signature(ProController)
 
-    assert "key_store_path" in signature.parameters
+    assert "profile_path" in signature.parameters
+    assert "key_store_path" not in signature.parameters
+
+
+def test_profileless_pro_controller_uses_native_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_config: dict[str, object] = {}
+    expected_transport = FakeHidTransport()
+
+    def fake_create_default_transport(
+        *,
+        adapter: str,
+        device_name: str,
+        profile: ProControllerProfile,
+        diagnostics: object,
+        key_store_path: str | None,
+    ) -> HidDeviceTransport:
+        captured_config.update(
+            {
+                "adapter": adapter,
+                "device_name": device_name,
+                "profile": profile,
+                "diagnostics": diagnostics,
+                "key_store_path": key_store_path,
+            }
+        )
+        return expected_transport
+
+    monkeypatch.setattr(
+        gamepad_transport_factory,
+        "create_default_transport",
+        fake_create_default_transport,
+    )
+
+    pad = ProController(adapter="usb:0", profile_path=None)
+
+    assert pad._runtime._ensure_transport() is expected_transport
+    assert captured_config["adapter"] == "usb:0"
+    assert captured_config["key_store_path"] is None
+    assert pad._runtime._config.profile_path is None
 
 
 def test_pro_controller_uses_controller_runtime_owner() -> None:

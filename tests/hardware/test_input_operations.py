@@ -8,6 +8,7 @@ from typing import Any, Literal, TextIO
 import pytest
 
 from swbt import Button, DiagnosticsConfig, IMUFrame, InputState, ProController, Stick
+from swbt.gamepad._config import _SwitchGamepadConfig
 from swbt.protocol.input_report import InputReportBuilder
 
 _OPERATOR_WAIT_SECONDS = 5.0
@@ -17,6 +18,23 @@ _STICK_VISIBLE_REPORT_HOLD_COUNT = 120
 _NEUTRAL_REPORT_HOLD_COUNT = 8
 _STICK_CIRCLE_STEPS = 32
 _STICK_CIRCLE_STEP_SECONDS = 0.15
+
+
+def _native_pro_controller(
+    *,
+    adapter: str,
+    diagnostics: DiagnosticsConfig,
+    key_store_path: str | None = None,
+    report_period_us: int | None = None,
+) -> ProController:
+    return ProController._from_config(
+        _SwitchGamepadConfig(
+            adapter=adapter,
+            key_store_path=key_store_path,
+            report_period_us=report_period_us,
+        ),
+        diagnostics=diagnostics,
+    )
 
 
 @pytest.mark.hardware
@@ -33,7 +51,7 @@ def test_switch_input_operation_sequence_for_manual_reflection(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = ProController(
+            pad = _native_pro_controller(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
@@ -119,7 +137,7 @@ def test_switch_input_after_full_handshake_for_manual_reflection(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
-            pad = ProController(
+            pad = _native_pro_controller(
                 adapter=swbt_bumble_adapter,
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
             )
@@ -210,7 +228,7 @@ def test_switch_input_semantics_pairing_writes_fresh_key_store(
                 expected_switch_screen="controller_search_or_change_grip_order",
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = ProController(
+            pad = _native_pro_controller(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -285,7 +303,7 @@ def test_switch_button_check_after_active_reconnect_for_manual_reflection(
                 expected_switch_screen="input_device_check_button_operation_selection",
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = ProController(
+            pad = _native_pro_controller(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -385,7 +403,7 @@ def test_switch_button_check_lr_and_dpad_after_active_reconnect_for_manual_refle
                 expected_switch_screen="input_device_check_button_operation_selection",
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = ProController(
+            pad = _native_pro_controller(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -567,7 +585,7 @@ def test_switch_stick_calibration_after_active_reconnect_for_manual_reflection(
                 stick=stick_name,
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = ProController(
+            pad = _native_pro_controller(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -710,7 +728,7 @@ def test_switch_gyro_rate_after_active_reconnect_for_manual_reflection(
                 expected_switch_screen="gyro_responsive_screen_or_motion_calibration",
                 wait_seconds=_OPERATOR_WAIT_SECONDS,
             )
-            pad = ProController(
+            pad = _native_pro_controller(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 report_period_us=15_000,

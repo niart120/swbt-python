@@ -397,6 +397,36 @@ class ProController(_PeriodicRuntimeBackedGamepad):
 
     _controller_spec = _ControllerSpec(profile=default_controller_profile())
 
+    def __init__(
+        self,
+        *,
+        adapter: str | None = None,
+        profile_path: str | None = None,
+        report_period_us: int | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+    ) -> None:
+        """Create a Pro Controller-compatible gamepad.
+
+        Args:
+            adapter: Bumble adapter moniker used for the Bluetooth backend.
+            profile_path: Optional swbt-owned exp local address profile path.
+            report_period_us: Optional periodic input report interval in microseconds.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+
+        Raises:
+            InvalidInputError: adapter is omitted or report_period_us is not positive.
+        """
+        config = self._controller_spec.build_config(
+            adapter=adapter,
+            key_store_path=None,
+            profile_path=profile_path,
+            report_period_us=report_period_us,
+            controller_colors=controller_colors,
+        )
+        self._init_from_config(config, diagnostics=diagnostics, transport=None)
+
 
 class JoyConL(_PeriodicRuntimeBackedGamepad):
     """Runtime-backed Joy-Con L-compatible gamepad."""

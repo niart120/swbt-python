@@ -12,6 +12,7 @@ import pytest
 
 from swbt import AdapterDiscoveryError, AdapterInfo
 from swbt import probe as probe_module
+from swbt.gamepad._config import _SwitchGamepadConfig
 
 
 class DiagnosticsLike(Protocol):
@@ -202,6 +203,19 @@ def test_swbt_probe_pair_writes_trace_with_injected_gamepad(
             captured["adapter"] = adapter
             captured["key_store_path"] = key_store_path
             self._trace_writer = diagnostics.trace_writer
+
+        @classmethod
+        def _from_config(
+            cls,
+            config: _SwitchGamepadConfig,
+            *,
+            diagnostics: DiagnosticsLike,
+        ) -> "FakeGamepad":
+            return cls(
+                adapter=config.adapter or "",
+                key_store_path=config.key_store_path,
+                diagnostics=diagnostics,
+            )
 
         async def __aenter__(self) -> "FakeGamepad":
             self._write_event("fake_open")

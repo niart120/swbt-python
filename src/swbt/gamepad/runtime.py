@@ -47,6 +47,7 @@ class ControllerRuntime:
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
+        profile_path: str | None = None,
         report_period_us: int | None = None,
         device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
@@ -59,6 +60,7 @@ class ControllerRuntime:
             adapter: Bumble adapter moniker used when the default transport is created.
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
+            profile_path: Optional swbt-owned exp local address profile path.
             report_period_us: Optional periodic input report interval in microseconds.
             device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -73,6 +75,7 @@ class ControllerRuntime:
         config = _SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
+            profile_path=profile_path,
             report_period_us=report_period_us,
             device_name=device_name,
             controller_colors=controller_colors,
