@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from bumble.keys import PairingKeys
 
-from swbt import ConnectionFailedError, ProController
+from swbt import ConnectionFailedError, JoyConL, JoyConR, ProController
 from swbt.transport._bumble_key_store import _ExpLocalProfileKeyStore
 from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
 
@@ -103,3 +103,83 @@ def test_pairing_failure_leaves_profile_available_for_retry(
         (str(profile_path), 0.5),
     ]
     assert closed_profiles == [str(profile_path)]
+
+
+def test_joycon_l_create_profile_saves_kind_and_leaves_profile_for_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile_path = tmp_path / "joycon-l.json"
+    attempts: list[float | None] = []
+
+    async def fail_pair(
+        self: JoyConL,
+        timeout: float | None = None,  # noqa: ASYNC109
+    ) -> None:
+        _ = self
+        attempts.append(timeout)
+        msg = "pairing failed"
+        raise ConnectionFailedError(msg)
+
+    async def fake_close(self: JoyConL, *, neutral: bool = True) -> None:
+        _ = (self, neutral)
+
+    monkeypatch.setattr(JoyConL, "pair", fail_pair)
+    monkeypatch.setattr(JoyConL, "close", fake_close)
+
+    async def run() -> None:
+        with pytest.raises(ConnectionFailedError, match="pairing failed"):
+            await JoyConL.create_profile(
+                adapter="usb:0",
+                profile_path=str(profile_path),
+                exp_local_address="02:12:34:56:78:9A",
+                pair_timeout=0.25,
+            )
+
+    asyncio.run(run())
+
+    profile = ExpLocalProfile.load(profile_path)
+    assert profile.controller_kind == "joycon_l"
+    assert attempts == [0.25]
+    retry = JoyConL(adapter="usb:0", profile_path=str(profile_path))
+    assert retry._runtime._config.profile_path == str(profile_path)
+
+
+def test_joycon_r_create_profile_saves_kind_and_leaves_profile_for_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile_path = tmp_path / "joycon-r.json"
+    attempts: list[float | None] = []
+
+    async def fail_pair(
+        self: JoyConR,
+        timeout: float | None = None,  # noqa: ASYNC109
+    ) -> None:
+        _ = self
+        attempts.append(timeout)
+        msg = "pairing failed"
+        raise ConnectionFailedError(msg)
+
+    async def fake_close(self: JoyConR, *, neutral: bool = True) -> None:
+        _ = (self, neutral)
+
+    monkeypatch.setattr(JoyConR, "pair", fail_pair)
+    monkeypatch.setattr(JoyConR, "close", fake_close)
+
+    async def run() -> None:
+        with pytest.raises(ConnectionFailedError, match="pairing failed"):
+            await JoyConR.create_profile(
+                adapter="usb:0",
+                profile_path=str(profile_path),
+                exp_local_address="02:12:34:56:78:9A",
+                pair_timeout=0.25,
+            )
+
+    asyncio.run(run())
+
+    profile = ExpLocalProfile.load(profile_path)
+    assert profile.controller_kind == "joycon_r"
+    assert attempts == [0.25]
+    retry = JoyConR(adapter="usb:0", profile_path=str(profile_path))
+    assert retry._runtime._config.profile_path == str(profile_path)

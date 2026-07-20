@@ -7,9 +7,9 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NoReturn, cast
+from typing import Literal, NoReturn, cast
 
-from swbt.errors import InvalidProfileError
+from swbt.errors import InvalidProfileError, ProfileControllerMismatchError
 
 _ADDRESS_PATTERN = re.compile(r"(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
 _RESERVED_INQUIRY_LAP_MIN = 0x9E8B00
@@ -17,7 +17,9 @@ _RESERVED_INQUIRY_LAP_MAX = 0x9E8B3F
 _PROFILE_FORMAT = "swbt.profile"
 _PROFILE_SCHEMA_VERSION = 1
 _PROFILE_IDENTITY_KIND = "exp-local-address"
-_PROFILE_CONTROLLER_KIND = "pro"
+type ExpLocalControllerKind = Literal["pro", "joycon_l", "joycon_r"]
+
+_PROFILE_CONTROLLER_KINDS: frozenset[str] = frozenset({"pro", "joycon_l", "joycon_r"})
 
 type KeyStoreNamespaces = dict[str, dict[str, dict[str, object]]]
 
@@ -68,17 +70,19 @@ class ExpLocalAddress:
 
 @dataclass(frozen=True)
 class ExpLocalProfile:
-    """Validated version 1 profile envelope for a Pro Controller."""
+    """Validated version 1 profile envelope for one concrete controller kind."""
 
     exp_local_address: ExpLocalAddress
     key_store_namespaces: KeyStoreNamespaces
-    controller_kind: str = _PROFILE_CONTROLLER_KIND
+    controller_kind: ExpLocalControllerKind = "pro"
 
     @classmethod
     def create_new(
         cls,
         path: str | Path,
         exp_local_address: ExpLocalAddress,
+        *,
+        controller_kind: ExpLocalControllerKind = "pro",
     ) -> "ExpLocalProfile":
         """Atomically create a new profile without overwriting an existing path."""
         address = str(exp_local_address)
@@ -88,6 +92,7 @@ class ExpLocalProfile:
                 address: {},
                 f"swbt.previous::{address}": {},
             },
+            controller_kind=controller_kind,
         )
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -108,6 +113,17 @@ class ExpLocalProfile:
             key_store_namespaces=copy.deepcopy(namespaces),
             controller_kind=self.controller_kind,
         )
+
+    def require_controller_kind(
+        self,
+        expected_controller_kind: ExpLocalControllerKind,
+    ) -> None:
+        """Reject a profile owned by a different concrete controller kind."""
+        if self.controller_kind != expected_controller_kind:
+            raise ProfileControllerMismatchError(
+                expected_controller_kind=expected_controller_kind,
+                actual_controller_kind=self.controller_kind,
+            )
 
     def save(self, path: str | Path) -> None:
         """Atomically replace an existing profile with this envelope."""
@@ -167,8 +183,9 @@ class ExpLocalProfile:
             _invalid_profile("profile format is unsupported")
         if payload.get("schema_version") != _PROFILE_SCHEMA_VERSION:
             _invalid_profile("profile schema_version is unsupported")
-        if payload.get("controller_kind") != _PROFILE_CONTROLLER_KIND:
-            _invalid_profile("profile controller_kind must be 'pro'")
+        controller_kind = payload.get("controller_kind")
+        if controller_kind not in _PROFILE_CONTROLLER_KINDS:
+            _invalid_profile("profile controller_kind is unsupported")
 
         identity = payload.get("identity")
         if not isinstance(identity, dict):
@@ -195,4 +212,5 @@ class ExpLocalProfile:
         return cls(
             exp_local_address=address,
             key_store_namespaces=cast("KeyStoreNamespaces", copy.deepcopy(namespaces)),
+            controller_kind=cast("ExpLocalControllerKind", controller_kind),
         )

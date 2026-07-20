@@ -67,6 +67,25 @@ class InvalidProfileError(SwbtError):
     """Raised when an exp local address profile is invalid or unsupported."""
 
 
+class ProfileControllerMismatchError(InvalidProfileError):
+    """Raised when a profile belongs to a different concrete controller kind."""
+
+    def __init__(
+        self,
+        *,
+        expected_controller_kind: str,
+        actual_controller_kind: str,
+    ) -> None:
+        """Initialize expected and actual profile controller kinds."""
+        message = (
+            "profile controller_kind mismatch: "
+            f"expected {expected_controller_kind!r}, got {actual_controller_kind!r}"
+        )
+        super().__init__(message)
+        self.expected_controller_kind = expected_controller_kind
+        self.actual_controller_kind = actual_controller_kind
+
+
 class ExpLocalAddressRecoveryRequired(SwbtError):  # noqa: N818
     """Raised when a volatile write may have changed the adapter identity."""
 

@@ -29,6 +29,7 @@ def test_package_exports_public_gamepad_surface() -> None:
         "JoyConR",
         "PeriodicSwitchGamepad",
         "ProController",
+        "ProfileControllerMismatchError",
         "Stick",
         "SwbtError",
         "SwitchGamepad",

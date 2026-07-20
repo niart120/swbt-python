@@ -92,7 +92,7 @@ def test_exp_local_profile_loads_supported_pro_controller_envelope(
         {
             "format": "swbt.profile",
             "schema_version": 1,
-            "controller_kind": "joycon_l",
+            "controller_kind": "direct_pro",
             "identity": {
                 "kind": "exp-local-address",
                 "address": "02:12:34:56:78:9A",
@@ -169,6 +169,38 @@ def test_exp_local_profile_create_new_atomically_saves_empty_pro_envelope(
         },
     }
     assert list(profile_path.parent.iterdir()) == [profile_path]
+
+
+def test_exp_local_profile_create_new_saves_joycon_l_controller_kind(
+    tmp_path: Path,
+) -> None:
+    profile_path = tmp_path / "joycon-l.json"
+
+    profile = ExpLocalProfile.create_new(
+        profile_path,
+        ExpLocalAddress.parse("02:12:34:56:78:9A"),
+        controller_kind="joycon_l",
+    )
+
+    assert profile.controller_kind == "joycon_l"
+    assert ExpLocalProfile.load(profile_path).controller_kind == "joycon_l"
+    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == ("joycon_l")
+
+
+def test_exp_local_profile_create_new_saves_joycon_r_controller_kind(
+    tmp_path: Path,
+) -> None:
+    profile_path = tmp_path / "joycon-r.json"
+
+    profile = ExpLocalProfile.create_new(
+        profile_path,
+        ExpLocalAddress.parse("02:12:34:56:78:9A"),
+        controller_kind="joycon_r",
+    )
+
+    assert profile.controller_kind == "joycon_r"
+    assert ExpLocalProfile.load(profile_path).controller_kind == "joycon_r"
+    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == ("joycon_r")
 
 
 def test_exp_local_profile_create_new_does_not_overwrite_existing_path(

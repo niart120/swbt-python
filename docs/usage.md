@@ -1,6 +1,6 @@
 # 利用例
 
-目的別の利用例です。API の引数、例外、送信方式ごとの契約は `docs/api.md`、実機での検証条件は `docs/hardware.md` にあります。実機接続には用用 SSB Bluetooth ドングル、Bumble、対象機器側のペアリングまたは再接続操作が必要です。
+目的別の利用例です。API の引数、例外、送信方式ごとの契約は `docs/api.md`、実機での検証条件は `docs/hardware.md` にあります。実機接続には専用 USB Bluetooth ドングル、Bumble、対象機器側のペアリングまたは再接続操作が必要です。
 
 ## クイックスタート
 
@@ -58,9 +58,9 @@ asyncio.run(main())
 
 ## 接続
 
-### Pro Controller プロファイルの初回作成
+### Periodic controller プロファイルの初回作成
 
-Pro Controller の接続情報を永続化する場合は、最初の 1 回だけ `create_profile()` を使います。`exp_local_address` は利用者が生成し、同時に使う他の Bluetooth デバイスと重複しない値を選びます。例示した `02:12:34:56:78:9A` を共通値として使わず、利用者ごとに管理する値へ置き換えてください。
+Pro Controller、Joy-Con L、Joy-Con R の exp local identity と接続情報を永続化する場合は、最初の 1 回だけ各 class の `create_profile()` を使います。`exp_local_address` は利用者が生成し、同時に使う他の Bluetooth デバイスと重複しない値を選びます。例示した値を共通値として使わず、controller kind と対象機器ごとに管理する値へ置き換えてください。
 
 ```python
 pad = await ProController.create_profile(
@@ -75,7 +75,19 @@ finally:
     await pad.close()
 ```
 
-対象は CSR8510 A10 の揮発領域への書換経路です。アダプタの永続領域は変更しません。既存のパスは上書きされません。ペアリングが失敗してもプロファイルは残るため、以後は `ProController(profile_path="profiles/switch-pro.json")` で再試行します。`ExpLocalAddressRecoveryRequired` が送出された場合は、SSB ドングルを抜き差ししてから再試行してください。
+Joy-Con も同じ手順で作成します。左右で同じ `profile_path` または `exp_local_address` を共有しません。
+
+```python
+left = await JoyConL.create_profile(
+    adapter="usb:0",
+    profile_path="profiles/switch-left-joycon.json",
+    exp_local_address="06:12:34:56:78:9A",
+    pair_timeout=60.0,
+)
+await left.close()
+```
+
+対象は CSR8510 A10 の揮発領域への書換経路です。アダプタの永続領域は変更しません。既存のパスは上書きされません。ペアリングが失敗してもプロファイルは残るため、作成時と同じ具象クラスの `profile_path` から再試行します。`ExpLocalAddressRecoveryRequired` が送出された場合は、USB ドングルを抜き差ししてから再試行してください。別の controller kind の profile を渡した場合は `ProfileControllerMismatchError` がアダプタを開く前に送出されます。
 
 ### 接続時の再接続・ペアリング選択
 
@@ -150,7 +162,7 @@ second = ProController(
 )
 ```
 
-1 つの保存ファイルに複数の保存済みペアリング情報を混ぜないでください。Pro Controller は対象機器ごとに別の `profile_path` を使います。Joy-Con と直接送信型は移行前の `key_store_path` を使います。コントローラー種別が違う場合は、同じ対象機器でも保存ファイルを共有しません。
+1 つの保存ファイルに複数の保存済みペアリング情報を混ぜないでください。Pro Controller と周期送信型 Joy-Con は、controller kind と対象機器ごとに別の `profile_path` を使います。Joy-Con の native-address 経路と直接送信型は `key_store_path` を使います。
 
 ## Joy-Con L/R
 
@@ -166,7 +178,7 @@ from swbt import Button, JoyConL, Stick
 async def main() -> None:
     async with JoyConL(
         adapter="usb:0",
-        key_store_path="switch-left-joycon-bond.json",
+        profile_path="profiles/switch-left-joycon.json",
     ) as left:
         await left.connect(timeout=30.0, allow_pairing=True)
         await left.tap(Button.SR, Button.SL)
@@ -190,7 +202,7 @@ from swbt import Button, JoyConR, Stick
 async def main() -> None:
     async with JoyConR(
         adapter="usb:0",
-        key_store_path="switch-right-joycon-bond.json",
+        profile_path="profiles/switch-right-joycon.json",
     ) as right:
         await right.connect(timeout=30.0, allow_pairing=True)
         await right.tap(Button.A)
@@ -203,23 +215,23 @@ asyncio.run(main())
 
 ### 非対応入力の扱い
 
-対応しない入力を検出する場合は、`SnsupportedInputError` を捕捉します。
+対応しない入力を検出する場合は、`UnsupportedInputError` を捕捉します。
 
 ```python
-from swbt import Button, JoyConL, Stick, SnsupportedInputError
+from swbt import Button, JoyConL, Stick, UnsupportedInputError
 
 async with JoyConL(
     adapter="usb:0",
-    key_store_path="switch-left-joycon-bond.json",
+    profile_path="profiles/switch-left-joycon.json",
 ) as left:
     try:
         await left.rstick(Stick.right())
-    except SnsupportedInputError as error:
+    except UnsupportedInputError as error:
         print(error)
 
     try:
         await left.tap(Button.A)
-    except SnsupportedInputError as error:
+    except UnsupportedInputError as error:
         print(error)
 ```
 

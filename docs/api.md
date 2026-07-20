@@ -57,6 +57,7 @@ from swbt import (
 | `UnsupportedInputError` | プロファイルが対応しない入力の拒否 |
 | `InvalidKeyStoreError` | ペアリング情報の保存形式が未対応、または現在の接続先が複数ある状態 |
 | `InvalidProfileError` | swbt プロファイル JSON の形式、バージョン、コントローラー種別、アドレスが不正な状態 |
+| `ProfileControllerMismatchError` | swbt プロファイルのコントローラー種別と生成する具象クラスが一致しない状態。`InvalidProfileError` の派生型 |
 | `ExpLocalAddressRecoveryRequired` | 揮発領域のアドレス書換開始後の状態を確定できず、専用 USB Bluetooth ドングルの抜き差しが必要な状態 |
 
 ## アダプタの列挙
@@ -111,11 +112,11 @@ direct_pad = DirectProController(
 
 `adapter` は Bumble transport に渡すアダプタ名です。
 
-`ProController` の `profile_path` は、利用者が用意したローカル Bluetooth アドレスとペアリングキーを同じ swbt プロファイル JSON に保存するパスです。既存プロファイルを再利用する場合だけコンストラクタに渡します。`profile_path=None` ではアダプタのアドレスを変更せず、ペアリング情報も永続化しません。
+Periodic controller の `profile_path` は、利用者が用意したローカル Bluetooth アドレスとペアリングキーを同じ swbt プロファイル JSON に保存するパスです。既存プロファイルを再利用する場合だけコンストラクタに渡します。
 
-Joy-Con と直接送信型は移行前の `key_store_path` を受け取ります。これは Bumble がペアリングキーを保存する JSON ファイルのパスです。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに分けてください。
+Joy-Con の adapter 本来のアドレスを使う経路と直接送信型は `key_store_path` を受け取ります。Joy-Con では `key_store_path` と `profile_path` を同時に指定できません。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに保存先を分けてください。
 
-新しい Pro Controller プロファイルは `create_profile()` で作成します。`exp_local_address` の生成と重複回避は利用者の責任です。例示した `02:12:34:56:78:9A` を共通値として使わず、利用者ごとに管理する値へ置き換えてください。この経路は CSR8510 A10 の揮発領域への書換として提供され、永続領域は変更しません。
+新しい Periodic controller プロファイルは、`ProController`、`JoyConL`、`JoyConR` の `create_profile()` で作成します。`exp_local_address` の生成と重複回避は利用者の責任です。例示した `02:12:34:56:78:9A` を共通値として使わず、controller kind と対象機器ごとに別の値を管理してください。この経路は CSR8510 A10 の揮発領域への書換として提供され、永続領域は変更しません。
 
 ```python
 pad = await ProController.create_profile(
@@ -130,7 +131,7 @@ finally:
     await pad.close()
 ```
 
-`create_profile()` は既存のパスを上書きしません。アドレスまたはプロファイルが不正ならアダプタを開く前に失敗します。ペアリング失敗後もプロファイルは残るため、`ProController(profile_path=...)` から再試行できます。揮発領域への書換開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` が送出されます。この場合は専用 USB Bluetooth ドングルを抜き差ししてから再試行します。
+`create_profile()` は既存のパスを上書きしません。アドレスまたはプロファイルが不正ならアダプタを開く前に失敗します。別の controller kind の profile は `ProfileControllerMismatchError` になります。ペアリング失敗後もプロファイルは残るため、作成時と同じ具象クラスの `profile_path` から再試行できます。揮発領域への書換開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` が送出されます。この場合は専用 USB Bluetooth ドングルを抜き差ししてから再試行します。
 
 `report_period_us` は、周期送信型の具象クラスが使うレポートループの送信周期です。`None` を指定した場合は、既定周期（8 ms）を使います。直接送信型の具象クラスは `report_period_us` を受け取りません。入力レポートの送信頻度は利用者が管理します。
 
@@ -271,7 +272,7 @@ right = JoyConR(
 ```python
 async with JoyConL(
     adapter="usb:0",
-    key_store_path="switch-left-joycon-bond.json",
+    profile_path="profiles/switch-left-joycon.json",
 ) as left:
     await left.connect(timeout=30.0, allow_pairing=True)
     await left.tap(Button.SR, Button.SL)
@@ -282,13 +283,13 @@ async with JoyConL(
 
 `apply(state)` と `send(state)` でも同じ制約を検査します。`JoyConL` または `DirectJoyConL` に右スティック入力や `A`、`B`、`X`、`Y` 入力を含む `InputState`、`JoyConR` または `DirectJoyConR` に左スティック入力や十字キー入力を含む `InputState` を渡すと `UnsupportedInputError` が送出されます。
 
-Pro Controller は `profile_path`、Joy-Con L/R は `key_store_path` を使います。HID 識別情報とペアリングキーの対応を分けるため、コントローラー種別ごとに別の保存先を使ってください。Joy-Con と直接送信型のプロファイル移行は後続の作業単位で扱います。
+Pro Controller と周期送信型 Joy-Con は `profile_path` を使えます。profile の `pro` / `joycon_l` / `joycon_r` は混在できないため、コントローラー種別ごとに別の保存先を使ってください。Joy-Con の native-address 経路と直接送信型は `key_store_path` を使います。直接送信型の profile 移行は後続の作業単位で扱います。
 「持ちかた/順番を変える」画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送る必要があります。
 
 OS、ドングル、ファームウェアをまたぐ互換性は未検証です。
 
 ## 例外とトレース出力
 
-例外は `SwbtError` を基底例外とします。アダプタ列挙の失敗では `AdapterDiscoveryError`、利用者入力の不正では `InvalidInputError`、コントローラーが対応しない入力では `UnsupportedInputError`、transport を開けなかった場合は `TransportOpenError`、接続タイムアウトでは `ConnectionTimeoutError`、接続不成立では `ConnectionFailedError`、ペアリング情報の保存形式が一致しない場合は `InvalidKeyStoreError`、プロファイルが不正な場合は `InvalidProfileError` が送出されます。揮発領域への書換開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` が送出されます。
+例外は `SwbtError` を基底例外とします。アダプタ列挙の失敗では `AdapterDiscoveryError`、利用者入力の不正では `InvalidInputError`、コントローラーが対応しない入力では `UnsupportedInputError`、transport を開けなかった場合は `TransportOpenError`、接続タイムアウトでは `ConnectionTimeoutError`、接続不成立では `ConnectionFailedError`、ペアリング情報の保存形式が一致しない場合は `InvalidKeyStoreError`、プロファイルが不正な場合は `InvalidProfileError` が送出されます。コントローラー種別の不一致は `ProfileControllerMismatchError` で区別できます。揮発領域への書換開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` が送出されます。
 
 `DiagnosticsConfig` はトレース出力のための設定です。`trace_writer` にテキストストリームを渡すと、接続状態の遷移、送信したレポート、受信したサブコマンド、エラー、`adapter`、`profile_path`、`key_store_path` などの実行時メタデータを、1 行 1 件の JSON オブジェクトとして出力します。このトレースログは、実機接続時の挙動確認や失敗時の切り分けに使います。

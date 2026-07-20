@@ -51,7 +51,7 @@ unit_052 の `ProController` exp profile 経路を、`JoyConL` と `JoyConR` へ
 |---|---|---|---|
 | Switch HID / report bytes | not applicable | not applicable | unit_052 の identity profile 拡張であり、Joy-Con report layout は変更しない |
 | Bumble / transport | required | inherited | unit_052 で確立する raw preparation / Bumble handoff を再利用する |
-| controller kind と key store | required | todo | 異なる HID profile の pairing key を同じ envelope に混在させない contract を unit test で固定する |
+| controller kind と key store | required | done | envelope の `pro` / `joycon_l` / `joycon_r` を保存し、mismatch を raw preparation 前に `ProfileControllerMismatchError` として拒否する contract を unit test で固定した |
 | OS / driver / adapter | required | hardware-observed only | CSR8510 A10 / WinUSB の既知構成で Joy-Con L/R を各々確認する |
 
 ## 6. 振る舞い仕様
@@ -68,19 +68,19 @@ unit_052 の `ProController` exp profile 経路を、`JoyConL` と `JoyConR` へ
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| deferred | JoyConL の新規 profile は `joycon_l` kind を保存する | new | unit | no | unit_052 の envelope codec に依存 |
-| deferred | JoyConR の新規 profile は `joycon_r` kind を保存する | new | unit | no | 同上 |
-| deferred | Joy-Con と異なる kind の profile は adapter open 前に失敗する | edge | unit | no | raw preparation を呼ばない |
-| deferred | Joy-Con profile は unit_052 と同じ target guard / recovery-required を使う | regression | integration | no | transport handoff の共有を確認 |
-| deferred | JoyConL の profile 作成、pairing、通常 close 後の再利用を確認する | characterization | hardware | yes | 完了必須 |
-| deferred | JoyConR の profile 作成、pairing、通常 close 後の再利用を確認する | characterization | hardware | yes | 完了必須 |
+| green | JoyConL の新規 profile は `joycon_l` kind を保存する | new | unit / integration | no | 公開 `create_profile()` と schema version 1 codec を確認 |
+| green | JoyConR の新規 profile は `joycon_r` kind を保存する | new | unit / integration | no | 公開 `create_profile()` と schema version 1 codec を確認 |
+| green | Joy-Con と異なる kind の profile は adapter open 前に失敗する | edge | unit | no | `ProfileControllerMismatchError` を送出し raw preparation を呼ばない |
+| green | Joy-Con profile は unit_052 と同じ target guard / recovery-required を使う | regression | integration | no | Pro / JoyConL / JoyConR の3 kind で preparation 前後の境界を確認 |
+| pass | JoyConL の profile 作成、pairing、通常 close 後の再利用を確認する | characterization | hardware | yes | 2026-07-20、CSR8510 A10 / WinUSB / Switch 2 22.5.0。fresh pairing と active reconnect が pass |
+| pass | JoyConR の profile 作成、pairing、通常 close 後の再利用を確認する | characterization | hardware | yes | 2026-07-20、CSR8510 A10 / WinUSB / Switch 2 22.5.0。fresh pairing と active reconnect が pass |
 
 ## 8. 文書検証計画
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| `spec/initial/api.md` | Joy-Con profile API | 本仕様 §6 | link / code example 構文確認 | deferred | unit_052 / 本 unit 完了後に `docs-quality-review` |
-| `spec/initial/risks.md` | controller kind 分離 | 本仕様 §2、§3 | link 確認 | deferred | 実機 gate 後に確認済み範囲を記録 |
+| `spec/initial/api.md`、`docs/api.md`、`docs/usage.md` | Joy-Con profile API | 本仕様 §6、公開 signature | `uv run mkdocs build --strict` | pass | `profile_path`、`create_profile()`、kind mismatch、native-address `key_store_path` を確認 |
+| `spec/initial/risks.md`、`docs/hardware.md`、release notes、README | controller kind 分離と実機範囲 | 本仕様 §2、§3、hardware log | `uv run mkdocs build --strict` | pass | Switch 2 / 22.5.0 の L/R gate だけを確認済みとして記録 |
 
 ## 9. 設計メモ
 
@@ -104,6 +104,23 @@ unit_052 の `ProController` exp profile 経路を、`JoyConL` と `JoyConR` へ
 | command | result | notes |
 |---|---|---|
 | unit_052 の unit / integration / hardware gate | pass | `spec/complete/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md` を参照。本 unit の gate は未実行 |
+| `uv run pytest tests/unit/test_exp_local_address.py::test_exp_local_profile_create_new_saves_joycon_l_controller_kind -q` | pass | 1 passed。JoyConL controller kind codec cycle |
+| `uv run ruff check src/swbt/transport/_exp_local_address.py tests/unit/test_exp_local_address.py` | pass | JoyConL controller kind codec cycle |
+| `uv run pytest tests/unit/test_exp_local_address.py::test_exp_local_profile_create_new_saves_joycon_r_controller_kind -q` | pass | 1 passed。JoyConR controller kind codec cycle |
+| `uv run ruff check src/swbt/transport/_exp_local_address.py tests/unit/test_exp_local_address.py` | pass | JoyConR controller kind codec cycle |
+| `uv run pytest tests/unit/test_exp_local_profile_runtime.py::test_joycon_profile_kind_mismatch_stops_before_preparation_and_transport_creation -q` | pass | 1 passed。kind mismatch cycle |
+| `uv run ruff check src/swbt/errors.py src/swbt/__init__.py src/swbt/transport/_exp_local_address.py src/swbt/gamepad/runtime.py src/swbt/gamepad/core.py tests/unit/test_exp_local_profile_runtime.py` | pass | kind mismatch cycle |
+| `uv run pytest tests/integration/test_exp_local_profile.py::test_joycon_l_create_profile_saves_kind_and_leaves_profile_for_retry -q` | pass | 1 passed。JoyConL 公開 profile entry point cycle |
+| `uv run pytest tests/integration/test_exp_local_profile.py::test_joycon_r_create_profile_saves_kind_and_leaves_profile_for_retry -q` | pass | 1 passed。JoyConR 公開 profile entry point cycle |
+| `uv run pytest tests/unit/test_exp_local_profile_runtime.py::test_recovery_required_stops_before_bumble_transport_creation -q` | pass | 3 passed。Pro / JoyConL / JoyConR 共通 recovery-required boundary |
+| `uv run pytest tests/integration/test_exp_local_profile.py -q` | pass | 4 passed。共通 profile 作成処理への refactor 前後で維持 |
+| `uv run pytest tests/unit/test_exp_local_address.py tests/unit/test_exp_local_profile_runtime.py tests/unit/test_public_api_boundary.py tests/integration/test_exp_local_profile.py -q` | pass | 73 passed。unit_053 関連回帰 |
+| `uv run ruff check src/swbt/errors.py src/swbt/__init__.py src/swbt/transport/_exp_local_address.py src/swbt/gamepad/_config.py src/swbt/gamepad/runtime.py src/swbt/gamepad/core.py tests/unit/test_exp_local_address.py tests/unit/test_exp_local_profile_runtime.py tests/unit/test_public_api_boundary.py tests/integration/test_exp_local_profile.py` | pass | unit_053 関連 lint |
+| `uv run ty check --no-progress` | pass | 型 gate。既存 native-address Joy-Con hardware test の `key_store_path` 互換も維持 |
+| `uv run pytest 'tests/hardware/test_exp_local_profile.py::test_switch_joycon_exp_local_profile_fresh_pairing_and_close[left-JoyConL-joycon_l]' -m hardware --swbt-bumble-adapter usb:0 --swbt-exp-local-address 12:78:D1:C4:E5:03 --swbt-hardware-artifact-dir build/hardware/unit-053-joycon-l-20260720 -q -s` | pass | 1 passed in 5.31s。fresh pairing / normal close |
+| `uv run pytest 'tests/hardware/test_exp_local_profile.py::test_switch_joycon_exp_local_profile_reuses_target_after_normal_close[left-JoyConL-joycon_l]' -m hardware --swbt-bumble-adapter usb:0 --swbt-exp-local-address 12:78:D1:C4:E5:03 --swbt-hardware-artifact-dir build/hardware/unit-053-joycon-l-20260720 -q -s` | pass | 1 passed in 3.25s。active reconnect |
+| `uv run pytest 'tests/hardware/test_exp_local_profile.py::test_switch_joycon_exp_local_profile_fresh_pairing_and_close[right-JoyConR-joycon_r]' -m hardware --swbt-bumble-adapter usb:0 --swbt-exp-local-address 6E:9B:54:87:29:79 --swbt-hardware-artifact-dir build/hardware/unit-053-joycon-r-20260720 -q -s` | pass with warning | 1 passed, 1 usb1 ctypes callback warning in 4.68s。fresh pairing / normal close |
+| `uv run pytest 'tests/hardware/test_exp_local_profile.py::test_switch_joycon_exp_local_profile_reuses_target_after_normal_close[right-JoyConR-joycon_r]' -m hardware --swbt-bumble-adapter usb:0 --swbt-exp-local-address 6E:9B:54:87:29:79 --swbt-hardware-artifact-dir build/hardware/unit-053-joycon-r-20260720 -q -s` | pass | 1 passed in 2.96s。active reconnect |
 | `uv run pytest tests/unit` | deferred | 実装後 |
 | `uv run pytest tests/integration` | deferred | 実装後 |
 | Joy-Con L/R 手動 gate | deferred | 明示承認が必要 |
@@ -131,6 +148,6 @@ unit_052 の `ProController` exp profile 経路を、`JoyConL` と `JoyConR` へ
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件を記録した
 - [x] unit_052 の完了を確認した
-- [ ] 実装と unit / integration gate を完了した
-- [ ] Joy-Con L/R 手動 gate を完了した
-- [ ] 初期設計と公開文書の Intent Delta を反映した
+- [x] 実装と unit / integration gate を完了した
+- [x] Joy-Con L/R 手動 gate を完了した
+- [x] 初期設計と公開文書の Intent Delta を反映した
