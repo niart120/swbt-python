@@ -136,7 +136,7 @@ await pad.connect(allow_pairing=False)
 | refactor-done | Bumble power-on 後の address 不一致は advertising / pairing / reconnect を開始しない | regression | unit | no | 51 tests pass。advertising / reconnect の照合を共通 helper へ統合 |
 | refactor-done | pairing key 保存後も envelope identity と namespace map が保持される | new | integration | no | 53 targeted tests pass。profile envelope の一時ファイル保存を共通化 |
 | refactor-skipped | pairing 失敗後、同じ profile で pairing を再試行できる | regression | integration | no | 61 targeted tests pass。作成済み profile を残して controller 資源だけを閉じる単一責務のため追加 refactor なし |
-| todo | `close()` 後に target が残る profile を次の controller が再利用できる | characterization | bumble | yes | known CSR8510 A10 の実機 gate と結ぶ |
+| refactor-skipped | `close()` 後に target が残る profile を次の controller が再利用できる | characterization | bumble | yes | 1 passed。active reconnect、profile bytes 不変、advertising / pairing / key update なしを確認し、追加 refactor なし |
 | refactor-skipped | fresh profile 作成、pairing、通常 close を確認する | characterization | hardware | yes | retry run は 1 passed。実機 trace assertion を address 確定後の diagnostics event に修正し、追加 refactor なし |
 
 ## 8. 文書検証計画
@@ -186,7 +186,9 @@ await pad.connect(allow_pairing=False)
 | `uv run ty check --no-progress` | pass | all checks passed |
 | `uv run pytest -p no:cacheprovider --basetemp <temp> tests/unit` | pass | 465 passed。OS temp を使用 |
 | `uv run pytest -p no:cacheprovider --basetemp <temp> tests/integration` | pass | 127 passed。OS temp を使用 |
-| 手動 CSR8510 A10 gate | partial | fresh profile / pairing / normal close は pass。同 profile の active reconnect が未実行 |
+| `uv run pytest tests/hardware/test_exp_local_profile.py::test_switch_exp_local_profile_fresh_pairing_and_close ...` | pass | retry artifact で 1 passed in 2.95s |
+| `uv run pytest tests/hardware/test_exp_local_profile.py::test_switch_exp_local_profile_reuses_target_after_normal_close ...` | pass | 1 passed in 2.88s。profile bytes 不変、禁止イベント 0 件 |
+| 手動 CSR8510 A10 gate | pass | fresh pairing / normal close と同 profile active reconnect を完了 |
 | `uv run mkdocs build --strict` | pass | 公開文書と初期設計の build 成功 |
 | `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | address validation cycle: 8 passed |
 | `uv run ruff check src/swbt/transport/_exp_local_address.py tests/unit/test_exp_local_address.py` | pass | address validation cycle |
@@ -246,6 +248,6 @@ await pad.connect(allow_pairing=False)
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件を記録した
 - [x] 実装と unit / integration gate を完了した
-- [ ] 明示承認下の手動実機 gate を完了した
+- [x] 明示承認下の手動実機 gate を完了した
 - [x] 初期設計と公開文書の Intent Delta を反映した
 - [x] 検証結果または未実行理由を更新した
