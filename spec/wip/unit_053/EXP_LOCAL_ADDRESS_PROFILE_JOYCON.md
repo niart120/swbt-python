@@ -10,7 +10,7 @@ unit_052 の `ProController` exp profile 経路を、`JoyConL` と `JoyConR` へ
 
 | source | 内容 | path |
 |---|---|---|
-| unit_052 | profile envelope、CSR preparation、ProController の基盤 | `spec/wip/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md` |
+| unit_052 | profile envelope、CSR preparation、ProController の基盤 | `spec/complete/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md` |
 | 初期公開 API | JoyConL / JoyConR の公開 constructor と lifecycle | `spec/initial/api.md` |
 | Joy-Con 実機観測 | Joy-Con L/R の既存 pairing / input 観測 | `spec/hardware-test-log.md` |
 
@@ -39,7 +39,7 @@ unit_052 の `ProController` exp profile 経路を、`JoyConL` と `JoyConR` へ
 
 ## 4. 関連 docs
 
-- `spec/wip/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md`
+- `spec/complete/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md`
 - `spec/initial/api.md`
 - `spec/initial/transport-bumble.md`
 - `spec/initial/lifecycle.md`
@@ -84,7 +84,7 @@ unit_052 の `ProController` exp profile 経路を、`JoyConL` と `JoyConR` へ
 
 ## 9. 設計メモ
 
-- profile envelope の controller kind は unit_052 の schema version 1 に含める。unit_052 がまだ未実装であるため、schema version を後から移行させずに済む。
+- profile envelope の controller kind は、完了した unit_052 の schema version 1 に含まれている。JSON shape を変えず Joy-Con の kind 値を追加する限り、schema version 1 を維持する。
 - 同じ `exp_local_address` を別 profile で同時に使わないことは利用者の責任とする。ただし controller kind が異なる profile path の共有は拒否する。
 - Joy-Con 固有 HID identity が Switch の既存登録とどう相互作用するかは未検証であり、各 side の手動 gate を省略しない。
 
@@ -103,7 +103,7 @@ unit_052 の `ProController` exp profile 経路を、`JoyConL` と `JoyConR` へ
 
 | command | result | notes |
 |---|---|---|
-| unit_052 の unit / integration gate | deferred | unit_052 完了が前提 |
+| unit_052 の unit / integration / hardware gate | pass | `spec/complete/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md` を参照。本 unit の gate は未実行 |
 | `uv run pytest tests/unit` | deferred | 実装後 |
 | `uv run pytest tests/integration` | deferred | 実装後 |
 | Joy-Con L/R 手動 gate | deferred | 明示承認が必要 |
@@ -130,7 +130,7 @@ unit_052 の `ProController` exp profile 経路を、`JoyConL` と `JoyConR` へ
 - [x] TDD Test List を作成した
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件を記録した
-- [ ] unit_052 の完了を確認した
+- [x] unit_052 の完了を確認した
 - [ ] 実装と unit / integration gate を完了した
 - [ ] Joy-Con L/R 手動 gate を完了した
 - [ ] 初期設計と公開文書の Intent Delta を反映した

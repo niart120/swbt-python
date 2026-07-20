@@ -154,7 +154,7 @@ Joy-Con と直接送信型は移行前の `key_store_path` を使います。ペ
 
 | Controller profile | Status | Verified scope | Not verified | Key store |
 |---|---|---|---|---|
-| Pro Controller | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 ファームウェア 22.1.0 では、従来のアドレスを使う経路でペアリング、保存済みペアリング情報による再接続、主要なボタン / スティック入力、ニュートラル復帰、終了時の切断を確認。2026-07-20 の unit_052 では、利用者管理のローカルアドレスを使う `profile_path` 経路で揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルの active reconnect、再接続時の profile bytes 不変と advertising / pairing / key 更新なしを確認。macOS 15.7.7 / CSR8510 A10 でも従来経路を限定確認 | unit_052 の Switch model / firmware、profile 経路での USB 抜き差し後の再適用、Linux、CSR8510 A10 以外、別ファームウェアは未確認 | 現行 `ProController` の永続化には対象機器ごとに別の `profile_path` を使う |
+| Pro Controller | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 ファームウェア 22.1.0 では、従来のアドレスを使う経路でペアリング、保存済みペアリング情報による再接続、主要なボタン / スティック入力、ニュートラル復帰、終了時の切断を確認。2026-07-20 の unit_052 では、Switch 2 firmware 22.5.0 に対し、利用者管理のローカルアドレスを使う `profile_path` 経路で揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルの active reconnect、再接続時の profile bytes 不変と advertising / pairing / key 更新なしを確認。macOS 15.7.7 / CSR8510 A10 でも従来経路を限定確認 | profile 経路での USB 抜き差し後の再適用、Linux、CSR8510 A10 以外、別ファームウェアは未確認 | 現行 `ProController` の永続化には対象機器ごとに別の `profile_path` を使う |
 | Joy-Con L | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con L としての登録、利用者指定色、保存済みペアリング情報を使った接続後の十字キー入力を確認。左スティックは入力送信とニュートラル復帰まで確認 | SDP の細部一致、OS / ドングル / ファームウェアをまたぐ互換性 | Pro Controller と Joy-Con R とは別の `key_store_path` を使う |
 | Joy-Con R | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con R としての登録、利用者指定色、保存済みペアリング情報を使った接続後の ABXY 入力を確認。右スティックは入力送信とニュートラル復帰まで確認 | SDP の細部一致、OS / ドングル / ファームウェアをまたぐ互換性 | Pro Controller と Joy-Con L とは別の `key_store_path` を使う |
 

@@ -146,14 +146,14 @@ await pad.connect(allow_pairing=False)
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
 | `spec/initial/api.md` | profile の作成と再利用 | 本仕様 §6.2 | link / code example の構文確認 | pass (2026-07-20) | 公開シグネチャと利用例を照合済み |
-| `spec/initial/transport-bumble.md` | CSR target 限定と guard | 本仕様 §5、§6 | link 確認 | pass (2026-07-20) | 実機 gate の観測結果は完了時に追記 |
+| `spec/initial/transport-bumble.md` | CSR target 限定と guard | 本仕様 §5、§6 | link 確認 | pass (2026-07-20) | 実機観測を初期設計と実機ログへ反映済み |
 | `spec/initial/lifecycle.md` | `close()` と recovery-required | 本仕様 §6 | link 確認 | pass (2026-07-20) | 公開 lifecycle と照合済み |
 | `spec/initial/risks.md` | local identity / recovery のリスク | 本仕様 §2、§3 | link 確認 | pass (2026-07-20) | EUI-48 の正式割当を前提にしない責任境界へ更新済み |
 
 ## 9. 設計メモ
 
 - P-007 の主な懸念は CSR warm reset 後の USB 再列挙である。unit_051 では旧 libusb handle を同一 Python process で再 open できなかった。preparation は raw session を閉じ、adapter が再び開けるまで待ってから read-back と Bumble transport 作成を行う。
-- 再列挙待機の timeout、adapter を再 open できない場合の exception、write 済みか確定できない境界は実装前に内部 state machine と unit test で固定する。write 送信後に target 状態を確定できない経路は `ExpLocalAddressRecoveryRequired` に畳み込む。
+- 再列挙待機の timeout、adapter を再 open できない場合の exception、write 済みか確定できない境界は内部 state machine と unit test で固定した。write 送信後に target 状態を確定できない経路は `ExpLocalAddressRecoveryRequired` に畳み込む。
 - `close()` は controller resource の終了であり、USB dongle の抜き差しや volatile address の復旧を行わない。抜き差し後の read-only probe は内部 diagnostics だけに残し、公開 API にしない。
 - profile は adapter 固有情報や factory / baseline BD_ADDR を保存しない。`controller_kind="pro"` は後続の Joy-Con / Direct profile との取り違えを防ぐ swbt 側 contract である。同じ local identity を同時に複数 adapter で使わないことは利用者の責任とする。
 - CSR8510 A10 以外で成功することは未検証である。対応可否を事前検知しようとせず、preparation 実行時の失敗として報告する。
@@ -168,9 +168,19 @@ await pad.connect(allow_pairing=False)
 | `src/swbt/transport/_exp_local_address.py` | new | typed address、envelope codec、preparation state / error |
 | `src/swbt/transport/_exp_local_identity.py` | new | raw CSR session、warm reset 再列挙、read-back handoff |
 | `src/swbt/transport/_bumble_key_store.py` | modify | envelope namespace view の KeyStore adapter |
+| `src/swbt/__init__.py` / `src/swbt/errors.py` | modify | profile validation / recovery-required の公開例外 |
+| `src/swbt/diagnostics.py` | modify | `profile_path` を含む run metadata |
+| `src/swbt/gamepad/_config.py` / `src/swbt/gamepad/runtime.py` | modify | profile configuration、preparation、retry lifecycle |
+| `src/swbt/probe.py` | modify | profile-aware metadata と legacy key store 境界 |
 | `tests/unit/test_exp_local_address.py` | new | validation、codec、failure classification |
 | `tests/unit/test_exp_local_identity.py` | new | preparation sequence と guard |
+| `tests/unit/test_exp_local_profile_runtime.py` | new | runtime preparation、failure、retry |
+| `tests/unit/test_bumble_transport.py` | modify | power-on guard と diagnostics event |
+| `tests/unit/test_public_api_boundary.py` / `tests/unit/test_diagnostics.py` / `tests/unit/test_probe_cli.py` | modify | 公開 surface と実行記録 |
 | `tests/integration/test_exp_local_profile.py` | new | pairing key persistence と retry lifecycle |
+| `tests/hardware/test_exp_local_profile.py` | new | fresh pairing / close と同 profile active reconnect の実機 gate |
+| `tests/hardware/test_input_operations.py` / `tests/hardware/test_reconnect_keystore.py` | modify | Pro Controller の profile path 移行 |
+| `README.md` / `docs/api.md` / `docs/usage.md` / `docs/hardware.md` / `docs/release-notes.md` / `docs/agent-brief.md` | modify | 公開 API、利用手順、安全境界、移行説明 |
 | `spec/initial/api.md` | modify | 完了時に `profile_path` / `create_profile()` を正本へ反映 |
 | `spec/initial/transport-bumble.md` | modify | CSR target 限定と transport handoff |
 | `spec/initial/lifecycle.md` | modify | close と recovery-required |
@@ -190,6 +200,8 @@ await pad.connect(allow_pairing=False)
 | `uv run pytest tests/hardware/test_exp_local_profile.py::test_switch_exp_local_profile_reuses_target_after_normal_close ...` | pass | 1 passed in 2.88s。profile bytes 不変、禁止イベント 0 件 |
 | 手動 CSR8510 A10 gate | pass | fresh pairing / normal close と同 profile active reconnect を完了 |
 | `uv run mkdocs build --strict` | pass | 公開文書と初期設計の build 成功 |
+| `uv sync --dev --group docs` | pass | 53 packages resolved / checked |
+| `uv build` | pass | sdist と wheel を作成 |
 | `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | address validation cycle: 8 passed |
 | `uv run ruff check src/swbt/transport/_exp_local_address.py tests/unit/test_exp_local_address.py` | pass | address validation cycle |
 | `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | profile codec cycle: 16 passed |
