@@ -11,7 +11,7 @@
 ### 破壊的変更と段階的移行
 
 - `ProController(..., key_store_path=...)` は `ProController(..., profile_path=...)` へ置き換わります。新規プロファイルはコンストラクタではなく `await ProController.create_profile(...)` で作成します。
-- Joy-Con の adapter 本来のアドレスを使う経路は既存の `key_store_path` を維持します。`profile_path` との同時指定はできません。直接送信型の profile 移行は後続の作業単位で扱います。
+- Joy-Con の adapter 本来のアドレスを使う経路は既存の `key_store_path` を維持します。`profile_path` との同時指定はできません。DirectProController、DirectJoyConL、DirectJoyConR は `profile_path` と `create_profile()` を使えます。
 - 既存の Bumble JSON ペアリング情報保存ファイルを swbt プロファイルとして自動移行しません。
 
 ### 対応範囲

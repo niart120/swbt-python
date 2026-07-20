@@ -283,7 +283,7 @@ async with JoyConL(
 
 `apply(state)` と `send(state)` でも同じ制約を検査します。`JoyConL` または `DirectJoyConL` に右スティック入力や `A`、`B`、`X`、`Y` 入力を含む `InputState`、`JoyConR` または `DirectJoyConR` に左スティック入力や十字キー入力を含む `InputState` を渡すと `UnsupportedInputError` が送出されます。
 
-Pro Controller と周期送信型 Joy-Con は `profile_path` を使えます。profile の `pro` / `joycon_l` / `joycon_r` は混在できないため、コントローラー種別ごとに別の保存先を使ってください。Joy-Con の native-address 経路と直接送信型は `key_store_path` を使います。直接送信型の profile 移行は後続の作業単位で扱います。
+全 concrete controller は `profile_path` を使えます。profile の `pro` / `joycon_l` / `joycon_r` / `direct_pro` / `direct_joycon_l` / `direct_joycon_r` は混在できないため、controller kind ごとに別の保存先を使ってください。Joy-Con の native-address 経路だけは `key_store_path` を使います。
 「持ちかた/順番を変える」画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送る必要があります。
 
 OS、ドングル、ファームウェアをまたぐ互換性は未検証です。
