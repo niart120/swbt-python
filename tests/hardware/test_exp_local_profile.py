@@ -7,11 +7,22 @@ from typing import Any, Literal
 
 import pytest
 
-from swbt import DiagnosticsConfig, JoyConL, JoyConR, ProController
+from swbt import (
+    Button,
+    DiagnosticsConfig,
+    DirectJoyConL,
+    DirectJoyConR,
+    DirectProController,
+    InputState,
+    JoyConL,
+    JoyConR,
+    ProController,
+)
 
 _PROFILE_FILENAME = "exp-local-pro-profile.json"
 type JoyConSide = Literal["left", "right"]
 type JoyConController = JoyConL | JoyConR
+type DirectController = DirectProController | DirectJoyConL | DirectJoyConR
 
 _JOYCON_CASES: tuple[
     tuple[JoyConSide, type[JoyConL] | type[JoyConR], Literal["joycon_l", "joycon_r"]],
@@ -19,6 +30,20 @@ _JOYCON_CASES: tuple[
 ] = (
     ("left", JoyConL, "joycon_l"),
     ("right", JoyConR, "joycon_r"),
+)
+
+_DIRECT_CASES: tuple[
+    tuple[
+        str,
+        type[DirectProController] | type[DirectJoyConL] | type[DirectJoyConR],
+        Literal["direct_pro", "direct_joycon_l", "direct_joycon_r"],
+        Button,
+    ],
+    ...,
+] = (
+    ("pro", DirectProController, "direct_pro", Button.A),
+    ("joycon-l", DirectJoyConL, "direct_joycon_l", Button.L),
+    ("joycon-r", DirectJoyConR, "direct_joycon_r", Button.R),
 )
 
 
@@ -260,6 +285,121 @@ def test_switch_joycon_exp_local_profile_reuses_target_after_normal_close(
         "transport_close_complete",
         adapter=swbt_bumble_adapter,
     )
+
+
+@pytest.mark.hardware
+@pytest.mark.parametrize(
+    ("name", "controller_cls", "controller_kind", "button"),
+    _DIRECT_CASES,
+)
+def test_switch_direct_exp_local_profile_fresh_pairing_send_and_close(
+    name: str,
+    controller_cls: type[DirectProController] | type[DirectJoyConL] | type[DirectJoyConR],
+    controller_kind: Literal["direct_pro", "direct_joycon_l", "direct_joycon_r"],
+    button: Button,
+    swbt_bumble_adapter: str,
+    swbt_exp_local_address: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Pair one Direct controller, send input, and close it neutrally."""
+    profile_path = swbt_hardware_artifact_dir / f"exp-local-direct-{name}-profile.json"
+    trace_path = swbt_hardware_artifact_dir / f"exp-local-direct-{name}-fresh-pairing.jsonl"
+    if profile_path.exists():
+        pytest.fail("fresh Direct exp profile already exists; use a new artifact directory")
+    sent_state = InputState.neutral().with_buttons([button])
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad: DirectController = await controller_cls.create_profile(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                exp_local_address=swbt_exp_local_address,
+                pair_timeout=60.0,
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                await _wait_for_event(trace_path, "key_store_update", timeout_seconds=10.0)
+                await pad.send(sent_state)
+                assert pad.snapshot() == sent_state
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    payload = json.loads(profile_path.read_text(encoding="utf-8"))
+    events = _read_jsonl(trace_path)
+    target = swbt_exp_local_address.upper()
+    assert payload["controller_kind"] == controller_kind
+    assert payload["identity"]["address"] == target
+    assert payload["key_store"]["namespaces"][target]
+    assert _contains_event(events, "exp_local_identity_prepared")
+    assert _contains_event(events, "key_store_update", status="succeeded")
+    assert _contains_event(events, "transport_close_complete", adapter=swbt_bumble_adapter)
+
+
+@pytest.mark.hardware
+@pytest.mark.parametrize(
+    ("name", "controller_cls", "controller_kind", "button"),
+    _DIRECT_CASES,
+)
+def test_switch_direct_exp_local_profile_reuses_target_after_normal_close(
+    name: str,
+    controller_cls: type[DirectProController] | type[DirectJoyConL] | type[DirectJoyConR],
+    controller_kind: Literal["direct_pro", "direct_joycon_l", "direct_joycon_r"],
+    button: Button,
+    swbt_bumble_adapter: str,
+    swbt_exp_local_address: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Reconnect one Direct controller without pairing fallback and send input."""
+    profile_path = swbt_hardware_artifact_dir / f"exp-local-direct-{name}-profile.json"
+    trace_path = swbt_hardware_artifact_dir / f"exp-local-direct-{name}-reconnect.jsonl"
+    if not profile_path.exists():
+        pytest.skip("Direct exp profile is missing; run the matching fresh pairing test first")
+    original_profile = profile_path.read_bytes()
+    target = swbt_exp_local_address.upper()
+    payload = json.loads(original_profile)
+    if payload.get("identity", {}).get("address") != target:
+        pytest.fail("existing Direct exp profile does not match --swbt-exp-local-address")
+    if payload.get("controller_kind") != controller_kind:
+        pytest.fail("existing Direct exp profile does not match the requested controller")
+    sent_state = InputState.neutral().with_buttons([button])
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad: DirectController = controller_cls(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                result = await pad.try_reconnect(timeout=60.0)
+                assert result.status == "connected"
+                await pad.send(sent_state)
+                assert pad.snapshot() == sent_state
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+    assert profile_path.read_bytes() == original_profile
+    assert _contains_event(
+        events,
+        "exp_local_identity_prepared",
+        status="already_active",
+        target_address=target,
+    )
+    assert _contains_event(
+        events,
+        "active_reconnect_result",
+        route="active_reconnect",
+        status="connected",
+    )
+    assert not _contains_event(events, "advertising_start")
+    assert not _contains_event(events, "classic_pairing")
+    assert not _contains_event(events, "key_store_update")
+    assert _contains_event(events, "transport_close_complete", adapter=swbt_bumble_adapter)
 
 
 async def _wait_for_event(

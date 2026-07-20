@@ -81,7 +81,7 @@ asyncio.run(main())
 
 「持ちかた/順番を変える」画面で Joy-Con としてペアリングする場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送信する必要があります。
 
-Pro Controller と周期送信型 Joy-Con は、利用者管理のローカル Bluetooth アドレスとペアリングキーをまとめる `profile_path` を使えます。新規プロファイルは各 class の `create_profile()` で作成し、コントローラー種別ごとに保存先とアドレスを分けてください。Joy-Con の adapter 本来のアドレスを使う経路と直接送信型は `key_store_path` を使います。Joy-Con L で右スティックや A/B/X/Y、Joy-Con R で左スティックや十字キーを入力すると `UnsupportedInputError` が送出されます。`JoyConPair` は未実装です。
+Pro Controller、周期送信型 Joy-Con、直接送信型は、利用者管理のローカル Bluetooth アドレスとペアリングキーをまとめる `profile_path` を使えます。新規プロファイルは各 class の `create_profile()` で作成し、controller kind ごとに保存先とアドレスを分けてください。Joy-Con の adapter 本来のアドレスを使う経路は `key_store_path` を使います。Joy-Con L で右スティックや A/B/X/Y、Joy-Con R で左スティックや十字キーを入力すると `UnsupportedInputError` が送出されます。`JoyConPair` は未実装です。
 
 ## 接続方法
 

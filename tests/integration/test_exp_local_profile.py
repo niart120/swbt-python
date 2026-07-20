@@ -5,7 +5,15 @@ from pathlib import Path
 import pytest
 from bumble.keys import PairingKeys
 
-from swbt import ConnectionFailedError, JoyConL, JoyConR, ProController
+from swbt import (
+    ConnectionFailedError,
+    DirectJoyConL,
+    DirectJoyConR,
+    DirectProController,
+    JoyConL,
+    JoyConR,
+    ProController,
+)
 from swbt.transport._bumble_key_store import _ExpLocalProfileKeyStore
 from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
 
@@ -183,3 +191,59 @@ def test_joycon_r_create_profile_saves_kind_and_leaves_profile_for_retry(
     assert attempts == [0.25]
     retry = JoyConR(adapter="usb:0", profile_path=str(profile_path))
     assert retry._runtime._config.profile_path == str(profile_path)
+
+
+@pytest.mark.parametrize(
+    ("controller_cls", "controller_kind"),
+    [
+        (DirectProController, "direct_pro"),
+        (DirectJoyConL, "direct_joycon_l"),
+        (DirectJoyConR, "direct_joycon_r"),
+    ],
+)
+def test_direct_create_profile_saves_kind_and_leaves_profile_for_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    controller_cls: type[DirectProController | DirectJoyConL | DirectJoyConR],
+    controller_kind: str,
+) -> None:
+    """Direct profile creation leaves a reusable profile after pairing failure."""
+    profile_path = tmp_path / f"{controller_kind}.json"
+    attempts: list[float | None] = []
+
+    async def fail_pair(
+        self: DirectProController | DirectJoyConL | DirectJoyConR,
+        timeout: float | None = None,  # noqa: ASYNC109
+    ) -> None:
+        _ = self
+        attempts.append(timeout)
+        msg = "pairing failed"
+        raise ConnectionFailedError(msg)
+
+    async def fake_close(
+        self: DirectProController | DirectJoyConL | DirectJoyConR,
+        *,
+        neutral: bool = True,
+    ) -> None:
+        _ = (self, neutral)
+
+    monkeypatch.setattr(controller_cls, "pair", fail_pair)
+    monkeypatch.setattr(controller_cls, "close", fake_close)
+
+    async def run() -> None:
+        with pytest.raises(ConnectionFailedError, match="pairing failed"):
+            await controller_cls.create_profile(
+                adapter="usb:0",
+                profile_path=str(profile_path),
+                exp_local_address="02:12:34:56:78:9A",
+                pair_timeout=0.25,
+            )
+
+    asyncio.run(run())
+
+    profile = ExpLocalProfile.load(profile_path)
+    assert profile.controller_kind == controller_kind
+    assert attempts == [0.25]
+    retry = controller_cls(adapter="usb:0", profile_path=str(profile_path))
+    assert retry._runtime._config.profile_path == str(profile_path)
+    assert retry._runtime._report_loop is None

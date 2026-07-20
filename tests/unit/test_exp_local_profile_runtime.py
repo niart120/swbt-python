@@ -7,6 +7,9 @@ import pytest
 
 from swbt import (
     DiagnosticsConfig,
+    DirectJoyConL,
+    DirectJoyConR,
+    DirectProController,
     ExpLocalAddressRecoveryRequired,
     InvalidProfileError,
     JoyConL,
@@ -152,6 +155,54 @@ def test_joycon_profile_kind_mismatch_stops_before_preparation_and_transport_cre
 
     assert mismatch.value.expected_controller_kind == "joycon_l"
     assert mismatch.value.actual_controller_kind == "pro"
+    assert events == []
+
+
+@pytest.mark.parametrize(
+    ("controller_cls", "expected_controller_kind", "actual_controller_kind"),
+    [
+        (DirectProController, "direct_pro", "pro"),
+        (DirectJoyConL, "direct_joycon_l", "joycon_l"),
+        (DirectJoyConR, "direct_joycon_r", "joycon_r"),
+    ],
+)
+def test_direct_profile_kind_mismatch_stops_before_preparation_and_transport_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    controller_cls: type[DirectProController | DirectJoyConL | DirectJoyConR],
+    expected_controller_kind: ExpLocalControllerKind,
+    actual_controller_kind: ExpLocalControllerKind,
+) -> None:
+    """A periodic profile must not reach a Direct controller transport."""
+    profile_path = tmp_path / "periodic.json"
+    ExpLocalProfile.create_new(
+        profile_path,
+        ExpLocalAddress.parse("02:12:34:56:78:9A"),
+        controller_kind=actual_controller_kind,
+    )
+    events: list[str] = []
+
+    async def fail_preparation(**_kwargs: object) -> object:
+        events.append("preparation_started")
+        raise AssertionError
+
+    def fail_transport_creation(**_kwargs: object) -> object:
+        events.append("transport_created")
+        raise AssertionError
+
+    monkeypatch.setattr(gamepad_runtime, "prepare_exp_local_identity", fail_preparation)
+    monkeypatch.setattr(
+        gamepad_transport_factory,
+        "create_default_transport",
+        fail_transport_creation,
+    )
+    pad = controller_cls(adapter="usb:0", profile_path=str(profile_path))
+
+    with pytest.raises(ProfileControllerMismatchError) as mismatch:
+        asyncio.run(pad.open())
+
+    assert mismatch.value.expected_controller_kind == expected_controller_kind
+    assert mismatch.value.actual_controller_kind == actual_controller_kind
     assert events == []
 
 

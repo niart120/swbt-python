@@ -194,27 +194,31 @@ class DirectProController(DirectSwitchGamepad):
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
+        profile_path: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
     ) -> None: ...
+
+    @classmethod
+    async def create_profile(...) -> Self: ...
 ```
 
-`JoyConL` / `JoyConR` は exp local identity 用の `profile_path` と `create_profile()` を持つ。adapter 本来の address を使う既存経路では `key_store_path` も受け取るが、`profile_path` と同時には指定できない。`DirectJoyConL` / `DirectJoyConR` は未移行であり、`DirectProController` と同じ constructor 引数を持つ。
+全 concrete controller は exp local identity 用の `profile_path` と `create_profile()` を持つ。Joy-Con の adapter 本来の address を使う既存経路では `key_store_path` も受け取るが、`profile_path` と同時には指定できない。Direct controller も同じ排他規則に従う。
 
 | 引数 | 意味 |
 |---|---|
 | `adapter` | Bumble transport に渡す adapter moniker |
-| `profile_path` | Periodic controller が exp local identity と pairing key を読み書きする swbt profile JSON path |
-| `key_store_path` | Joy-Con の native-address 経路と Direct controller が使う Bumble JSON key store path |
+| `profile_path` | concrete controller が exp local identity と pairing key を読み書きする swbt profile JSON path |
+| `key_store_path` | Joy-Con の native-address 経路が使う Bumble JSON key store path |
 | `report_period_us` | Periodic だけが受け取る入力レポートの送信周期。`None` は profile の既定値 |
 | `controller_colors` | SPI profile で返す controller body / buttons / left grip / right grip の固定色 |
 | `diagnostics` | trace と counter の設定 |
 
 公開 constructor では `adapter` は必須である。transport 注入と profile 差し替えは内部 test helper に限定し、公開 extension point としない。
 
-Periodic controller の `profile_path` は、利用者が選んだ `exp_local_address` と pairing key を同じ swbt profile JSON に保存する。新規 path は具象 class の `create_profile()` で作成し、既存 path は同じ controller kind の constructor に渡して再利用する。異なる kind の profile は `ProfileControllerMismatchError` とし、adapter open 前に拒否する。
+concrete controller の `profile_path` は、利用者が選んだ `exp_local_address` と pairing key を同じ swbt profile JSON に保存する。新規 path は具象 class の `create_profile()` で作成し、既存 path は同じ controller kind の constructor に渡して再利用する。異なる kind の profile は `ProfileControllerMismatchError` とし、adapter open 前に拒否する。
 
-`key_store_path` は adapter 本来の address を使う Joy-Con と Direct controller の pairing storage を定義する。controller profile が異なる場合は同じ対象機器でも分ける。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。
+`key_store_path` は adapter 本来の address を使う Joy-Con の pairing storage を定義する。controller profile が異なる場合は同じ対象機器でも分ける。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。
 
 `create_profile()` は path が存在する場合に上書きせず `FileExistsError` を送出する。address は 6 octet の individual / locally administered address だけを受理し、予約 inquiry LAP を拒否する。pairing に失敗した場合も profile は残り、同じ `profile_path` を通常 constructor に渡して再試行できる。
 
@@ -341,7 +345,7 @@ async with JoyConL(
 
 片側 Joy-Con が持たない button / stick は `UnsupportedInputError` とする。左 Joy-Con は A/B/X/Y、right stick などを扱わない。右 Joy-Con は D-pad、left stick などを扱わない。`InputState` を `apply()` または `send()` する場合も同じ検査を行い、不正 state は送信・commit しない。
 
-Pro Controller と周期送信型 Joy-Con は `profile_path` を使える。各 profile envelope は `pro` / `joycon_l` / `joycon_r` の kind を持ち、別 kind の constructor では開けない。同じ対象機器でも controller kind ごとに別の保存 path と `exp_local_address` を管理する。Direct controller は `key_store_path` を使う。
+全 concrete controller は `profile_path` を使える。各 profile envelope は `pro` / `joycon_l` / `joycon_r` / `direct_pro` / `direct_joycon_l` / `direct_joycon_r` の kind を持ち、別 kind の constructor では開けない。同じ対象機器でも controller kind ごとに別の保存 path と `exp_local_address` を管理する。Direct と Periodic 間で profile を共有しない。
 
 `JoyConPair` は初期 API に含めない。左右を 1 つの controller として束ねる API は、左右別 device の connect / disconnect failure semantics と cleanup を別途設計してから追加する。
 

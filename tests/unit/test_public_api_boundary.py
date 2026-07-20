@@ -192,6 +192,8 @@ def test_reporting_types_expose_only_their_owned_full_state_operation() -> None:
         assert hasattr(controller_cls, "send")
         assert not hasattr(controller_cls, "apply")
         assert "report_period_us" not in inspect.signature(controller_cls).parameters
+        assert "profile_path" in inspect.signature(controller_cls).parameters
+        assert hasattr(controller_cls, "create_profile")
 
 
 def test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams() -> None:
