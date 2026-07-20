@@ -54,10 +54,11 @@ def test_switch_exp_local_profile_fresh_pairing_and_close(
     preparation = _first_event(events, "exp_local_identity_prepared")
     assert preparation["status"] in {"rewritten", "already_active"}
     assert preparation["target_address"] == target
+    assert _contains_event(events, "bumble_device_initialized")
     assert _contains_event(
         events,
-        "bumble_device_initialized",
-        local_bluetooth_address=target.replace(":", "").lower(),
+        "local_bluetooth_address_configured",
+        address=target.replace(":", "").lower(),
     )
     assert _contains_event(events, "key_store_update", status="succeeded")
     assert _contains_event(
@@ -111,10 +112,11 @@ def test_switch_exp_local_profile_reuses_target_after_normal_close(
         status="already_active",
         target_address=target,
     )
+    assert _contains_event(events, "bumble_device_initialized")
     assert _contains_event(
         events,
-        "bumble_device_initialized",
-        local_bluetooth_address=target.replace(":", "").lower(),
+        "local_bluetooth_address_configured",
+        address=target.replace(":", "").lower(),
     )
     assert _contains_event(
         events,

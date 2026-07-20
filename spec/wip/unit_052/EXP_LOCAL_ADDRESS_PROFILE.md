@@ -137,7 +137,7 @@ await pad.connect(allow_pairing=False)
 | refactor-done | pairing key 保存後も envelope identity と namespace map が保持される | new | integration | no | 53 targeted tests pass。profile envelope の一時ファイル保存を共通化 |
 | refactor-skipped | pairing 失敗後、同じ profile で pairing を再試行できる | regression | integration | no | 61 targeted tests pass。作成済み profile を残して controller 資源だけを閉じる単一責務のため追加 refactor なし |
 | todo | `close()` 後に target が残る profile を次の controller が再利用できる | characterization | bumble | yes | known CSR8510 A10 の実機 gate と結ぶ |
-| todo | fresh profile 作成、pairing、通常 close 後の同 profile 再利用を確認する | characterization | hardware | yes | 完了必須の手動 gate |
+| refactor-skipped | fresh profile 作成、pairing、通常 close を確認する | characterization | hardware | yes | retry run は 1 passed。実機 trace assertion を address 確定後の diagnostics event に修正し、追加 refactor なし |
 
 ## 8. 文書検証計画
 
@@ -186,7 +186,7 @@ await pad.connect(allow_pairing=False)
 | `uv run ty check --no-progress` | pass | all checks passed |
 | `uv run pytest -p no:cacheprovider --basetemp <temp> tests/unit` | pass | 465 passed。OS temp を使用 |
 | `uv run pytest -p no:cacheprovider --basetemp <temp> tests/integration` | pass | 127 passed。OS temp を使用 |
-| 手動 CSR8510 A10 gate | not run | 利用者指定の `exp_local_address` と command ごとの明示承認が必要 |
+| 手動 CSR8510 A10 gate | partial | fresh profile / pairing / normal close は pass。同 profile の active reconnect が未実行 |
 | `uv run mkdocs build --strict` | pass | 公開文書と初期設計の build 成功 |
 | `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | address validation cycle: 8 passed |
 | `uv run ruff check src/swbt/transport/_exp_local_address.py tests/unit/test_exp_local_address.py` | pass | address validation cycle |
