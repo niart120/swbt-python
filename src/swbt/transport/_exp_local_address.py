@@ -19,7 +19,7 @@ _PROFILE_SCHEMA_VERSION = 1
 _PROFILE_IDENTITY_KIND = "exp-local-address"
 _PROFILE_CONTROLLER_KIND = "pro"
 
-type KeyStoreNamespaces = dict[str, dict[str, object]]
+type KeyStoreNamespaces = dict[str, dict[str, dict[str, object]]]
 
 
 def _invalid_profile(message: str, *, cause: Exception | None = None) -> NoReturn:
@@ -91,14 +91,37 @@ class ExpLocalProfile:
         )
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        encoded = (
-            json.dumps(
-                profile._as_payload(),
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n"
-        ).encode()
+        temporary_path = profile._write_temporary_file(target)
+        try:
+            os.link(temporary_path, target)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+        return profile
+
+    def with_key_store_namespaces(
+        self,
+        namespaces: KeyStoreNamespaces,
+    ) -> "ExpLocalProfile":
+        """Return a profile with replaced key-store namespaces."""
+        return ExpLocalProfile(
+            exp_local_address=self.exp_local_address,
+            key_store_namespaces=copy.deepcopy(namespaces),
+            controller_kind=self.controller_kind,
+        )
+
+    def save(self, path: str | Path) -> None:
+        """Atomically replace an existing profile with this envelope."""
+        target = Path(path)
+        if not target.exists():
+            raise FileNotFoundError(target)
+        temporary_path = self._write_temporary_file(target)
+        try:
+            temporary_path.replace(target)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+
+    def _write_temporary_file(self, target: Path) -> Path:
+        encoded = (json.dumps(self._as_payload(), indent=2, sort_keys=True) + "\n").encode()
         file_descriptor, temporary_name = tempfile.mkstemp(
             dir=target.parent,
             prefix=f".{target.name}.",
@@ -110,10 +133,10 @@ class ExpLocalProfile:
                 temporary_file.write(encoded)
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
-            os.link(temporary_path, target)
-        finally:
+        except Exception:
             temporary_path.unlink(missing_ok=True)
-        return profile
+            raise
+        return temporary_path
 
     def _as_payload(self) -> dict[str, object]:
         return {

@@ -141,7 +141,7 @@ class ControllerRuntime:
             diagnostics=self._diagnostics,
             ensure_open=self.open,
             get_transport=self._connection_transport,
-            key_store_path=self._config.key_store_path,
+            key_store_path=(self._config.profile_path or self._config.key_store_path),
             pair=self._pair_for_connection_workflow,
             set_connection_state=self._set_connection_state,
             transport_was_injected=self._transport_was_injected,
@@ -907,6 +907,9 @@ class ControllerRuntime:
                 profile=self._controller_profile,
                 diagnostics=self._diagnostics,
                 key_store_path=self._config.key_store_path,
+                profile_path=(
+                    self._config.profile_path if self._exp_local_profile is not None else None
+                ),
                 expected_local_bluetooth_address=(
                     self._exp_local_profile.exp_local_address.bytes
                     if self._exp_local_profile is not None

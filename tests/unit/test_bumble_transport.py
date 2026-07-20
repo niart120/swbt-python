@@ -18,6 +18,7 @@ from swbt.protocol.profiles.joycon import JoyConLeftProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport import bumble as bumble_module
 from swbt.transport._bumble_sdp import build_hid_service_records
+from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
 from swbt.transport.bumble import BumbleHidTransport
 
 
@@ -905,6 +906,42 @@ def test_bumble_initialize_device_configures_json_key_store(
             "sink": handle.sink,
         }
         assert isinstance(fake_device.keystore, bumble_module._CurrentPreviousJsonKeyStore)
+
+    asyncio.run(run())
+
+
+def test_bumble_initialize_device_configures_profile_key_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        fake_device = FakeBumbleDevice()
+
+        class FakeDeviceFactory:
+            @staticmethod
+            def from_config_with_hci(config: object, source: object, sink: object) -> object:
+                _ = (config, source, sink)
+                return fake_device
+
+        def create_hid_device(device: object) -> FakeHidDevice:
+            assert isinstance(device, FakeBumbleDevice)
+            return FakeHidDevice()
+
+        monkeypatch.setattr(bumble_device_module, "Device", FakeDeviceFactory)
+        monkeypatch.setattr(bumble_hid_module, "Device", create_hid_device)
+
+        profile_path = tmp_path / "profile.json"
+        target = ExpLocalAddress.parse("02:12:34:56:78:9A")
+        ExpLocalProfile.create_new(profile_path, target)
+
+        await bumble_module._default_initialize_device(
+            FakeBumbleHandle(),
+            device_name="Pro Controller",
+            profile=ProControllerProfile(),
+            profile_path=str(profile_path),
+        )
+
+        assert isinstance(fake_device.keystore, bumble_module._ExpLocalProfileKeyStore)
 
     asyncio.run(run())
 

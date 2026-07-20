@@ -8,6 +8,7 @@ from typing import Any, Protocol, cast
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import InvalidKeyStoreError
+from swbt.transport._exp_local_address import ExpLocalProfile, KeyStoreNamespaces
 
 PREVIOUS_NAMESPACE_PREFIX = "swbt.previous::"
 
@@ -156,6 +157,80 @@ class _CurrentPreviousJsonKeyStore:
 
     def _previous_namespace(self, current_store: object) -> str:
         return f"{PREVIOUS_NAMESPACE_PREFIX}{cast('Any', current_store).namespace}"
+
+
+class _ExpLocalProfileNamespaceStore:
+    """JsonKeyStore-compatible view over one profile namespace map."""
+
+    def __init__(self, *, profile_path: Path, namespace: str) -> None:
+        self._profile_path = profile_path
+        self.namespace = namespace
+
+    async def load(
+        self,
+    ) -> tuple[KeyStoreNamespaces, dict[str, dict[str, object]]]:
+        profile = ExpLocalProfile.load(self._profile_path)
+        self._require_matching_identity(profile)
+        namespaces = copy.deepcopy(profile.key_store_namespaces)
+        current = namespaces.setdefault(self.namespace, {})
+        return namespaces, current
+
+    async def save(self, db: KeyStoreNamespaces) -> None:
+        profile = ExpLocalProfile.load(self._profile_path)
+        self._require_matching_identity(profile)
+        profile.with_key_store_namespaces(db).save(self._profile_path)
+
+    async def get(self, name: str) -> object | None:
+        for peer_address, peer_keys in await self.get_all():
+            if peer_address == name:
+                return peer_keys
+        return None
+
+    async def get_all(self) -> list[tuple[str, object]]:
+        from bumble.keys import PairingKeys  # noqa: PLC0415
+
+        _, key_map = await self.load()
+        return [(name, PairingKeys.from_dict(cast("Any", keys))) for name, keys in key_map.items()]
+
+    async def delete(self, name: str) -> None:
+        db, key_map = await self.load()
+        del key_map[name]
+        await self.save(db)
+
+    async def delete_all(self) -> None:
+        db, key_map = await self.load()
+        key_map.clear()
+        await self.save(db)
+
+    async def get_resolving_keys(self) -> object:
+        from bumble.keys import KeyStore  # noqa: PLC0415
+
+        return await KeyStore.get_resolving_keys(cast("Any", self))
+
+    def _require_matching_identity(self, profile: ExpLocalProfile) -> None:
+        if str(profile.exp_local_address) == self.namespace:
+            return
+        msg = "profile key-store namespace does not match exp_local_address"
+        raise InvalidKeyStoreError(msg)
+
+
+class _ExpLocalProfileKeyStore(_CurrentPreviousJsonKeyStore):
+    """Current/previous Bumble key store persisted inside a profile envelope."""
+
+    def __init__(self, *, profile_path: str | Path, namespace: str) -> None:
+        super().__init__(filename=profile_path, namespace=namespace)
+
+    def _current_store(self) -> _BumbleJsonKeyStoreRuntime:
+        if self._namespace is None:
+            msg = "profile key-store namespace is required"
+            raise InvalidKeyStoreError(msg)
+        return cast(
+            "_BumbleJsonKeyStoreRuntime",
+            _ExpLocalProfileNamespaceStore(
+                profile_path=self._filename,
+                namespace=self._namespace,
+            ),
+        )
 
 
 class _DiagnosticKeyStore:
