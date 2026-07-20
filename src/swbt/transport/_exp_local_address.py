@@ -2,7 +2,9 @@
 
 import copy
 import json
+import os
 import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn, cast
@@ -71,6 +73,61 @@ class ExpLocalProfile:
     exp_local_address: ExpLocalAddress
     key_store_namespaces: KeyStoreNamespaces
     controller_kind: str = _PROFILE_CONTROLLER_KIND
+
+    @classmethod
+    def create_new(
+        cls,
+        path: str | Path,
+        exp_local_address: ExpLocalAddress,
+    ) -> "ExpLocalProfile":
+        """Atomically create a new profile without overwriting an existing path."""
+        address = str(exp_local_address)
+        profile = cls(
+            exp_local_address=exp_local_address,
+            key_store_namespaces={
+                address: {},
+                f"swbt.previous::{address}": {},
+            },
+        )
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        encoded = (
+            json.dumps(
+                profile._as_payload(),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode()
+        file_descriptor, temporary_name = tempfile.mkstemp(
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(file_descriptor, "wb") as temporary_file:
+                temporary_file.write(encoded)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+            os.link(temporary_path, target)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+        return profile
+
+    def _as_payload(self) -> dict[str, object]:
+        return {
+            "format": _PROFILE_FORMAT,
+            "schema_version": _PROFILE_SCHEMA_VERSION,
+            "identity": {
+                "kind": _PROFILE_IDENTITY_KIND,
+                "address": str(self.exp_local_address),
+            },
+            "controller_kind": self.controller_kind,
+            "key_store": {
+                "namespaces": copy.deepcopy(self.key_store_namespaces),
+            },
+        }
 
     @classmethod
     def load(cls, path: str | Path) -> "ExpLocalProfile":

@@ -140,3 +140,49 @@ def test_exp_local_profile_rejects_malformed_json_before_adapter_open(
 
     with pytest.raises(InvalidProfileError):
         ExpLocalProfile.load(profile_path)
+
+
+def test_exp_local_profile_create_new_atomically_saves_empty_pro_envelope(
+    tmp_path: Path,
+) -> None:
+    profile_path = tmp_path / "profiles" / "pro.json"
+
+    profile = ExpLocalProfile.create_new(
+        profile_path,
+        ExpLocalAddress.parse("02:12:34:56:78:9A"),
+    )
+
+    assert profile == ExpLocalProfile.load(profile_path)
+    assert json.loads(profile_path.read_text(encoding="utf-8")) == {
+        "format": "swbt.profile",
+        "schema_version": 1,
+        "identity": {
+            "kind": "exp-local-address",
+            "address": "02:12:34:56:78:9A",
+        },
+        "controller_kind": "pro",
+        "key_store": {
+            "namespaces": {
+                "02:12:34:56:78:9A": {},
+                "swbt.previous::02:12:34:56:78:9A": {},
+            }
+        },
+    }
+    assert list(profile_path.parent.iterdir()) == [profile_path]
+
+
+def test_exp_local_profile_create_new_does_not_overwrite_existing_path(
+    tmp_path: Path,
+) -> None:
+    profile_path = tmp_path / "pro.json"
+    original = b"existing profile"
+    profile_path.write_bytes(original)
+
+    with pytest.raises(FileExistsError):
+        ExpLocalProfile.create_new(
+            profile_path,
+            ExpLocalAddress.parse("02:12:34:56:78:9A"),
+        )
+
+    assert profile_path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [profile_path]
