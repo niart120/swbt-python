@@ -2,6 +2,9 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import pytest
+
+from swbt import ExpLocalAddressRecoveryRequired
 from swbt.transport._csr_bd_addr import (
     CsrBdAddrRewritePlan,
     CsrBdAddrStore,
@@ -196,3 +199,52 @@ def test_prepare_exp_local_identity_rewrites_then_reopens_and_reads_back() -> No
         "after:close",
     ]
     assert sessions == []
+
+
+def test_prepare_exp_local_identity_requires_recovery_when_reenumeration_fails() -> None:
+    events: list[str] = []
+    before = _WritableFakeSession(
+        address="00:1B:DC:F9:9F:7D",
+        events=events,
+        label="before",
+    )
+    first_open = True
+
+    async def open_session(adapter: str) -> _WritableFakeSession:
+        nonlocal first_open
+        assert adapter == "usb:0"
+        if first_open:
+            first_open = False
+            events.append("before:open")
+            return before
+        events.append("reenumeration_open_failed")
+        raise OSError
+
+    async def sleep(delay: float) -> None:
+        assert delay == 0.25
+        events.append("wait_reenumeration")
+
+    with pytest.raises(ExpLocalAddressRecoveryRequired) as raised:
+        asyncio.run(
+            prepare_exp_local_identity(
+                adapter="usb:0",
+                target=ExpLocalAddress.parse("02:12:34:56:78:9A"),
+                reenumeration_timeout=0,
+                reenumeration_poll_interval=0.25,
+                _open_session=open_session,
+                _sleep=sleep,
+            )
+        )
+
+    assert raised.value.stage == "reenumeration"
+    assert raised.value.target_address == "02:12:34:56:78:9A"
+    assert events == [
+        "before:open",
+        "before:initialize",
+        "before:read_standard_address",
+        "before:write",
+        "before:warm_reset",
+        "before:close",
+        "wait_reenumeration",
+        "reenumeration_open_failed",
+    ]

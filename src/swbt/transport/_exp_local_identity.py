@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
+from swbt.errors import ExpLocalAddressRecoveryRequired
 from swbt.transport._csr_bd_addr import (
     CsrBdAddrRewritePlan,
     CsrVendorCommand,
@@ -53,6 +54,12 @@ class ExpLocalIdentityPreparationResult:
     target_address: str
 
 
+@dataclass
+class _PreparationState:
+    stage: str = "opening"
+    write_started: bool = False
+
+
 async def prepare_exp_local_identity(
     *,
     adapter: str,
@@ -63,13 +70,49 @@ async def prepare_exp_local_identity(
     _open_session: _SessionOpener | None = None,
     _sleep: _Sleep = asyncio.sleep,
 ) -> ExpLocalIdentityPreparationResult:
-    """Apply a volatile target only when the active CSR address differs."""
-    open_session = _open_session or _open_default_session
+    """Apply a volatile target and classify uncertainty after write starts."""
+    state = _PreparationState()
+    try:
+        return await _prepare_exp_local_identity(
+            adapter=adapter,
+            target=target,
+            response_timeout=response_timeout,
+            reenumeration_timeout=reenumeration_timeout,
+            reenumeration_poll_interval=reenumeration_poll_interval,
+            open_session=_open_session or _open_default_session,
+            sleep=_sleep,
+            state=state,
+        )
+    except ExpLocalAddressRecoveryRequired:
+        raise
+    except Exception as error:
+        if not state.write_started:
+            raise
+        raise ExpLocalAddressRecoveryRequired(
+            target_address=str(target),
+            stage=state.stage,
+        ) from error
+
+
+async def _prepare_exp_local_identity(
+    *,
+    adapter: str,
+    target: ExpLocalAddress,
+    response_timeout: float,
+    reenumeration_timeout: float,
+    reenumeration_poll_interval: float,
+    open_session: _SessionOpener,
+    sleep: _Sleep,
+    state: _PreparationState,
+) -> ExpLocalIdentityPreparationResult:
+    state.stage = "opening"
     session = await open_session(adapter)
     reset_enqueued = False
     current_address: str
     try:
+        state.stage = "initializing"
         await _initialize_csr_session(session, response_timeout=response_timeout)
+        state.stage = "read_current"
         current_address = (
             await session.read_standard_address(response_timeout=response_timeout)
         ).upper()
@@ -85,10 +128,13 @@ async def prepare_exp_local_identity(
             original_address=current_address,
             requested_address=target_address,
         )
+        state.stage = "write"
+        state.write_started = True
         await session.send_write(
             experiment.apply,
             response_timeout=response_timeout,
         )
+        state.stage = "warm_reset"
         session.enqueue_warm_reset(experiment.apply.reset_command)
         reset_enqueued = True
     finally:
@@ -98,14 +144,16 @@ async def prepare_exp_local_identity(
             if not reset_enqueued:
                 raise
 
+    state.stage = "reenumeration"
     readback_session = await _open_reenumerated_session(
         adapter=adapter,
         open_session=open_session,
         reenumeration_timeout=reenumeration_timeout,
         poll_interval=reenumeration_poll_interval,
-        sleep=_sleep,
+        sleep=sleep,
     )
     try:
+        state.stage = "readback"
         await _initialize_csr_session(
             readback_session,
             response_timeout=response_timeout,

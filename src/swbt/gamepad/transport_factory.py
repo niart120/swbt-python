@@ -17,6 +17,7 @@ class _TransportFactory(Protocol):
         profile: ControllerProfile,
         diagnostics: DiagnosticsRecorder,
         key_store_path: str | None,
+        expected_local_bluetooth_address: bytes | None = None,
     ) -> HidDeviceTransport: ...
 
 
@@ -32,8 +33,16 @@ class _StaticTransportFactory:
         profile: ControllerProfile,
         diagnostics: DiagnosticsRecorder,
         key_store_path: str | None,
+        expected_local_bluetooth_address: bytes | None = None,
     ) -> HidDeviceTransport:
-        _ = (adapter, device_name, profile, diagnostics, key_store_path)
+        _ = (
+            adapter,
+            device_name,
+            profile,
+            diagnostics,
+            key_store_path,
+            expected_local_bluetooth_address,
+        )
         return self.transport
 
 
@@ -47,13 +56,23 @@ class _BumbleTransportFactory:
         profile: ControllerProfile,
         diagnostics: DiagnosticsRecorder,
         key_store_path: str | None,
+        expected_local_bluetooth_address: bytes | None = None,
     ) -> HidDeviceTransport:
+        if expected_local_bluetooth_address is None:
+            return create_default_transport(
+                adapter=adapter,
+                device_name=device_name,
+                profile=profile,
+                diagnostics=diagnostics,
+                key_store_path=key_store_path,
+            )
         return create_default_transport(
             adapter=adapter,
             device_name=device_name,
             profile=profile,
             diagnostics=diagnostics,
             key_store_path=key_store_path,
+            expected_local_bluetooth_address=expected_local_bluetooth_address,
         )
 
 
@@ -64,14 +83,24 @@ def create_default_transport(
     profile: ControllerProfile,
     diagnostics: DiagnosticsRecorder,
     key_store_path: str | None,
+    expected_local_bluetooth_address: bytes | None = None,
 ) -> HidDeviceTransport:
     """Create the default Bumble-backed transport without importing Bumble at API import time."""
     from swbt.transport.bumble import BumbleHidTransport  # noqa: PLC0415
 
+    if expected_local_bluetooth_address is None:
+        return BumbleHidTransport(
+            adapter=adapter,
+            device_name=device_name,
+            profile=profile,
+            diagnostics=diagnostics,
+            key_store_path=key_store_path,
+        )
     return BumbleHidTransport(
         adapter=adapter,
         device_name=device_name,
         profile=profile,
         diagnostics=diagnostics,
         key_store_path=key_store_path,
+        expected_local_bluetooth_address=expected_local_bluetooth_address,
     )

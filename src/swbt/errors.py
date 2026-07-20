@@ -67,6 +67,20 @@ class InvalidProfileError(SwbtError):
     """Raised when an exp local address profile is invalid or unsupported."""
 
 
+class ExpLocalAddressRecoveryRequired(SwbtError):  # noqa: N818
+    """Raised when a volatile write may have changed the adapter identity."""
+
+    def __init__(self, *, target_address: str, stage: str) -> None:
+        """Initialize the target and failure stage requiring physical recovery."""
+        message = (
+            "exp local address preparation became uncertain after write started; "
+            "unplug and reconnect the USB dongle before retrying"
+        )
+        super().__init__(message)
+        self.target_address = target_address
+        self.stage = stage
+
+
 class ProtocolError(SwbtError):
     """Raised when protocol bytes cannot be parsed or produced."""
 
