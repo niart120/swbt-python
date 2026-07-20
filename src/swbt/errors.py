@@ -63,6 +63,10 @@ class InvalidKeyStoreError(SwbtError):
     """Raised when a key store has an unsupported or invalid shape."""
 
 
+class InvalidProfileError(SwbtError):
+    """Raised when an exp local address profile is invalid or unsupported."""
+
+
 class ProtocolError(SwbtError):
     """Raised when protocol bytes cannot be parsed or produced."""
 
