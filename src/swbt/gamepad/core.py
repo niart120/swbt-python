@@ -394,12 +394,14 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
     """Runtime-backed gamepad with caller-owned input transmission."""
 
     _reporting_mode = "direct"
+    _exp_local_controller_kind: ExpLocalControllerKind
 
     def __init__(
         self,
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
+        profile_path: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
     ) -> None:
@@ -407,7 +409,8 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
 
         Args:
             adapter: Bumble adapter moniker used for the Bluetooth backend.
-            key_store_path: Optional path used by the Bluetooth backend to persist keys.
+            key_store_path: Optional path used with the adapter's native address.
+            profile_path: Optional swbt-owned exp local address profile path.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
 
@@ -417,10 +420,61 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
         config = self._controller_spec.build_config(
             adapter=adapter,
             key_store_path=key_store_path,
+            profile_path=profile_path,
+            exp_local_controller_kind=self._exp_local_controller_kind,
             report_period_us=None,
             controller_colors=controller_colors,
         )
         self._init_from_config(config, diagnostics=diagnostics, transport=None)
+
+    @classmethod
+    async def create_profile(
+        cls,
+        *,
+        adapter: str,
+        profile_path: str,
+        exp_local_address: str,
+        pair_timeout: float | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+    ) -> Self:
+        """Create a new direct exp local address profile and pair it.
+
+        Args:
+            adapter: Bumble adapter moniker used for volatile identity preparation.
+            profile_path: New path for the swbt-owned profile JSON.
+            exp_local_address: Individual locally administered Bluetooth address.
+            pair_timeout: Maximum seconds to wait for the initial pairing connection.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+
+        Returns:
+            The paired direct controller. The caller owns its lifetime.
+
+        Raises:
+            ValueError: ``exp_local_address`` is invalid.
+            FileExistsError: ``profile_path`` already exists.
+            Exception: Profile preparation or pairing failed. The created profile remains
+                available for a later retry.
+        """
+        target = ExpLocalAddress.parse(exp_local_address)
+        ExpLocalProfile.create_new(
+            profile_path,
+            target,
+            controller_kind=cls._exp_local_controller_kind,
+        )
+        gamepad = cls(
+            adapter=adapter,
+            profile_path=profile_path,
+            controller_colors=controller_colors,
+            diagnostics=diagnostics,
+        )
+        try:
+            await gamepad.pair(timeout=pair_timeout)
+        except BaseException:
+            await gamepad.close(neutral=False)
+            raise
+        return gamepad
 
     async def send(self, state: InputState) -> None:
         """Send one complete input state and commit it after transmission.
@@ -679,15 +733,18 @@ class DirectProController(_DirectRuntimeBackedGamepad):
     """Direct-reporting Pro Controller-compatible gamepad."""
 
     _controller_spec = _ControllerSpec(profile=default_controller_profile())
+    _exp_local_controller_kind = "direct_pro"
 
 
 class DirectJoyConL(_DirectRuntimeBackedGamepad):
     """Direct-reporting Joy-Con L-compatible gamepad."""
 
     _controller_spec = _ControllerSpec(profile=JoyConLeftProfile())
+    _exp_local_controller_kind = "direct_joycon_l"
 
 
 class DirectJoyConR(_DirectRuntimeBackedGamepad):
     """Direct-reporting Joy-Con R-compatible gamepad."""
 
     _controller_spec = _ControllerSpec(profile=JoyConRightProfile())
+    _exp_local_controller_kind = "direct_joycon_r"

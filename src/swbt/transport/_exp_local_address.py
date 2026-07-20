@@ -17,9 +17,25 @@ _RESERVED_INQUIRY_LAP_MAX = 0x9E8B3F
 _PROFILE_FORMAT = "swbt.profile"
 _PROFILE_SCHEMA_VERSION = 1
 _PROFILE_IDENTITY_KIND = "exp-local-address"
-type ExpLocalControllerKind = Literal["pro", "joycon_l", "joycon_r"]
+type ExpLocalControllerKind = Literal[
+    "pro",
+    "joycon_l",
+    "joycon_r",
+    "direct_pro",
+    "direct_joycon_l",
+    "direct_joycon_r",
+]
 
-_PROFILE_CONTROLLER_KINDS: frozenset[str] = frozenset({"pro", "joycon_l", "joycon_r"})
+_PROFILE_CONTROLLER_KINDS: frozenset[str] = frozenset(
+    {
+        "pro",
+        "joycon_l",
+        "joycon_r",
+        "direct_pro",
+        "direct_joycon_l",
+        "direct_joycon_r",
+    }
+)
 
 type KeyStoreNamespaces = dict[str, dict[str, dict[str, object]]]
 

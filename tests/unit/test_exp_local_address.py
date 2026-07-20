@@ -4,7 +4,11 @@ from pathlib import Path
 import pytest
 
 from swbt import InvalidProfileError
-from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
+from swbt.transport._exp_local_address import (
+    ExpLocalAddress,
+    ExpLocalControllerKind,
+    ExpLocalProfile,
+)
 
 
 def test_exp_local_address_accepts_individual_locally_administered_value() -> None:
@@ -92,7 +96,7 @@ def test_exp_local_profile_loads_supported_pro_controller_envelope(
         {
             "format": "swbt.profile",
             "schema_version": 1,
-            "controller_kind": "direct_pro",
+            "controller_kind": "unsupported_controller",
             "identity": {
                 "kind": "exp-local-address",
                 "address": "02:12:34:56:78:9A",
@@ -201,6 +205,27 @@ def test_exp_local_profile_create_new_saves_joycon_r_controller_kind(
     assert profile.controller_kind == "joycon_r"
     assert ExpLocalProfile.load(profile_path).controller_kind == "joycon_r"
     assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == ("joycon_r")
+
+
+@pytest.mark.parametrize(
+    "controller_kind",
+    ["direct_pro", "direct_joycon_l", "direct_joycon_r"],
+)
+def test_exp_local_profile_create_new_saves_direct_controller_kind(
+    tmp_path: Path,
+    controller_kind: ExpLocalControllerKind,
+) -> None:
+    """A new direct profile records its concrete reporting kind."""
+    profile_path = tmp_path / f"{controller_kind}.json"
+
+    profile = ExpLocalProfile.create_new(
+        profile_path,
+        ExpLocalAddress.parse("02:12:34:56:78:9A"),
+        controller_kind=controller_kind,
+    )
+
+    assert profile.controller_kind == controller_kind
+    assert ExpLocalProfile.load(profile_path).controller_kind == controller_kind
 
 
 def test_exp_local_profile_create_new_does_not_overwrite_existing_path(

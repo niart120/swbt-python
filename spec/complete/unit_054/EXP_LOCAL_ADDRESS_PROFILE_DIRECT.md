@@ -132,7 +132,7 @@ unit_052 の exp profile 経路を、periodic report loop を持たない `Direc
 - [x] TDD Test List を作成した
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件を記録した
-- [ ] unit_052 / unit_053 の完了を確認した
-- [ ] 実装と unit / integration gate を完了した
-- [ ] Direct controller 手動 gate を完了した
+- [x] unit_052 / unit_053 の完了を確認した
+- [x] 実装と unit / integration gate を完了した
+- [x] Direct controller 手動 gate を完了した
 - [ ] 初期設計と公開文書の Intent Delta を反映した
