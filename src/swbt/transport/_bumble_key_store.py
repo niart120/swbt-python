@@ -1,8 +1,6 @@
 """Bumble JSON key store metadata helpers."""
 
 import copy
-import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -11,35 +9,6 @@ from swbt.errors import InvalidKeyStoreError
 from swbt.transport._exp_local_address import ExpLocalProfile, KeyStoreNamespaces
 
 PREVIOUS_NAMESPACE_PREFIX = "swbt.previous::"
-
-
-@dataclass(frozen=True)
-class KeyStoreMetadata:
-    """Observed metadata for a Bumble JSON key store file."""
-
-    exists: bool
-    previous_exists: bool
-
-
-def read_key_store_metadata(key_store_path: str | Path) -> KeyStoreMetadata:
-    """Read non-sensitive metadata from a Bumble JSON key store file."""
-    path = Path(key_store_path)
-    if not path.exists():
-        return KeyStoreMetadata(exists=False, previous_exists=False)
-    return KeyStoreMetadata(
-        exists=True,
-        previous_exists=_previous_generation_exists(path),
-    )
-
-
-def _previous_generation_exists(key_store_path: Path) -> bool:
-    try:
-        key_store_data = json.loads(key_store_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    if not isinstance(key_store_data, dict):
-        return False
-    return any(str(namespace).startswith(PREVIOUS_NAMESPACE_PREFIX) for namespace in key_store_data)
 
 
 class _BumbleJsonKeyStoreRuntime(Protocol):
@@ -69,7 +38,7 @@ class _BumbleJsonKeyStoreRuntime(Protocol):
         """Return LE resolving keys for Bumble internals."""
 
 
-class _CurrentPreviousJsonKeyStore:
+class _CurrentPreviousProfileKeyStore:
     """Bumble-compatible JSON key store with one previous generation."""
 
     def __init__(
@@ -77,25 +46,13 @@ class _CurrentPreviousJsonKeyStore:
         *,
         filename: str | Path,
         namespace: str | None = None,
-        device: object | None = None,
     ) -> None:
-        if namespace is None and device is None:
-            msg = "namespace or device is required"
+        if namespace is None:
+            msg = "namespace is required"
             raise ValueError(msg)
         self._filename = Path(filename)
         self._namespace = namespace
-        self._device = device
         self.last_update_previous_saved = False
-
-    @classmethod
-    def from_device(
-        cls,
-        device: object,
-        *,
-        filename: str | Path,
-    ) -> "_CurrentPreviousJsonKeyStore":
-        """Create a store whose namespace follows the Bumble device address."""
-        return cls(filename=filename, device=device)
 
     async def update(self, name: str, keys: object) -> None:
         """Write current keys and keep the overwritten current value as previous."""
@@ -142,14 +99,6 @@ class _CurrentPreviousJsonKeyStore:
     def _current_store(self) -> _BumbleJsonKeyStoreRuntime:
         from bumble.keys import JsonKeyStore  # noqa: PLC0415
 
-        if self._device is not None:
-            return cast(
-                "_BumbleJsonKeyStoreRuntime",
-                JsonKeyStore.from_device(
-                    cast("Any", self._device),
-                    filename=str(self._filename),
-                ),
-            )
         return cast(
             "_BumbleJsonKeyStoreRuntime",
             JsonKeyStore(self._namespace, str(self._filename)),
@@ -214,7 +163,7 @@ class _ExpLocalProfileNamespaceStore:
         raise InvalidKeyStoreError(msg)
 
 
-class _ExpLocalProfileKeyStore(_CurrentPreviousJsonKeyStore):
+class _ExpLocalProfileKeyStore(_CurrentPreviousProfileKeyStore):
     """Current/previous Bumble key store persisted inside a profile envelope."""
 
     def __init__(self, *, profile_path: str | Path, namespace: str) -> None:
@@ -287,7 +236,7 @@ class _DiagnosticKeyStore:
         return getattr(self._key_store, name)
 
     def _generation_fields(self) -> dict[str, object]:
-        if not isinstance(self._key_store, _CurrentPreviousJsonKeyStore):
+        if not isinstance(self._key_store, _CurrentPreviousProfileKeyStore):
             return {}
         return {
             "generation": "current",

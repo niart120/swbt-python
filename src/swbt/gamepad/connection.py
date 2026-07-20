@@ -58,7 +58,7 @@ class ConnectionWorkflow:
     diagnostics: DiagnosticsRecorder
     ensure_open: EnsureOpen
     get_transport: TransportProvider
-    key_store_path: str | None
+    profile_path: str | None
     pair: PairWithTimeout
     set_connection_state: StateSetter
     transport_was_injected: bool
@@ -71,10 +71,10 @@ class ConnectionWorkflow:
         """Try active reconnect with exactly one bonded peer."""
         await self.ensure_open()
         transport = self._transport()
-        if self.key_store_path is None and not self.transport_was_injected:
+        if self.profile_path is None and not self.transport_was_injected:
             self.diagnostics.record_event(
-                "reconnect_key_store_unavailable",
-                reason="key_store_path_none",
+                "reconnect_profile_unavailable",
+                reason="profile_path_none",
                 route="active_reconnect",
             )
         peers = await transport.list_bonded_peers()

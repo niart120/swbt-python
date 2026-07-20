@@ -16,7 +16,6 @@ class _TransportFactory(Protocol):
         device_name: str,
         profile: ControllerProfile,
         diagnostics: DiagnosticsRecorder,
-        key_store_path: str | None,
         profile_path: str | None = None,
         expected_local_bluetooth_address: bytes | None = None,
     ) -> HidDeviceTransport: ...
@@ -33,7 +32,6 @@ class _StaticTransportFactory:
         device_name: str,
         profile: ControllerProfile,
         diagnostics: DiagnosticsRecorder,
-        key_store_path: str | None,
         profile_path: str | None = None,
         expected_local_bluetooth_address: bytes | None = None,
     ) -> HidDeviceTransport:
@@ -42,7 +40,6 @@ class _StaticTransportFactory:
             device_name,
             profile,
             diagnostics,
-            key_store_path,
             profile_path,
             expected_local_bluetooth_address,
         )
@@ -58,7 +55,6 @@ class _BumbleTransportFactory:
         device_name: str,
         profile: ControllerProfile,
         diagnostics: DiagnosticsRecorder,
-        key_store_path: str | None,
         profile_path: str | None = None,
         expected_local_bluetooth_address: bytes | None = None,
     ) -> HidDeviceTransport:
@@ -68,14 +64,12 @@ class _BumbleTransportFactory:
                 device_name=device_name,
                 profile=profile,
                 diagnostics=diagnostics,
-                key_store_path=key_store_path,
             )
         return create_default_transport(
             adapter=adapter,
             device_name=device_name,
             profile=profile,
             diagnostics=diagnostics,
-            key_store_path=key_store_path,
             profile_path=profile_path,
             expected_local_bluetooth_address=expected_local_bluetooth_address,
         )
@@ -87,7 +81,6 @@ def create_default_transport(
     device_name: str,
     profile: ControllerProfile,
     diagnostics: DiagnosticsRecorder,
-    key_store_path: str | None,
     profile_path: str | None = None,
     expected_local_bluetooth_address: bytes | None = None,
 ) -> HidDeviceTransport:
@@ -100,14 +93,12 @@ def create_default_transport(
             device_name=device_name,
             profile=profile,
             diagnostics=diagnostics,
-            key_store_path=key_store_path,
         )
     return BumbleHidTransport(
         adapter=adapter,
         device_name=device_name,
         profile=profile,
         diagnostics=diagnostics,
-        key_store_path=key_store_path,
         profile_path=profile_path,
         expected_local_bluetooth_address=expected_local_bluetooth_address,
     )

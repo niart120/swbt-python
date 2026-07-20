@@ -21,7 +21,6 @@ from swbt.transport._bumble_hidp import (
     hid_channel_name,
 )
 from swbt.transport._bumble_key_store import (
-    _CurrentPreviousJsonKeyStore,
     _DiagnosticKeyStore,
     _ExpLocalProfileKeyStore,
 )
@@ -174,7 +173,6 @@ class BumbleHidTransport:
         adapter: str,
         device_name: str = _DEFAULT_DEVICE_NAME,
         profile: ControllerProfile | None = None,
-        key_store_path: str | None = None,
         profile_path: str | None = None,
         diagnostics: DiagnosticsRecorder | None = None,
         expected_local_bluetooth_address: bytes | None = None,
@@ -187,10 +185,6 @@ class BumbleHidTransport:
         self._adapter = adapter
         self._device_name = device_name
         self._profile = profile or default_controller_profile()
-        if key_store_path is not None and profile_path is not None:
-            msg = "key_store_path and profile_path are mutually exclusive"
-            raise ValueError(msg)
-        self._key_store_path = key_store_path
         self._profile_path = profile_path
         self._diagnostics = diagnostics
         if (
@@ -212,7 +206,6 @@ class BumbleHidTransport:
                     handle,
                     device_name=self._device_name,
                     profile=self._profile,
-                    key_store_path=self._key_store_path,
                     profile_path=self._profile_path,
                 )
 
@@ -697,7 +690,6 @@ async def _default_initialize_device(
     *,
     device_name: str,
     profile: ControllerProfile,
-    key_store_path: str | None = None,
     profile_path: str | None = None,
 ) -> _BumbleRuntime:
     from bumble.device import Device, DeviceConfiguration  # noqa: PLC0415
@@ -724,11 +716,6 @@ async def _default_initialize_device(
         cast("Any", device).keystore = _ExpLocalProfileKeyStore(
             profile_path=profile_path,
             namespace=str(exp_profile.exp_local_address),
-        )
-    elif key_store_path is not None:
-        cast("Any", device).keystore = _CurrentPreviousJsonKeyStore.from_device(
-            device,
-            filename=key_store_path,
         )
     service_records = build_hid_service_records(
         profile.hid_report_descriptor,

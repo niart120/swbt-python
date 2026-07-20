@@ -36,7 +36,7 @@ def test_connection_workflow_records_no_bond_result() -> None:
             diagnostics=DiagnosticsRecorder(trace_writer=trace),
             ensure_open=ensure_open,
             get_transport=lambda: transport,
-            key_store_path=None,
+            profile_path=None,
             pair=pair,
             set_connection_state=set_connection_state,
             transport_was_injected=False,
@@ -48,8 +48,8 @@ def test_connection_workflow_records_no_bond_result() -> None:
 
         assert result.status == "no_bond"
         assert {
-            "event": "reconnect_key_store_unavailable",
-            "reason": "key_store_path_none",
+            "event": "reconnect_profile_unavailable",
+            "reason": "profile_path_none",
             "route": "active_reconnect",
         } in events
         assert {

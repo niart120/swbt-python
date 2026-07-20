@@ -48,7 +48,6 @@ class ControllerRuntime:
         self,
         *,
         adapter: str | None = None,
-        key_store_path: str | None = None,
         profile_path: str | None = None,
         report_period_us: int | None = None,
         device_name: str | None = None,
@@ -61,7 +60,6 @@ class ControllerRuntime:
         Args:
             adapter: Bumble adapter moniker used when the default transport is created.
                 Required unless a custom transport is supplied.
-            key_store_path: Optional path used by the default transport to persist keys.
             profile_path: Optional swbt-owned exp local address profile path.
             report_period_us: Optional periodic input report interval in microseconds.
             device_name: Optional HID device name passed to the default transport.
@@ -76,7 +74,6 @@ class ControllerRuntime:
         """
         config = _SwitchGamepadConfig(
             adapter=adapter,
-            key_store_path=key_store_path,
             profile_path=profile_path,
             exp_local_controller_kind="pro" if profile_path is not None else None,
             report_period_us=report_period_us,
@@ -142,7 +139,7 @@ class ControllerRuntime:
             diagnostics=self._diagnostics,
             ensure_open=self.open,
             get_transport=self._connection_transport,
-            key_store_path=(self._config.profile_path or self._config.key_store_path),
+            profile_path=self._config.profile_path,
             pair=self._pair_for_connection_workflow,
             set_connection_state=self._set_connection_state,
             transport_was_injected=self._transport_was_injected,
@@ -752,21 +749,8 @@ class ControllerRuntime:
             raise InvalidInputError(msg)
 
     def _record_run_metadata(self) -> None:
-        key_store_exists: bool | None = None
-        key_store_previous_exists: bool | None = None
-        if self._config.key_store_path is not None:
-            from swbt.transport._bumble_key_store import (  # noqa: PLC0415
-                read_key_store_metadata,
-            )
-
-            key_store_metadata = read_key_store_metadata(self._config.key_store_path)
-            key_store_exists = key_store_metadata.exists
-            key_store_previous_exists = key_store_metadata.previous_exists
         self._diagnostics.record_run_metadata(
             adapter=self._metadata_adapter(),
-            key_store_exists=key_store_exists,
-            key_store_path=self._config.key_store_path,
-            key_store_previous_exists=key_store_previous_exists,
             profile_path=self._config.profile_path,
         )
 
@@ -919,7 +903,6 @@ class ControllerRuntime:
                 device_name=self._config.device_name,
                 profile=self._controller_profile,
                 diagnostics=self._diagnostics,
-                key_store_path=self._config.key_store_path,
                 profile_path=(
                     self._config.profile_path if self._exp_local_profile is not None else None
                 ),

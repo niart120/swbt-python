@@ -234,7 +234,6 @@ def test_profile_target_is_forwarded_to_bumble_power_on_guard(
         device_name: str,
         profile: object,
         diagnostics: object,
-        key_store_path: str | None,
         profile_path: str | None,
         expected_local_bluetooth_address: bytes | None,
     ) -> HidDeviceTransport:
@@ -244,7 +243,6 @@ def test_profile_target_is_forwarded_to_bumble_power_on_guard(
                 "device_name": device_name,
                 "profile": profile,
                 "diagnostics": diagnostics,
-                "key_store_path": key_store_path,
                 "profile_path": profile_path,
                 "expected_local_bluetooth_address": expected_local_bluetooth_address,
             }
@@ -273,7 +271,6 @@ def test_profile_target_is_forwarded_to_bumble_power_on_guard(
 
     assert transport is expected_transport
     assert captured["prepared"] == ("usb:0", "02:12:34:56:78:9A")
-    assert captured["key_store_path"] is None
     assert captured["profile_path"] == str(profile_path)
     assert captured["expected_local_bluetooth_address"] == bytes.fromhex("02 12 34 56 78 9A")
     assert json.loads(trace.getvalue()) == {

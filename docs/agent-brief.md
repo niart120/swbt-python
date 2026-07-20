@@ -35,7 +35,7 @@ dongle before retrying.
 For a single Joy-Con L/R, use `JoyConL(...)` or `JoyConR(...)`:
 
 ```python
-async with JoyConL(adapter="usb:0", key_store_path="switch-left-joycon-bond.json") as left:
+async with JoyConL(adapter="usb:0", profile_path="switch-left-joycon-bond.json") as left:
     await left.connect(timeout=30.0, allow_pairing=True)
     await left.tap(Button.L)
     await left.neutral()
@@ -54,7 +54,7 @@ Rules:
 
 - Use `connect(..., allow_pairing=True)` for first-run examples.
 - Use `pair()` only when the target device is in controller pairing/search mode.
-- Use `reconnect()` only when the Pro profile or legacy key store contains one current bonded peer.
+- Use `reconnect()` only when the profile contains one current bonded peer.
 - Use `try_connect()` / `try_reconnect()` when code needs `ConnectionResult` instead of exceptions.
 - Use `tap()` for immediate short button input.
 - Use `press()` / `release()` for held button state.
@@ -69,7 +69,7 @@ Rules:
 - Use `IMUFrame.accel_g()` or `IMUFrame.with_accel_g()` for acceleration in G, and `IMUFrame.to_accel_g()` for conversion back to G. The scale is fixed at `1/4096 G/raw`.
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
 - Use `InputState` + `send()` for one complete Direct input report. Awaiting it includes transport completion and state commit.
-- Use a separate `profile_path` and local address for every controller kind and target device. Only Joy-Con native-address paths use `key_store_path`.
+- Use a separate `profile_path` and local address for every controller kind and target device.
 - Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`: left does not support right stick or A/B/X/Y, right does not support left stick or D-pad.
 - Use `SwitchGamepad` only when code accepts either reporting contract. Use `PeriodicSwitchGamepad` or `DirectSwitchGamepad` when the sending contract matters.
 - Instantiate `ProController`, `JoyConL`, or `JoyConR` for Periodic reporting. Instantiate the corresponding `Direct*` class for Direct reporting.

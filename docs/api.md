@@ -102,7 +102,7 @@ pad = ProController(
 
 direct_pad = DirectProController(
     adapter="usb:0",
-    key_store_path="switch-direct-bond.json",
+    profile_path="switch-direct-bond.json",
     controller_colors=None,
     diagnostics=None,
 )
@@ -112,11 +112,11 @@ direct_pad = DirectProController(
 
 `adapter` は Bumble transport に渡すアダプタ名です。
 
-Periodic controller の `profile_path` は、利用者が用意したローカル Bluetooth アドレスとペアリングキーを同じ swbt プロファイル JSON に保存するパスです。既存プロファイルを再利用する場合だけコンストラクタに渡します。
+全 concrete controller の `profile_path` は、利用者が用意したローカル Bluetooth アドレスとペアリングキーを同じ swbt プロファイル JSON に保存するパスです。既存プロファイルを再利用する場合だけコンストラクタに渡します。
 
-Joy-Con の adapter 本来のアドレスを使う経路と直接送信型は `key_store_path` を受け取ります。Joy-Con では `key_store_path` と `profile_path` を同時に指定できません。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに保存先を分けてください。
+全 concrete controller は `profile_path` を受け取ります。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに保存先を分けてください。
 
-新しい Periodic controller プロファイルは、`ProController`、`JoyConL`、`JoyConR` の `create_profile()` で作成します。`exp_local_address` の生成と重複回避は利用者の責任です。例示した `02:12:34:56:78:9A` を共通値として使わず、controller kind と対象機器ごとに別の値を管理してください。この経路は CSR8510 A10 の揮発領域への書換として提供され、永続領域は変更しません。
+新しいプロファイルは、各 concrete controller の `create_profile()` で作成します。`exp_local_address` の生成と重複回避は利用者の責任です。例示した `02:12:34:56:78:9A` を共通値として使わず、controller kind と対象機器ごとに別の値を管理してください。この経路は CSR8510 A10 の揮発領域への書換として提供され、永続領域は変更しません。
 
 ```python
 pad = await ProController.create_profile(
@@ -258,11 +258,11 @@ from swbt import Button, JoyConL, JoyConR, Stick
 
 left = JoyConL(
     adapter="usb:0",
-    key_store_path="switch-left-joycon-bond.json",
+    profile_path="switch-left-joycon-bond.json",
 )
 right = JoyConR(
     adapter="usb:0",
-    key_store_path="switch-right-joycon-bond.json",
+    profile_path="switch-right-joycon-bond.json",
 )
 ```
 
@@ -283,7 +283,7 @@ async with JoyConL(
 
 `apply(state)` と `send(state)` でも同じ制約を検査します。`JoyConL` または `DirectJoyConL` に右スティック入力や `A`、`B`、`X`、`Y` 入力を含む `InputState`、`JoyConR` または `DirectJoyConR` に左スティック入力や十字キー入力を含む `InputState` を渡すと `UnsupportedInputError` が送出されます。
 
-全 concrete controller は `profile_path` を使えます。profile の `pro` / `joycon_l` / `joycon_r` / `direct_pro` / `direct_joycon_l` / `direct_joycon_r` は混在できないため、controller kind ごとに別の保存先を使ってください。Joy-Con の native-address 経路だけは `key_store_path` を使います。
+全 concrete controller は `profile_path` を使えます。profile の `pro` / `joycon_l` / `joycon_r` / `direct_pro` / `direct_joycon_l` / `direct_joycon_r` は混在できないため、controller kind ごとに別の保存先を使ってください。
 「持ちかた/順番を変える」画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送る必要があります。
 
 OS、ドングル、ファームウェアをまたぐ互換性は未検証です。
@@ -292,4 +292,4 @@ OS、ドングル、ファームウェアをまたぐ互換性は未検証です
 
 例外は `SwbtError` を基底例外とします。アダプタ列挙の失敗では `AdapterDiscoveryError`、利用者入力の不正では `InvalidInputError`、コントローラーが対応しない入力では `UnsupportedInputError`、transport を開けなかった場合は `TransportOpenError`、接続タイムアウトでは `ConnectionTimeoutError`、接続不成立では `ConnectionFailedError`、ペアリング情報の保存形式が一致しない場合は `InvalidKeyStoreError`、プロファイルが不正な場合は `InvalidProfileError` が送出されます。コントローラー種別の不一致は `ProfileControllerMismatchError` で区別できます。揮発領域への書換開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` が送出されます。
 
-`DiagnosticsConfig` はトレース出力のための設定です。`trace_writer` にテキストストリームを渡すと、接続状態の遷移、送信したレポート、受信したサブコマンド、エラー、`adapter`、`profile_path`、`key_store_path` などの実行時メタデータを、1 行 1 件の JSON オブジェクトとして出力します。このトレースログは、実機接続時の挙動確認や失敗時の切り分けに使います。
+`DiagnosticsConfig` はトレース出力のための設定です。`trace_writer` にテキストストリームを渡すと、接続状態の遷移、送信したレポート、受信したサブコマンド、エラー、`adapter`、`profile_path` などの実行時メタデータを、1 行 1 件の JSON オブジェクトとして出力します。このトレースログは、実機接続時の挙動確認や失敗時の切り分けに使います。

@@ -139,9 +139,6 @@ class DiagnosticsRecorder:
         self,
         *,
         adapter: str,
-        key_store_exists: bool | None = None,
-        key_store_path: str | None = None,
-        key_store_previous_exists: bool | None = None,
         profile_path: str | None = None,
     ) -> DiagnosticsEvent:
         """Record environment metadata for one diagnostics run."""
@@ -151,12 +148,6 @@ class DiagnosticsRecorder:
             "package_version": self._package_version(),
             "python_version": platform.python_version(),
         }
-        if key_store_path is not None:
-            fields["key_store_path"] = key_store_path
-        if key_store_exists is not None:
-            fields["key_store_exists"] = key_store_exists
-        if key_store_previous_exists is not None:
-            fields["key_store_previous_exists"] = key_store_previous_exists
         if profile_path is not None:
             fields["profile_path"] = profile_path
         return self.record_event(

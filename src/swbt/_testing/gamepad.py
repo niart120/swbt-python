@@ -19,7 +19,7 @@ def make_pro_controller(
     *,
     transport: HidDeviceTransport,
     adapter: str | None = None,
-    key_store_path: str | None = None,
+    profile_path: str | None = None,
     report_period_us: int | None = None,
     controller_colors: ControllerColors | None = None,
     diagnostics: DiagnosticsConfig | None = None,
@@ -28,7 +28,7 @@ def make_pro_controller(
     return ProController._from_config(
         _SwitchGamepadConfig(
             adapter=adapter,
-            key_store_path=key_store_path,
+            profile_path=profile_path,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         ),
@@ -41,7 +41,7 @@ def make_joycon_l(
     *,
     transport: HidDeviceTransport,
     adapter: str | None = None,
-    key_store_path: str | None = None,
+    profile_path: str | None = None,
     report_period_us: int | None = None,
     controller_colors: ControllerColors | None = None,
     diagnostics: DiagnosticsConfig | None = None,
@@ -50,7 +50,7 @@ def make_joycon_l(
     return JoyConL._from_config(
         _SwitchGamepadConfig(
             adapter=adapter,
-            key_store_path=key_store_path,
+            profile_path=profile_path,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
             profile=JoyConLeftProfile(),
@@ -64,7 +64,7 @@ def make_joycon_r(
     *,
     transport: HidDeviceTransport,
     adapter: str | None = None,
-    key_store_path: str | None = None,
+    profile_path: str | None = None,
     report_period_us: int | None = None,
     controller_colors: ControllerColors | None = None,
     diagnostics: DiagnosticsConfig | None = None,
@@ -73,7 +73,7 @@ def make_joycon_r(
     return JoyConR._from_config(
         _SwitchGamepadConfig(
             adapter=adapter,
-            key_store_path=key_store_path,
+            profile_path=profile_path,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
             profile=JoyConRightProfile(),
@@ -87,7 +87,7 @@ def make_direct_pro_controller(
     *,
     transport: HidDeviceTransport,
     adapter: str | None = None,
-    key_store_path: str | None = None,
+    profile_path: str | None = None,
     controller_colors: ControllerColors | None = None,
     diagnostics: DiagnosticsConfig | None = None,
 ) -> DirectProController:
@@ -95,7 +95,7 @@ def make_direct_pro_controller(
     return DirectProController._from_config(
         _SwitchGamepadConfig(
             adapter=adapter,
-            key_store_path=key_store_path,
+            profile_path=profile_path,
             controller_colors=controller_colors,
         ),
         diagnostics=diagnostics,
@@ -107,7 +107,7 @@ def make_direct_joycon_l(
     *,
     transport: HidDeviceTransport,
     adapter: str | None = None,
-    key_store_path: str | None = None,
+    profile_path: str | None = None,
     controller_colors: ControllerColors | None = None,
     diagnostics: DiagnosticsConfig | None = None,
 ) -> DirectJoyConL:
@@ -115,7 +115,7 @@ def make_direct_joycon_l(
     return DirectJoyConL._from_config(
         _SwitchGamepadConfig(
             adapter=adapter,
-            key_store_path=key_store_path,
+            profile_path=profile_path,
             controller_colors=controller_colors,
             profile=JoyConLeftProfile(),
         ),
@@ -128,7 +128,7 @@ def make_direct_joycon_r(
     *,
     transport: HidDeviceTransport,
     adapter: str | None = None,
-    key_store_path: str | None = None,
+    profile_path: str | None = None,
     controller_colors: ControllerColors | None = None,
     diagnostics: DiagnosticsConfig | None = None,
 ) -> DirectJoyConR:
@@ -136,7 +136,7 @@ def make_direct_joycon_r(
     return DirectJoyConR._from_config(
         _SwitchGamepadConfig(
             adapter=adapter,
-            key_store_path=key_store_path,
+            profile_path=profile_path,
             controller_colors=controller_colors,
             profile=JoyConRightProfile(),
         ),

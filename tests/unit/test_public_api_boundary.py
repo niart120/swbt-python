@@ -9,8 +9,7 @@ import subprocess
 import sys
 from dataclasses import fields
 from io import StringIO
-from pathlib import Path
-from typing import TYPE_CHECKING, cast, get_args
+from typing import TYPE_CHECKING, Any, cast, get_args
 
 import pytest
 
@@ -194,6 +193,7 @@ def test_reporting_types_expose_only_their_owned_full_state_operation() -> None:
         assert "report_period_us" not in inspect.signature(controller_cls).parameters
         assert "profile_path" in inspect.signature(controller_cls).parameters
         assert hasattr(controller_cls, "create_profile")
+        assert "key_store_path" not in inspect.signature(controller_cls).parameters
 
 
 def test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams() -> None:
@@ -213,8 +213,8 @@ def test_rearchitecture_target_public_controller_constructors_hide_config_identi
         controller_cls = getattr(swbt, controller_name)
         parameters = set(inspect.signature(controller_cls).parameters)
 
-        assert common_parameters | {"key_store_path", "profile_path"} <= parameters
-        assert forbidden_parameters.isdisjoint(parameters)
+        assert common_parameters | {"profile_path"} <= parameters
+        assert (forbidden_parameters | {"key_store_path"}).isdisjoint(parameters)
 
 
 def test_rearchitecture_target_public_controller_constructors_hide_transport_seam() -> None:
@@ -243,7 +243,6 @@ def test_profileless_pro_controller_uses_native_transport(
         device_name: str,
         profile: ProControllerProfile,
         diagnostics: object,
-        key_store_path: str | None,
     ) -> HidDeviceTransport:
         captured_config.update(
             {
@@ -251,7 +250,6 @@ def test_profileless_pro_controller_uses_native_transport(
                 "device_name": device_name,
                 "profile": profile,
                 "diagnostics": diagnostics,
-                "key_store_path": key_store_path,
             }
         )
         return expected_transport
@@ -266,7 +264,6 @@ def test_profileless_pro_controller_uses_native_transport(
 
     assert pad._runtime._ensure_transport() is expected_transport
     assert captured_config["adapter"] == "usb:0"
-    assert captured_config["key_store_path"] is None
     assert pad._runtime._config.profile_path is None
 
 
@@ -317,7 +314,7 @@ def test_joycon_public_constructors_are_thin_switch_gamepad_wrappers() -> None:
         assert issubclass(controller_cls, SwitchGamepad)
         assert "side" not in signature.parameters
         assert "adapter" in signature.parameters
-        assert "key_store_path" in signature.parameters
+        assert "key_store_path" not in signature.parameters
         assert "profile_path" in signature.parameters
         assert hasattr(controller_cls, "create_profile")
     assert "JoyConLeftProfile" not in swbt.__all__
@@ -328,11 +325,10 @@ def test_joycon_public_constructors_are_thin_switch_gamepad_wrappers() -> None:
 def test_joycon_constructor_rejects_key_store_and_profile_paths_together(
     controller_cls: type[JoyConL | JoyConR],
 ) -> None:
-    with pytest.raises(InvalidInputError, match="mutually exclusive"):
-        controller_cls(
+    with pytest.raises(TypeError, match="key_store_path"):
+        cast("Any", controller_cls)(
             adapter="usb:0",
             key_store_path="keys.json",
-            profile_path="profile.json",
         )
 
 
@@ -421,101 +417,6 @@ def test_switch_gamepad_rejects_non_positive_report_period(report_period_us: int
         ProController(adapter="usb:0", report_period_us=report_period_us)
 
 
-def test_switch_gamepad_from_config_passes_resource_config_to_bumble_transport(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def run() -> None:
-        bumble_module = importlib.import_module("swbt.transport.bumble")
-
-        captured_config: dict[str, object] = {}
-
-        class FakeBumbleTransport:
-            def __init__(
-                self,
-                *,
-                adapter: str,
-                device_name: str,
-                profile: ProControllerProfile,
-                key_store_path: str | None,
-                diagnostics: object,
-            ) -> None:
-                captured_config.update(
-                    {
-                        "adapter": adapter,
-                        "device_name": device_name,
-                        "profile": profile,
-                        "key_store_path": key_store_path,
-                        "diagnostics": diagnostics,
-                    }
-                )
-
-            async def open(self) -> None:
-                return None
-
-            async def start_advertising(self) -> None:
-                return None
-
-            async def close(self) -> None:
-                return None
-
-            async def request_disconnect(self) -> DisconnectRequestResult:
-                return DisconnectRequestResult(status="unavailable")
-
-            async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
-                return ()
-
-            async def connect_bonded_peer(
-                self,
-                peer_address: str,
-                *,
-                connect_timeout: float | None,
-            ) -> None:
-                _ = (peer_address, connect_timeout)
-
-            async def send_interrupt(self, payload: bytes) -> None:
-                _ = payload
-
-            async def send_control(self, payload: bytes) -> None:
-                _ = payload
-
-            def on_interrupt_data(self, callback: object) -> None:
-                _ = callback
-
-            def on_control_data(self, callback: object) -> None:
-                _ = callback
-
-            def on_connected(self, callback: object) -> None:
-                _ = callback
-
-            def on_disconnected(self, callback: object) -> None:
-                _ = callback
-
-        monkeypatch.setattr(bumble_module, "BumbleHidTransport", FakeBumbleTransport)
-
-        key_store_path = tmp_path / "keys.json"
-        pad = ProController._from_config(
-            _SwitchGamepadConfig(
-                adapter="usb:1",
-                device_name="Reference Pad",
-                key_store_path=str(key_store_path),
-            )
-        )
-
-        await pad.open()
-        result = await pad.try_reconnect()
-        await pad.close(neutral=True)
-
-        assert captured_config["adapter"] == "usb:1"
-        assert captured_config["device_name"] == "Reference Pad"
-        assert isinstance(captured_config["profile"], ProControllerProfile)
-        assert captured_config["key_store_path"] == str(key_store_path)
-        assert captured_config["diagnostics"] is not None
-        assert result.status == "no_bond"
-
-    asyncio.run(run())
-
-
 def test_from_config_uses_profile_device_name_unless_user_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -530,10 +431,9 @@ def test_from_config_uses_profile_device_name_unless_user_overrides(
                 adapter: str,
                 device_name: str,
                 profile: ProControllerProfile,
-                key_store_path: str | None,
                 diagnostics: object,
             ) -> None:
-                _ = (adapter, profile, key_store_path, diagnostics)
+                _ = (adapter, profile, diagnostics)
                 captured_config["device_name"] = device_name
 
             async def open(self) -> None:
@@ -744,10 +644,9 @@ def test_default_transport_without_key_store_records_reconnect_limitation(
                 adapter: str,
                 device_name: str,
                 profile: ProControllerProfile,
-                key_store_path: str | None,
                 diagnostics: object,
             ) -> None:
-                _ = (adapter, device_name, profile, key_store_path, diagnostics)
+                _ = (adapter, device_name, profile, diagnostics)
 
             async def open(self) -> None:
                 return None
@@ -804,8 +703,8 @@ def test_default_transport_without_key_store_records_reconnect_limitation(
 
         assert result.status == "no_bond"
         assert {
-            "event": "reconnect_key_store_unavailable",
-            "reason": "key_store_path_none",
+            "event": "reconnect_profile_unavailable",
+            "reason": "profile_path_none",
             "route": "active_reconnect",
         } in events
 

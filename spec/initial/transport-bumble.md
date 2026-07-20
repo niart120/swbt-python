@@ -107,7 +107,7 @@ SwitchGamepad(adapter="usb:0")
 
 OS ごとの adapter discovery は `list_adapters()` と `swbt-probe adapters` で補助する。どちらも USB descriptor の列挙だけを行い、Bumble transport として adapter を開かない。
 
-`BumbleHidTransport` は内部 constructor で `key_store_path` または `profile_path` のどちらか一方を受け取る。両方の同時指定は拒否する。
+`BumbleHidTransport` は内部 constructor で `profile_path` だけを受け取る。native JSON key-store の path は受け取らない。
 
 ```python
 BumbleHidTransport(
@@ -118,11 +118,11 @@ BumbleHidTransport(
 )
 ```
 
-`key_store_path` の実際の読み書きは Bumble key store が必要とする reconnect / pairing key update のタイミングで行う。`profile_path` は上位 runtime が adapter open 前に検証し、transport は `key_store.namespaces` だけを Bumble KeyStore interface として読み書きする。envelope の identity と controller kind は保持し、更新時はファイル全体を原子的に置き換える。
+`profile_path` の実際の読み書きは Bumble key store が必要とする reconnect / pairing key update のタイミングで行う。`profile_path` は上位 runtime が adapter open 前に検証し、transport は `key_store.namespaces` だけを Bumble KeyStore interface として読み書きする。envelope の identity と controller kind は保持し、更新時はファイル全体を原子的に置き換える。
 
 ### 3.1.1 接続情報と local BD_ADDR
 
-`key_store_path` は bond / link key の保存先だけを選び、local Bluetooth identity は変更しない。`ProController` の exp profile 経路では、利用者が管理する `exp_local_address` と pairing key namespace を同じ profile envelope に保存する。
+`profile_path` は bond / link key の保存先だけを選び、local Bluetooth identity は変更しない。`ProController` の exp profile 経路では、利用者が管理する `exp_local_address` と pairing key namespace を同じ profile envelope に保存する。
 
 対象は CSR8510 A10 の volatile 操作である。runtime は Bumble transport を作る前に raw CSR session で現在値を読む。現在値が target と異なる場合だけ PSRAM write、warm reset、USB 再列挙、read-back を行う。永続領域は変更しない。現在値が target と一致する場合は write と reset を省略する。
 

@@ -176,7 +176,6 @@ class JoyConL(PeriodicSwitchGamepad):
         self,
         *,
         adapter: str | None = None,
-        key_store_path: str | None = None,
         profile_path: str | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
@@ -193,7 +192,6 @@ class DirectProController(DirectSwitchGamepad):
         self,
         *,
         adapter: str | None = None,
-        key_store_path: str | None = None,
         profile_path: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
@@ -203,13 +201,12 @@ class DirectProController(DirectSwitchGamepad):
     async def create_profile(...) -> Self: ...
 ```
 
-全 concrete controller は exp local identity 用の `profile_path` と `create_profile()` を持つ。Joy-Con の adapter 本来の address を使う既存経路では `key_store_path` も受け取るが、`profile_path` と同時には指定できない。Direct controller も同じ排他規則に従う。
+全 concrete controller は `profile_path` と `create_profile()` を持つ。profile は exp local identity と pairing key を同じ envelope に保存する。
 
 | 引数 | 意味 |
 |---|---|
 | `adapter` | Bumble transport に渡す adapter moniker |
 | `profile_path` | concrete controller が exp local identity と pairing key を読み書きする swbt profile JSON path |
-| `key_store_path` | Joy-Con の native-address 経路が使う Bumble JSON key store path |
 | `report_period_us` | Periodic だけが受け取る入力レポートの送信周期。`None` は profile の既定値 |
 | `controller_colors` | SPI profile で返す controller body / buttons / left grip / right grip の固定色 |
 | `diagnostics` | trace と counter の設定 |
@@ -218,7 +215,7 @@ class DirectProController(DirectSwitchGamepad):
 
 concrete controller の `profile_path` は、利用者が選んだ `exp_local_address` と pairing key を同じ swbt profile JSON に保存する。新規 path は具象 class の `create_profile()` で作成し、既存 path は同じ controller kind の constructor に渡して再利用する。異なる kind の profile は `ProfileControllerMismatchError` とし、adapter open 前に拒否する。
 
-`key_store_path` は adapter 本来の address を使う Joy-Con の pairing storage を定義する。controller profile が異なる場合は同じ対象機器でも分ける。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。
+`profile_path` は全 concrete controller の pairing storage を定義する。controller kind または対象機器が異なる場合は保存先を分ける。`profile_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。
 
 `create_profile()` は path が存在する場合に上書きせず `FileExistsError` を送出する。address は 6 octet の individual / locally administered address だけを受理し、予約 inquiry LAP を拒否する。pairing に失敗した場合も profile は残り、同じ `profile_path` を通常 constructor に渡して再試行できる。
 
@@ -324,11 +321,11 @@ right = JoyConR(adapter="usb:0", profile_path="profiles/switch-right-joycon.json
 
 direct_left = DirectJoyConL(
     adapter="usb:0",
-    key_store_path="switch-direct-left-joycon-bond.json",
+    profile_path="switch-direct-left-joycon-bond.json",
 )
 direct_right = DirectJoyConR(
     adapter="usb:0",
-    key_store_path="switch-direct-right-joycon-bond.json",
+    profile_path="switch-direct-right-joycon-bond.json",
 )
 ```
 
