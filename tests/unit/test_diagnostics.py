@@ -54,6 +54,20 @@ def test_run_metadata_records_key_store_metadata_from_caller() -> None:
     assert payload["key_store_previous_exists"] is True
 
 
+def test_run_metadata_records_profile_path_from_caller() -> None:
+    trace = StringIO()
+    recorder = DiagnosticsRecorder(trace_writer=trace)
+
+    recorder.record_run_metadata(
+        adapter="usb:0",
+        profile_path="profiles/switch-pro.json",
+    )
+
+    payload = json.loads(trace.getvalue())
+
+    assert payload["profile_path"] == "profiles/switch-pro.json"
+
+
 def test_state_transition_records_previous_next_and_reason() -> None:
     trace = StringIO()
     recorder = DiagnosticsRecorder(trace_writer=trace)

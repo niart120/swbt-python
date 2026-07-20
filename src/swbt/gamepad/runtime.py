@@ -766,6 +766,7 @@ class ControllerRuntime:
             key_store_exists=key_store_exists,
             key_store_path=self._config.key_store_path,
             key_store_previous_exists=key_store_previous_exists,
+            profile_path=self._config.profile_path,
         )
 
     def _metadata_adapter(self) -> str:
