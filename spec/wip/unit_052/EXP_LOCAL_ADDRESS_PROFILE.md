@@ -128,7 +128,7 @@ await pad.connect(allow_pairing=False)
 |---|---|---|---|---|---|
 | todo | profile なしの `ProController` は CSR preparation を呼ばず native transport を作る | regression | unit | no | 既存通常経路を固定 |
 | todo | malformed / unknown schema / legacy raw Bumble JSON は adapter open 前に拒否する | edge | unit | no | profile migration を暗黙に行わない |
-| todo | group、universal、reserved LAP の address は profile 作成前に拒否する | edge | unit | no | adapter を開かない |
+| refactor-skipped | group、universal、reserved LAP の address は profile 作成前に拒否する | edge | unit | no | 8 tests pass。immutable value object で責務が閉じており追加 refactor なし |
 | todo | 新規 profile は `controller_kind="pro"` を含む envelope を atomic に保存し、既存 path を上書きしない | new | unit | no | identity と namespace map を保持 |
 | todo | current = target なら volatile write と warm reset を省略する | new | unit | no | 継続利用の idempotence |
 | todo | current != target では write、reset、再列挙後 read-back を順に要求する | new | unit | no | raw preparation fake / harness を使う |
@@ -187,6 +187,9 @@ await pad.connect(allow_pairing=False)
 | `uv run pytest tests/unit` | not run | 実装前 |
 | `uv run pytest tests/integration` | not run | integration tree を追加 / 変更した場合に実行 |
 | 手動 CSR8510 A10 gate | not run | 実装・unit / integration gate 後、明示承認が必要 |
+| `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | address validation cycle: 8 passed |
+| `uv run ruff check src/swbt/transport/_exp_local_address.py tests/unit/test_exp_local_address.py` | pass | address validation cycle |
+| `uv run ty check --no-progress` | pass | address validation cycle |
 
 ## 12. 実機実行条件
 
