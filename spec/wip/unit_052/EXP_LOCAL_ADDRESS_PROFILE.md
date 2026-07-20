@@ -131,7 +131,7 @@ await pad.connect(allow_pairing=False)
 | refactor-skipped | group、universal、reserved LAP の address は profile 作成前に拒否する | edge | unit | no | 8 tests pass。immutable value object で責務が閉じており追加 refactor なし |
 | refactor-done | 新規 profile は `controller_kind="pro"` を含む envelope を atomic に保存し、既存 path を上書きしない | new | unit | no | 18 tests pass。一時ファイルの完全書込と payload 生成を分離 |
 | refactor-skipped | current = target なら volatile write と warm reset を省略する | new | unit | no | 1 test pass。比較結果を immutable result に閉じており追加 refactor なし |
-| todo | current != target では write、reset、再列挙後 read-back を順に要求する | new | unit | no | raw preparation fake / harness を使う |
+| refactor-done | current != target では write、reset、再列挙後 read-back を順に要求する | new | unit | no | 2 tests pass。CSR 初期化と再列挙 retry を helper へ分離 |
 | todo | write 後の結果不明は `ExpLocalAddressRecoveryRequired` となり pairing を始めない | edge | unit | no | write 前 failure と区別 |
 | todo | Bumble power-on 後の address 不一致は advertising / pairing / reconnect を開始しない | regression | unit | no | guard を固定 |
 | todo | pairing key 保存後も envelope identity と namespace map が保持される | new | integration | no | Bumble KeyStore contract |
@@ -202,6 +202,9 @@ await pad.connect(allow_pairing=False)
 | `uv run pytest tests/unit/test_exp_local_identity.py -q` | pass | already-active preparation cycle: 1 passed |
 | `uv run ruff check src/swbt/transport/_exp_local_identity.py tests/unit/test_exp_local_identity.py` | pass | already-active preparation cycle |
 | `uv run ty check --no-progress` | pass | already-active preparation cycle |
+| `uv run pytest tests/unit/test_exp_local_identity.py -q` | pass | rewrite / re-enumeration cycle: 2 passed |
+| `uv run ruff check src/swbt/transport/_exp_local_identity.py tests/unit/test_exp_local_identity.py` | pass | rewrite / re-enumeration cycle |
+| `uv run ty check --no-progress` | pass | rewrite / re-enumeration cycle |
 
 ## 12. 実機実行条件
 
