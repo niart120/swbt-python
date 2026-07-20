@@ -14,6 +14,7 @@ class _SwitchGamepadConfig:
     Attributes:
         adapter: Bumble adapter moniker, such as ``"usb:0"``.
         key_store_path: Path used by the default transport to persist pairing keys.
+        profile_path: Path to a swbt-owned exp local address profile.
         profile: Fixed controller identity and protocol profile.
         report_period_us: Periodic input report interval in microseconds.
         device_name: HID device name advertised to the host.
@@ -22,6 +23,7 @@ class _SwitchGamepadConfig:
 
     adapter: str | None = None
     key_store_path: str | None = None
+    profile_path: str | None = None
     profile: ControllerProfile = field(default_factory=default_controller_profile)
     report_period_us: int | None = None
     device_name: str | None = None
@@ -63,11 +65,13 @@ class _ControllerSpec:
         key_store_path: str | None,
         report_period_us: int | None,
         controller_colors: ControllerColors | None,
+        profile_path: str | None = None,
     ) -> _SwitchGamepadConfig:
         """Create internal construction config from public constructor options."""
         return _SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
+            profile_path=profile_path,
             profile=self.profile,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
@@ -80,6 +84,7 @@ class _RuntimeConfig:
 
     adapter: str | None
     key_store_path: str | None
+    profile_path: str | None
     profile: ControllerProfile
     report_period_us: int
     device_name: str
@@ -94,6 +99,7 @@ class _RuntimeConfig:
         return cls(
             adapter=config.adapter,
             key_store_path=config.key_store_path,
+            profile_path=config.profile_path,
             profile=config.profile,
             report_period_us=config.report_period_us,
             device_name=config.device_name,

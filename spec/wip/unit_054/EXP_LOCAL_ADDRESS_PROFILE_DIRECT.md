@@ -10,7 +10,7 @@ unit_052 の exp profile 経路を、periodic report loop を持たない `Direc
 
 | source | 内容 | path |
 |---|---|---|
-| unit_052 | profile envelope、CSR preparation、ProController の基盤 | `spec/wip/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md` |
+| unit_052 | profile envelope、CSR preparation、ProController の基盤 | `spec/complete/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md` |
 | unit_053 | Joy-Con の controller kind と profile 分離 | `spec/wip/unit_053/EXP_LOCAL_ADDRESS_PROFILE_JOYCON.md` |
 | 初期公開 API | Direct controller の constructor / send / close lifecycle | `spec/initial/api.md` |
 | 初期 lifecycle | Direct は periodic task を持たない | `spec/initial/lifecycle.md` |
@@ -39,7 +39,7 @@ unit_052 の exp profile 経路を、periodic report loop を持たない `Direc
 
 ## 4. 関連 docs
 
-- `spec/wip/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md`
+- `spec/complete/unit_052/EXP_LOCAL_ADDRESS_PROFILE.md`
 - `spec/wip/unit_053/EXP_LOCAL_ADDRESS_PROFILE_JOYCON.md`
 - `spec/initial/api.md`
 - `spec/initial/lifecycle.md`
@@ -105,7 +105,7 @@ unit_052 の exp profile 経路を、periodic report loop を持たない `Direc
 
 | command | result | notes |
 |---|---|---|
-| unit_052 / unit_053 の gate | deferred | 依存 unit の完了が前提 |
+| unit_052 / unit_053 の gate | partial | unit_052 は完了。unit_053 は未実装・未検証 |
 | `uv run pytest tests/unit` | deferred | 実装後 |
 | `uv run pytest tests/integration` | deferred | 実装後 |
 | Direct controller 手動 gate | deferred | 明示承認が必要 |

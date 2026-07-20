@@ -10,6 +10,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from swbt import AdapterDiscoveryError, AdapterInfo, DiagnosticsConfig, ProController, list_adapters
+from swbt.gamepad._config import _SwitchGamepadConfig
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -155,9 +156,11 @@ async def _run_pair_probe(
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     with trace_path.open("w", encoding="utf-8") as trace_writer:
         diagnostics = DiagnosticsConfig(trace_writer=trace_writer)
-        async with ProController(
-            adapter=adapter,
-            key_store_path=key_store_path,
+        async with ProController._from_config(
+            _SwitchGamepadConfig(
+                adapter=adapter,
+                key_store_path=key_store_path,
+            ),
             diagnostics=diagnostics,
         ) as pad:
             await pad.pair(timeout=pair_timeout)

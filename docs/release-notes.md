@@ -1,5 +1,22 @@
 # Release Notes
 
+## Unreleased
+
+### 追加機能
+
+- `ProController.create_profile()` と `ProController(profile_path=...)` を追加しました。利用者が管理する `exp_local_address` とペアリングキーを一つの swbt プロファイル JSON に保存し、CSR8510 A10 の揮発領域にある Bluetooth アドレスを接続前に準備します。
+- 揮発領域への書換開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` を送出します。`close()` は接続資源だけを閉じ、書き換えたアドレスを元へ戻しません。
+
+### 破壊的変更と段階的移行
+
+- `ProController(..., key_store_path=...)` は `ProController(..., profile_path=...)` へ置き換わります。新規プロファイルはコンストラクタではなく `await ProController.create_profile(...)` で作成します。
+- Joy-Con と直接送信型は、各コントローラー種別と実機での生成・接続・終了を後続の作業単位で検証するまで既存の `key_store_path` を維持します。これは後方互換性を保証する判断ではなく、未検証の公開 API を同時に変更しないための段階的移行です。
+- 既存の Bumble JSON ペアリング情報保存ファイルを swbt プロファイルとして自動移行しません。
+
+### 対応範囲
+
+対象は CSR8510 A10 の揮発領域への書換経路です。永続領域は変更しません。`exp_local_address` の生成と重複回避は利用者の責任です。CSR8510 A10 以外のドングル、出荷時アドレスの保存、公開の読み取り専用確認 API は対象外です。
+
 ## 0.4.0
 
 ### 追加機能

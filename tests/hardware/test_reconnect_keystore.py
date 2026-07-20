@@ -7,10 +7,26 @@ from typing import Any, TextIO
 import pytest
 
 from swbt import DiagnosticsConfig, ProController
+from swbt.gamepad._config import _SwitchGamepadConfig
 
 _INITIAL_PAIRING_OPERATOR_WAIT_SECONDS = 5.0
 _ACTIVE_RECONNECT_OPERATOR_WAIT_SECONDS = 5.0
 _INCOMING_OPERATOR_WAIT_SECONDS = 5.0
+
+
+def _native_pro_controller(
+    *,
+    adapter: str,
+    key_store_path: str,
+    diagnostics: DiagnosticsConfig,
+) -> ProController:
+    return ProController._from_config(
+        _SwitchGamepadConfig(
+            adapter=adapter,
+            key_store_path=key_store_path,
+        ),
+        diagnostics=diagnostics,
+    )
 
 
 @pytest.mark.hardware
@@ -80,7 +96,7 @@ def test_switch_active_reconnect_with_existing_key_store_records_result(
                 expected_switch_screen="home_or_normal_screen_not_change_grip_order",
                 wait_seconds=_ACTIVE_RECONNECT_OPERATOR_WAIT_SECONDS,
             )
-            pad = ProController(
+            pad = _native_pro_controller(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -161,7 +177,7 @@ def test_switch_incoming_connection_trace_stays_separate_from_active_reconnect(
 
     async def run() -> None:
         with incoming_trace_path.open("w", encoding="utf-8") as trace:
-            pad = ProController(
+            pad = _native_pro_controller(
                 adapter=swbt_bumble_adapter,
                 key_store_path=str(key_store_path),
                 diagnostics=DiagnosticsConfig(trace_writer=trace),
@@ -209,7 +225,7 @@ async def _pair_with_key_store(
             expected_switch_screen="controller_search_or_change_grip_order",
             wait_seconds=_INITIAL_PAIRING_OPERATOR_WAIT_SECONDS,
         )
-        pad = ProController(
+        pad = _native_pro_controller(
             adapter=adapter,
             key_store_path=str(key_store_path),
             diagnostics=DiagnosticsConfig(trace_writer=trace),

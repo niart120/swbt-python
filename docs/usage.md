@@ -1,12 +1,12 @@
 # 利用例
 
-目的別の利用例です。API の引数、例外、送信方式ごとの契約は `docs/api.md`、実機での検証条件は `docs/hardware.md` にあります。実機接続には専用 USB Bluetooth ドングル、Bumble、対象機器側のペアリングまたは再接続操作が必要です。
+目的別の利用例です。API の引数、例外、送信方式ごとの契約は `docs/api.md`、実機での検証条件は `docs/hardware.md` にあります。実機接続には用用 SSB Bluetooth ドングル、Bumble、対象機器側のペアリングまたは再接続操作が必要です。
 
 ## クイックスタート
 
 ### 周期送信型
 
-初回実行では `allow_pairing=True` を指定し、対象機器側はコントローラー接続画面にセットします。
+以下の例は作成済みの `profiles/switch-pro.json` を使います。初回作成は「Pro Controller プロファイルの初回作成」を先に実行します。ペアリングを再試行する場合は `allow_pairing=True` を指定し、対象機器側でコントローラー接続画面を開きます。
 
 ```python
 import asyncio
@@ -16,7 +16,7 @@ from swbt import Button, ProController
 async def main() -> None:
     async with ProController(
         adapter="usb:0",
-        key_store_path="switch-bond.json",
+        profile_path="profiles/switch-pro.json",
     ) as pad:
         await pad.connect(timeout=30.0, allow_pairing=True)
         await pad.press(Button.A)
@@ -58,24 +58,43 @@ asyncio.run(main())
 
 ## 接続
 
+### Pro Controller プロファイルの初回作成
+
+Pro Controller の接続情報を永続化する場合は、最初の 1 回だけ `create_profile()` を使います。`exp_local_address` は利用者が生成し、同時に使う他の Bluetooth デバイスと重複しない値を選びます。例示した `02:12:34:56:78:9A` を共通値として使わず、利用者ごとに管理する値へ置き換えてください。
+
+```python
+pad = await ProController.create_profile(
+    adapter="usb:0",
+    profile_path="profiles/switch-pro.json",
+    exp_local_address="02:12:34:56:78:9A",
+    pair_timeout=60.0,
+)
+try:
+    await pad.neutral()
+finally:
+    await pad.close()
+```
+
+対象は CSR8510 A10 の揮発領域への書換経路です。アダプタの永続領域は変更しません。既存のパスは上書きされません。ペアリングが失敗してもプロファイルは残るため、以後は `ProController(profile_path="profiles/switch-pro.json")` で再試行します。`ExpLocalAddressRecoveryRequired` が送出された場合は、SSB ドングルを抜き差ししてから再試行してください。
+
 ### 接続時の再接続・ペアリング選択
 
 ```python
 async with ProController(
     adapter="usb:0",
-    key_store_path="switch-bond.json",
+    profile_path="profiles/switch-pro.json",
 ) as pad:
     await pad.connect(timeout=30.0, allow_pairing=True)
 ```
 
-保存済みペアリング情報があれば再接続を試し、ない場合はペアリングを行います。初回接続では対象機器をコントローラー接続画面に置いてから呼び出します。
+プロファイルに保存済みペアリング情報があれば再接続を試し、ない場合はペアリングを行います。初回接続では対象機器をコントローラー接続画面に置いてから呼び出します。
 
 ### ペアリングのみ
 
 ```python
 async with ProController(
     adapter="usb:0",
-    key_store_path="switch-bond.json",
+    profile_path="profiles/switch-pro.json",
 ) as pad:
     await pad.pair(timeout=30.0)
 ```
@@ -87,7 +106,7 @@ async with ProController(
 ```python
 async with ProController(
     adapter="usb:0",
-    key_store_path="switch-bond.json",
+    profile_path="profiles/switch-pro.json",
 ) as pad:
     await pad.reconnect(timeout=10.0)
 ```
@@ -101,7 +120,7 @@ async with ProController(
 ```python
 async with ProController(
     adapter="usb:0",
-    key_store_path="switch-bond.json",
+    profile_path="profiles/switch-pro.json",
 ) as pad:
     result = await pad.try_connect(timeout=30.0, allow_pairing=True)
     if result.status != "connected":
@@ -111,7 +130,7 @@ async with ProController(
 ```python
 async with ProController(
     adapter="usb:0",
-    key_store_path="switch-bond.json",
+    profile_path="profiles/switch-pro.json",
 ) as pad:
     result = await pad.try_reconnect(timeout=10.0)
     if result.status == "no_bond":
@@ -123,15 +142,15 @@ async with ProController(
 ```python
 first = ProController(
     adapter="usb:0",
-    key_store_path="switch-2-fw-22-1-0.json",
+    profile_path="profiles/switch-2-fw-22-1-0-pro.json",
 )
 second = ProController(
     adapter="usb:0",
-    key_store_path="other-switch.json",
+    profile_path="profiles/other-switch-pro.json",
 )
 ```
 
-1 つの保存ファイルに複数の保存済みペアリング情報を混ぜないでください。別の対象機器とペアリングする場合は、対象機器ごとに別の `key_store_path` を使います。Pro Controller、Joy-Con L、Joy-Con R のようにプロファイルが違う場合も、同じ対象機器で保存ファイルを共有しません。
+1 つの保存ファイルに複数の保存済みペアリング情報を混ぜないでください。Pro Controller は対象機器ごとに別の `profile_path` を使います。Joy-Con と直接送信型は移行前の `key_store_path` を使います。コントローラー種別が違う場合は、同じ対象機器でも保存ファイルを共有しません。
 
 ## Joy-Con L/R
 
@@ -184,10 +203,10 @@ asyncio.run(main())
 
 ### 非対応入力の扱い
 
-対応しない入力を検出する場合は、`UnsupportedInputError` を捕捉します。
+対応しない入力を検出する場合は、`SnsupportedInputError` を捕捉します。
 
 ```python
-from swbt import Button, JoyConL, Stick, UnsupportedInputError
+from swbt import Button, JoyConL, Stick, SnsupportedInputError
 
 async with JoyConL(
     adapter="usb:0",
@@ -195,12 +214,12 @@ async with JoyConL(
 ) as left:
     try:
         await left.rstick(Stick.right())
-    except UnsupportedInputError as error:
+    except SnsupportedInputError as error:
         print(error)
 
     try:
         await left.tap(Button.A)
-    except UnsupportedInputError as error:
+    except SnsupportedInputError as error:
         print(error)
 ```
 
@@ -276,21 +295,21 @@ await pad.sticks(left=Stick.tilt(0.7, 0.7))
 ### ジャイロだけの設定
 
 ```python
-from swbt import IMUFrame
+from swbt import IMSFrame
 
-await pad.imu(IMUFrame.gyro(100, 0, 0))
+await pad.imu(IMSFrame.gyro(100, 0, 0))
 ```
 
 ### 角速度の指定
 
 ```python
 from math import radians
-from swbt import IMUFrame
+from swbt import IMSFrame
 
 omega_x = radians(90.0)
 omega_y = radians(-45.0)
 omega_z = 0.0
-frame = IMUFrame.gyro_rate(
+frame = IMSFrame.gyro_rate(
     x_rad_s=omega_x,
     y_rad_s=omega_y,
     z_rad_s=omega_z,
@@ -300,26 +319,26 @@ await pad.imu(frame)
 x_rad_s, y_rad_s, z_rad_s = frame.to_gyro_rate()
 ```
 
-`IMUFrame.gyro_rate()` は角速度を rad/s 単位で指定するときに使います。
+`IMSFrame.gyro_rate()` は角速度を rad/s 単位で指定するときに使います。
 
 ### 加速度とジャイロの設定
 
 ```python
-from swbt import IMUFrame
+from swbt import IMSFrame
 
-frame = IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)
+frame = IMSFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)
 await pad.imu(frame)
 ```
 
 ### 3 入力分の個別設定
 
 ```python
-from swbt import IMUFrame
+from swbt import IMSFrame
 
 await pad.imu(
-    IMUFrame.gyro(100, 0, 0),
-    IMUFrame.gyro(120, 0, 0),
-    IMUFrame.gyro(140, 0, 0),
+    IMSFrame.gyro(100, 0, 0),
+    IMSFrame.gyro(120, 0, 0),
+    IMSFrame.gyro(140, 0, 0),
 )
 ```
 
@@ -370,7 +389,7 @@ from swbt import Button, DiagnosticsConfig, ProController
 with Path("trace.jsonl").open("w", encoding="utf-8") as trace:
     async with ProController(
         adapter="usb:0",
-        key_store_path="switch-bond.json",
+        profile_path="profiles/switch-pro.json",
         diagnostics=DiagnosticsConfig(trace_writer=trace),
     ) as pad:
         await pad.connect(timeout=30.0, allow_pairing=True)

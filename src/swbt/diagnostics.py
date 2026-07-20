@@ -142,6 +142,7 @@ class DiagnosticsRecorder:
         key_store_exists: bool | None = None,
         key_store_path: str | None = None,
         key_store_previous_exists: bool | None = None,
+        profile_path: str | None = None,
     ) -> DiagnosticsEvent:
         """Record environment metadata for one diagnostics run."""
         fields: dict[str, object] = {
@@ -156,6 +157,8 @@ class DiagnosticsRecorder:
             fields["key_store_exists"] = key_store_exists
         if key_store_previous_exists is not None:
             fields["key_store_previous_exists"] = key_store_previous_exists
+        if profile_path is not None:
+            fields["profile_path"] = profile_path
         return self.record_event(
             "run_metadata",
             **fields,

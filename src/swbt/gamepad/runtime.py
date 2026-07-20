@@ -32,6 +32,8 @@ from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.subcommand import SubcommandResponder
 from swbt.report_loop import ReportLoop, ReportSender
 from swbt.state_store import InputStateStore
+from swbt.transport._exp_local_address import ExpLocalProfile
+from swbt.transport._exp_local_identity import prepare_exp_local_identity
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
 
 
@@ -47,6 +49,7 @@ class ControllerRuntime:
         *,
         adapter: str | None = None,
         key_store_path: str | None = None,
+        profile_path: str | None = None,
         report_period_us: int | None = None,
         device_name: str | None = None,
         controller_colors: ControllerColors | None = None,
@@ -59,6 +62,7 @@ class ControllerRuntime:
             adapter: Bumble adapter moniker used when the default transport is created.
                 Required unless a custom transport is supplied.
             key_store_path: Optional path used by the default transport to persist keys.
+            profile_path: Optional swbt-owned exp local address profile path.
             report_period_us: Optional periodic input report interval in microseconds.
             device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -73,6 +77,7 @@ class ControllerRuntime:
         config = _SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
+            profile_path=profile_path,
             report_period_us=report_period_us,
             device_name=device_name,
             controller_colors=controller_colors,
@@ -95,6 +100,7 @@ class ControllerRuntime:
         self._reporting_mode = reporting_mode
         self._transport = transport
         self._transport_was_injected = transport is not None
+        self._exp_local_profile: ExpLocalProfile | None = None
         if transport is None:
             self._transport_factory = _BumbleTransportFactory()
         else:
@@ -135,7 +141,7 @@ class ControllerRuntime:
             diagnostics=self._diagnostics,
             ensure_open=self.open,
             get_transport=self._connection_transport,
-            key_store_path=self._config.key_store_path,
+            key_store_path=(self._config.profile_path or self._config.key_store_path),
             pair=self._pair_for_connection_workflow,
             set_connection_state=self._set_connection_state,
             transport_was_injected=self._transport_was_injected,
@@ -209,6 +215,7 @@ class ControllerRuntime:
         async with self._lifecycle_lock:
             if self._is_open:
                 return
+            await self._prepare_exp_local_profile()
             transport = self._ensure_transport()
             self._record_run_metadata()
             self._connection_state = "opening"
@@ -759,6 +766,7 @@ class ControllerRuntime:
             key_store_exists=key_store_exists,
             key_store_path=self._config.key_store_path,
             key_store_previous_exists=key_store_previous_exists,
+            profile_path=self._config.profile_path,
         )
 
     def _metadata_adapter(self) -> str:
@@ -871,6 +879,26 @@ class ControllerRuntime:
         finally:
             self._disconnect_event.set()
 
+    async def _prepare_exp_local_profile(self) -> None:
+        if self._transport_was_injected or self._config.profile_path is None:
+            return
+        profile = ExpLocalProfile.load(self._config.profile_path)
+        adapter = self._config.adapter
+        if adapter is None:
+            msg = "adapter is required for exp local address preparation"
+            raise InvalidInputError(msg)
+        result = await prepare_exp_local_identity(
+            adapter=adapter,
+            target=profile.exp_local_address,
+        )
+        self._diagnostics.record_event(
+            "exp_local_identity_prepared",
+            current_address=result.current_address,
+            status=result.status,
+            target_address=result.target_address,
+        )
+        self._exp_local_profile = profile
+
     def _ensure_transport(self) -> HidDeviceTransport:
         if self._transport is None:
             if self._config.adapter is None:
@@ -886,5 +914,13 @@ class ControllerRuntime:
                 profile=self._controller_profile,
                 diagnostics=self._diagnostics,
                 key_store_path=self._config.key_store_path,
+                profile_path=(
+                    self._config.profile_path if self._exp_local_profile is not None else None
+                ),
+                expected_local_bluetooth_address=(
+                    self._exp_local_profile.exp_local_address.bytes
+                    if self._exp_local_profile is not None
+                    else None
+                ),
             )
         return self._transport

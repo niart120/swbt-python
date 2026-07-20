@@ -107,34 +107,34 @@ SwitchGamepad(adapter="usb:0")
 
 OS ごとの adapter discovery は `list_adapters()` と `swbt-probe adapters` で補助する。どちらも USB descriptor の列挙だけを行い、Bumble transport として adapter を開かない。
 
-`BumbleHidTransport` は constructor で `key_store_path` を受け取る。
+`BumbleHidTransport` は内部 constructor で `key_store_path` または `profile_path` のどちらか一方を受け取る。両方の同時指定は拒否する。
 
 ```python
 BumbleHidTransport(
     adapter="usb:0",
     device_name="Pro Controller",
-    key_store_path="switch-bond.json",
+    profile_path="profiles/switch-pro.json",
+    expected_local_bluetooth_address=bytes.fromhex("02 12 34 56 78 9A"),
 )
 ```
 
-constructor / open 時点では key store file の作成までは要求しない。実際の読み書きは Bumble key store が必要とする reconnect / pairing key update のタイミングで行う。
+`key_store_path` の実際の読み書きは Bumble key store が必要とする reconnect / pairing key update のタイミングで行う。`profile_path` は上位 runtime が adapter open 前に検証し、transport は `key_store.namespaces` だけを Bumble KeyStore interface として読み書きする。envelope の identity と controller kind は保持し、更新時はファイル全体を原子的に置き換える。
 
 ### 3.1.1 接続情報と local BD_ADDR
 
-`key_store_path` は bond / link key の保存先を選ぶ。local Bluetooth identity は変更しないため、異なる key store を選ぶだけでは Switch に別の物理デバイスとして提示できない。
+`key_store_path` は bond / link key の保存先だけを選び、local Bluetooth identity は変更しない。`ProController` の exp profile 経路では、利用者が管理する `exp_local_address` と pairing key namespace を同じ profile envelope に保存する。
 
-CSR8510 A10 / WinUSB / Bumble 0.0.230 の専用実験環境では、CSR PSRAMへのwriteとwarm resetによりcontroller-reported BD_ADDRを一時変更できた。変更後のaddressはBumble transportの通常closeとraw adapter再openをまたいで保持され、USB power cycle後に元addressへ戻った。これは対象個体でのhardware observationであり、他adapterやdriverへの保証ではない。
+対象は CSR8510 A10 の volatile 操作である。runtime は Bumble transport を作る前に raw CSR session で現在値を読む。現在値が target と異なる場合だけ PSRAM write、warm reset、USB 再列挙、read-back を行う。永続領域は変更しない。現在値が target と一致する場合は write と reset を省略する。
 
-実験用 `BumbleHidTransport` は `expected_local_bluetooth_address` を受け取れる。指定時は `power_on()` 後、discoverable / connectableを有効にする前にcontrollerのpublic addressを照合し、不一致なら可視化へ進まない。この引数はpublic `SwitchGamepad` APIには露出しない。
+raw session と Bumble transport は同時に adapter を開かない。write 開始後に再列挙または read-back を確定できない場合は `ExpLocalAddressRecoveryRequired` を送出し、pairing を始めない。利用者は専用 USB Bluetooth ドングルを抜き差ししてから再試行する。
 
-接続情報ごとのidentity切替を後続で公開する場合は、key store選択に加えて次の順序を一体として扱う。
+`BumbleHidTransport` は `power_on()` 後、discoverable / connectable、pairing、active reconnect の前に public address を target と照合する。不一致なら Switch から見える状態へ進まない。準備結果は `exp_local_identity_prepared` diagnostics event に `already_active` または `rewritten` として記録する。
 
-1. 対象profileへ割り当てた正規のBD_ADDRをvolatile適用する。
-2. warm reset後のstandard HCI / vendor readでaddressを照合する。
-3. expected-address guard付きtransportを開く。
-4. USB power cycle後はaddressを再適用する。
+`close()` は transport と controller resource を閉じるだけで、volatile address を元へ戻さない。CSR8510 A10 / WinUSB / Bumble 0.0.230 の対象個体では通常 close と raw adapter 再 open をまたいで値を保持し、USB power cycle 後に元へ戻ることを観測した。他 adapter、driver、OS へ一般化しない。
 
-実験で使ったlocal / dummy addressは製品設定に使わない。Switch UIはBD_ADDRを表示せず、on-air captureも行っていないため、複数登録がBD_ADDRだけで分離されたことはinferenceに留める。
+2026-07-20 の unit_052 実機 gate では、同じ対象個体で fresh profile の pairing と通常 close 後、同じ profile による active reconnect が pass した。再接続時は `current = target` のため write / reset を省略し、profile bytes を変更せず、advertising / pairing / key update を行わなかった。Switch 2 / firmware 22.5.0 は利用者確認済みである。
+
+`exp_local_address` の生成、重複回避、同時利用管理は利用者の責任とする。swbt は 6 octet、individual、locally administered、予約 inquiry LAP 以外であることを検査する。factory / baseline address は profile に保存せず、公開 read-only probe も提供しない。
 
 ### 3.2 Bumble device 生成
 

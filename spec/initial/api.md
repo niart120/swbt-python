@@ -26,20 +26,21 @@ import asyncio
 from swbt import Button, ProController
 
 async def main() -> None:
-    async with ProController(
+    pad = await ProController.create_profile(
         adapter="usb:0",
-        key_store_path="switch-bond.json",
-    ) as pad:
-        await pad.connect(
-            timeout=30.0,
-            allow_pairing=True,
-        )
+        profile_path="profiles/switch-pro.json",
+        exp_local_address="02:12:34:56:78:9A",
+        pair_timeout=60.0,
+    )
+    try:
         await pad.tap(Button.A)
+    finally:
+        await pad.close()
 
 asyncio.run(main())
 ```
 
-`connect()` は保存済み bond があれば bond reuse reconnect を優先する。初回 pairing まで許可する場合だけ `allow_pairing=True` を指定する。
+`create_profile()` は新規プロファイルを保存して初回ペアリングを行う。`exp_local_address` の生成と重複回避は利用者が担う。以降の例はこのプロファイルが存在する前提とし、`connect()` は保存済みペアリング情報があれば再接続を優先する。ペアリングの再試行まで許可する場合だけ `allow_pairing=True` を指定する。
 
 ### 2.2 複数ボタンを押す
 
@@ -48,7 +49,7 @@ import asyncio
 from swbt import Button, ProController
 
 async def main() -> None:
-    async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+    async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json") as pad:
         await pad.connect(timeout=30.0)
 
         await pad.press(Button.L, Button.R)
@@ -66,7 +67,7 @@ import asyncio
 from swbt import ProController, Stick
 
 async def main() -> None:
-    async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+    async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json") as pad:
         await pad.connect(timeout=30.0)
 
         await pad.lstick(Stick.up())
@@ -85,7 +86,7 @@ import asyncio
 from swbt import Button, InputState, ProController, Stick
 
 async def main() -> None:
-    async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+    async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json") as pad:
         await pad.connect(timeout=30.0)
 
         state = InputState.neutral().with_buttons([Button.L, Button.R]).with_sticks(
@@ -151,11 +152,24 @@ class ProController(PeriodicSwitchGamepad):
         self,
         *,
         adapter: str | None = None,
-        key_store_path: str | None = None,
+        profile_path: str | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
     ) -> None: ...
+
+    @classmethod
+    async def create_profile(
+        cls,
+        *,
+        adapter: str,
+        profile_path: str,
+        exp_local_address: str,
+        pair_timeout: float | None = None,
+        report_period_us: int | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+    ) -> Self: ...
 
 class DirectProController(DirectSwitchGamepad):
     def __init__(
@@ -168,19 +182,24 @@ class DirectProController(DirectSwitchGamepad):
     ) -> None: ...
 ```
 
-`JoyConL` / `JoyConR` は `ProController` と同じ constructor 引数を持つ。`DirectJoyConL` / `DirectJoyConR` は `DirectProController` と同じ constructor 引数を持つ。
+`JoyConL` / `JoyConR` は unit_053 が完了するまで既存の `key_store_path` を受け取る。`DirectJoyConL` / `DirectJoyConR` は `DirectProController` と同じ constructor 引数を持つ。これらを `ProController` と同時に変更しない理由は後方互換性の保証ではなく、controller kind と reporting lifecycle ごとの必須実機 gate を通してから公開契約を変更するためである。
 
 | 引数 | 意味 |
 |---|---|
 | `adapter` | Bumble transport に渡す adapter moniker |
-| `key_store_path` | default Bumble transport が pairing key を保存する JSON key store path |
+| `profile_path` | `ProController` が exp local identity と pairing key を読み書きする swbt profile JSON path |
+| `key_store_path` | Joy-Con / Direct が移行 unit 完了まで使う Bumble JSON key store path |
 | `report_period_us` | Periodic だけが受け取る入力レポートの送信周期。`None` は profile の既定値 |
 | `controller_colors` | SPI profile で返す controller body / buttons / left grip / right grip の固定色 |
 | `diagnostics` | trace と counter の設定 |
 
 公開 constructor では `adapter` は必須である。transport 注入と profile 差し替えは内部 test helper に限定し、公開 extension point としない。
 
-`key_store_path` は 1 つの仮想 controller と対象機器の pairing storage を定義する構成値である。controller profile が異なる場合は同じ対象機器でも分ける。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。
+`ProController(profile_path=...)` は、利用者が選んだ `exp_local_address` と pairing key を同じ swbt profile JSON に保存する。新規 path は `await ProController.create_profile(...)` で作成し、既存 path は constructor に渡して再利用する。`profile_path=None` は CSR volatile identity を変更せず、pairing key を永続化しない。
+
+`key_store_path` は Joy-Con / Direct の移行前 API で、1 つの仮想 controller と対象機器の pairing storage を定義する。controller profile が異なる場合は同じ対象機器でも分ける。`key_store_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。
+
+`create_profile()` は path が存在する場合に上書きせず `FileExistsError` を送出する。address は 6 octet の individual / locally administered address だけを受理し、予約 inquiry LAP を拒否する。pairing に失敗した場合も profile は残り、同じ `profile_path` を通常 constructor に渡して再試行できる。
 
 Periodic の `report_period_us=None` は profile が持つ既定周期を使う。Pro Controller の既定 profile では `8000us` になる。Direct はレポートループを持たず、`report_period_us` を受け取らない。
 
@@ -269,7 +288,7 @@ def status(self) -> GamepadStatus: ...
 ### 3.5 context manager
 
 ```python
-async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json") as pad:
     await pad.connect(timeout=30.0)
     await pad.tap(Button.A)
 ```
@@ -305,7 +324,7 @@ async with JoyConL(
 
 片側 Joy-Con が持たない button / stick は `UnsupportedInputError` とする。左 Joy-Con は A/B/X/Y、right stick などを扱わない。右 Joy-Con は D-pad、left stick などを扱わない。`InputState` を `apply()` または `send()` する場合も同じ検査を行い、不正 state は送信・commit しない。
 
-Pro Controller、Joy-Con L、Joy-Con R は HID identity と pairing key の対応を分けるため、別々の `key_store_path` を使う。同じ対象機器でも profile を変える場合は key store を共有しない。
+Pro Controller は `profile_path`、Joy-Con L/R は移行 unit 完了まで `key_store_path` を使う。HID identity と pairing key の対応を混在させないため、同じ対象機器でも controller kind ごとに別の保存 path を使う。
 
 `JoyConPair` は初期 API に含めない。左右を 1 つの controller として束ねる API は、左右別 device の connect / disconnect failure semantics と cleanup を別途設計してから追加する。
 

@@ -126,18 +126,18 @@ await pad.connect(allow_pairing=False)
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | profile なしの `ProController` は CSR preparation を呼ばず native transport を作る | regression | unit | no | 既存通常経路を固定 |
-| todo | malformed / unknown schema / legacy raw Bumble JSON は adapter open 前に拒否する | edge | unit | no | profile migration を暗黙に行わない |
-| todo | group、universal、reserved LAP の address は profile 作成前に拒否する | edge | unit | no | adapter を開かない |
-| todo | 新規 profile は `controller_kind="pro"` を含む envelope を atomic に保存し、既存 path を上書きしない | new | unit | no | identity と namespace map を保持 |
-| todo | current = target なら volatile write と warm reset を省略する | new | unit | no | 継続利用の idempotence |
-| todo | current != target では write、reset、再列挙後 read-back を順に要求する | new | unit | no | raw preparation fake / harness を使う |
-| todo | write 後の結果不明は `ExpLocalAddressRecoveryRequired` となり pairing を始めない | edge | unit | no | write 前 failure と区別 |
-| todo | Bumble power-on 後の address 不一致は advertising / pairing / reconnect を開始しない | regression | unit | no | guard を固定 |
-| todo | pairing key 保存後も envelope identity と namespace map が保持される | new | integration | no | Bumble KeyStore contract |
-| todo | pairing 失敗後、同じ profile で pairing を再試行できる | regression | integration | no | recovery-required にしない |
-| todo | `close()` 後に target が残る profile を次の controller が再利用できる | characterization | bumble | yes | known CSR8510 A10 の実機 gate と結ぶ |
-| todo | fresh profile 作成、pairing、通常 close 後の同 profile 再利用を確認する | characterization | hardware | yes | 完了必須の手動 gate |
+| refactor-skipped | profile なしの `ProController` は CSR preparation を呼ばず native transport を作る | regression | unit | no | 52 targeted tests pass。native factory への既存引数を維持し追加 refactor なし |
+| refactor-skipped | malformed / unknown schema / legacy raw Bumble JSON は adapter open 前に拒否する | edge | unit | no | 16 tests pass。codec は adapter 非依存で責務が閉じており追加 refactor なし |
+| refactor-skipped | group、universal、reserved LAP の address は profile 作成前に拒否する | edge | unit | no | 8 tests pass。immutable value object で責務が閉じており追加 refactor なし |
+| refactor-done | 新規 profile は `controller_kind="pro"` を含む envelope を atomic に保存し、既存 path を上書きしない | new | unit | no | 18 tests pass。一時ファイルの完全書込と payload 生成を分離 |
+| refactor-skipped | current = target なら volatile write と warm reset を省略する | new | unit | no | 1 test pass。比較結果を immutable result に閉じており追加 refactor なし |
+| refactor-done | current != target では write、reset、再列挙後 read-back を順に要求する | new | unit | no | 2 tests pass。CSR 初期化と再列挙 retry を helper へ分離 |
+| refactor-done | write 後の結果不明は `ExpLocalAddressRecoveryRequired` となり pairing を始めない | edge | unit | no | 5 targeted tests pass。stage state と runtime preparation を分離 |
+| refactor-done | Bumble power-on 後の address 不一致は advertising / pairing / reconnect を開始しない | regression | unit | no | 51 tests pass。advertising / reconnect の照合を共通 helper へ統合 |
+| refactor-done | pairing key 保存後も envelope identity と namespace map が保持される | new | integration | no | 53 targeted tests pass。profile envelope の一時ファイル保存を共通化 |
+| refactor-skipped | pairing 失敗後、同じ profile で pairing を再試行できる | regression | integration | no | 61 targeted tests pass。作成済み profile を残して controller 資源だけを閉じる単一責務のため追加 refactor なし |
+| refactor-skipped | `close()` 後に target が残る profile を次の controller が再利用できる | characterization | bumble | yes | 1 passed。active reconnect、profile bytes 不変、advertising / pairing / key update なしを確認し、追加 refactor なし |
+| refactor-skipped | fresh profile 作成、pairing、通常 close を確認する | characterization | hardware | yes | retry run は 1 passed。実機 trace assertion を address 確定後の diagnostics event に修正し、追加 refactor なし |
 
 ## 8. 文書検証計画
 
@@ -145,15 +145,15 @@ await pad.connect(allow_pairing=False)
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| `spec/initial/api.md` | profile の作成と再利用 | 本仕様 §6.2 | link / code example の構文確認 | todo | 実装 API 確定後に `docs-quality-review` |
-| `spec/initial/transport-bumble.md` | CSR target 限定と guard | 本仕様 §5、§6 | link 確認 | todo | 実機 gate 後に確認済み範囲を記録 |
-| `spec/initial/lifecycle.md` | `close()` と recovery-required | 本仕様 §6 | link 確認 | todo | public lifecycle との整合 |
-| `spec/initial/risks.md` | local identity / recovery のリスク | 本仕様 §2、§3 | link 確認 | todo | obsolete な EUI-48 前提を置換 |
+| `spec/initial/api.md` | profile の作成と再利用 | 本仕様 §6.2 | link / code example の構文確認 | pass (2026-07-20) | 公開シグネチャと利用例を照合済み |
+| `spec/initial/transport-bumble.md` | CSR target 限定と guard | 本仕様 §5、§6 | link 確認 | pass (2026-07-20) | 実機観測を初期設計と実機ログへ反映済み |
+| `spec/initial/lifecycle.md` | `close()` と recovery-required | 本仕様 §6 | link 確認 | pass (2026-07-20) | 公開 lifecycle と照合済み |
+| `spec/initial/risks.md` | local identity / recovery のリスク | 本仕様 §2、§3 | link 確認 | pass (2026-07-20) | EUI-48 の正式割当を前提にしない責任境界へ更新済み |
 
 ## 9. 設計メモ
 
 - P-007 の主な懸念は CSR warm reset 後の USB 再列挙である。unit_051 では旧 libusb handle を同一 Python process で再 open できなかった。preparation は raw session を閉じ、adapter が再び開けるまで待ってから read-back と Bumble transport 作成を行う。
-- 再列挙待機の timeout、adapter を再 open できない場合の exception、write 済みか確定できない境界は実装前に内部 state machine と unit test で固定する。write 送信後に target 状態を確定できない経路は `ExpLocalAddressRecoveryRequired` に畳み込む。
+- 再列挙待機の timeout、adapter を再 open できない場合の exception、write 済みか確定できない境界は内部 state machine と unit test で固定した。write 送信後に target 状態を確定できない経路は `ExpLocalAddressRecoveryRequired` に畳み込む。
 - `close()` は controller resource の終了であり、USB dongle の抜き差しや volatile address の復旧を行わない。抜き差し後の read-only probe は内部 diagnostics だけに残し、公開 API にしない。
 - profile は adapter 固有情報や factory / baseline BD_ADDR を保存しない。`controller_kind="pro"` は後続の Joy-Con / Direct profile との取り違えを防ぐ swbt 側 contract である。同じ local identity を同時に複数 adapter で使わないことは利用者の責任とする。
 - CSR8510 A10 以外で成功することは未検証である。対応可否を事前検知しようとせず、preparation 実行時の失敗として報告する。
@@ -168,9 +168,19 @@ await pad.connect(allow_pairing=False)
 | `src/swbt/transport/_exp_local_address.py` | new | typed address、envelope codec、preparation state / error |
 | `src/swbt/transport/_exp_local_identity.py` | new | raw CSR session、warm reset 再列挙、read-back handoff |
 | `src/swbt/transport/_bumble_key_store.py` | modify | envelope namespace view の KeyStore adapter |
+| `src/swbt/__init__.py` / `src/swbt/errors.py` | modify | profile validation / recovery-required の公開例外 |
+| `src/swbt/diagnostics.py` | modify | `profile_path` を含む run metadata |
+| `src/swbt/gamepad/_config.py` / `src/swbt/gamepad/runtime.py` | modify | profile configuration、preparation、retry lifecycle |
+| `src/swbt/probe.py` | modify | profile-aware metadata と legacy key store 境界 |
 | `tests/unit/test_exp_local_address.py` | new | validation、codec、failure classification |
 | `tests/unit/test_exp_local_identity.py` | new | preparation sequence と guard |
+| `tests/unit/test_exp_local_profile_runtime.py` | new | runtime preparation、failure、retry |
+| `tests/unit/test_bumble_transport.py` | modify | power-on guard と diagnostics event |
+| `tests/unit/test_public_api_boundary.py` / `tests/unit/test_diagnostics.py` / `tests/unit/test_probe_cli.py` | modify | 公開 surface と実行記録 |
 | `tests/integration/test_exp_local_profile.py` | new | pairing key persistence と retry lifecycle |
+| `tests/hardware/test_exp_local_profile.py` | new | fresh pairing / close と同 profile active reconnect の実機 gate |
+| `tests/hardware/test_input_operations.py` / `tests/hardware/test_reconnect_keystore.py` | modify | Pro Controller の profile path 移行 |
+| `README.md` / `docs/api.md` / `docs/usage.md` / `docs/hardware.md` / `docs/release-notes.md` / `docs/agent-brief.md` | modify | 公開 API、利用手順、安全境界、移行説明 |
 | `spec/initial/api.md` | modify | 完了時に `profile_path` / `create_profile()` を正本へ反映 |
 | `spec/initial/transport-bumble.md` | modify | CSR target 限定と transport handoff |
 | `spec/initial/lifecycle.md` | modify | close と recovery-required |
@@ -181,12 +191,50 @@ await pad.connect(allow_pairing=False)
 
 | command | result | notes |
 |---|---|---|
-| `uv run ruff format --check .` | not run | 実装前 |
-| `uv run ruff check .` | not run | 実装前 |
-| `uv run ty check --no-progress` | not run | 実装前 |
-| `uv run pytest tests/unit` | not run | 実装前 |
-| `uv run pytest tests/integration` | not run | integration tree を追加 / 変更した場合に実行 |
-| 手動 CSR8510 A10 gate | not run | 実装・unit / integration gate 後、明示承認が必要 |
+| `uv run ruff format --check .` | pass | 104 files already formatted |
+| `uv run ruff check .` | pass | all checks passed |
+| `uv run ty check --no-progress` | pass | all checks passed |
+| `uv run pytest -p no:cacheprovider --basetemp <temp> tests/unit` | pass | 465 passed。OS temp を使用 |
+| `uv run pytest -p no:cacheprovider --basetemp <temp> tests/integration` | pass | 127 passed。OS temp を使用 |
+| `uv run pytest tests/hardware/test_exp_local_profile.py::test_switch_exp_local_profile_fresh_pairing_and_close ...` | pass | retry artifact で 1 passed in 2.95s |
+| `uv run pytest tests/hardware/test_exp_local_profile.py::test_switch_exp_local_profile_reuses_target_after_normal_close ...` | pass | 1 passed in 2.88s。profile bytes 不変、禁止イベント 0 件 |
+| 手動 CSR8510 A10 gate | pass | fresh pairing / normal close と同 profile active reconnect を完了 |
+| `uv run mkdocs build --strict` | pass | 公開文書と初期設計の build 成功 |
+| `uv sync --dev --group docs` | pass | 53 packages resolved / checked |
+| `uv build` | pass | sdist と wheel を作成 |
+| `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | address validation cycle: 8 passed |
+| `uv run ruff check src/swbt/transport/_exp_local_address.py tests/unit/test_exp_local_address.py` | pass | address validation cycle |
+| `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | profile codec cycle: 16 passed |
+| `uv run ruff format --check src/swbt/transport/_exp_local_address.py src/swbt/errors.py src/swbt/__init__.py tests/unit/test_exp_local_address.py` | pass | profile codec cycle |
+| `uv run ruff check src/swbt/transport/_exp_local_address.py src/swbt/errors.py src/swbt/__init__.py tests/unit/test_exp_local_address.py` | pass | profile codec cycle |
+| `uv run ty check --no-progress` | pass | address validation cycle |
+| `uv run pytest tests/unit/test_public_api_boundary.py tests/unit/test_gamepad_transport_factory.py tests/unit/test_probe_cli.py -q` | pass | profile-less native transport cycle: 52 passed |
+| `uv run ruff check src/swbt/gamepad/_config.py src/swbt/gamepad/runtime.py src/swbt/gamepad/core.py src/swbt/probe.py tests/unit/test_public_api_boundary.py tests/unit/test_probe_cli.py tests/hardware/test_input_operations.py tests/hardware/test_reconnect_keystore.py` | pass | profile-less native transport cycle |
+| `uv run ty check --no-progress` | pass | profile-less native transport cycle |
+| `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | atomic profile creation cycle: 18 passed |
+| `uv run ruff check src/swbt/transport/_exp_local_address.py tests/unit/test_exp_local_address.py` | pass | atomic profile creation cycle |
+| `uv run ty check --no-progress` | pass | atomic profile creation cycle |
+| `uv run pytest tests/unit/test_exp_local_identity.py -q` | pass | already-active preparation cycle: 1 passed |
+| `uv run ruff check src/swbt/transport/_exp_local_identity.py tests/unit/test_exp_local_identity.py` | pass | already-active preparation cycle |
+| `uv run ty check --no-progress` | pass | already-active preparation cycle |
+| `uv run pytest tests/unit/test_exp_local_identity.py -q` | pass | rewrite / re-enumeration cycle: 2 passed |
+| `uv run ruff check src/swbt/transport/_exp_local_identity.py tests/unit/test_exp_local_identity.py` | pass | rewrite / re-enumeration cycle |
+| `uv run ty check --no-progress` | pass | rewrite / re-enumeration cycle |
+| `uv run pytest tests/unit/test_exp_local_identity.py tests/unit/test_exp_local_profile_runtime.py -q` | pass | recovery-required runtime cycle: 5 passed |
+| `uv run pytest tests/unit/test_exp_local_identity.py tests/unit/test_exp_local_profile_runtime.py tests/unit/test_gamepad_transport_factory.py tests/unit/test_public_api_boundary.py tests/unit/test_exp_local_address.py -q` | pass | recovery-required surrounding regression: 68 passed |
+| `uv run ruff check src/swbt/errors.py src/swbt/__init__.py src/swbt/transport/_exp_local_identity.py src/swbt/gamepad/transport_factory.py src/swbt/gamepad/runtime.py tests/unit/test_exp_local_identity.py tests/unit/test_exp_local_profile_runtime.py` | pass | recovery-required runtime cycle |
+| `uv run ty check --no-progress` | pass | recovery-required runtime cycle |
+| `uv run pytest tests/unit/test_bumble_transport.py tests/unit/test_exp_local_profile_runtime.py tests/unit/test_gamepad_transport_factory.py -q` | pass | Bumble power-on guard cycle: 51 passed |
+| `uv run ruff check src/swbt/transport/bumble.py tests/unit/test_bumble_transport.py tests/unit/test_exp_local_profile_runtime.py` | pass | Bumble power-on guard cycle |
+| `uv run ty check --no-progress` | pass | Bumble power-on guard cycle |
+| `uv run pytest tests/integration/test_exp_local_profile.py tests/unit/test_exp_local_profile_runtime.py tests/unit/test_gamepad_transport_factory.py tests/unit/test_bumble_transport.py -q` | pass | profile key-store cycle: 53 passed |
+| `uv run ruff check src/swbt/transport/_exp_local_address.py src/swbt/transport/_bumble_key_store.py src/swbt/transport/bumble.py src/swbt/gamepad/runtime.py src/swbt/gamepad/transport_factory.py tests/unit/test_exp_local_profile_runtime.py tests/unit/test_bumble_transport.py tests/integration/test_exp_local_profile.py` | pass | profile key-store cycle |
+| `uv run ty check --no-progress` | pass | profile key-store cycle |
+| `git diff --check` | pass | profile key-store cycle |
+| `uv run pytest -p no:cacheprovider --basetemp <temp> tests/integration/test_exp_local_profile.py tests/unit/test_public_api_boundary.py tests/unit/test_exp_local_address.py -q` | pass | pairing retry cycle: 61 passed。repo 内 pytest temp の権限不整合を避けるため OS temp を指定 |
+| `uv run ruff check src/swbt/gamepad/core.py tests/integration/test_exp_local_profile.py` | pass | pairing retry cycle |
+| `uv run ty check --no-progress` | pass | pairing retry cycle |
+| `git diff --check` | pass | pairing retry cycle |
 
 ## 12. 実機実行条件
 
@@ -211,7 +259,7 @@ await pad.connect(allow_pairing=False)
 - [x] TDD Test List を作成した
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件を記録した
-- [ ] 実装と unit / integration gate を完了した
-- [ ] 明示承認下の手動実機 gate を完了した
-- [ ] 初期設計と公開文書の Intent Delta を反映した
-- [ ] 検証結果または未実行理由を更新した
+- [x] 実装と unit / integration gate を完了した
+- [x] 明示承認下の手動実機 gate を完了した
+- [x] 初期設計と公開文書の Intent Delta を反映した
+- [x] 検証結果または未実行理由を更新した

@@ -18,6 +18,7 @@ from swbt.protocol.profiles.joycon import JoyConLeftProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport import bumble as bumble_module
 from swbt.transport._bumble_sdp import build_hid_service_records
+from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
 from swbt.transport.bumble import BumbleHidTransport
 
 
@@ -909,6 +910,42 @@ def test_bumble_initialize_device_configures_json_key_store(
     asyncio.run(run())
 
 
+def test_bumble_initialize_device_configures_profile_key_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        fake_device = FakeBumbleDevice()
+
+        class FakeDeviceFactory:
+            @staticmethod
+            def from_config_with_hci(config: object, source: object, sink: object) -> object:
+                _ = (config, source, sink)
+                return fake_device
+
+        def create_hid_device(device: object) -> FakeHidDevice:
+            assert isinstance(device, FakeBumbleDevice)
+            return FakeHidDevice()
+
+        monkeypatch.setattr(bumble_device_module, "Device", FakeDeviceFactory)
+        monkeypatch.setattr(bumble_hid_module, "Device", create_hid_device)
+
+        profile_path = tmp_path / "profile.json"
+        target = ExpLocalAddress.parse("02:12:34:56:78:9A")
+        ExpLocalProfile.create_new(profile_path, target)
+
+        await bumble_module._default_initialize_device(
+            FakeBumbleHandle(),
+            device_name="Pro Controller",
+            profile=ProControllerProfile(),
+            profile_path=str(profile_path),
+        )
+
+        assert isinstance(fake_device.keystore, bumble_module._ExpLocalProfileKeyStore)
+
+    asyncio.run(run())
+
+
 def test_bumble_initialize_device_uses_profile_hid_descriptor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1326,6 +1363,47 @@ def test_bumble_start_advertising_rejects_unexpected_address_before_visibility()
             await transport.start_advertising()
 
         assert device.power_on_count == 1
+        assert device.connectable_calls == []
+        assert device.discoverable_calls == []
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_active_reconnect_rejects_unexpected_address_before_connect() -> None:
+    async def run() -> None:
+        class AddressAfterPowerOnDevice(FakeBumbleDevice):
+            async def power_on(self) -> None:
+                await super().power_on()
+                self.public_address = Address("00:11:22:33:44:55")
+
+        device = AddressAfterPowerOnDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            expected_local_bluetooth_address=bytes.fromhex("02 1b dc f9 9f 7d"),
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        with pytest.raises(RuntimeError, match="expected local Bluetooth address"):
+            await transport.connect_bonded_peer(
+                "AA:BB:CC:DD:EE:FF",
+                connect_timeout=1.0,
+            )
+
+        assert device.power_on_count == 1
+        assert device.connect_calls == []
         assert device.connectable_calls == []
         assert device.discoverable_calls == []
 
