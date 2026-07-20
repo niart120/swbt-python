@@ -135,7 +135,7 @@ await pad.connect(allow_pairing=False)
 | refactor-done | write 後の結果不明は `ExpLocalAddressRecoveryRequired` となり pairing を始めない | edge | unit | no | 5 targeted tests pass。stage state と runtime preparation を分離 |
 | refactor-done | Bumble power-on 後の address 不一致は advertising / pairing / reconnect を開始しない | regression | unit | no | 51 tests pass。advertising / reconnect の照合を共通 helper へ統合 |
 | refactor-done | pairing key 保存後も envelope identity と namespace map が保持される | new | integration | no | 53 targeted tests pass。profile envelope の一時ファイル保存を共通化 |
-| todo | pairing 失敗後、同じ profile で pairing を再試行できる | regression | integration | no | recovery-required にしない |
+| refactor-skipped | pairing 失敗後、同じ profile で pairing を再試行できる | regression | integration | no | 61 targeted tests pass。作成済み profile を残して controller 資源だけを閉じる単一責務のため追加 refactor なし |
 | todo | `close()` 後に target が残る profile を次の controller が再利用できる | characterization | bumble | yes | known CSR8510 A10 の実機 gate と結ぶ |
 | todo | fresh profile 作成、pairing、通常 close 後の同 profile 再利用を確認する | characterization | hardware | yes | 完了必須の手動 gate |
 
@@ -216,6 +216,10 @@ await pad.connect(allow_pairing=False)
 | `uv run ruff check src/swbt/transport/_exp_local_address.py src/swbt/transport/_bumble_key_store.py src/swbt/transport/bumble.py src/swbt/gamepad/runtime.py src/swbt/gamepad/transport_factory.py tests/unit/test_exp_local_profile_runtime.py tests/unit/test_bumble_transport.py tests/integration/test_exp_local_profile.py` | pass | profile key-store cycle |
 | `uv run ty check --no-progress` | pass | profile key-store cycle |
 | `git diff --check` | pass | profile key-store cycle |
+| `uv run pytest -p no:cacheprovider --basetemp <temp> tests/integration/test_exp_local_profile.py tests/unit/test_public_api_boundary.py tests/unit/test_exp_local_address.py -q` | pass | pairing retry cycle: 61 passed。repo 内 pytest temp の権限不整合を避けるため OS temp を指定 |
+| `uv run ruff check src/swbt/gamepad/core.py tests/integration/test_exp_local_profile.py` | pass | pairing retry cycle |
+| `uv run ty check --no-progress` | pass | pairing retry cycle |
+| `git diff --check` | pass | pairing retry cycle |
 
 ## 12. 実機実行条件
 
