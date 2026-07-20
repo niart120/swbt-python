@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from swbt.errors import InvalidInputError
 from swbt.protocol.profiles.base import ControllerColors, ControllerProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
+from swbt.transport._exp_local_address import ExpLocalControllerKind
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class _SwitchGamepadConfig:
     adapter: str | None = None
     key_store_path: str | None = None
     profile_path: str | None = None
+    exp_local_controller_kind: ExpLocalControllerKind | None = None
     profile: ControllerProfile = field(default_factory=default_controller_profile)
     report_period_us: int | None = None
     device_name: str | None = None
@@ -31,6 +33,9 @@ class _SwitchGamepadConfig:
 
     def __post_init__(self) -> None:
         """Validate resource configuration."""
+        if self.key_store_path is not None and self.profile_path is not None:
+            msg = "key_store_path and profile_path are mutually exclusive"
+            raise InvalidInputError(msg)
         if not isinstance(self.profile, ControllerProfile):
             msg = "profile must be a ControllerProfile"
             raise InvalidInputError(msg)
@@ -66,12 +71,14 @@ class _ControllerSpec:
         report_period_us: int | None,
         controller_colors: ControllerColors | None,
         profile_path: str | None = None,
+        exp_local_controller_kind: ExpLocalControllerKind | None = None,
     ) -> _SwitchGamepadConfig:
         """Create internal construction config from public constructor options."""
         return _SwitchGamepadConfig(
             adapter=adapter,
             key_store_path=key_store_path,
             profile_path=profile_path,
+            exp_local_controller_kind=exp_local_controller_kind,
             profile=self.profile,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
@@ -85,6 +92,7 @@ class _RuntimeConfig:
     adapter: str | None
     key_store_path: str | None
     profile_path: str | None
+    exp_local_controller_kind: ExpLocalControllerKind | None
     profile: ControllerProfile
     report_period_us: int
     device_name: str
@@ -100,6 +108,7 @@ class _RuntimeConfig:
             adapter=config.adapter,
             key_store_path=config.key_store_path,
             profile_path=config.profile_path,
+            exp_local_controller_kind=config.exp_local_controller_kind,
             profile=config.profile,
             report_period_us=config.report_period_us,
             device_name=config.device_name,

@@ -211,8 +211,8 @@ def test_rearchitecture_target_public_controller_constructors_hide_config_identi
         controller_cls = getattr(swbt, controller_name)
         parameters = set(inspect.signature(controller_cls).parameters)
 
-        assert common_parameters | {"key_store_path"} <= parameters
-        assert (forbidden_parameters | {"profile_path"}).isdisjoint(parameters)
+        assert common_parameters | {"key_store_path", "profile_path"} <= parameters
+        assert forbidden_parameters.isdisjoint(parameters)
 
 
 def test_rearchitecture_target_public_controller_constructors_hide_transport_seam() -> None:
@@ -316,8 +316,22 @@ def test_joycon_public_constructors_are_thin_switch_gamepad_wrappers() -> None:
         assert "side" not in signature.parameters
         assert "adapter" in signature.parameters
         assert "key_store_path" in signature.parameters
+        assert "profile_path" in signature.parameters
+        assert hasattr(controller_cls, "create_profile")
     assert "JoyConLeftProfile" not in swbt.__all__
     assert "JoyConRightProfile" not in swbt.__all__
+
+
+@pytest.mark.parametrize("controller_cls", [JoyConL, JoyConR])
+def test_joycon_constructor_rejects_key_store_and_profile_paths_together(
+    controller_cls: type[JoyConL | JoyConR],
+) -> None:
+    with pytest.raises(InvalidInputError, match="mutually exclusive"):
+        controller_cls(
+            adapter="usb:0",
+            key_store_path="keys.json",
+            profile_path="profile.json",
+        )
 
 
 def test_concrete_controller_classes_own_internal_controller_specs() -> None:

@@ -9,23 +9,44 @@ from swbt import (
     DiagnosticsConfig,
     ExpLocalAddressRecoveryRequired,
     InvalidProfileError,
+    JoyConL,
+    JoyConR,
     ProController,
+    ProfileControllerMismatchError,
 )
 from swbt.gamepad import runtime as gamepad_runtime
 from swbt.gamepad import transport_factory as gamepad_transport_factory
-from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
+from swbt.transport._exp_local_address import (
+    ExpLocalAddress,
+    ExpLocalControllerKind,
+    ExpLocalProfile,
+)
 from swbt.transport._exp_local_identity import ExpLocalIdentityPreparationResult
 from swbt.transport.base import HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
 
 
+@pytest.mark.parametrize(
+    ("controller_cls", "controller_kind"),
+    [
+        (ProController, "pro"),
+        (JoyConL, "joycon_l"),
+        (JoyConR, "joycon_r"),
+    ],
+)
 def test_recovery_required_stops_before_bumble_transport_creation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    controller_cls: type[ProController | JoyConL | JoyConR],
+    controller_kind: ExpLocalControllerKind,
 ) -> None:
-    profile_path = tmp_path / "pro.json"
+    profile_path = tmp_path / f"{controller_kind}.json"
     target = ExpLocalAddress.parse("02:12:34:56:78:9A")
-    ExpLocalProfile.create_new(profile_path, target)
+    ExpLocalProfile.create_new(
+        profile_path,
+        target,
+        controller_kind=controller_kind,
+    )
     events: list[str] = []
 
     async def fail_preparation(
@@ -53,7 +74,7 @@ def test_recovery_required_stops_before_bumble_transport_creation(
         "create_default_transport",
         fail_transport_creation,
     )
-    pad = ProController(adapter="usb:0", profile_path=str(profile_path))
+    pad = controller_cls(adapter="usb:0", profile_path=str(profile_path))
 
     with pytest.raises(ExpLocalAddressRecoveryRequired):
         asyncio.run(pad.pair(timeout=0.1))
@@ -92,6 +113,45 @@ def test_invalid_profile_stops_before_preparation_and_transport_creation(
     with pytest.raises(InvalidProfileError):
         asyncio.run(pad.open())
 
+    assert events == []
+
+
+def test_joycon_profile_kind_mismatch_stops_before_preparation_and_transport_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile_path = tmp_path / "pro.json"
+    ExpLocalProfile.create_new(
+        profile_path,
+        ExpLocalAddress.parse("02:12:34:56:78:9A"),
+    )
+    events: list[str] = []
+
+    async def fail_preparation(**_kwargs: object) -> object:
+        events.append("preparation_started")
+        raise AssertionError
+
+    def fail_transport_creation(**_kwargs: object) -> object:
+        events.append("transport_created")
+        raise AssertionError
+
+    monkeypatch.setattr(
+        gamepad_runtime,
+        "prepare_exp_local_identity",
+        fail_preparation,
+    )
+    monkeypatch.setattr(
+        gamepad_transport_factory,
+        "create_default_transport",
+        fail_transport_creation,
+    )
+    pad = JoyConL(adapter="usb:0", profile_path=str(profile_path))
+
+    with pytest.raises(ProfileControllerMismatchError) as mismatch:
+        asyncio.run(pad.open())
+
+    assert mismatch.value.expected_controller_kind == "joycon_l"
+    assert mismatch.value.actual_controller_kind == "pro"
     assert events == []
 
 

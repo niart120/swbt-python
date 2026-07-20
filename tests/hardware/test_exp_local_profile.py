@@ -3,13 +3,23 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
-from swbt import DiagnosticsConfig, ProController
+from swbt import DiagnosticsConfig, JoyConL, JoyConR, ProController
 
 _PROFILE_FILENAME = "exp-local-pro-profile.json"
+type JoyConSide = Literal["left", "right"]
+type JoyConController = JoyConL | JoyConR
+
+_JOYCON_CASES: tuple[
+    tuple[JoyConSide, type[JoyConL] | type[JoyConR], Literal["joycon_l", "joycon_r"]],
+    ...,
+] = (
+    ("left", JoyConL, "joycon_l"),
+    ("right", JoyConR, "joycon_r"),
+)
 
 
 @pytest.mark.hardware
@@ -117,6 +127,124 @@ def test_switch_exp_local_profile_reuses_target_after_normal_close(
         events,
         "local_bluetooth_address_configured",
         address=target.replace(":", "").lower(),
+    )
+    assert _contains_event(
+        events,
+        "active_reconnect_result",
+        route="active_reconnect",
+        status="connected",
+    )
+    assert not _contains_event(events, "advertising_start")
+    assert not _contains_event(events, "classic_pairing")
+    assert not _contains_event(events, "key_store_update")
+    assert _contains_event(
+        events,
+        "transport_close_complete",
+        adapter=swbt_bumble_adapter,
+    )
+
+
+@pytest.mark.hardware
+@pytest.mark.parametrize(("side", "controller_cls", "controller_kind"), _JOYCON_CASES)
+def test_switch_joycon_exp_local_profile_fresh_pairing_and_close(
+    side: JoyConSide,
+    controller_cls: type[JoyConL] | type[JoyConR],
+    controller_kind: Literal["joycon_l", "joycon_r"],
+    swbt_bumble_adapter: str,
+    swbt_exp_local_address: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Create one side-specific Joy-Con profile, pair, and close cleanly."""
+    profile_path = swbt_hardware_artifact_dir / f"exp-local-joycon-{side}-profile.json"
+    trace_path = swbt_hardware_artifact_dir / f"exp-local-joycon-{side}-fresh-pairing.jsonl"
+    if profile_path.exists():
+        pytest.fail("fresh exp profile already exists; use a new artifact directory")
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad = await controller_cls.create_profile(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                exp_local_address=swbt_exp_local_address,
+                pair_timeout=60.0,
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                await _wait_for_event(trace_path, "key_store_update", timeout_seconds=10.0)
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    payload = json.loads(profile_path.read_text(encoding="utf-8"))
+    events = _read_jsonl(trace_path)
+    target = swbt_exp_local_address.upper()
+    assert payload["format"] == "swbt.profile"
+    assert payload["schema_version"] == 1
+    assert payload["controller_kind"] == controller_kind
+    assert payload["identity"] == {
+        "kind": "exp-local-address",
+        "address": target,
+    }
+    assert payload["key_store"]["namespaces"][target]
+    preparation = _first_event(events, "exp_local_identity_prepared")
+    assert preparation["status"] in {"rewritten", "already_active"}
+    assert preparation["target_address"] == target
+    assert _contains_event(events, "bumble_device_initialized")
+    assert _contains_event(events, "key_store_update", status="succeeded")
+    assert _contains_event(
+        events,
+        "transport_close_complete",
+        adapter=swbt_bumble_adapter,
+    )
+
+
+@pytest.mark.hardware
+@pytest.mark.parametrize(("side", "controller_cls", "controller_kind"), _JOYCON_CASES)
+def test_switch_joycon_exp_local_profile_reuses_target_after_normal_close(
+    side: JoyConSide,
+    controller_cls: type[JoyConL] | type[JoyConR],
+    controller_kind: Literal["joycon_l", "joycon_r"],
+    swbt_bumble_adapter: str,
+    swbt_exp_local_address: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Reuse one side-specific Joy-Con profile without pairing fallback."""
+    profile_path = swbt_hardware_artifact_dir / f"exp-local-joycon-{side}-profile.json"
+    trace_path = swbt_hardware_artifact_dir / f"exp-local-joycon-{side}-reconnect.jsonl"
+    if not profile_path.exists():
+        pytest.skip("Joy-Con exp profile is missing; run the matching fresh pairing test first")
+    original_profile = profile_path.read_bytes()
+    target = swbt_exp_local_address.upper()
+    payload = json.loads(original_profile)
+    if payload.get("identity", {}).get("address") != target:
+        pytest.fail("existing exp profile does not match --swbt-exp-local-address")
+    if payload.get("controller_kind") != controller_kind:
+        pytest.fail("existing exp profile does not match the requested Joy-Con side")
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad: JoyConController = controller_cls(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                result = await pad.try_reconnect(timeout=60.0)
+                assert result.status == "connected"
+                await asyncio.sleep(1.0)
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+    assert profile_path.read_bytes() == original_profile
+    assert _contains_event(
+        events,
+        "exp_local_identity_prepared",
+        status="already_active",
+        target_address=target,
     )
     assert _contains_event(
         events,

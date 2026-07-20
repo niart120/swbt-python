@@ -78,6 +78,7 @@ class ControllerRuntime:
             adapter=adapter,
             key_store_path=key_store_path,
             profile_path=profile_path,
+            exp_local_controller_kind="pro" if profile_path is not None else None,
             report_period_us=report_period_us,
             device_name=device_name,
             controller_colors=controller_colors,
@@ -883,6 +884,11 @@ class ControllerRuntime:
         if self._transport_was_injected or self._config.profile_path is None:
             return
         profile = ExpLocalProfile.load(self._config.profile_path)
+        expected_controller_kind = self._config.exp_local_controller_kind
+        if expected_controller_kind is None:
+            msg = "exp local controller kind is required with profile_path"
+            raise InvalidInputError(msg)
+        profile.require_controller_kind(expected_controller_kind)
         adapter = self._config.adapter
         if adapter is None:
             msg = "adapter is required for exp local address preparation"

@@ -69,7 +69,7 @@ Rules:
 - Use `IMUFrame.accel_g()` or `IMUFrame.with_accel_g()` for acceleration in G, and `IMUFrame.to_accel_g()` for conversion back to G. The scale is fixed at `1/4096 G/raw`.
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
 - Use `InputState` + `send()` for one complete Direct input report. Awaiting it includes transport completion and state commit.
-- Use a separate `profile_path` for each Pro Controller identity and target device. Joy-Con and Direct types still use separate `key_store_path` values until their follow-up units are complete.
+- Use a separate `profile_path` and local address for each periodic controller kind and target device. Joy-Con native-address paths and Direct types use separate `key_store_path` values.
 - Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`: left does not support right stick or A/B/X/Y, right does not support left stick or D-pad.
 - Use `SwitchGamepad` only when code accepts either reporting contract. Use `PeriodicSwitchGamepad` or `DirectSwitchGamepad` when the sending contract matters.
 - Instantiate `ProController`, `JoyConL`, or `JoyConR` for Periodic reporting. Instantiate the corresponding `Direct*` class for Direct reporting.
