@@ -8,11 +8,10 @@
 - `JoyConL` / `JoyConR` にも `create_profile()` と `profile_path` を追加しました。プロファイルには `joycon_l` / `joycon_r` を保存し、異なるコントローラー種別で開くと `ProfileControllerMismatchError` をアダプタ準備前に送出します。
 - 揮発領域への書換開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` を送出します。`close()` は接続資源だけを閉じ、書き換えたアドレスを元へ戻しません。
 
-### 破壊的変更と段階的移行
+### 破壊的変更
 
-- `ProController(..., key_store_path=...)` は `ProController(..., profile_path=...)` へ置き換わります。新規プロファイルはコンストラクタではなく `await ProController.create_profile(...)` で作成します。
-- Joy-Con の adapter 本来のアドレスを使う経路は既存の `key_store_path` を維持します。`profile_path` との同時指定はできません。DirectProController、DirectJoyConL、DirectJoyConR は `profile_path` と `create_profile()` を使えます。
-- 既存の Bumble JSON ペアリング情報保存ファイルを swbt プロファイルとして自動移行しません。
+- 全 concrete controller から `key_store_path` を削除しました。再接続と初回ペアリングには `profile_path` を使い、新規プロファイルはコンストラクタではなく `await ControllerClass.create_profile(...)` で作成します。
+- native JSON key-store の読み込み、互換モード、自動移行はありません。既存ファイルは再利用できないため、controller kind と対象機器ごとに新しい profile を作成してください。
 
 ### 対応範囲
 

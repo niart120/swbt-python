@@ -68,20 +68,20 @@ unit_052 の exp profile 経路を、periodic report loop を持たない `Direc
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| deferred | DirectPro profile は `direct_pro` kind を保存する | new | unit | no | unit_052 envelope に依存 |
-| deferred | DirectJoyConL/R profile は対応する direct kind を保存する | new | unit | no | unit_053 kind contract に依存 |
-| deferred | Direct controller と profile kind の不一致は adapter open 前に失敗する | edge | unit | no | raw preparation を呼ばない |
-| deferred | Direct profile の preparation は report loop を作らない | regression | integration | no | Direct lifecycle を固定 |
-| deferred | Direct profile の `send()` は成功後 commit を維持する | regression | integration | no | identity layer と input layer の分離 |
-| deferred | DirectPro の profile 作成、pairing、通常 close 後の再利用を確認する | characterization | hardware | yes | 完了必須 |
-| deferred | DirectJoyConL/R の同じ確認を行う | characterization | hardware | yes | 完了必須 |
+| done | DirectPro profile は `direct_pro` kind を保存する | regression | integration | no | `test_direct_create_profile_saves_kind_and_leaves_profile_for_retry` |
+| done | DirectJoyConL/R profile は対応する direct kind を保存する | regression | integration | no | `test_direct_create_profile_saves_kind_and_leaves_profile_for_retry` |
+| done | Direct controller と profile kind の不一致は adapter open 前に失敗する | edge | unit | no | `test_direct_profile_kind_mismatch_stops_before_preparation_and_transport_creation` |
+| done | Direct profile の preparation は report loop を作らない | regression | integration | no | Direct profile retry integration が `_report_loop is None` を確認 |
+| done | Direct profile の `send()` は成功後 commit を維持する | regression | integration | no | `test_direct_send_waits_for_transport_and_commits_exactly_one_report` |
+| done | DirectPro の profile 作成、pairing、通常 close 後の再利用を確認する | characterization | hardware | yes | 2026-07-21 unit_054 で pass |
+| done | DirectJoyConL/R の同じ確認を行う | characterization | hardware | yes | 2026-07-21 unit_054 で pass |
 
 ## 8. 文書検証計画
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| `spec/initial/api.md` | Direct profile API | 本仕様 §6 | link / code example 構文確認 | deferred | 各手動 gate 後に `docs-quality-review` |
-| `spec/initial/lifecycle.md` | Direct preparation と close | 本仕様 §6 | link 確認 | deferred | periodic との差分を明記 |
+| `spec/initial/api.md` | Direct profile API | 本仕様 §6 | `uv run mkdocs build --strict` | done | なし |
+| `spec/initial/lifecycle.md` | Direct preparation と close | 本仕様 §6 | `uv run mkdocs build --strict` | done | なし |
 
 ## 9. 設計メモ
 
@@ -105,10 +105,11 @@ unit_052 の exp profile 経路を、periodic report loop を持たない `Direc
 
 | command | result | notes |
 |---|---|---|
-| unit_052 / unit_053 の gate | partial | unit_052 は完了。unit_053 は未実装・未検証 |
-| `uv run pytest tests/unit` | deferred | 実装後 |
-| `uv run pytest tests/integration` | deferred | 実装後 |
-| Direct controller 手動 gate | deferred | 明示承認が必要 |
+| unit_052 / unit_053 の gate | pass | profile foundation と Periodic Joy-Con profile gate は完了 |
+| `uv run pytest tests/unit` | pass | profile-only 移行後に 454 passed |
+| `uv run pytest tests/integration` | pass | profile-only 移行後に 131 passed |
+| Direct controller 手動 gate | pass | 2026-07-21 unit_054。Direct Pro / Joy-Con L / Joy-Con R の fresh pairing、`send()`、active reconnect、neutral close を記録 |
+| `uv run mkdocs build --strict` | pass | profile-only 移行後 |
 
 ## 12. 実機実行条件
 
@@ -135,4 +136,4 @@ unit_052 の exp profile 経路を、periodic report loop を持たない `Direc
 - [x] unit_052 / unit_053 の完了を確認した
 - [x] 実装と unit / integration gate を完了した
 - [x] Direct controller 手動 gate を完了した
-- [ ] 初期設計と公開文書の Intent Delta を反映した
+- [x] 初期設計と公開文書の Intent Delta を反映した

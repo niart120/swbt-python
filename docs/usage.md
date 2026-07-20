@@ -40,7 +40,7 @@ from swbt import Button, DirectProController, InputState, Stick
 async def main() -> None:
     async with DirectProController(
         adapter="usb:0",
-        key_store_path="switch-direct-bond.json",
+        profile_path="switch-direct-bond.json",
     ) as pad:
         await pad.connect(timeout=30.0, allow_pairing=True)
 
@@ -58,9 +58,9 @@ asyncio.run(main())
 
 ## 接続
 
-### Periodic controller プロファイルの初回作成
+### プロファイルの初回作成
 
-Pro Controller、Joy-Con L、Joy-Con R の exp local identity と接続情報を永続化する場合は、最初の 1 回だけ各 class の `create_profile()` を使います。`exp_local_address` は利用者が生成し、同時に使う他の Bluetooth デバイスと重複しない値を選びます。例示した値を共通値として使わず、controller kind と対象機器ごとに管理する値へ置き換えてください。
+全 concrete controller の exp local identity と接続情報を永続化する場合は、最初の 1 回だけ各 class の `create_profile()` を使います。`exp_local_address` は利用者が生成し、同時に使う他の Bluetooth デバイスと重複しない値を選びます。例示した値を共通値として使わず、controller kind と対象機器ごとに管理する値へ置き換えてください。
 
 ```python
 pad = await ProController.create_profile(
@@ -162,7 +162,7 @@ second = ProController(
 )
 ```
 
-1 つの保存ファイルに複数の保存済みペアリング情報を混ぜないでください。Pro Controller と周期送信型 Joy-Con は、controller kind と対象機器ごとに別の `profile_path` を使います。Joy-Con の native-address 経路と直接送信型は `key_store_path` を使います。
+1 つの保存ファイルに複数の保存済みペアリング情報を混ぜないでください。全 concrete controller で、controller kind と対象機器ごとに別の `profile_path` を使います。
 
 ## Joy-Con L/R
 

@@ -247,7 +247,7 @@ M7 packaging / examples / CLI
 
 ### 8.1 対象範囲
 
-- `key_store_path`
+- `profile_path`
 - pairing 情報の保存
 - reconnect
 - diagnostics 拡充
@@ -261,7 +261,7 @@ M7 packaging / examples / CLI
 
 ### 8.3 実装項目
 
-- key store の保存先を設定できるようにする
+- profile の保存先を設定できるようにする
 - pairing 情報が保存されたか diagnostics に記録する
 - bond reuse reconnect の成功 / 失敗を active / incoming に分けて記録する
 - reconnect 失敗時は failure diagnostics を残して clean close する
@@ -271,7 +271,7 @@ M7 packaging / examples / CLI
 
 ### 8.4 完了条件
 
-- key store ありの接続情報保存が確認できる
+- profile に接続情報が保存されることを確認する
 - reconnect の成功 / 失敗が diagnostics で追える
 - reconnect 失敗後に明示 API で再 pairing できる
 - hardware run metadata が trace に含まれる

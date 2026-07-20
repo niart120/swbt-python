@@ -54,15 +54,17 @@ def test_default_transport_factory_passes_resource_config_to_bumble_transport(
             adapter: str,
             device_name: str,
             profile: ProControllerProfile,
-            key_store_path: str | None,
+            profile_path: str | None,
             diagnostics: object,
+            expected_local_bluetooth_address: bytes | None = None,
         ) -> None:
+            _ = expected_local_bluetooth_address
             captured_config.update(
                 {
                     "adapter": adapter,
                     "device_name": device_name,
                     "profile": profile,
-                    "key_store_path": key_store_path,
+                    "profile_path": profile_path,
                     "diagnostics": diagnostics,
                     "transport": self,
                 }
@@ -72,13 +74,13 @@ def test_default_transport_factory_passes_resource_config_to_bumble_transport(
 
     diagnostics = DiagnosticsRecorder()
     profile = ProControllerProfile(battery_connection=0x92)
-    key_store_path = tmp_path / "keys.json"
+    profile_path = tmp_path / "profile.json"
     transport = create_default_transport(
         adapter="usb:1",
         device_name="Reference Pad",
         profile=profile,
         diagnostics=diagnostics,
-        key_store_path=str(key_store_path),
+        profile_path=str(profile_path),
     )
 
     assert captured_config == {
@@ -86,7 +88,7 @@ def test_default_transport_factory_passes_resource_config_to_bumble_transport(
         "device_name": "Reference Pad",
         "profile": profile,
         "diagnostics": diagnostics,
-        "key_store_path": str(key_store_path),
+        "profile_path": str(profile_path),
         "transport": transport,
     }
 
@@ -102,7 +104,7 @@ def test_static_transport_factory_returns_injected_transport() -> None:
         device_name="Reference Pad",
         profile=profile,
         diagnostics=diagnostics,
-        key_store_path=None,
+        profile_path=None,
     )
 
     assert created_transport is transport
@@ -122,15 +124,17 @@ def test_bumble_transport_factory_passes_resource_config_to_default_transport(
             adapter: str,
             device_name: str,
             profile: ProControllerProfile,
-            key_store_path: str | None,
+            profile_path: str | None,
             diagnostics: object,
+            expected_local_bluetooth_address: bytes | None = None,
         ) -> None:
+            _ = expected_local_bluetooth_address
             captured_config.update(
                 {
                     "adapter": adapter,
                     "device_name": device_name,
                     "profile": profile,
-                    "key_store_path": key_store_path,
+                    "profile_path": profile_path,
                     "diagnostics": diagnostics,
                     "transport": self,
                 }
@@ -140,14 +144,14 @@ def test_bumble_transport_factory_passes_resource_config_to_default_transport(
 
     diagnostics = DiagnosticsRecorder()
     profile = ProControllerProfile(battery_connection=0x92)
-    key_store_path = tmp_path / "keys.json"
+    profile_path = tmp_path / "profile.json"
     factory = _BumbleTransportFactory()
     transport = factory.create(
         adapter="usb:1",
         device_name="Reference Pad",
         profile=profile,
         diagnostics=diagnostics,
-        key_store_path=str(key_store_path),
+        profile_path=str(profile_path),
     )
 
     assert captured_config == {
@@ -155,6 +159,6 @@ def test_bumble_transport_factory_passes_resource_config_to_default_transport(
         "device_name": "Reference Pad",
         "profile": profile,
         "diagnostics": diagnostics,
-        "key_store_path": str(key_store_path),
+        "profile_path": str(profile_path),
         "transport": transport,
     }

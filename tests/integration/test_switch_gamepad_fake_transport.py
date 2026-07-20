@@ -160,14 +160,14 @@ def test_open_only_does_not_start_advertising() -> None:
     asyncio.run(run())
 
 
-def test_key_store_path_is_recorded_in_run_metadata(tmp_path: Path) -> None:
+def test_profile_path_is_recorded_in_run_metadata(tmp_path: Path) -> None:
     async def run() -> None:
         trace = StringIO()
         transport = FakeHidTransport()
-        key_store_path = tmp_path / "keys.json"
+        profile_path = tmp_path / "profile.json"
         pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
-            key_store_path=str(key_store_path),
+            profile_path=str(profile_path),
             transport=transport,
         )
 
@@ -179,48 +179,7 @@ def test_key_store_path_is_recorded_in_run_metadata(tmp_path: Path) -> None:
         assert {
             "event": "run_metadata",
             "adapter": "custom",
-            "key_store_exists": False,
-            "key_store_path": str(key_store_path),
-            "key_store_previous_exists": False,
-            "os": platform.system(),
-            "package_version": metadata.version("swbt-python"),
-            "python_version": platform.python_version(),
-        } in events
-
-    asyncio.run(run())
-
-
-def test_key_store_previous_generation_is_recorded_in_run_metadata(tmp_path: Path) -> None:
-    async def run() -> None:
-        trace = StringIO()
-        transport = FakeHidTransport()
-        key_store_path = tmp_path / "keys.json"
-        key_store_path.write_text(
-            json.dumps(
-                {
-                    "AA:BB:CC:DD:EE:FF": {},
-                    "swbt.previous::AA:BB:CC:DD:EE:FF": {"01:02:03:04:05:06": {"link_key_type": 4}},
-                }
-            ),
-            encoding="utf-8",
-        )
-        pad = make_pro_controller(
-            diagnostics=DiagnosticsConfig(trace_writer=trace),
-            key_store_path=str(key_store_path),
-            transport=transport,
-        )
-
-        result = await pad.try_reconnect()
-        await pad.close(neutral=True)
-
-        events = [json.loads(line) for line in trace.getvalue().splitlines()]
-        assert result.status == "no_bond"
-        assert {
-            "event": "run_metadata",
-            "adapter": "custom",
-            "key_store_exists": True,
-            "key_store_path": str(key_store_path),
-            "key_store_previous_exists": True,
+            "profile_path": str(profile_path),
             "os": platform.system(),
             "package_version": metadata.version("swbt-python"),
             "python_version": platform.python_version(),
@@ -244,7 +203,7 @@ def test_try_reconnect_with_injected_transport_skips_default_key_store_warning()
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
 
         assert result.status == "no_bond"
-        assert not any(event["event"] == "reconnect_key_store_unavailable" for event in events)
+        assert not any(event["event"] == "reconnect_profile_unavailable" for event in events)
 
     asyncio.run(run())
 
@@ -254,13 +213,13 @@ def test_injected_transport_is_not_reconfigured_by_switch_gamepad() -> None:
         transport = FakeHidTransport()
 
         async with make_pro_controller(
-            key_store_path="configured-for-metadata.json",
+            profile_path="configured-for-metadata.json",
             transport=transport,
         ) as pad:
             result = await pad.try_reconnect()
 
             assert result.status == "no_bond"
-            assert not hasattr(transport, "configure_key_store_path")
+            assert not hasattr(transport, "configure_profile_path")
 
     asyncio.run(run())
 

@@ -14,7 +14,6 @@ class _SwitchGamepadConfig:
 
     Attributes:
         adapter: Bumble adapter moniker, such as ``"usb:0"``.
-        key_store_path: Path used by the default transport to persist pairing keys.
         profile_path: Path to a swbt-owned exp local address profile.
         profile: Fixed controller identity and protocol profile.
         report_period_us: Periodic input report interval in microseconds.
@@ -23,7 +22,6 @@ class _SwitchGamepadConfig:
     """
 
     adapter: str | None = None
-    key_store_path: str | None = None
     profile_path: str | None = None
     exp_local_controller_kind: ExpLocalControllerKind | None = None
     profile: ControllerProfile = field(default_factory=default_controller_profile)
@@ -33,9 +31,6 @@ class _SwitchGamepadConfig:
 
     def __post_init__(self) -> None:
         """Validate resource configuration."""
-        if self.key_store_path is not None and self.profile_path is not None:
-            msg = "key_store_path and profile_path are mutually exclusive"
-            raise InvalidInputError(msg)
         if not isinstance(self.profile, ControllerProfile):
             msg = "profile must be a ControllerProfile"
             raise InvalidInputError(msg)
@@ -67,7 +62,6 @@ class _ControllerSpec:
         self,
         *,
         adapter: str | None,
-        key_store_path: str | None,
         report_period_us: int | None,
         controller_colors: ControllerColors | None,
         profile_path: str | None = None,
@@ -76,7 +70,6 @@ class _ControllerSpec:
         """Create internal construction config from public constructor options."""
         return _SwitchGamepadConfig(
             adapter=adapter,
-            key_store_path=key_store_path,
             profile_path=profile_path,
             exp_local_controller_kind=exp_local_controller_kind,
             profile=self.profile,
@@ -90,7 +83,6 @@ class _RuntimeConfig:
     """Normalized internal configuration for ControllerRuntime."""
 
     adapter: str | None
-    key_store_path: str | None
     profile_path: str | None
     exp_local_controller_kind: ExpLocalControllerKind | None
     profile: ControllerProfile
@@ -106,7 +98,6 @@ class _RuntimeConfig:
             raise InvalidInputError(msg)
         return cls(
             adapter=config.adapter,
-            key_store_path=config.key_store_path,
             profile_path=config.profile_path,
             exp_local_controller_kind=config.exp_local_controller_kind,
             profile=config.profile,

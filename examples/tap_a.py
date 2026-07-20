@@ -29,7 +29,7 @@ async def tap_a_once(pad: SwitchGamepad, *, duration: float = 0.08) -> None:
 async def run(
     *,
     adapter: str,
-    key_store_path: str | None,
+    profile_path: str,
     connect_timeout: float,
     duration: float,
     allow_pairing: bool,
@@ -38,12 +38,12 @@ async def run(
 
     Args:
         adapter: Bumble adapter moniker, such as ``"usb:0"``.
-        key_store_path: Optional pairing key store path.
+        profile_path: Existing swbt profile path.
         connect_timeout: Seconds to wait for each connection attempt.
         duration: Seconds to keep Button A pressed.
         allow_pairing: If ``True``, allow first-time pairing when no bond exists.
     """
-    async with ProController(adapter=adapter, key_store_path=key_store_path) as pad:
+    async with ProController(adapter=adapter, profile_path=profile_path) as pad:
         await pad.connect(
             timeout=connect_timeout,
             allow_pairing=allow_pairing,
@@ -61,7 +61,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Tap Button A once through swbt-python.",
     )
     parser.add_argument("--adapter", default="usb:0", help="Bumble adapter moniker")
-    parser.add_argument("--key-store", dest="key_store_path", help="pairing key store path")
+    parser.add_argument(
+        "--profile", dest="profile_path", required=True, help="existing swbt profile path"
+    )
     parser.add_argument("--timeout", default=30.0, type=float, help="connection timeout seconds")
     parser.add_argument(
         "--duration",
@@ -90,7 +92,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     asyncio.run(
         run(
             adapter=args.adapter,
-            key_store_path=args.key_store_path,
+            profile_path=args.profile_path,
             connect_timeout=args.timeout,
             duration=args.duration,
             allow_pairing=args.allow_pairing,

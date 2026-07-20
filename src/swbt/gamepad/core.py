@@ -39,7 +39,6 @@ class _RuntimeBackedGamepad:
         self,
         *,
         adapter: str | None = None,
-        key_store_path: str | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
@@ -48,7 +47,6 @@ class _RuntimeBackedGamepad:
 
         Args:
             adapter: Bumble adapter moniker used for the Bluetooth backend.
-            key_store_path: Optional path used by the Bluetooth backend to persist keys.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
@@ -58,7 +56,6 @@ class _RuntimeBackedGamepad:
         """
         config = self._controller_spec.build_config(
             adapter=adapter,
-            key_store_path=key_store_path,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )
@@ -400,7 +397,6 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
         self,
         *,
         adapter: str | None = None,
-        key_store_path: str | None = None,
         profile_path: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
@@ -409,7 +405,6 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
 
         Args:
             adapter: Bumble adapter moniker used for the Bluetooth backend.
-            key_store_path: Optional path used with the adapter's native address.
             profile_path: Optional swbt-owned exp local address profile path.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
@@ -419,7 +414,6 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
         """
         config = self._controller_spec.build_config(
             adapter=adapter,
-            key_store_path=key_store_path,
             profile_path=profile_path,
             exp_local_controller_kind=self._exp_local_controller_kind,
             report_period_us=None,
@@ -513,7 +507,6 @@ class ProController(_PeriodicRuntimeBackedGamepad):
         """
         config = self._controller_spec.build_config(
             adapter=adapter,
-            key_store_path=None,
             profile_path=profile_path,
             exp_local_controller_kind="pro",
             report_period_us=report_period_us,
@@ -574,7 +567,6 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
         self,
         *,
         adapter: str | None = None,
-        key_store_path: str | None = None,
         profile_path: str | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
@@ -584,7 +576,6 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
 
         Args:
             adapter: Bumble adapter moniker used for the Bluetooth backend.
-            key_store_path: Optional path used with the adapter's native address.
             profile_path: Optional swbt-owned exp local address profile path.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -595,7 +586,6 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
         """
         config = self._controller_spec.build_config(
             adapter=adapter,
-            key_store_path=key_store_path,
             profile_path=profile_path,
             exp_local_controller_kind="joycon_l",
             report_period_us=report_period_us,
@@ -656,7 +646,6 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
         self,
         *,
         adapter: str | None = None,
-        key_store_path: str | None = None,
         profile_path: str | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
@@ -666,7 +655,6 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
 
         Args:
             adapter: Bumble adapter moniker used for the Bluetooth backend.
-            key_store_path: Optional path used with the adapter's native address.
             profile_path: Optional swbt-owned exp local address profile path.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -677,7 +665,6 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
         """
         config = self._controller_spec.build_config(
             adapter=adapter,
-            key_store_path=key_store_path,
             profile_path=profile_path,
             exp_local_controller_kind="joycon_r",
             report_period_us=report_period_us,

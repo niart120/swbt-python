@@ -17,7 +17,7 @@ from swbt import Button, DiagnosticsConfig, ProController
 async def run(
     *,
     adapter: str,
-    key_store_path: str | None,
+    profile_path: str,
     trace_path: Path,
     connect_timeout: float,
     tap_duration: float,
@@ -26,7 +26,7 @@ async def run(
 
     Args:
         adapter: Bumble adapter moniker, such as ``"usb:0"``.
-        key_store_path: Optional pairing key store path.
+        profile_path: Existing swbt profile path.
         trace_path: JSON Lines diagnostics trace output path.
         connect_timeout: Seconds to wait for reconnect or pairing.
         tap_duration: Seconds to keep Button A pressed.
@@ -35,7 +35,7 @@ async def run(
     with trace_path.open("w", encoding="utf-8") as trace_writer:
         await _bring_up_with_trace(
             adapter=adapter,
-            key_store_path=key_store_path,
+            profile_path=profile_path,
             connect_timeout=connect_timeout,
             tap_duration=tap_duration,
             trace_writer=trace_writer,
@@ -45,7 +45,7 @@ async def run(
 async def _bring_up_with_trace(
     *,
     adapter: str,
-    key_store_path: str | None,
+    profile_path: str,
     connect_timeout: float,
     tap_duration: float,
     trace_writer: TextIO,
@@ -53,7 +53,7 @@ async def _bring_up_with_trace(
     diagnostics = DiagnosticsConfig(trace_writer=trace_writer)
     async with ProController(
         adapter=adapter,
-        key_store_path=key_store_path,
+        profile_path=profile_path,
         diagnostics=diagnostics,
     ) as pad:
         await pad.connect(
@@ -77,7 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--adapter", default="usb:0", help="Bumble adapter moniker")
-    parser.add_argument("--key-store", dest="key_store_path", help="pairing key store path")
+    parser.add_argument(
+        "--profile", dest="profile_path", required=True, help="existing swbt profile path"
+    )
     parser.add_argument("--trace", required=True, type=Path, help="JSON Lines trace output path")
     parser.add_argument("--timeout", default=30.0, type=float, help="connection timeout seconds")
     parser.add_argument(
@@ -102,7 +104,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     asyncio.run(
         run(
             adapter=args.adapter,
-            key_store_path=args.key_store_path,
+            profile_path=args.profile_path,
             trace_path=args.trace,
             connect_timeout=args.timeout,
             tap_duration=args.tap_duration,

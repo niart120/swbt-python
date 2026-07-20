@@ -10,7 +10,6 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from swbt import AdapterDiscoveryError, AdapterInfo, DiagnosticsConfig, ProController, list_adapters
-from swbt.gamepad._config import _SwitchGamepadConfig
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,9 +51,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="adapter moniker to use after approval, for example usb:0",
     )
     pair_parser.add_argument(
-        "--key-store",
-        dest="key_store_path",
-        help="pairing key store path for the approved pairing run",
+        "--profile",
+        dest="profile_path",
+        required=True,
+        help="swbt profile path for the approved pairing run",
     )
     pair_parser.add_argument(
         "--trace",
@@ -138,7 +138,7 @@ def _run_pair(_args: argparse.Namespace) -> int:
     asyncio.run(
         _run_pair_probe(
             adapter=_args.adapter,
-            key_store_path=_args.key_store_path,
+            profile_path=_args.profile_path,
             pair_timeout=_args.timeout,
             trace_path=_args.trace,
         )
@@ -149,18 +149,16 @@ def _run_pair(_args: argparse.Namespace) -> int:
 async def _run_pair_probe(
     *,
     adapter: str,
-    key_store_path: str | None,
+    profile_path: str,
     pair_timeout: float,
     trace_path: Path,
 ) -> None:
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     with trace_path.open("w", encoding="utf-8") as trace_writer:
         diagnostics = DiagnosticsConfig(trace_writer=trace_writer)
-        async with ProController._from_config(
-            _SwitchGamepadConfig(
-                adapter=adapter,
-                key_store_path=key_store_path,
-            ),
+        async with ProController(
+            adapter=adapter,
+            profile_path=profile_path,
             diagnostics=diagnostics,
         ) as pad:
             await pad.pair(timeout=pair_timeout)
