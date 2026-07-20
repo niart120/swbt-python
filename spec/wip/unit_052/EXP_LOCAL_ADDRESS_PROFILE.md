@@ -145,10 +145,10 @@ await pad.connect(allow_pairing=False)
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| `spec/initial/api.md` | profile の作成と再利用 | 本仕様 §6.2 | link / code example の構文確認 | todo | 実装 API 確定後に `docs-quality-review` |
-| `spec/initial/transport-bumble.md` | CSR target 限定と guard | 本仕様 §5、§6 | link 確認 | todo | 実機 gate 後に確認済み範囲を記録 |
-| `spec/initial/lifecycle.md` | `close()` と recovery-required | 本仕様 §6 | link 確認 | todo | public lifecycle との整合 |
-| `spec/initial/risks.md` | local identity / recovery のリスク | 本仕様 §2、§3 | link 確認 | todo | obsolete な EUI-48 前提を置換 |
+| `spec/initial/api.md` | profile の作成と再利用 | 本仕様 §6.2 | link / code example の構文確認 | pass (2026-07-20) | 公開シグネチャと利用例を照合済み |
+| `spec/initial/transport-bumble.md` | CSR target 限定と guard | 本仕様 §5、§6 | link 確認 | pass (2026-07-20) | 実機 gate の観測結果は完了時に追記 |
+| `spec/initial/lifecycle.md` | `close()` と recovery-required | 本仕様 §6 | link 確認 | pass (2026-07-20) | 公開 lifecycle と照合済み |
+| `spec/initial/risks.md` | local identity / recovery のリスク | 本仕様 §2、§3 | link 確認 | pass (2026-07-20) | EUI-48 の正式割当を前提にしない責任境界へ更新済み |
 
 ## 9. 設計メモ
 
@@ -181,12 +181,13 @@ await pad.connect(allow_pairing=False)
 
 | command | result | notes |
 |---|---|---|
-| `uv run ruff format --check .` | not run | 実装前 |
-| `uv run ruff check .` | not run | 実装前 |
-| `uv run ty check --no-progress` | not run | 実装前 |
-| `uv run pytest tests/unit` | not run | 実装前 |
-| `uv run pytest tests/integration` | not run | integration tree を追加 / 変更した場合に実行 |
-| 手動 CSR8510 A10 gate | not run | 実装・unit / integration gate 後、明示承認が必要 |
+| `uv run ruff format --check .` | pass | 104 files already formatted |
+| `uv run ruff check .` | pass | all checks passed |
+| `uv run ty check --no-progress` | pass | all checks passed |
+| `uv run pytest -p no:cacheprovider --basetemp <temp> tests/unit` | pass | 465 passed。OS temp を使用 |
+| `uv run pytest -p no:cacheprovider --basetemp <temp> tests/integration` | pass | 127 passed。OS temp を使用 |
+| 手動 CSR8510 A10 gate | not run | 利用者指定の `exp_local_address` と command ごとの明示承認が必要 |
+| `uv run mkdocs build --strict` | pass | 公開文書と初期設計の build 成功 |
 | `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | address validation cycle: 8 passed |
 | `uv run ruff check src/swbt/transport/_exp_local_address.py tests/unit/test_exp_local_address.py` | pass | address validation cycle |
 | `uv run pytest tests/unit/test_exp_local_address.py -q` | pass | profile codec cycle: 16 passed |
@@ -244,7 +245,7 @@ await pad.connect(allow_pairing=False)
 - [x] TDD Test List を作成した
 - [x] 必要な根拠監査を記録した
 - [x] 実機実行条件を記録した
-- [ ] 実装と unit / integration gate を完了した
+- [x] 実装と unit / integration gate を完了した
 - [ ] 明示承認下の手動実機 gate を完了した
-- [ ] 初期設計と公開文書の Intent Delta を反映した
-- [ ] 検証結果または未実行理由を更新した
+- [x] 初期設計と公開文書の Intent Delta を反映した
+- [x] 検証結果または未実行理由を更新した

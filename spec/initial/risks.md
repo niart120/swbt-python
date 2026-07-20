@@ -144,32 +144,34 @@ Switch の初期化 sequence で必要な subcommand への応答が不足する
 - `SubcommandResponder` の unit test を追加してから実機再検証する
 - `0x21` reply を periodic `0x30` より優先する
 
-## 8. reconnect の不確実性
+## 8. exp local identity と reconnect の不確実性
 
 ### 8.1 内容
 
-pairing 情報の保存、link key の扱い、active reconnect / incoming reconnect の挙動は Bumble と OS / dongle の組み合わせに依存する。
+pairing 情報、link key、active reconnect / incoming reconnect の挙動は Bumble と OS / dongle の組み合わせに依存する。key store だけを分けても local BD_ADDR が同じなら、Switch から見た物理 device identity は分離できない。
 
-key storeはbond情報のnamespaceであり、local BD_ADDRを変更しない。複数のkey storeを用意しても、同じlocal BD_ADDRのままならSwitchから見た物理device identityは分離できない。
+`ProController` の exp profile 経路は、利用者が管理する locally administered address を CSR8510 A10 の volatile 領域へ適用し、同じ JSON envelope に pairing key を保存する。これは正式割当の universal EUI-48 を取得・管理する機能ではない。address の生成、重複回避、同時利用管理は利用者の責任である。
 
 ### 8.2 影響
 
-- 初回 pairing は成功するが reconnect できない
-- reconnect 失敗後に明示 API で再 pairing できない
-- key store が壊れた場合に復旧手順が必要になる
-- profileごとにkey storeだけを分け、local BD_ADDRを同じまま使うと、Switch側の登録が衝突する可能性がある
+- 同じ local address を複数 adapter で同時に使うと identity が衝突する
+- volatile write 後の warm reset / USB 再列挙に失敗すると、adapter の現在状態を process から確定できない
+- USB power cycle 後は target address が失われ、次回利用時に再適用が必要になる
+- profile envelope、controller kind、pairing key namespace が不一致だと誤った identity で接続を始める可能性がある
+- CSR8510 A10 以外の adapter では vendor command または再列挙方式が異なる可能性がある
 
 ### 8.3 対策
 
-- reconnect は M6 まで public guarantee にしない
-- `key_store_path` の存在と読み書きを diagnostics に記録する
-- reconnect 失敗時は failure diagnostics を残して clean close する
-- 自動 advertising recovery と retry loop は、pre-host-connection timeout 再発リスクを別途監査するまで M6 に含めない
-- key store 削除による再 pairing 手順を文書化する
-- BD_ADDR切替はCSR8510 A10のvolatile実験経路に限定し、public APIにはまだ露出しない
-- address変更後はBumbleの可視化前にstandard HCI addressを照合し、不一致ならpairingを拒否する
-- USB power cycleでvolatile addressが元へ戻るため、後続のidentity切替機能では起動時の再適用と復旧確認を必須にする
-- 実運用addressは正規に割り当てられたuniversal EUI-48を使い、実験用local / dummy addressを流用しない
+- address は 6 octet、individual、locally administered、予約 inquiry LAP 以外であることを adapter open 前に検査する
+- profile envelope に schema version、controller kind、target address、key store namespace map を保存し、生 Bumble JSON は受け付けない
+- current address が target と異なる場合だけ volatile write と warm reset を行い、再列挙後に read-back する
+- Bumble `power_on()` 後、advertising / pairing / reconnect より前に target address を再照合する
+- write 開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` を送出し、専用 USB Bluetooth ドングルの抜き差しを求める
+- pairing / reconnect の通常失敗は recovery-required にせず、同じ profile から再試行できるようにする
+- `close()` は volatile address を戻さず、次回の同 profile 利用を妨げない
+- factory / baseline address は保存せず、公開 read-only probe も提供しない
+- 対応範囲は実機確認した CSR8510 A10 / WinUSB に限定し、他 adapter を事前検知できるとは主張しない
+- Joy-Con / Direct への公開 API 展開は controller kind と実機 lifecycle を各後続 unit で確認してから行う
 
 ## 9. scope creep
 

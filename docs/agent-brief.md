@@ -17,11 +17,20 @@ from swbt import (
 Prefer this minimal pattern:
 
 ```python
-async with ProController(adapter="usb:0", key_store_path="switch-bond.json") as pad:
+async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json") as pad:
     await pad.connect(timeout=30.0, allow_pairing=True)
     await pad.tap(Button.A)
     await pad.neutral()
 ```
+
+Create a new persistent Pro Controller profile once with
+`await ProController.create_profile(adapter=..., profile_path=...,
+exp_local_address=..., pair_timeout=...)`. The caller owns address generation and
+collision avoidance. The path must not already exist. Reuse the returned connected
+controller or close it and pass the same `profile_path` to `ProController(...)`.
+This CSR8510 A10 path writes only volatile state. On
+`ExpLocalAddressRecoveryRequired`, unplug and reconnect the dedicated USB Bluetooth
+dongle before retrying.
 
 For a single Joy-Con L/R, use `JoyConL(...)` or `JoyConR(...)`:
 
@@ -45,7 +54,7 @@ Rules:
 
 - Use `connect(..., allow_pairing=True)` for first-run examples.
 - Use `pair()` only when the target device is in controller pairing/search mode.
-- Use `reconnect()` only when a key store already contains one current bonded peer.
+- Use `reconnect()` only when the Pro profile or legacy key store contains one current bonded peer.
 - Use `try_connect()` / `try_reconnect()` when code needs `ConnectionResult` instead of exceptions.
 - Use `tap()` for immediate short button input.
 - Use `press()` / `release()` for held button state.
@@ -60,7 +69,7 @@ Rules:
 - Use `IMUFrame.accel_g()` or `IMUFrame.with_accel_g()` for acceleration in G, and `IMUFrame.to_accel_g()` for conversion back to G. The scale is fixed at `1/4096 G/raw`.
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
 - Use `InputState` + `send()` for one complete Direct input report. Awaiting it includes transport completion and state commit.
-- Use a separate `key_store_path` for Pro Controller, Joy-Con L, and Joy-Con R profiles, even when the target device is the same.
+- Use a separate `profile_path` for each Pro Controller identity and target device. Joy-Con and Direct types still use separate `key_store_path` values until their follow-up units are complete.
 - Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`: left does not support right stick or A/B/X/Y, right does not support left stick or D-pad.
 - Use `SwitchGamepad` only when code accepts either reporting contract. Use `PeriodicSwitchGamepad` or `DirectSwitchGamepad` when the sending contract matters.
 - Instantiate `ProController`, `JoyConL`, or `JoyConR` for Periodic reporting. Instantiate the corresponding `Direct*` class for Direct reporting.

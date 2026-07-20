@@ -107,26 +107,54 @@ swbt-probe adapters --json
 
 ## Pairing And Reconnect
 
-`key_store_path` はペアリング情報を保存する JSON key store path です。保存済みペアリング情報を使う場合は `ProController(adapter="usb:0", key_store_path="switch-bond.json")` のように指定します。
+### Pro Controller の実験用プロファイル
 
-### Profile-specific Key Stores
+Pro Controller の接続情報を永続化する経路は、CSR8510 A10 の揮発領域の Bluetooth アドレス書換を使います。利用者が管理する個別かつローカル管理のアドレスを `exp_local_address` に指定し、最初のペアリングでプロファイルを作成します。
 
-key store はコントローラー種別ごとに分けてください。Pro Controller 相当、Joy-Con L 相当、Joy-Con R 相当のように HID identity や SDP record が異なる profile を同じ key store に混ぜると、保存済みペアリング情報と接続待ち受け時の identity の対応が崩れます。
+```python
+pad = await ProController.create_profile(
+    adapter="usb:0",
+    profile_path="profiles/switch-pro.json",
+    exp_local_address="02:12:34:56:78:9A",
+    pair_timeout=60.0,
+)
+await pad.close()
+```
+
+- `exp_local_address` の生成、重複回避、管理は利用者の責任です。例示した `02:12:34:56:78:9A` は共通値として使わず、利用者ごとに管理する値へ置き換えます。
+- 書き換えるのは揮発領域だけです。`close()` はアドレスを元へ戻しません。
+- 専用 USB Bluetooth ドングルを抜き差しすると揮発領域のアドレスが失われる場合があります。次回 `profile_path` を使うときに再適用されます。
+- 書換開始後の状態を確定できず `ExpLocalAddressRecoveryRequired` が送出された場合は、専用 USB Bluetooth ドングルを抜き差ししてから再試行します。
+- 出荷時アドレスの読取りと保存、公開の読み取り専用確認 API、CSR8510 A10 以外の互換性判定は行いません。
+
+作成済みプロファイルは次のように再利用します。プロファイル JSON にはアドレスとペアリングキーが同居するため、別の対象機器やコントローラー種別と共有しません。
+
+```python
+pad = ProController(
+    adapter="usb:0",
+    profile_path="profiles/switch-pro.json",
+)
+await pad.reconnect(timeout=60.0)
+```
+
+### Joy-Con / 直接送信型のペアリング情報
+
+Joy-Con と直接送信型は移行前の `key_store_path` を使います。ペアリング情報の保存ファイルはコントローラー種別ごとに分けてください。Pro Controller の実験用プロファイルと、Joy-Con L/R または直接送信型の保存ファイルを共有しません。HID 識別情報や SDP レコードが異なるコントローラー種別を同じ保存ファイルに混ぜると、ペアリング情報と接続待ち受け時の識別情報の対応が崩れます。
 
 運用例:
 
-- Pro Controller 相当: `keys/pro-controller.json`
+- Pro Controller 相当: `profiles/pro-controller.json`（swbt プロファイル）
 - Joy-Con L 相当: `keys/joy-con-left.json`
 - Joy-Con R 相当: `keys/joy-con-right.json`
 
-同じ profile でも、接続先の対象機器を分ける場合は key store も分けてください。1 つの key store は「1 つの対象機器」と「1 つの controller profile」の組み合わせに固定します。
+同じプロファイルでも、接続先の対象機器を分ける場合はペアリング情報の保存ファイルも分けてください。1 つの保存ファイルは「1 つの対象機器」と「1 つのコントローラー種別」の組み合わせに固定します。
 
 ## Controller Profile Verification Matrix
 以下の表は、各コントローラー種別の動作確認状況をまとめたものです。
 
 | Controller profile | Status | Verified scope | Not verified | Key store |
 |---|---|---|---|---|
-| Pro Controller | verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 でペアリング、保存済みペアリング情報を使う再接続、Button A / L / R / 十字キー / 左スティック / 右スティック、ニュートラル後の入力残りなし、close 後の接続解除を確認。macOS 15.7.7 / CSR8510 A10 でもペアリング、保存済みペアリング情報を使う再接続、ボタン入力、ニュートラル復帰を確認 | Linux、CSR8510 A10 以外のドングル、別 firmware、ペアリングなしで対象機器から接続した場合のペアリング情報再利用 | 対象機器と controller profile ごとに別の `key_store_path` を使う |
+| Pro Controller | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 ファームウェア 22.1.0 では、従来のアドレスを使う経路でペアリング、保存済みペアリング情報による再接続、主要なボタン / スティック入力、ニュートラル復帰、終了時の切断を確認。macOS 15.7.7 / CSR8510 A10 でも従来経路を限定確認 | `profile_path` を使う揮発アドレス書換、初回ペアリング、通常終了後の同一プロファイル再利用は unit_052 の実機ゲート待ち。Linux、CSR8510 A10 以外、別ファームウェアも未確認 | 現行 `ProController` の永続化には対象機器ごとに別の `profile_path` を使う |
 | Joy-Con L | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con L としての登録、利用者指定色、保存済みペアリング情報を使った接続後の十字キー入力を確認。左スティックは入力送信とニュートラル復帰まで確認 | SDP の細部一致、OS / ドングル / ファームウェアをまたぐ互換性 | Pro Controller と Joy-Con R とは別の `key_store_path` を使う |
 | Joy-Con R | partially verified | Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で Joy-Con R としての登録、利用者指定色、保存済みペアリング情報を使った接続後の ABXY 入力を確認。右スティックは入力送信とニュートラル復帰まで確認 | SDP の細部一致、OS / ドングル / ファームウェアをまたぐ互換性 | Pro Controller と Joy-Con L とは別の `key_store_path` を使う |
 
@@ -175,7 +203,7 @@ Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluet
 
 - `reconnect()` / `try_reconnect()` は保存済みペアリング情報がない場合、`no_bond` として失敗します。
 - 初回接続では `connect(..., allow_pairing=True)` か `pair()` を使います。
-- `key_store_path` が別ファイルを指していないか確認します。
+- Pro Controller は `profile_path`、Joy-Con / 直接送信型は `key_store_path` が別ファイルを指していないか確認します。
 
 ### Multiple Current Peers
 
