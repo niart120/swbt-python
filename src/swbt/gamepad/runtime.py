@@ -886,9 +886,15 @@ class ControllerRuntime:
         if adapter is None:
             msg = "adapter is required for exp local address preparation"
             raise InvalidInputError(msg)
-        await prepare_exp_local_identity(
+        result = await prepare_exp_local_identity(
             adapter=adapter,
             target=profile.exp_local_address,
+        )
+        self._diagnostics.record_event(
+            "exp_local_identity_prepared",
+            current_address=result.current_address,
+            status=result.status,
+            target_address=result.target_address,
         )
         self._exp_local_profile = profile
 

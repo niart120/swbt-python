@@ -1,12 +1,20 @@
 import asyncio
+import json
+from io import StringIO
 from pathlib import Path
 
 import pytest
 
-from swbt import ExpLocalAddressRecoveryRequired, InvalidProfileError, ProController
+from swbt import (
+    DiagnosticsConfig,
+    ExpLocalAddressRecoveryRequired,
+    InvalidProfileError,
+    ProController,
+)
 from swbt.gamepad import runtime as gamepad_runtime
 from swbt.gamepad import transport_factory as gamepad_transport_factory
 from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
+from swbt.transport._exp_local_identity import ExpLocalIdentityPreparationResult
 from swbt.transport.base import HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
 
@@ -101,9 +109,13 @@ def test_profile_target_is_forwarded_to_bumble_power_on_guard(
         *,
         adapter: str,
         target: ExpLocalAddress,
-    ) -> object:
+    ) -> ExpLocalIdentityPreparationResult:
         captured["prepared"] = (adapter, str(target))
-        return object()
+        return ExpLocalIdentityPreparationResult(
+            status="already_active",
+            current_address=str(target),
+            target_address=str(target),
+        )
 
     def create_transport(
         *,
@@ -138,7 +150,12 @@ def test_profile_target_is_forwarded_to_bumble_power_on_guard(
         "create_default_transport",
         create_transport,
     )
-    pad = ProController(adapter="usb:0", profile_path=str(profile_path))
+    trace = StringIO()
+    pad = ProController(
+        adapter="usb:0",
+        profile_path=str(profile_path),
+        diagnostics=DiagnosticsConfig(trace_writer=trace),
+    )
 
     asyncio.run(pad._runtime._prepare_exp_local_profile())
     transport = pad._runtime._ensure_transport()
@@ -148,3 +165,9 @@ def test_profile_target_is_forwarded_to_bumble_power_on_guard(
     assert captured["key_store_path"] is None
     assert captured["profile_path"] == str(profile_path)
     assert captured["expected_local_bluetooth_address"] == bytes.fromhex("02 12 34 56 78 9A")
+    assert json.loads(trace.getvalue()) == {
+        "event": "exp_local_identity_prepared",
+        "current_address": "02:12:34:56:78:9A",
+        "status": "already_active",
+        "target_address": "02:12:34:56:78:9A",
+    }
