@@ -28,6 +28,12 @@ def pytest_addoption(parser: Parser) -> None:
         ),
     )
     group.addoption(
+        "--swbt-local-address-b",
+        action="store",
+        default=None,
+        help=("Second locally administered address for the multi-address reconnect hardware run."),
+    )
+    group.addoption(
         "--swbt-device-info-address",
         action="store",
         default=None,
@@ -62,6 +68,14 @@ def swbt_local_address(pytestconfig: Config) -> str:
     option = pytestconfig.getoption("--swbt-local-address")
     if not isinstance(option, str) or option == "":
         pytest.skip("--swbt-local-address is required for pairing profile hardware runs")
+    return option
+
+
+@pytest.fixture
+def swbt_secondary_local_address(pytestconfig: Config) -> str:
+    option = pytestconfig.getoption("--swbt-local-address-b")
+    if not isinstance(option, str) or option == "":
+        pytest.skip("--swbt-local-address-b is required for multi-address reconnect runs")
     return option
 
 
