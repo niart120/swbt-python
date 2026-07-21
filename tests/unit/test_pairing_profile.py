@@ -244,8 +244,7 @@ def test_pairing_profile_load_normalizes_legacy_direct_controller_kind(
     assert profile.controller_kind is expected_kind
     profile.save(profile_path)
     assert (
-        json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"]
-        == normalized_kind
+        json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == normalized_kind
     )
 
 
