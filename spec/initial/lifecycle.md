@@ -63,7 +63,7 @@ closed
 8. `opened` 状態に入る
 9. Periodic だけ `ReportLoop` task を起動可能な状態にする。Direct は周期 task を作らない
 
-profile の validation、raw read、volatile write、warm reset、再列挙、read-back は HID advertising より前に完了する。current address が target と一致する場合は write と reset を省略する。write 開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` を送出し、transport 構築と pairing へ進まない。
+profile の validation、raw read、volatile write、warm reset、再列挙、read-back は HID advertising より前に完了する。current address が target と一致する場合は write と reset を省略する。write 開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` を送出し、transport 構築と pairing へ進まない。
 
 `open()` は Switch との接続完了を待たず、HID advertising も開始しない。Bluetooth 上で外部から見える接続開始は `pair()`、`connect()`、`reconnect()` が担当する。
 
@@ -141,7 +141,7 @@ await pad.close(neutral=True)
 
 close 中に neutral report 送信が失敗した場合、close 全体の完了を優先し、失敗は recoverable な diagnostics error として記録する。
 
-exp profile を使った場合も `close()` の責務は controller resource と接続を閉じることに限る。volatile address を元へ戻さず、USB ドングルの抜き差しや read-only probe を要求しない。次の controller が同じ profile を開くときに current address が target なら、そのまま接続処理を続行する。
+pairing profile を使った場合も `close()` の責務は controller resource と接続を閉じることに限る。volatile address を元へ戻さず、USB ドングルの抜き差しや read-only probe を要求しない。次の controller が同じ profile を開くときに current address が target なら、そのまま接続処理を続行する。
 
 ## 9. neutral fail-safe
 

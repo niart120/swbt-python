@@ -1,4 +1,4 @@
-"""Validation and persistence types for exp local address profiles."""
+"""Validation and persistence types for pairing profiles."""
 
 import copy
 import json
@@ -7,9 +7,10 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, NoReturn, cast
+from typing import NoReturn, cast
 
 from swbt.errors import InvalidProfileError, ProfileControllerMismatchError
+from swbt.protocol.profiles.base import ControllerKind
 
 _ADDRESS_PATTERN = re.compile(r"(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
 _RESERVED_INQUIRY_LAP_MIN = 0x9E8B00
@@ -17,25 +18,19 @@ _RESERVED_INQUIRY_LAP_MAX = 0x9E8B3F
 _PROFILE_FORMAT = "swbt.profile"
 _PROFILE_SCHEMA_VERSION = 1
 _PROFILE_IDENTITY_KIND = "exp-local-address"
-type ExpLocalControllerKind = Literal[
-    "pro",
-    "joycon_l",
-    "joycon_r",
-    "direct_pro",
-    "direct_joycon_l",
-    "direct_joycon_r",
-]
-
-_PROFILE_CONTROLLER_KINDS: frozenset[str] = frozenset(
-    {
-        "pro",
-        "joycon_l",
-        "joycon_r",
-        "direct_pro",
-        "direct_joycon_l",
-        "direct_joycon_r",
-    }
-)
+_CONTROLLER_KINDS_BY_PROFILE_VALUE: dict[str, ControllerKind] = {
+    "pro": ControllerKind.PRO_CONTROLLER,
+    "joycon_l": ControllerKind.JOYCON_LEFT,
+    "joycon_r": ControllerKind.JOYCON_RIGHT,
+    "direct_pro": ControllerKind.PRO_CONTROLLER,
+    "direct_joycon_l": ControllerKind.JOYCON_LEFT,
+    "direct_joycon_r": ControllerKind.JOYCON_RIGHT,
+}
+_PROFILE_VALUES_BY_CONTROLLER_KIND: dict[ControllerKind, str] = {
+    ControllerKind.PRO_CONTROLLER: "pro",
+    ControllerKind.JOYCON_LEFT: "joycon_l",
+    ControllerKind.JOYCON_RIGHT: "joycon_r",
+}
 
 type KeyStoreNamespaces = dict[str, dict[str, dict[str, object]]]
 
@@ -47,30 +42,30 @@ def _invalid_profile(message: str, *, cause: Exception | None = None) -> NoRetur
 
 
 @dataclass(frozen=True)
-class ExpLocalAddress:
+class LocalAddress:
     """An individual, locally administered six-octet Bluetooth address."""
 
     _octets: bytes
 
     @classmethod
-    def parse(cls, value: str) -> "ExpLocalAddress":
-        """Parse and validate the canonical exp profile address contract."""
+    def parse(cls, value: str) -> "LocalAddress":
+        """Parse and validate the pairing profile address contract."""
         if _ADDRESS_PATTERN.fullmatch(value) is None:
-            msg = "exp_local_address must contain 6 octets in XX:XX:XX:XX:XX:XX form"
+            msg = "local_address must contain 6 octets in XX:XX:XX:XX:XX:XX form"
             raise ValueError(msg)
 
         octets = bytes.fromhex(value.replace(":", ""))
         first_octet = octets[0]
         if first_octet & 0x01:
-            msg = "exp_local_address must be an individual address"
+            msg = "local_address must be an individual address"
             raise ValueError(msg)
         if not first_octet & 0x02:
-            msg = "exp_local_address must be locally administered"
+            msg = "local_address must be locally administered"
             raise ValueError(msg)
 
         lap = int.from_bytes(octets[3:], "big")
         if _RESERVED_INQUIRY_LAP_MIN <= lap <= _RESERVED_INQUIRY_LAP_MAX:
-            msg = "exp_local_address must not use a reserved inquiry LAP"
+            msg = "local_address must not use a reserved inquiry LAP"
             raise ValueError(msg)
         return cls(octets)
 
@@ -85,25 +80,25 @@ class ExpLocalAddress:
 
 
 @dataclass(frozen=True)
-class ExpLocalProfile:
-    """Validated version 1 profile envelope for one concrete controller kind."""
+class PairingProfile:
+    """Validated version 1 envelope for one controller shape and its pairing data."""
 
-    exp_local_address: ExpLocalAddress
+    local_address: LocalAddress
     key_store_namespaces: KeyStoreNamespaces
-    controller_kind: ExpLocalControllerKind = "pro"
+    controller_kind: ControllerKind = ControllerKind.PRO_CONTROLLER
 
     @classmethod
     def create_new(
         cls,
         path: str | Path,
-        exp_local_address: ExpLocalAddress,
+        local_address: LocalAddress,
         *,
-        controller_kind: ExpLocalControllerKind = "pro",
-    ) -> "ExpLocalProfile":
+        controller_kind: ControllerKind = ControllerKind.PRO_CONTROLLER,
+    ) -> "PairingProfile":
         """Atomically create a new profile without overwriting an existing path."""
-        address = str(exp_local_address)
+        address = str(local_address)
         profile = cls(
-            exp_local_address=exp_local_address,
+            local_address=local_address,
             key_store_namespaces={
                 address: {},
                 f"swbt.previous::{address}": {},
@@ -122,23 +117,23 @@ class ExpLocalProfile:
     def with_key_store_namespaces(
         self,
         namespaces: KeyStoreNamespaces,
-    ) -> "ExpLocalProfile":
+    ) -> "PairingProfile":
         """Return a profile with replaced key-store namespaces."""
-        return ExpLocalProfile(
-            exp_local_address=self.exp_local_address,
+        return PairingProfile(
+            local_address=self.local_address,
             key_store_namespaces=copy.deepcopy(namespaces),
             controller_kind=self.controller_kind,
         )
 
     def require_controller_kind(
         self,
-        expected_controller_kind: ExpLocalControllerKind,
+        expected_controller_kind: ControllerKind,
     ) -> None:
         """Reject a profile owned by a different concrete controller kind."""
         if self.controller_kind != expected_controller_kind:
             raise ProfileControllerMismatchError(
-                expected_controller_kind=expected_controller_kind,
-                actual_controller_kind=self.controller_kind,
+                expected_controller_kind=expected_controller_kind.value,
+                actual_controller_kind=self.controller_kind.value,
             )
 
     def save(self, path: str | Path) -> None:
@@ -176,16 +171,16 @@ class ExpLocalProfile:
             "schema_version": _PROFILE_SCHEMA_VERSION,
             "identity": {
                 "kind": _PROFILE_IDENTITY_KIND,
-                "address": str(self.exp_local_address),
+                "address": str(self.local_address),
             },
-            "controller_kind": self.controller_kind,
+            "controller_kind": _PROFILE_VALUES_BY_CONTROLLER_KIND[self.controller_kind],
             "key_store": {
                 "namespaces": copy.deepcopy(self.key_store_namespaces),
             },
         }
 
     @classmethod
-    def load(cls, path: str | Path) -> "ExpLocalProfile":
+    def load(cls, path: str | Path) -> "PairingProfile":
         """Load a supported profile without opening an adapter."""
         try:
             with Path(path).open(encoding="utf-8") as profile_file:
@@ -199,8 +194,11 @@ class ExpLocalProfile:
             _invalid_profile("profile format is unsupported")
         if payload.get("schema_version") != _PROFILE_SCHEMA_VERSION:
             _invalid_profile("profile schema_version is unsupported")
-        controller_kind = payload.get("controller_kind")
-        if controller_kind not in _PROFILE_CONTROLLER_KINDS:
+        controller_kind_value = payload.get("controller_kind")
+        if not isinstance(controller_kind_value, str):
+            _invalid_profile("profile controller_kind is unsupported")
+        controller_kind = _CONTROLLER_KINDS_BY_PROFILE_VALUE.get(controller_kind_value)
+        if controller_kind is None:
             _invalid_profile("profile controller_kind is unsupported")
 
         identity = payload.get("identity")
@@ -212,7 +210,7 @@ class ExpLocalProfile:
         if not isinstance(address_value, str):
             _invalid_profile("profile identity address must be a string")
         try:
-            address = ExpLocalAddress.parse(address_value)
+            address = LocalAddress.parse(address_value)
         except ValueError as error:
             _invalid_profile(str(error), cause=error)
 
@@ -226,7 +224,7 @@ class ExpLocalProfile:
             _invalid_profile("profile key_store.namespaces must be an object map")
 
         return cls(
-            exp_local_address=address,
+            local_address=address,
             key_store_namespaces=cast("KeyStoreNamespaces", copy.deepcopy(namespaces)),
-            controller_kind=cast("ExpLocalControllerKind", controller_kind),
+            controller_kind=controller_kind,
         )

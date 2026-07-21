@@ -12,7 +12,7 @@ async def run(
     *,
     adapter: str,
     profile_path: str,
-    exp_local_address: str,
+    local_address: str,
     trace_path: Path,
     pair_timeout: float,
 ) -> None:
@@ -21,7 +21,7 @@ async def run(
     Args:
         adapter: Bumble adapter moniker, such as ``"usb:0"``.
         profile_path: New swbt profile path. It must not already exist.
-        exp_local_address: Individual locally administered Bluetooth address.
+        local_address: Individual locally administered Bluetooth address.
         trace_path: JSON Lines diagnostics trace output path.
         pair_timeout: Seconds to wait for a host connection.
     """
@@ -30,7 +30,7 @@ async def run(
         pad = await ProController.create_profile(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_address=exp_local_address,
+            local_address=local_address,
             pair_timeout=pair_timeout,
             diagnostics=DiagnosticsConfig(trace_writer=trace_writer),
         )
@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--adapter", default="usb:0", help="Bumble adapter moniker")
     parser.add_argument("--profile", required=True, help="new swbt profile path")
     parser.add_argument(
-        "--exp-local-address",
+        "--local-address",
         required=True,
         help="individual locally administered Bluetooth address",
     )
@@ -61,7 +61,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run(
             adapter=args.adapter,
             profile_path=args.profile,
-            exp_local_address=args.exp_local_address,
+            local_address=args.local_address,
             trace_path=args.trace,
             pair_timeout=args.timeout,
         )

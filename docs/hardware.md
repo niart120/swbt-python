@@ -109,22 +109,22 @@ swbt-probe adapters --json
 
 ### Pro Controller の実験用プロファイル
 
-Pro Controller の接続情報を永続化する経路は、CSR8510 A10 の揮発領域の Bluetooth アドレス書換を使います。利用者が管理する個別かつローカル管理のアドレスを `exp_local_address` に指定し、最初のペアリングでプロファイルを作成します。
+Pro Controller の接続情報を永続化する経路は、CSR8510 A10 の揮発領域の Bluetooth アドレス書換を使います。利用者が管理する個別かつローカル管理のアドレスを `local_address` に指定し、最初のペアリングでプロファイルを作成します。
 
 ```python
 pad = await ProController.create_profile(
     adapter="usb:0",
     profile_path="profiles/switch-pro.json",
-    exp_local_address="02:12:34:56:78:9A",
+    local_address="02:12:34:56:78:9A",
     pair_timeout=60.0,
 )
 await pad.close()
 ```
 
-- `exp_local_address` の生成、重複回避、管理は利用者の責任です。例示した `02:12:34:56:78:9A` は共通値として使わず、利用者ごとに管理する値へ置き換えます。
+- `local_address` の生成、重複回避、管理は利用者の責任です。例示した `02:12:34:56:78:9A` は共通値として使わず、利用者ごとに管理する値へ置き換えます。
 - 書き換えるのは揮発領域だけです。`close()` はアドレスを元へ戻しません。
 - 専用 USB Bluetooth ドングルを抜き差しすると揮発領域のアドレスが失われる場合があります。次回 `profile_path` を使うときに再適用されます。
-- 書換開始後の状態を確定できず `ExpLocalAddressRecoveryRequired` が送出された場合は、専用 USB Bluetooth ドングルを抜き差ししてから再試行します。
+- 書換開始後の状態を確定できず `AdapterIdentityRecoveryRequired` が送出された場合は、専用 USB Bluetooth ドングルを抜き差ししてから再試行します。
 - 出荷時アドレスの読取りと保存、公開の読み取り専用確認 API、CSR8510 A10 以外の互換性判定は行いません。
 
 作成済みプロファイルは次のように再利用します。プロファイル JSON にはアドレスとペアリングキーが同居するため、別の対象機器やコントローラー種別と共有しません。
@@ -139,7 +139,7 @@ await pad.reconnect(timeout=60.0)
 
 ### Joy-Con / 直接送信型のペアリング情報
 
-周期送信型 Joy-Con と直接送信型は、いずれも exp local identity と pairing key を保存する `profile_path` を使います。保存ファイルはコントローラー種別ごとに分け、Pro Controller、Joy-Con L/R、直接送信型の間で共有しないでください。
+周期送信型と直接送信型は、いずれも adapter identity と pairing key を保存する `profile_path` を使います。保存ファイルは Pro Controller、Joy-Con L、Joy-Con R の controller shape ごとに分けます。同じ shape の periodic / direct 間で同じ profile を受け付けますが、その方式間再利用は実機未検証です。
 
 運用例:
 
@@ -147,7 +147,7 @@ await pad.reconnect(timeout=60.0)
 - Joy-Con L 相当: `profiles/joy-con-left.json`
 - Joy-Con R 相当: `profiles/joy-con-right.json`
 
-同じプロファイルでも、接続先の対象機器を分ける場合はペアリング情報の保存ファイルも分けてください。1 つの保存ファイルは「1 つの対象機器」と「1 つのコントローラー種別」の組み合わせに固定します。
+同じプロファイルでも、接続先の対象機器を分ける場合はペアリング情報の保存ファイルも分けてください。1 つの保存ファイルは「1 つの対象機器」と「1 つの controller shape」の組み合わせに固定します。
 
 ## Controller Profile Verification Matrix
 以下の表は、各コントローラー種別の動作確認状況をまとめたものです。
@@ -155,8 +155,8 @@ await pad.reconnect(timeout=60.0)
 | Controller profile | Status | Verified scope | Not verified | Profile storage |
 |---|---|---|---|---|
 | Pro Controller | partially verified | 2026-07-20 の unit_052 では、Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 に対し、`profile_path` 経路で揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルの active reconnect、再接続時の profile bytes 不変と advertising / pairing / key 更新なしを確認 | USB 抜き差し後の再適用、Linux、CSR8510 A10 以外、別ファームウェア | 対象機器ごとに別の `profile_path` を使う |
-| Joy-Con L | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 で exp local profile の揮発アドレス準備、初回ペアリング、通常終了、同一 profile の active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性 | controller kind と対象機器ごとに別の `profile_path` を使う |
-| Joy-Con R | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 で exp local profile の揮発アドレス準備、初回ペアリング、通常終了、同一 profile の active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性。fresh pairing teardown の Bumble / usb1 callback warning は hardware log を参照 | controller kind と対象機器ごとに別の `profile_path` を使う |
+| Joy-Con L | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 で pairing profile の揮発アドレス準備、初回ペアリング、通常終了、同一 profile の active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性 | controller shape と対象機器ごとに別の `profile_path` を使う |
+| Joy-Con R | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 で pairing profile の揮発アドレス準備、初回ペアリング、通常終了、同一 profile の active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性。fresh pairing teardown の Bumble / usb1 callback warning は hardware log を参照 | controller shape と対象機器ごとに別の `profile_path` を使う |
 
 ## Confirmed Behavior
 
@@ -203,7 +203,7 @@ Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluet
 
 - `reconnect()` / `try_reconnect()` は保存済みペアリング情報がない場合、`no_bond` として失敗します。
 - 初回接続では `connect(..., allow_pairing=True)` か `pair()` を使います。
-- 全 concrete controller で、controller kind と対象機器ごとに別の `profile_path` を指しているか確認します。
+- 全 concrete controller で、controller shape と対象機器ごとに別の `profile_path` を指しているか確認します。
 
 ### Multiple Current Peers
 

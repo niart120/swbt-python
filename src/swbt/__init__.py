@@ -4,10 +4,10 @@ from swbt.adapter_discovery import AdapterInfo, list_adapters
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
 from swbt.errors import (
     AdapterDiscoveryError,
+    AdapterIdentityRecoveryRequired,
     ClosedError,
     ConnectionFailedError,
     ConnectionTimeoutError,
-    ExpLocalAddressRecoveryRequired,
     InvalidInputError,
     InvalidKeyStoreError,
     InvalidProfileError,
@@ -33,6 +33,7 @@ from swbt.protocol.profiles.base import ControllerColors
 
 __all__ = (
     "AdapterDiscoveryError",
+    "AdapterIdentityRecoveryRequired",
     "AdapterInfo",
     "Button",
     "ClosedError",
@@ -45,7 +46,6 @@ __all__ = (
     "DirectJoyConR",
     "DirectProController",
     "DirectSwitchGamepad",
-    "ExpLocalAddressRecoveryRequired",
     "GamepadStatus",
     "IMUFrame",
     "InputState",

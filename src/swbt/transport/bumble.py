@@ -22,7 +22,7 @@ from swbt.transport._bumble_hidp import (
 )
 from swbt.transport._bumble_key_store import (
     _DiagnosticKeyStore,
-    _ExpLocalProfileKeyStore,
+    _PairingProfileKeyStore,
 )
 from swbt.transport._bumble_lifecycle import (
     register_connection_diagnostics,
@@ -30,7 +30,7 @@ from swbt.transport._bumble_lifecycle import (
     register_l2cap_lifecycle_bridge,
 )
 from swbt.transport._bumble_sdp import build_hid_service_records
-from swbt.transport._exp_local_address import ExpLocalProfile
+from swbt.transport._pairing_profile import PairingProfile
 from swbt.transport.base import BondedPeer, DisconnectRequestResult
 
 if TYPE_CHECKING:
@@ -712,10 +712,10 @@ async def _default_initialize_device(
         cast("TransportSink", handle.sink),
     )
     if profile_path is not None:
-        exp_profile = ExpLocalProfile.load(profile_path)
-        cast("Any", device).keystore = _ExpLocalProfileKeyStore(
+        pairing_profile = PairingProfile.load(profile_path)
+        cast("Any", device).keystore = _PairingProfileKeyStore(
             profile_path=profile_path,
-            namespace=str(exp_profile.exp_local_address),
+            namespace=str(pairing_profile.local_address),
         )
     service_records = build_hid_service_records(
         profile.hid_report_descriptor,

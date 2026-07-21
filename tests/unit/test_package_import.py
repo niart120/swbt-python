@@ -18,7 +18,7 @@ def test_package_exports_public_gamepad_surface() -> None:
         "DirectJoyConR",
         "DirectProController",
         "DirectSwitchGamepad",
-        "ExpLocalAddressRecoveryRequired",
+        "AdapterIdentityRecoveryRequired",
         "GamepadStatus",
         "IMUFrame",
         "InputState",

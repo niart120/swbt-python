@@ -4,18 +4,20 @@
 
 ### 追加機能
 
-- `ProController.create_profile()` と `ProController(profile_path=...)` を追加しました。利用者が管理する `exp_local_address` とペアリングキーを一つの swbt プロファイル JSON に保存し、CSR8510 A10 の揮発領域にある Bluetooth アドレスを接続前に準備します。
+- `ProController.create_profile()` と `ProController(profile_path=...)` を追加しました。利用者が管理する `local_address` とペアリングキーを一つの swbt プロファイル JSON に保存し、CSR8510 A10 の揮発領域にある Bluetooth アドレスを接続前に準備します。
 - `JoyConL` / `JoyConR` にも `create_profile()` と `profile_path` を追加しました。プロファイルには `joycon_l` / `joycon_r` を保存し、異なるコントローラー種別で開くと `ProfileControllerMismatchError` をアダプタ準備前に送出します。
-- 揮発領域への書換開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` を送出します。`close()` は接続資源だけを閉じ、書き換えたアドレスを元へ戻しません。
+- 揮発領域への書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` を送出します。`close()` は接続資源だけを閉じ、書き換えたアドレスを元へ戻しません。
 
 ### 破壊的変更
 
 - 全 concrete controller から `key_store_path` を削除しました。再接続と初回ペアリングには `profile_path` を使い、新規プロファイルはコンストラクタではなく `await ControllerClass.create_profile(...)` で作成します。
-- native JSON key-store の読み込み、互換モード、自動移行はありません。既存ファイルは再利用できないため、controller kind と対象機器ごとに新しい profile を作成してください。
+- native JSON key-store の読み込み、互換モード、自動移行はありません。既存ファイルは再利用できないため、controller shape と対象機器ごとに新しい profile を作成してください。
+- `create_profile(..., exp_local_address=...)` は `create_profile(..., local_address=...)` に、`ExpLocalAddressRecoveryRequired` は `AdapterIdentityRecoveryRequired` に改名しました。
+- profile の controller 分類から Direct / Periodic を除きました。新規 JSON は `pro` / `joycon_l` / `joycon_r` を保存します。旧 `direct_*` 値は読み込みのみ受け付け、次回の保存で正規化します。同じ controller shape の Direct / Periodic が同じ profile を開けますが、その方式間の実機再利用は未検証です。
 
 ### 対応範囲
 
-対象は CSR8510 A10 の揮発領域への書換経路です。永続領域は変更しません。`exp_local_address` の生成と重複回避は利用者の責任です。CSR8510 A10 以外のドングル、出荷時アドレスの保存、公開の読み取り専用確認 API は対象外です。
+対象は CSR8510 A10 の揮発領域への書換経路です。永続領域は変更しません。`local_address` の生成と重複回避は利用者の責任です。CSR8510 A10 以外のドングル、出荷時アドレスの保存、公開の読み取り専用確認 API は対象外です。
 
 ## 0.4.0
 

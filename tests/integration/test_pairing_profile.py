@@ -14,8 +14,9 @@ from swbt import (
     JoyConR,
     ProController,
 )
-from swbt.transport._bumble_key_store import _ExpLocalProfileKeyStore
-from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
+from swbt.protocol.profiles.base import ControllerKind
+from swbt.transport._bumble_key_store import _PairingProfileKeyStore
+from swbt.transport._pairing_profile import LocalAddress, PairingProfile
 
 
 def _pairing_keys(marker: int) -> PairingKeys:
@@ -29,9 +30,9 @@ def test_profile_key_store_update_preserves_identity_and_namespace_generations(
     tmp_path: Path,
 ) -> None:
     profile_path = tmp_path / "pro.json"
-    target = ExpLocalAddress.parse("02:12:34:56:78:9A")
-    ExpLocalProfile.create_new(profile_path, target)
-    key_store = _ExpLocalProfileKeyStore(
+    target = LocalAddress.parse("02:12:34:56:78:9A")
+    PairingProfile.create_new(profile_path, target)
+    key_store = _PairingProfileKeyStore(
         profile_path=profile_path,
         namespace=str(target),
     )
@@ -94,7 +95,7 @@ def test_pairing_failure_leaves_profile_available_for_retry(
             await ProController.create_profile(
                 adapter="usb:0",
                 profile_path=str(profile_path),
-                exp_local_address="02:12:34:56:78:9A",
+                local_address="02:12:34:56:78:9A",
                 pair_timeout=0.25,
             )
 
@@ -103,7 +104,7 @@ def test_pairing_failure_leaves_profile_available_for_retry(
 
     asyncio.run(run())
 
-    assert ExpLocalProfile.load(profile_path).exp_local_address == ExpLocalAddress.parse(
+    assert PairingProfile.load(profile_path).local_address == LocalAddress.parse(
         "02:12:34:56:78:9A"
     )
     assert attempts == [
@@ -140,14 +141,14 @@ def test_joycon_l_create_profile_saves_kind_and_leaves_profile_for_retry(
             await JoyConL.create_profile(
                 adapter="usb:0",
                 profile_path=str(profile_path),
-                exp_local_address="02:12:34:56:78:9A",
+                local_address="02:12:34:56:78:9A",
                 pair_timeout=0.25,
             )
 
     asyncio.run(run())
 
-    profile = ExpLocalProfile.load(profile_path)
-    assert profile.controller_kind == "joycon_l"
+    profile = PairingProfile.load(profile_path)
+    assert profile.controller_kind is ControllerKind.JOYCON_LEFT
     assert attempts == [0.25]
     retry = JoyConL(adapter="usb:0", profile_path=str(profile_path))
     assert retry._runtime._config.profile_path == str(profile_path)
@@ -180,35 +181,36 @@ def test_joycon_r_create_profile_saves_kind_and_leaves_profile_for_retry(
             await JoyConR.create_profile(
                 adapter="usb:0",
                 profile_path=str(profile_path),
-                exp_local_address="02:12:34:56:78:9A",
+                local_address="02:12:34:56:78:9A",
                 pair_timeout=0.25,
             )
 
     asyncio.run(run())
 
-    profile = ExpLocalProfile.load(profile_path)
-    assert profile.controller_kind == "joycon_r"
+    profile = PairingProfile.load(profile_path)
+    assert profile.controller_kind is ControllerKind.JOYCON_RIGHT
     assert attempts == [0.25]
     retry = JoyConR(adapter="usb:0", profile_path=str(profile_path))
     assert retry._runtime._config.profile_path == str(profile_path)
 
 
 @pytest.mark.parametrize(
-    ("controller_cls", "controller_kind"),
+    ("controller_cls", "controller_kind", "serialized_kind"),
     [
-        (DirectProController, "direct_pro"),
-        (DirectJoyConL, "direct_joycon_l"),
-        (DirectJoyConR, "direct_joycon_r"),
+        (DirectProController, ControllerKind.PRO_CONTROLLER, "pro"),
+        (DirectJoyConL, ControllerKind.JOYCON_LEFT, "joycon_l"),
+        (DirectJoyConR, ControllerKind.JOYCON_RIGHT, "joycon_r"),
     ],
 )
 def test_direct_create_profile_saves_kind_and_leaves_profile_for_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     controller_cls: type[DirectProController | DirectJoyConL | DirectJoyConR],
-    controller_kind: str,
+    controller_kind: ControllerKind,
+    serialized_kind: str,
 ) -> None:
     """Direct profile creation leaves a reusable profile after pairing failure."""
-    profile_path = tmp_path / f"{controller_kind}.json"
+    profile_path = tmp_path / f"{controller_kind.value}.json"
     attempts: list[float | None] = []
 
     async def fail_pair(
@@ -235,14 +237,15 @@ def test_direct_create_profile_saves_kind_and_leaves_profile_for_retry(
             await controller_cls.create_profile(
                 adapter="usb:0",
                 profile_path=str(profile_path),
-                exp_local_address="02:12:34:56:78:9A",
+                local_address="02:12:34:56:78:9A",
                 pair_timeout=0.25,
             )
 
     asyncio.run(run())
 
-    profile = ExpLocalProfile.load(profile_path)
-    assert profile.controller_kind == controller_kind
+    profile = PairingProfile.load(profile_path)
+    assert profile.controller_kind is controller_kind
+    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == serialized_kind
     assert attempts == [0.25]
     retry = controller_cls(adapter="usb:0", profile_path=str(profile_path))
     assert retry._runtime._config.profile_path == str(profile_path)
