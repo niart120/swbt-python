@@ -188,7 +188,7 @@ def test_pairing_profile_create_new_saves_joycon_l_controller_kind(
 
     assert profile.controller_kind is ControllerKind.JOYCON_LEFT
     assert PairingProfile.load(profile_path).controller_kind is ControllerKind.JOYCON_LEFT
-    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == ("joycon_l")
+    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == "joycon_l"
 
 
 def test_pairing_profile_create_new_saves_joycon_r_controller_kind(
@@ -204,7 +204,7 @@ def test_pairing_profile_create_new_saves_joycon_r_controller_kind(
 
     assert profile.controller_kind is ControllerKind.JOYCON_RIGHT
     assert PairingProfile.load(profile_path).controller_kind is ControllerKind.JOYCON_RIGHT
-    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == ("joycon_r")
+    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == "joycon_r"
 
 
 @pytest.mark.parametrize(
@@ -243,7 +243,10 @@ def test_pairing_profile_load_normalizes_legacy_direct_controller_kind(
 
     assert profile.controller_kind is expected_kind
     profile.save(profile_path)
-    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == normalized_kind
+    assert (
+        json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"]
+        == normalized_kind
+    )
 
 
 def test_pairing_profile_create_new_does_not_overwrite_existing_path(

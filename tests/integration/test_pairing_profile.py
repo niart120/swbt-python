@@ -245,7 +245,10 @@ def test_direct_create_profile_saves_kind_and_leaves_profile_for_retry(
 
     profile = PairingProfile.load(profile_path)
     assert profile.controller_kind is controller_kind
-    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == serialized_kind
+    assert (
+        json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"]
+        == serialized_kind
+    )
     assert attempts == [0.25]
     retry = controller_cls(adapter="usb:0", profile_path=str(profile_path))
     assert retry._runtime._config.profile_path == str(profile_path)
