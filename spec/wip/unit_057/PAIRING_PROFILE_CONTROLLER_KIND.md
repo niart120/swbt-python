@@ -19,20 +19,21 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 | actor / boundary | 入力または状態 | 期待する観測結果 | 制約 |
 |---|---|---|---|
 | Direct / Periodic Pro Controller | 同じ Pro profile path | controller shape が一致すれば両方で profile を開ける | input 送信方式は各 runtime のまま |
-| 旧 profile | `controller_kind: "direct_pro"` | Pro Controller 用の profile として読み込める | JSON key / identity kind は不変 |
+| 以前の Direct profile | `controller_kind: "direct_pro"` | adapter open 前に未対応値として失敗する | 別の profile path で作成し直し、再ペアリングする |
 | Joy-Con / Pro | 異なる controller shape の profile | adapter open 前に不一致として拒否する | profile 混在は許可しない |
 
 ## 2. 対象範囲
 
 - `PairingProfile.controller_kind` に既存 `ControllerKind` を使う。
 - 新規保存は `pro` / `joycon_l` / `joycon_r` だけを出力する。
-- 旧 `direct_pro` / `direct_joycon_l` / `direct_joycon_r` を対応する `ControllerKind` へ正規化して読み込む。
+- `direct_pro` / `direct_joycon_l` / `direct_joycon_r` を含む既存 profile との互換性は提供しない。新しい profile を作成して再ペアリングする。
 - Runtime config と concrete controller から ReportingMode を含む profile kind を削除する。
 - 同一 controller shape の Direct / Periodic が同じ profile を受け付けることを fake transport test で固定する。
 
 ## 3. 対象外
 
 - JSON のキー、`identity.kind: "exp-local-address"`、schema version を変更しない。
+- 旧 `direct_*` 値を判別する専用の migration / rejection 分岐は追加しない。未対応の `controller_kind` として既存の検証で扱う。
 - Periodic の周期送信、Direct の送信成功後 commit、HID report、Bumble adapter 操作を変更しない。
 - Direct / Periodic 間の同一 profile を使う実機接続は、この変更では実行しない。
 
@@ -55,7 +56,7 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 | 振る舞い | 入力・状態 | 期待結果 | 備考 |
 |---|---|---|---|
 | profile 作成 | Pro / Joy-Con concrete controller | protocol profile の `ControllerKind` を保存値へ変換する | direct prefix を出力しない |
-| legacy load | 旧 direct kind | 同じ controller shape の `ControllerKind` に正規化する | migration file は作らない |
+| 既存 Direct profile の load | 旧 direct kind | `InvalidProfileError` で adapter open 前に失敗する | profile を別 path に作り直して再ペアリングする |
 | cross-mode reuse | 同じ shape の Direct / Periodic | profile kind mismatch を起こさない | fake transport で検証 |
 | shape mismatch | Pro profile を Joy-Con で開く | adapter open 前に `ProfileControllerMismatchError` | 既存保護を維持 |
 
@@ -64,7 +65,7 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
 | implemented / smoke passed | 新規 profile が ReportingMode を含まない controller shape を保存する | regression | unit | no | 新規保存は `pro` / `joycon_l` / `joycon_r`。pytest は環境遮断 |
-| implemented / smoke passed | 旧 direct kind を持つ JSON が対応する `ControllerKind` として読み込める | regression | unit | no | smoke test で `direct_pro` を確認 |
+| implemented / pending CI | 旧 direct kind を持つ JSON が未対応値として adapter open 前に失敗する | regression | unit | no | `direct_*` を特別扱いせず、既存の `controller_kind` 検証で拒否する |
 | implemented / blocked | 同じ controller shape の periodic / direct が profile を相互利用できる | regression | unit | no | runtime guard test を追加。pytest は環境遮断 |
 | implemented / blocked | controller shape が異なる profile は adapter open 前に拒否される | regression | unit | no | existing guard を `ControllerKind` 比較へ更新。pytest は環境遮断 |
 | deferred | Direct / Periodic 間 profile 再利用の実機 pairing / reconnect | characterization | hardware | yes | 明示承認と専用 adapter が必要 |
@@ -79,13 +80,13 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 
 - `ControllerKind` は protocol profile が持つ controller shape の enum であり、PairingProfile が必要とする意味と一致する。
 - direct / periodic は PairingProfile に保存しない。profile 読み込み時の guard は runtime config の `ControllerProfile.kind` と比較する。
-- legacy direct kind は読み込みだけを受け付け、次に `save()` した時点で shape-only の値へ正規化される。
+- `direct_*` は未対応の `controller_kind` と同じ扱いである。既存 profile の読み込み互換、migration、schema version 更新は行わず、利用者が別 path に profile を作成して再ペアリングする。
 
 ## 10. 対象ファイル
 
 | path | change | 内容 |
 |---|---|---|
-| `src/swbt/transport/_pairing_profile.py` | modify | legacy kind の正規化と `ControllerKind` 化 |
+| `src/swbt/transport/_pairing_profile.py` | modify | `ControllerKind` 化と shape-only の値だけの受理 |
 | `src/swbt/gamepad/_config.py` | modify | profile kind config の削除 |
 | `src/swbt/gamepad/core.py` | modify | direct / periodic 共通の shape 利用 |
 | `src/swbt/gamepad/runtime.py` | modify | protocol profile の kind による guard |
@@ -98,7 +99,7 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 |---|---|---|
 | `git diff --check` | passed | whitespace error なし |
 | `PYTHONPYCACHEPREFIX=/tmp/swbt-pycache python -m compileall -q src tests examples` | passed | syntax compile |
-| pairing profile normalization smoke test | passed | 新規 `joycon_l` 保存と旧 `direct_pro` の正規化 |
+| pairing profile controller kind test | pending CI | 新規 shape-only 値の保存と `direct_*` の未対応扱い |
 | `ruff 0.15.20 format --check .` | passed | CI と同じ Ruff version を一時領域で実行 |
 | `ruff 0.15.20 check .` | passed | CI と同じ Ruff version を一時領域で実行 |
 | `uv run ty check --no-progress` | blocked | 同上 |

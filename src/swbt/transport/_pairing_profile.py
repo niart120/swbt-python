@@ -22,9 +22,6 @@ _CONTROLLER_KINDS_BY_PROFILE_VALUE: dict[str, ControllerKind] = {
     "pro": ControllerKind.PRO_CONTROLLER,
     "joycon_l": ControllerKind.JOYCON_LEFT,
     "joycon_r": ControllerKind.JOYCON_RIGHT,
-    "direct_pro": ControllerKind.PRO_CONTROLLER,
-    "direct_joycon_l": ControllerKind.JOYCON_LEFT,
-    "direct_joycon_r": ControllerKind.JOYCON_RIGHT,
 }
 _PROFILE_VALUES_BY_CONTROLLER_KIND: dict[ControllerKind, str] = {
     ControllerKind.PRO_CONTROLLER: "pro",

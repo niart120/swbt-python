@@ -13,7 +13,7 @@
 - 全 concrete controller から `key_store_path` を削除しました。再接続と初回ペアリングには `profile_path` を使い、新規プロファイルはコンストラクタではなく `await ControllerClass.create_profile(...)` で作成します。
 - native JSON key-store の読み込み、互換モード、自動移行はありません。既存ファイルは再利用できないため、controller shape と対象機器ごとに新しい profile を作成してください。
 - `create_profile(..., exp_local_address=...)` は `create_profile(..., local_address=...)` に、`ExpLocalAddressRecoveryRequired` は `AdapterIdentityRecoveryRequired` に改名しました。
-- profile の controller 分類から Direct / Periodic を除きました。新規 JSON は `pro` / `joycon_l` / `joycon_r` を保存します。旧 `direct_*` 値は読み込みのみ受け付け、次回の保存で正規化します。同じ controller shape の Direct / Periodic が同じ profile を開けますが、その方式間の実機再利用は未検証です。
+- profile の controller 分類から Direct / Periodic を除きました。新規 JSON は `pro` / `joycon_l` / `joycon_r` を保存します。`direct_*` を保存した既存 profile は互換ではないため、別の profile path で作成し直して再ペアリングしてください。schema version は更新しません。同じ controller shape の Direct / Periodic が新しい profile を共有できますが、その方式間の実機再利用は未検証です。
 
 ### 対応範囲
 

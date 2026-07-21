@@ -94,7 +94,7 @@
 |---|---|---|
 | `git diff --check` | passed | whitespace error なし |
 | `PYTHONPYCACHEPREFIX=/tmp/swbt-pycache python -m compileall -q src tests examples` | passed | syntax compile |
-| pairing profile normalization smoke test | passed | 新規 `joycon_l` 保存と旧 `direct_pro` の正規化 |
+| pairing profile controller kind test | pending CI | 新規 shape-only 値の保存と `direct_*` の未対応扱い |
 | `ruff 0.15.20 format --check .` | passed | CI と同じ Ruff version を一時領域で実行 |
 | `ruff 0.15.20 check .` | passed | CI と同じ Ruff version を一時領域で実行 |
 | `uv run ty check --no-progress` | blocked | 同上 |

@@ -106,6 +106,36 @@ def test_pairing_profile_loads_supported_pro_controller_envelope(
         {
             "format": "swbt.profile",
             "schema_version": 1,
+            "controller_kind": "direct_pro",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 1,
+            "controller_kind": "direct_joycon_l",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 1,
+            "controller_kind": "direct_joycon_r",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 1,
             "controller_kind": "pro",
             "identity": {
                 "kind": "factory-address",
@@ -205,47 +235,6 @@ def test_pairing_profile_create_new_saves_joycon_r_controller_kind(
     assert profile.controller_kind is ControllerKind.JOYCON_RIGHT
     assert PairingProfile.load(profile_path).controller_kind is ControllerKind.JOYCON_RIGHT
     assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == "joycon_r"
-
-
-@pytest.mark.parametrize(
-    ("legacy_kind", "expected_kind", "normalized_kind"),
-    [
-        ("direct_pro", ControllerKind.PRO_CONTROLLER, "pro"),
-        ("direct_joycon_l", ControllerKind.JOYCON_LEFT, "joycon_l"),
-        ("direct_joycon_r", ControllerKind.JOYCON_RIGHT, "joycon_r"),
-    ],
-)
-def test_pairing_profile_load_normalizes_legacy_direct_controller_kind(
-    tmp_path: Path,
-    legacy_kind: str,
-    expected_kind: ControllerKind,
-    normalized_kind: str,
-) -> None:
-    """A legacy profile does not retain the old reporting mode classification."""
-    profile_path = tmp_path / f"{legacy_kind}.json"
-    profile_path.write_text(
-        json.dumps(
-            {
-                "format": "swbt.profile",
-                "schema_version": 1,
-                "controller_kind": legacy_kind,
-                "identity": {
-                    "kind": "exp-local-address",
-                    "address": "02:12:34:56:78:9A",
-                },
-                "key_store": {"namespaces": {"02:12:34:56:78:9A": {}}},
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    profile = PairingProfile.load(profile_path)
-
-    assert profile.controller_kind is expected_kind
-    profile.save(profile_path)
-    assert (
-        json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == normalized_kind
-    )
 
 
 def test_pairing_profile_create_new_does_not_overwrite_existing_path(
