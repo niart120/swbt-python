@@ -96,7 +96,7 @@
 | `PYTHONPYCACHEPREFIX=/tmp/swbt-pycache python -m compileall -q src tests examples` | passed | syntax compile |
 | pairing profile normalization smoke test | passed | 新規 `joycon_l` 保存と旧 `direct_pro` の正規化 |
 | `ruff 0.15.20 format --check .` | passed | CI と同じ Ruff version を一時領域で実行 |
-| `uv run ruff check .` | blocked | 同上 |
+| `ruff 0.15.20 check .` | passed | CI と同じ Ruff version を一時領域で実行 |
 | `uv run ty check --no-progress` | blocked | 同上 |
 | `uv run pytest tests/unit` | blocked | 同上。Bumble を含む依存が未導入 |
 | `uv run pytest tests/integration` | blocked | 同上 |

@@ -6,7 +6,7 @@ from typing import Any, Protocol, cast
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import InvalidKeyStoreError
-from swbt.transport._pairing_profile import PairingProfile, KeyStoreNamespaces
+from swbt.transport._pairing_profile import KeyStoreNamespaces, PairingProfile
 
 PREVIOUS_NAMESPACE_PREFIX = "swbt.previous::"
 

@@ -5,12 +5,12 @@ from dataclasses import dataclass
 import pytest
 
 from swbt import AdapterIdentityRecoveryRequired
+from swbt.transport._adapter_identity import prepare_adapter_identity
 from swbt.transport._csr_bd_addr import (
     CsrBdAddrRewritePlan,
     CsrBdAddrStore,
     CsrVendorCommand,
 )
-from swbt.transport._adapter_identity import prepare_adapter_identity
 from swbt.transport._pairing_profile import LocalAddress
 
 
