@@ -64,17 +64,17 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| implemented / smoke passed | 新規 profile が ReportingMode を含まない controller shape を保存する | regression | unit | no | 新規保存は `pro` / `joycon_l` / `joycon_r`。pytest は環境遮断 |
-| implemented / pending CI | 旧 direct kind を持つ JSON が未対応値として adapter open 前に失敗する | regression | unit | no | `direct_*` を特別扱いせず、既存の `controller_kind` 検証で拒否する |
-| implemented / blocked | 同じ controller shape の periodic / direct が profile を相互利用できる | regression | unit | no | runtime guard test を追加。pytest は環境遮断 |
-| implemented / blocked | controller shape が異なる profile は adapter open 前に拒否される | regression | unit | no | existing guard を `ControllerKind` 比較へ更新。pytest は環境遮断 |
+| implemented / CI passed | 新規 profile が ReportingMode を含まない controller shape を保存する | regression | unit | no | 新規保存は `pro` / `joycon_l` / `joycon_r`。GitHub Actions CI #142 で確認 |
+| implemented / CI passed | 旧 direct kind を持つ JSON が未対応値として adapter open 前に失敗する | regression | unit | no | `direct_*` を特別扱いせず、既存の `controller_kind` 検証で拒否。GitHub Actions CI #142 で確認 |
+| implemented / CI passed | 同じ controller shape の periodic / direct が profile を相互利用できる | regression | unit | no | runtime guard test を追加。GitHub Actions CI #142 で確認 |
+| implemented / CI passed | controller shape が異なる profile は adapter open 前に拒否される | regression | unit | no | `ControllerKind` 比較の guard を GitHub Actions CI #142 で確認 |
 | deferred | Direct / Periodic 間 profile 再利用の実機 pairing / reconnect | characterization | hardware | yes | 明示承認と専用 adapter が必要 |
 
 ## 8. 文書検証計画
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| API / usage / hardware docs | profile の再利用範囲 | 本仕様 §6、test | `uv run mkdocs build --strict` | manual pass / build blocked | 実機共有は未検証、`uv` cache は read-only |
+| API / usage / hardware docs | profile の再利用範囲 | 本仕様 §6、test | `uv run mkdocs build --strict` | GitHub Actions Docs #99 passed | 実機共有は未検証 |
 
 ## 9. 設計メモ
 
@@ -99,7 +99,7 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 |---|---|---|
 | `git diff --check` | passed | whitespace error なし |
 | `PYTHONPYCACHEPREFIX=/tmp/swbt-pycache python -m compileall -q src tests examples` | passed | syntax compile |
-| pairing profile controller kind test | pending CI | 新規 shape-only 値の保存と `direct_*` の未対応扱い |
+| GitHub Actions CI #142 | passed | 新規 shape-only 値の保存と `direct_*` の未対応扱いを含む unit / integration test |
 | `ruff 0.15.20 format --check .` | passed | CI と同じ Ruff version を一時領域で実行 |
 | `ruff 0.15.20 check .` | passed | CI と同じ Ruff version を一時領域で実行 |
 | `uv run ty check --no-progress` | blocked | 同上 |
