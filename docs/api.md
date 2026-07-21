@@ -112,11 +112,11 @@ direct_pad = DirectProController(
 
 `adapter` は Bumble transport に渡すアダプタ名です。
 
-全 concrete controller の `profile_path` は、利用者が用意したローカル Bluetooth アドレスとペアリングキーを同じ swbt プロファイル JSON に保存するパスです。既存プロファイルを再利用する場合だけコンストラクタに渡します。
+すべての具象クラスの `profile_path` は、利用者が用意したローカル Bluetooth アドレスとペアリングキーを同じ swbt プロファイル JSON に保存するパスです。既存プロファイルを再利用する場合だけコンストラクタに渡します。
 
-全 concrete controller は `profile_path` を受け取ります。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに保存先を分けてください。
+すべての具象クラスは `profile_path` を受け取ります。1 つの仮想コントローラーと 1 つの対象機器の組み合わせごとに保存先を分けてください。
 
-新しいプロファイルは、各 concrete controller の `create_profile()` で作成します。`local_address` の生成と重複回避は利用者の責任です。例示した `02:12:34:56:78:9A` を共通値として使わず、controller shape と対象機器ごとに別の値を管理してください。この経路は CSR8510 A10 の揮発領域への書換として提供され、永続領域は変更しません。
+新しいプロファイルは、各具象クラスの `create_profile()` で作成します。`local_address` の生成と重複回避は利用者の責任です。例示した `02:12:34:56:78:9A` を共通値として使わず、コントローラー形状と対象機器ごとに別の値を管理してください。この経路は CSR8510 A10 の揮発領域への書換として提供され、永続領域は変更しません。
 
 ```python
 pad = await ProController.create_profile(
@@ -131,7 +131,7 @@ finally:
     await pad.close()
 ```
 
-`create_profile()` は既存のパスを上書きしません。アドレスまたはプロファイルが不正ならアダプタを開く前に失敗します。別の controller shape の profile は `ProfileControllerMismatchError` になります。ペアリング失敗後もプロファイルは残るため、作成時と同じ controller shape の `profile_path` から再試行できます。揮発領域への書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` が送出されます。この場合は専用 USB Bluetooth ドングルを抜き差ししてから再試行します。
+`create_profile()` は既存のパスを上書きしません。アドレスまたはプロファイルが不正ならアダプタを開く前に失敗します。別のコントローラー形状のプロファイルは `ProfileControllerMismatchError` になります。ペアリング失敗後もプロファイルは残るため、作成時と同じコントローラー形状の `profile_path` から再試行できます。揮発領域への書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` が送出されます。この場合は専用 USB Bluetooth ドングルを抜き差ししてから再試行します。
 
 `report_period_us` は、周期送信型の具象クラスが使うレポートループの送信周期です。`None` を指定した場合は、既定周期（8 ms）を使います。直接送信型の具象クラスは `report_period_us` を受け取りません。入力レポートの送信頻度は利用者が管理します。
 
@@ -283,7 +283,7 @@ async with JoyConL(
 
 `apply(state)` と `send(state)` でも同じ制約を検査します。`JoyConL` または `DirectJoyConL` に右スティック入力や `A`、`B`、`X`、`Y` 入力を含む `InputState`、`JoyConR` または `DirectJoyConR` に左スティック入力や十字キー入力を含む `InputState` を渡すと `UnsupportedInputError` が送出されます。
 
-全 concrete controller は `profile_path` を使えます。profile は `pro` / `joycon_l` / `joycon_r` の controller shape を持つため、異なる shape では別の保存先を使ってください。Direct と Periodic は同じ controller shape の profile を共有できますが、方式間再利用の実機検証は未実施です。
+すべての具象クラスは `profile_path` を使えます。プロファイルは `pro` / `joycon_l` / `joycon_r` のコントローラー形状を持つため、異なるコントローラー形状では別の保存先を使ってください。直接送信型と周期送信型は同じコントローラー形状のプロファイルを共有できますが、方式間再利用の実機検証は未実施です。
 「持ちかた/順番を変える」画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送る必要があります。
 
 OS、ドングル、ファームウェアをまたぐ互換性は未検証です。

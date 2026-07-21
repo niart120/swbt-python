@@ -10,10 +10,10 @@
 
 ### 破壊的変更
 
-- 全 concrete controller から `key_store_path` を削除しました。再接続と初回ペアリングには `profile_path` を使い、新規プロファイルはコンストラクタではなく `await ControllerClass.create_profile(...)` で作成します。
-- native JSON key-store の読み込み、互換モード、自動移行はありません。既存ファイルは再利用できないため、controller shape と対象機器ごとに新しい profile を作成してください。
+- すべての具象クラスから `key_store_path` を削除しました。再接続と初回ペアリングには `profile_path` を使い、新規プロファイルはコンストラクタではなく `await ControllerClass.create_profile(...)` で作成します。
+- native JSON key-store の読み込み、互換モード、自動移行はありません。既存ファイルは再利用できないため、コントローラー形状と対象機器ごとに新しいプロファイルを作成してください。
 - `create_profile(..., exp_local_address=...)` は `create_profile(..., local_address=...)` に、`ExpLocalAddressRecoveryRequired` は `AdapterIdentityRecoveryRequired` に改名しました。
-- profile の controller 分類から Direct / Periodic を除きました。新規 JSON は `pro` / `joycon_l` / `joycon_r` を保存します。`direct_*` を保存した既存 profile は互換ではないため、別の profile path で作成し直して再ペアリングしてください。schema version は更新しません。同じ controller shape の Direct / Periodic が新しい profile を共有できますが、その方式間の実機再利用は未検証です。
+- プロファイルのコントローラー分類から周期送信型／直接送信型を除きました。新規 JSON は `pro` / `joycon_l` / `joycon_r` を保存します。`direct_*` を保存した既存プロファイルは互換ではないため、別の `profile_path` で作り直して再ペアリングしてください。`schema_version` は変更しません。同じコントローラー形状の周期送信型と直接送信型が新しいプロファイルを共有できますが、方式間の実機再利用は未検証です。
 
 ### 対応範囲
 

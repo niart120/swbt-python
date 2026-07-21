@@ -139,7 +139,7 @@ await pad.reconnect(timeout=60.0)
 
 ### Joy-Con / 直接送信型のペアリング情報
 
-周期送信型と直接送信型は、いずれも adapter identity と pairing key を保存する `profile_path` を使います。保存ファイルは Pro Controller、Joy-Con L、Joy-Con R の controller shape ごとに分けます。同じ shape の periodic / direct 間で同じ profile を受け付けますが、その方式間再利用は実機未検証です。
+周期送信型と直接送信型は、いずれもアダプタ識別情報とペアリングキーを保存する `profile_path` を使います。保存ファイルは Pro Controller、Joy-Con L、Joy-Con R のコントローラー形状ごとに分けます。同じコントローラー形状の周期送信型と直接送信型の間で同じプロファイルを受け付けますが、方式間再利用は実機未検証です。
 
 運用例:
 
@@ -147,7 +147,7 @@ await pad.reconnect(timeout=60.0)
 - Joy-Con L 相当: `profiles/joy-con-left.json`
 - Joy-Con R 相当: `profiles/joy-con-right.json`
 
-同じプロファイルでも、接続先の対象機器を分ける場合はペアリング情報の保存ファイルも分けてください。1 つの保存ファイルは「1 つの対象機器」と「1 つの controller shape」の組み合わせに固定します。
+同じコントローラー形状でも、接続先の対象機器を分ける場合はペアリング情報の保存ファイルも分けてください。1 つの保存ファイルは「1 つの対象機器」と「1 つのコントローラー形状」の組み合わせに固定します。
 
 ## Controller Profile Verification Matrix
 以下の表は、各コントローラー種別の動作確認状況をまとめたものです。
@@ -155,8 +155,8 @@ await pad.reconnect(timeout=60.0)
 | Controller profile | Status | Verified scope | Not verified | Profile storage |
 |---|---|---|---|---|
 | Pro Controller | partially verified | 2026-07-20 の unit_052 では、Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 に対し、`profile_path` 経路で揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルの active reconnect、再接続時の profile bytes 不変と advertising / pairing / key 更新なしを確認 | USB 抜き差し後の再適用、Linux、CSR8510 A10 以外、別ファームウェア | 対象機器ごとに別の `profile_path` を使う |
-| Joy-Con L | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 で pairing profile の揮発アドレス準備、初回ペアリング、通常終了、同一 profile の active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性 | controller shape と対象機器ごとに別の `profile_path` を使う |
-| Joy-Con R | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 で pairing profile の揮発アドレス準備、初回ペアリング、通常終了、同一 profile の active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性。fresh pairing teardown の Bumble / usb1 callback warning は hardware log を参照 | controller shape と対象機器ごとに別の `profile_path` を使う |
+| Joy-Con L | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 でペアリングプロファイルの揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルによる active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性 | コントローラー形状と対象機器ごとに別の `profile_path` を使う |
+| Joy-Con R | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 でペアリングプロファイルの揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルによる active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性。fresh pairing teardown の Bumble / usb1 callback warning は hardware log を参照 | コントローラー形状と対象機器ごとに別の `profile_path` を使う |
 
 ## Confirmed Behavior
 
@@ -203,7 +203,7 @@ Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluet
 
 - `reconnect()` / `try_reconnect()` は保存済みペアリング情報がない場合、`no_bond` として失敗します。
 - 初回接続では `connect(..., allow_pairing=True)` か `pair()` を使います。
-- 全 concrete controller で、controller shape と対象機器ごとに別の `profile_path` を指しているか確認します。
+- すべての具象クラスで、コントローラー形状と対象機器ごとに別の `profile_path` を指しているか確認します。
 
 ### Multiple Current Peers
 
