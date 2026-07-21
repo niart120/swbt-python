@@ -6,7 +6,7 @@ from typing import Any, Protocol, cast
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import InvalidKeyStoreError
-from swbt.transport._exp_local_address import ExpLocalProfile, KeyStoreNamespaces
+from swbt.transport._pairing_profile import KeyStoreNamespaces, PairingProfile
 
 PREVIOUS_NAMESPACE_PREFIX = "swbt.previous::"
 
@@ -108,7 +108,7 @@ class _CurrentPreviousProfileKeyStore:
         return f"{PREVIOUS_NAMESPACE_PREFIX}{cast('Any', current_store).namespace}"
 
 
-class _ExpLocalProfileNamespaceStore:
+class _PairingProfileNamespaceStore:
     """JsonKeyStore-compatible view over one profile namespace map."""
 
     def __init__(self, *, profile_path: Path, namespace: str) -> None:
@@ -118,14 +118,14 @@ class _ExpLocalProfileNamespaceStore:
     async def load(
         self,
     ) -> tuple[KeyStoreNamespaces, dict[str, dict[str, object]]]:
-        profile = ExpLocalProfile.load(self._profile_path)
+        profile = PairingProfile.load(self._profile_path)
         self._require_matching_identity(profile)
         namespaces = copy.deepcopy(profile.key_store_namespaces)
         current = namespaces.setdefault(self.namespace, {})
         return namespaces, current
 
     async def save(self, db: KeyStoreNamespaces) -> None:
-        profile = ExpLocalProfile.load(self._profile_path)
+        profile = PairingProfile.load(self._profile_path)
         self._require_matching_identity(profile)
         profile.with_key_store_namespaces(db).save(self._profile_path)
 
@@ -156,14 +156,14 @@ class _ExpLocalProfileNamespaceStore:
 
         return await KeyStore.get_resolving_keys(cast("Any", self))
 
-    def _require_matching_identity(self, profile: ExpLocalProfile) -> None:
-        if str(profile.exp_local_address) == self.namespace:
+    def _require_matching_identity(self, profile: PairingProfile) -> None:
+        if str(profile.local_address) == self.namespace:
             return
-        msg = "profile key-store namespace does not match exp_local_address"
+        msg = "profile key-store namespace does not match local_address"
         raise InvalidKeyStoreError(msg)
 
 
-class _ExpLocalProfileKeyStore(_CurrentPreviousProfileKeyStore):
+class _PairingProfileKeyStore(_CurrentPreviousProfileKeyStore):
     """Current/previous Bumble key store persisted inside a profile envelope."""
 
     def __init__(self, *, profile_path: str | Path, namespace: str) -> None:
@@ -175,7 +175,7 @@ class _ExpLocalProfileKeyStore(_CurrentPreviousProfileKeyStore):
             raise InvalidKeyStoreError(msg)
         return cast(
             "_BumbleJsonKeyStoreRuntime",
-            _ExpLocalProfileNamespaceStore(
+            _PairingProfileNamespaceStore(
                 profile_path=self._filename,
                 namespace=self._namespace,
             ),

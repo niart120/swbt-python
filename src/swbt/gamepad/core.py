@@ -17,10 +17,9 @@ from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.state_store import InputStateStore
-from swbt.transport._exp_local_address import (
-    ExpLocalAddress,
-    ExpLocalControllerKind,
-    ExpLocalProfile,
+from swbt.transport._pairing_profile import (
+    LocalAddress,
+    PairingProfile,
 )
 from swbt.transport.base import HidDeviceTransport
 
@@ -353,24 +352,23 @@ class _PeriodicRuntimeBackedGamepad(_RuntimeBackedGamepad, PeriodicSwitchGamepad
         await self._runtime.apply(state)
 
     @classmethod
-    async def _create_exp_local_profile(
+    async def _create_pairing_profile(
         cls,
         *,
-        controller_kind: ExpLocalControllerKind,
         adapter: str,
         profile_path: str,
-        exp_local_address: str,
+        local_address: str,
         pair_timeout: float | None,
         report_period_us: int | None,
         controller_colors: ControllerColors | None,
         diagnostics: DiagnosticsConfig | None,
     ) -> Self:
         """Create, pair, and clean up a concrete periodic controller profile."""
-        target = ExpLocalAddress.parse(exp_local_address)
-        ExpLocalProfile.create_new(
+        target = LocalAddress.parse(local_address)
+        PairingProfile.create_new(
             profile_path,
             target,
-            controller_kind=controller_kind,
+            controller_kind=cls._controller_spec.profile.kind,
         )
         gamepad = cls(
             adapter=adapter,
@@ -391,7 +389,6 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
     """Runtime-backed gamepad with caller-owned input transmission."""
 
     _reporting_mode = "direct"
-    _exp_local_controller_kind: ExpLocalControllerKind
 
     def __init__(
         self,
@@ -405,7 +402,7 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
 
         Args:
             adapter: Bumble adapter moniker used for the Bluetooth backend.
-            profile_path: Optional swbt-owned exp local address profile path.
+            profile_path: Optional swbt-owned pairing profile path.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
 
@@ -415,7 +412,6 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
         config = self._controller_spec.build_config(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_controller_kind=self._exp_local_controller_kind,
             report_period_us=None,
             controller_colors=controller_colors,
         )
@@ -427,17 +423,17 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
         *,
         adapter: str,
         profile_path: str,
-        exp_local_address: str,
+        local_address: str,
         pair_timeout: float | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
     ) -> Self:
-        """Create a new direct exp local address profile and pair it.
+        """Create a new direct pairing profile and pair it.
 
         Args:
             adapter: Bumble adapter moniker used for volatile identity preparation.
             profile_path: New path for the swbt-owned profile JSON.
-            exp_local_address: Individual locally administered Bluetooth address.
+            local_address: Individual locally administered Bluetooth address.
             pair_timeout: Maximum seconds to wait for the initial pairing connection.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
@@ -446,16 +442,16 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
             The paired direct controller. The caller owns its lifetime.
 
         Raises:
-            ValueError: ``exp_local_address`` is invalid.
+            ValueError: ``local_address`` is invalid.
             FileExistsError: ``profile_path`` already exists.
             Exception: Profile preparation or pairing failed. The created profile remains
                 available for a later retry.
         """
-        target = ExpLocalAddress.parse(exp_local_address)
-        ExpLocalProfile.create_new(
+        target = LocalAddress.parse(local_address)
+        PairingProfile.create_new(
             profile_path,
             target,
-            controller_kind=cls._exp_local_controller_kind,
+            controller_kind=cls._controller_spec.profile.kind,
         )
         gamepad = cls(
             adapter=adapter,
@@ -497,7 +493,7 @@ class ProController(_PeriodicRuntimeBackedGamepad):
 
         Args:
             adapter: Bumble adapter moniker used for the Bluetooth backend.
-            profile_path: Optional swbt-owned exp local address profile path.
+            profile_path: Optional swbt-owned pairing profile path.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
@@ -508,7 +504,6 @@ class ProController(_PeriodicRuntimeBackedGamepad):
         config = self._controller_spec.build_config(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_controller_kind="pro",
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )
@@ -520,18 +515,18 @@ class ProController(_PeriodicRuntimeBackedGamepad):
         *,
         adapter: str,
         profile_path: str,
-        exp_local_address: str,
+        local_address: str,
         pair_timeout: float | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
     ) -> Self:
-        """Create a new exp local address profile and pair it.
+        """Create a new pairing profile and pair it.
 
         Args:
             adapter: Bumble adapter moniker used for volatile identity preparation.
             profile_path: New path for the swbt-owned profile JSON.
-            exp_local_address: Individual locally administered Bluetooth address.
+            local_address: Individual locally administered Bluetooth address.
             pair_timeout: Maximum seconds to wait for the initial pairing connection.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -541,16 +536,15 @@ class ProController(_PeriodicRuntimeBackedGamepad):
             ProController: The paired controller. The caller owns its lifetime.
 
         Raises:
-            ValueError: ``exp_local_address`` is invalid.
+            ValueError: ``local_address`` is invalid.
             FileExistsError: ``profile_path`` already exists.
             Exception: Profile preparation or pairing failed. The created profile remains
                 available for a later retry.
         """
-        return await cls._create_exp_local_profile(
-            controller_kind="pro",
+        return await cls._create_pairing_profile(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_address=exp_local_address,
+            local_address=local_address,
             pair_timeout=pair_timeout,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
@@ -576,7 +570,7 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
 
         Args:
             adapter: Bumble adapter moniker used for the Bluetooth backend.
-            profile_path: Optional swbt-owned exp local address profile path.
+            profile_path: Optional swbt-owned pairing profile path.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
@@ -587,7 +581,6 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
         config = self._controller_spec.build_config(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_controller_kind="joycon_l",
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )
@@ -599,18 +592,18 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
         *,
         adapter: str,
         profile_path: str,
-        exp_local_address: str,
+        local_address: str,
         pair_timeout: float | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
     ) -> Self:
-        """Create a new Joy-Con L exp local address profile and pair it.
+        """Create a new Joy-Con L pairing profile and pair it.
 
         Args:
             adapter: Bumble adapter moniker used for volatile identity preparation.
             profile_path: New path for the swbt-owned profile JSON.
-            exp_local_address: Individual locally administered Bluetooth address.
+            local_address: Individual locally administered Bluetooth address.
             pair_timeout: Maximum seconds to wait for the initial pairing connection.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -620,16 +613,15 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
             JoyConL: The paired controller. The caller owns its lifetime.
 
         Raises:
-            ValueError: ``exp_local_address`` is invalid.
+            ValueError: ``local_address`` is invalid.
             FileExistsError: ``profile_path`` already exists.
             Exception: Profile preparation or pairing failed. The created profile remains
                 available for a later retry.
         """
-        return await cls._create_exp_local_profile(
-            controller_kind="joycon_l",
+        return await cls._create_pairing_profile(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_address=exp_local_address,
+            local_address=local_address,
             pair_timeout=pair_timeout,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
@@ -655,7 +647,7 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
 
         Args:
             adapter: Bumble adapter moniker used for the Bluetooth backend.
-            profile_path: Optional swbt-owned exp local address profile path.
+            profile_path: Optional swbt-owned pairing profile path.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
@@ -666,7 +658,6 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
         config = self._controller_spec.build_config(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_controller_kind="joycon_r",
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )
@@ -678,18 +669,18 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
         *,
         adapter: str,
         profile_path: str,
-        exp_local_address: str,
+        local_address: str,
         pair_timeout: float | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
     ) -> Self:
-        """Create a new Joy-Con R exp local address profile and pair it.
+        """Create a new Joy-Con R pairing profile and pair it.
 
         Args:
             adapter: Bumble adapter moniker used for volatile identity preparation.
             profile_path: New path for the swbt-owned profile JSON.
-            exp_local_address: Individual locally administered Bluetooth address.
+            local_address: Individual locally administered Bluetooth address.
             pair_timeout: Maximum seconds to wait for the initial pairing connection.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -699,16 +690,15 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
             JoyConR: The paired controller. The caller owns its lifetime.
 
         Raises:
-            ValueError: ``exp_local_address`` is invalid.
+            ValueError: ``local_address`` is invalid.
             FileExistsError: ``profile_path`` already exists.
             Exception: Profile preparation or pairing failed. The created profile remains
                 available for a later retry.
         """
-        return await cls._create_exp_local_profile(
-            controller_kind="joycon_r",
+        return await cls._create_pairing_profile(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_address=exp_local_address,
+            local_address=local_address,
             pair_timeout=pair_timeout,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
@@ -720,18 +710,15 @@ class DirectProController(_DirectRuntimeBackedGamepad):
     """Direct-reporting Pro Controller-compatible gamepad."""
 
     _controller_spec = _ControllerSpec(profile=default_controller_profile())
-    _exp_local_controller_kind = "direct_pro"
 
 
 class DirectJoyConL(_DirectRuntimeBackedGamepad):
     """Direct-reporting Joy-Con L-compatible gamepad."""
 
     _controller_spec = _ControllerSpec(profile=JoyConLeftProfile())
-    _exp_local_controller_kind = "direct_joycon_l"
 
 
 class DirectJoyConR(_DirectRuntimeBackedGamepad):
     """Direct-reporting Joy-Con R-compatible gamepad."""
 
     _controller_spec = _ControllerSpec(profile=JoyConRightProfile())
-    _exp_local_controller_kind = "direct_joycon_r"

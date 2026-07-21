@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from swbt.errors import InvalidInputError
 from swbt.protocol.profiles.base import ControllerColors, ControllerProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
-from swbt.transport._exp_local_address import ExpLocalControllerKind
 
 
 @dataclass(frozen=True)
@@ -14,7 +13,7 @@ class _SwitchGamepadConfig:
 
     Attributes:
         adapter: Bumble adapter moniker, such as ``"usb:0"``.
-        profile_path: Path to a swbt-owned exp local address profile.
+        profile_path: Path to a swbt-owned pairing profile.
         profile: Fixed controller identity and protocol profile.
         report_period_us: Periodic input report interval in microseconds.
         device_name: HID device name advertised to the host.
@@ -23,7 +22,6 @@ class _SwitchGamepadConfig:
 
     adapter: str | None = None
     profile_path: str | None = None
-    exp_local_controller_kind: ExpLocalControllerKind | None = None
     profile: ControllerProfile = field(default_factory=default_controller_profile)
     report_period_us: int | None = None
     device_name: str | None = None
@@ -65,13 +63,11 @@ class _ControllerSpec:
         report_period_us: int | None,
         controller_colors: ControllerColors | None,
         profile_path: str | None = None,
-        exp_local_controller_kind: ExpLocalControllerKind | None = None,
     ) -> _SwitchGamepadConfig:
         """Create internal construction config from public constructor options."""
         return _SwitchGamepadConfig(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_controller_kind=exp_local_controller_kind,
             profile=self.profile,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
@@ -84,7 +80,6 @@ class _RuntimeConfig:
 
     adapter: str | None
     profile_path: str | None
-    exp_local_controller_kind: ExpLocalControllerKind | None
     profile: ControllerProfile
     report_period_us: int
     device_name: str
@@ -99,7 +94,6 @@ class _RuntimeConfig:
         return cls(
             adapter=config.adapter,
             profile_path=config.profile_path,
-            exp_local_controller_kind=config.exp_local_controller_kind,
             profile=config.profile,
             report_period_us=config.report_period_us,
             device_name=config.device_name,

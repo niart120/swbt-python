@@ -19,12 +19,12 @@ def pytest_addoption(parser: Parser) -> None:
         help="Directory where hardware diagnostics artifacts should be written.",
     )
     group.addoption(
-        "--swbt-exp-local-address",
+        "--swbt-local-address",
         action="store",
         default=None,
         help=(
             "User-managed individual locally administered address for approved "
-            "exp local profile hardware runs."
+            "pairing profile hardware runs."
         ),
     )
     group.addoption(
@@ -58,10 +58,10 @@ def swbt_hardware_artifact_dir(pytestconfig: Config, tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def swbt_exp_local_address(pytestconfig: Config) -> str:
-    option = pytestconfig.getoption("--swbt-exp-local-address")
+def swbt_local_address(pytestconfig: Config) -> str:
+    option = pytestconfig.getoption("--swbt-local-address")
     if not isinstance(option, str) or option == "":
-        pytest.skip("--swbt-exp-local-address is required for exp profile hardware runs")
+        pytest.skip("--swbt-local-address is required for pairing profile hardware runs")
     return option
 
 

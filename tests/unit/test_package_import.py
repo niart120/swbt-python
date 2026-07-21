@@ -6,6 +6,7 @@ import swbt
 def test_package_exports_public_gamepad_surface() -> None:
     assert swbt.__all__ == (
         "AdapterDiscoveryError",
+        "AdapterIdentityRecoveryRequired",
         "AdapterInfo",
         "Button",
         "ClosedError",
@@ -18,7 +19,6 @@ def test_package_exports_public_gamepad_surface() -> None:
         "DirectJoyConR",
         "DirectProController",
         "DirectSwitchGamepad",
-        "ExpLocalAddressRecoveryRequired",
         "GamepadStatus",
         "IMUFrame",
         "InputState",

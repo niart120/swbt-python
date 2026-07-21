@@ -5,13 +5,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
-from swbt.errors import ExpLocalAddressRecoveryRequired
+from swbt.errors import AdapterIdentityRecoveryRequired
 from swbt.transport._csr_bd_addr import (
     CsrBdAddrRewritePlan,
     CsrVendorCommand,
     build_csr_bd_addr_volatile_experiment_plan,
 )
-from swbt.transport._exp_local_address import ExpLocalAddress
+from swbt.transport._pairing_profile import LocalAddress
 
 
 class _CsrMetadata(Protocol):
@@ -46,7 +46,7 @@ type _Sleep = Callable[[float], Awaitable[None]]
 
 
 @dataclass(frozen=True)
-class ExpLocalIdentityPreparationResult:
+class AdapterIdentityPreparationResult:
     """Result of applying a profile target to the active CSR identity."""
 
     status: Literal["already_active", "rewritten"]
@@ -60,20 +60,20 @@ class _PreparationState:
     write_started: bool = False
 
 
-async def prepare_exp_local_identity(
+async def prepare_adapter_identity(
     *,
     adapter: str,
-    target: ExpLocalAddress,
+    target: LocalAddress,
     response_timeout: float = 2.0,
     reenumeration_timeout: float = 10.0,
     reenumeration_poll_interval: float = 0.25,
     _open_session: _SessionOpener | None = None,
     _sleep: _Sleep = asyncio.sleep,
-) -> ExpLocalIdentityPreparationResult:
+) -> AdapterIdentityPreparationResult:
     """Apply a volatile target and classify uncertainty after write starts."""
     state = _PreparationState()
     try:
-        return await _prepare_exp_local_identity(
+        return await _prepare_adapter_identity(
             adapter=adapter,
             target=target,
             response_timeout=response_timeout,
@@ -83,28 +83,28 @@ async def prepare_exp_local_identity(
             sleep=_sleep,
             state=state,
         )
-    except ExpLocalAddressRecoveryRequired:
+    except AdapterIdentityRecoveryRequired:
         raise
     except Exception as error:
         if not state.write_started:
             raise
-        raise ExpLocalAddressRecoveryRequired(
+        raise AdapterIdentityRecoveryRequired(
             target_address=str(target),
             stage=state.stage,
         ) from error
 
 
-async def _prepare_exp_local_identity(
+async def _prepare_adapter_identity(
     *,
     adapter: str,
-    target: ExpLocalAddress,
+    target: LocalAddress,
     response_timeout: float,
     reenumeration_timeout: float,
     reenumeration_poll_interval: float,
     open_session: _SessionOpener,
     sleep: _Sleep,
     state: _PreparationState,
-) -> ExpLocalIdentityPreparationResult:
+) -> AdapterIdentityPreparationResult:
     state.stage = "opening"
     session = await open_session(adapter)
     reset_enqueued = False
@@ -118,7 +118,7 @@ async def _prepare_exp_local_identity(
         ).upper()
         target_address = str(target)
         if current_address == target_address:
-            return ExpLocalIdentityPreparationResult(
+            return AdapterIdentityPreparationResult(
                 status="already_active",
                 current_address=current_address,
                 target_address=target_address,
@@ -169,7 +169,7 @@ async def _prepare_exp_local_identity(
     if readback_address != target_address:
         msg = f"expected active address {target_address}, got {readback_address}"
         raise RuntimeError(msg)
-    return ExpLocalIdentityPreparationResult(
+    return AdapterIdentityPreparationResult(
         status="rewritten",
         current_address=current_address,
         target_address=target_address,
@@ -187,7 +187,7 @@ async def _initialize_csr_session(
     )
     if metadata.company_identifier != 10:
         msg = (
-            "exp local address preparation requires a CSR controller "
+            "local address preparation requires a CSR controller "
             f"(company identifier 10), got {metadata.company_identifier}"
         )
         raise RuntimeError(msg)

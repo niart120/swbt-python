@@ -64,7 +64,7 @@ class InvalidKeyStoreError(SwbtError):
 
 
 class InvalidProfileError(SwbtError):
-    """Raised when an exp local address profile is invalid or unsupported."""
+    """Raised when a pairing profile is invalid or unsupported."""
 
 
 class ProfileControllerMismatchError(InvalidProfileError):
@@ -86,13 +86,13 @@ class ProfileControllerMismatchError(InvalidProfileError):
         self.actual_controller_kind = actual_controller_kind
 
 
-class ExpLocalAddressRecoveryRequired(SwbtError):  # noqa: N818
+class AdapterIdentityRecoveryRequired(SwbtError):  # noqa: N818
     """Raised when a volatile write may have changed the adapter identity."""
 
     def __init__(self, *, target_address: str, stage: str) -> None:
         """Initialize the target and failure stage requiring physical recovery."""
         message = (
-            "exp local address preparation became uncertain after write started; "
+            "adapter identity preparation became uncertain after write started; "
             "unplug and reconnect the USB dongle before retrying"
         )
         super().__init__(message)

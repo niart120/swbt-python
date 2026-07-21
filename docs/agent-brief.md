@@ -25,11 +25,11 @@ async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json
 
 Create a new persistent Pro Controller profile once with
 `await ProController.create_profile(adapter=..., profile_path=...,
-exp_local_address=..., pair_timeout=...)`. The caller owns address generation and
+local_address=..., pair_timeout=...)`. The caller owns address generation and
 collision avoidance. The path must not already exist. Reuse the returned connected
 controller or close it and pass the same `profile_path` to `ProController(...)`.
 This CSR8510 A10 path writes only volatile state. On
-`ExpLocalAddressRecoveryRequired`, unplug and reconnect the dedicated USB Bluetooth
+`AdapterIdentityRecoveryRequired`, unplug and reconnect the dedicated USB Bluetooth
 dongle before retrying.
 
 For a single Joy-Con L/R, use `JoyConL(...)` or `JoyConR(...)`:
@@ -69,7 +69,7 @@ Rules:
 - Use `IMUFrame.accel_g()` or `IMUFrame.with_accel_g()` for acceleration in G, and `IMUFrame.to_accel_g()` for conversion back to G. The scale is fixed at `1/4096 G/raw`.
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
 - Use `InputState` + `send()` for one complete Direct input report. Awaiting it includes transport completion and state commit.
-- Use a separate `profile_path` and local address for every controller kind and target device.
+- Use a separate `profile_path` and local address for every controller shape and target device.
 - Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`: left does not support right stick or A/B/X/Y, right does not support left stick or D-pad.
 - Use `SwitchGamepad` only when code accepts either reporting contract. Use `PeriodicSwitchGamepad` or `DirectSwitchGamepad` when the sending contract matters.
 - Instantiate `ProController`, `JoyConL`, or `JoyConR` for Periodic reporting. Instantiate the corresponding `Direct*` class for Direct reporting.

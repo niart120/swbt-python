@@ -4,15 +4,15 @@ from pathlib import Path
 import pytest
 
 from swbt import InvalidProfileError
-from swbt.transport._exp_local_address import (
-    ExpLocalAddress,
-    ExpLocalControllerKind,
-    ExpLocalProfile,
+from swbt.protocol.profiles.base import ControllerKind
+from swbt.transport._pairing_profile import (
+    LocalAddress,
+    PairingProfile,
 )
 
 
-def test_exp_local_address_accepts_individual_locally_administered_value() -> None:
-    address = ExpLocalAddress.parse("02:12:34:56:78:9a")
+def test_local_address_accepts_individual_locally_administered_value() -> None:
+    address = LocalAddress.parse("02:12:34:56:78:9a")
 
     assert str(address) == "02:12:34:56:78:9A"
     assert address.bytes == bytes.fromhex("02 12 34 56 78 9A")
@@ -29,20 +29,20 @@ def test_exp_local_address_accepts_individual_locally_administered_value() -> No
         ("02:12:34:9E:8B:3F", "reserved inquiry LAP"),
     ],
 )
-def test_exp_local_address_rejects_values_outside_profile_contract(
+def test_local_address_rejects_values_outside_profile_contract(
     value: str,
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        ExpLocalAddress.parse(value)
+        LocalAddress.parse(value)
 
 
-def test_exp_local_address_allows_values_adjacent_to_reserved_lap() -> None:
-    assert str(ExpLocalAddress.parse("02:12:34:9E:8A:FF")) == "02:12:34:9E:8A:FF"
-    assert str(ExpLocalAddress.parse("02:12:34:9E:8B:40")) == "02:12:34:9E:8B:40"
+def test_local_address_allows_values_adjacent_to_reserved_lap() -> None:
+    assert str(LocalAddress.parse("02:12:34:9E:8A:FF")) == "02:12:34:9E:8A:FF"
+    assert str(LocalAddress.parse("02:12:34:9E:8B:40")) == "02:12:34:9E:8B:40"
 
 
-def test_exp_local_profile_loads_supported_pro_controller_envelope(
+def test_pairing_profile_loads_supported_pro_controller_envelope(
     tmp_path: Path,
 ) -> None:
     profile_path = tmp_path / "profile.json"
@@ -62,10 +62,10 @@ def test_exp_local_profile_loads_supported_pro_controller_envelope(
         encoding="utf-8",
     )
 
-    profile = ExpLocalProfile.load(profile_path)
+    profile = PairingProfile.load(profile_path)
 
-    assert str(profile.exp_local_address) == "02:12:34:56:78:9A"
-    assert profile.controller_kind == "pro"
+    assert str(profile.local_address) == "02:12:34:56:78:9A"
+    assert profile.controller_kind is ControllerKind.PRO_CONTROLLER
     assert profile.key_store_namespaces == {"02:12:34:56:78:9A": {}}
 
 
@@ -106,6 +106,36 @@ def test_exp_local_profile_loads_supported_pro_controller_envelope(
         {
             "format": "swbt.profile",
             "schema_version": 1,
+            "controller_kind": "direct_pro",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 1,
+            "controller_kind": "direct_joycon_l",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 1,
+            "controller_kind": "direct_joycon_r",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 1,
             "controller_kind": "pro",
             "identity": {
                 "kind": "factory-address",
@@ -125,7 +155,7 @@ def test_exp_local_profile_loads_supported_pro_controller_envelope(
         },
     ],
 )
-def test_exp_local_profile_rejects_unsupported_envelope_before_adapter_open(
+def test_pairing_profile_rejects_unsupported_envelope_before_adapter_open(
     tmp_path: Path,
     payload: object,
 ) -> None:
@@ -133,30 +163,30 @@ def test_exp_local_profile_rejects_unsupported_envelope_before_adapter_open(
     profile_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(InvalidProfileError):
-        ExpLocalProfile.load(profile_path)
+        PairingProfile.load(profile_path)
 
 
-def test_exp_local_profile_rejects_malformed_json_before_adapter_open(
+def test_pairing_profile_rejects_malformed_json_before_adapter_open(
     tmp_path: Path,
 ) -> None:
     profile_path = tmp_path / "profile.json"
     profile_path.write_text("{", encoding="utf-8")
 
     with pytest.raises(InvalidProfileError):
-        ExpLocalProfile.load(profile_path)
+        PairingProfile.load(profile_path)
 
 
-def test_exp_local_profile_create_new_atomically_saves_empty_pro_envelope(
+def test_pairing_profile_create_new_atomically_saves_empty_pro_envelope(
     tmp_path: Path,
 ) -> None:
     profile_path = tmp_path / "profiles" / "pro.json"
 
-    profile = ExpLocalProfile.create_new(
+    profile = PairingProfile.create_new(
         profile_path,
-        ExpLocalAddress.parse("02:12:34:56:78:9A"),
+        LocalAddress.parse("02:12:34:56:78:9A"),
     )
 
-    assert profile == ExpLocalProfile.load(profile_path)
+    assert profile == PairingProfile.load(profile_path)
     assert json.loads(profile_path.read_text(encoding="utf-8")) == {
         "format": "swbt.profile",
         "schema_version": 1,
@@ -175,60 +205,39 @@ def test_exp_local_profile_create_new_atomically_saves_empty_pro_envelope(
     assert list(profile_path.parent.iterdir()) == [profile_path]
 
 
-def test_exp_local_profile_create_new_saves_joycon_l_controller_kind(
+def test_pairing_profile_create_new_saves_joycon_l_controller_kind(
     tmp_path: Path,
 ) -> None:
     profile_path = tmp_path / "joycon-l.json"
 
-    profile = ExpLocalProfile.create_new(
+    profile = PairingProfile.create_new(
         profile_path,
-        ExpLocalAddress.parse("02:12:34:56:78:9A"),
-        controller_kind="joycon_l",
+        LocalAddress.parse("02:12:34:56:78:9A"),
+        controller_kind=ControllerKind.JOYCON_LEFT,
     )
 
-    assert profile.controller_kind == "joycon_l"
-    assert ExpLocalProfile.load(profile_path).controller_kind == "joycon_l"
-    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == ("joycon_l")
+    assert profile.controller_kind is ControllerKind.JOYCON_LEFT
+    assert PairingProfile.load(profile_path).controller_kind is ControllerKind.JOYCON_LEFT
+    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == "joycon_l"
 
 
-def test_exp_local_profile_create_new_saves_joycon_r_controller_kind(
+def test_pairing_profile_create_new_saves_joycon_r_controller_kind(
     tmp_path: Path,
 ) -> None:
     profile_path = tmp_path / "joycon-r.json"
 
-    profile = ExpLocalProfile.create_new(
+    profile = PairingProfile.create_new(
         profile_path,
-        ExpLocalAddress.parse("02:12:34:56:78:9A"),
-        controller_kind="joycon_r",
+        LocalAddress.parse("02:12:34:56:78:9A"),
+        controller_kind=ControllerKind.JOYCON_RIGHT,
     )
 
-    assert profile.controller_kind == "joycon_r"
-    assert ExpLocalProfile.load(profile_path).controller_kind == "joycon_r"
-    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == ("joycon_r")
+    assert profile.controller_kind is ControllerKind.JOYCON_RIGHT
+    assert PairingProfile.load(profile_path).controller_kind is ControllerKind.JOYCON_RIGHT
+    assert json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == "joycon_r"
 
 
-@pytest.mark.parametrize(
-    "controller_kind",
-    ["direct_pro", "direct_joycon_l", "direct_joycon_r"],
-)
-def test_exp_local_profile_create_new_saves_direct_controller_kind(
-    tmp_path: Path,
-    controller_kind: ExpLocalControllerKind,
-) -> None:
-    """A new direct profile records its concrete reporting kind."""
-    profile_path = tmp_path / f"{controller_kind}.json"
-
-    profile = ExpLocalProfile.create_new(
-        profile_path,
-        ExpLocalAddress.parse("02:12:34:56:78:9A"),
-        controller_kind=controller_kind,
-    )
-
-    assert profile.controller_kind == controller_kind
-    assert ExpLocalProfile.load(profile_path).controller_kind == controller_kind
-
-
-def test_exp_local_profile_create_new_does_not_overwrite_existing_path(
+def test_pairing_profile_create_new_does_not_overwrite_existing_path(
     tmp_path: Path,
 ) -> None:
     profile_path = tmp_path / "pro.json"
@@ -236,9 +245,9 @@ def test_exp_local_profile_create_new_does_not_overwrite_existing_path(
     profile_path.write_bytes(original)
 
     with pytest.raises(FileExistsError):
-        ExpLocalProfile.create_new(
+        PairingProfile.create_new(
             profile_path,
-            ExpLocalAddress.parse("02:12:34:56:78:9A"),
+            LocalAddress.parse("02:12:34:56:78:9A"),
         )
 
     assert profile_path.read_bytes() == original

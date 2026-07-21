@@ -18,7 +18,7 @@ from swbt.protocol.profiles.joycon import JoyConLeftProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport import bumble as bumble_module
 from swbt.transport._bumble_sdp import build_hid_service_records
-from swbt.transport._exp_local_address import ExpLocalAddress, ExpLocalProfile
+from swbt.transport._pairing_profile import LocalAddress, PairingProfile
 from swbt.transport.bumble import BumbleHidTransport
 
 
@@ -488,8 +488,8 @@ def test_bumble_initialize_device_configures_profile_key_store(
         monkeypatch.setattr(bumble_hid_module, "Device", create_hid_device)
 
         profile_path = tmp_path / "profile.json"
-        target = ExpLocalAddress.parse("02:12:34:56:78:9A")
-        ExpLocalProfile.create_new(profile_path, target)
+        target = LocalAddress.parse("02:12:34:56:78:9A")
+        PairingProfile.create_new(profile_path, target)
 
         await bumble_module._default_initialize_device(
             FakeBumbleHandle(),
@@ -498,7 +498,7 @@ def test_bumble_initialize_device_configures_profile_key_store(
             profile_path=str(profile_path),
         )
 
-        assert isinstance(fake_device.keystore, bumble_module._ExpLocalProfileKeyStore)
+        assert isinstance(fake_device.keystore, bumble_module._PairingProfileKeyStore)
 
     asyncio.run(run())
 

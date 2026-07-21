@@ -4,14 +4,14 @@ from dataclasses import dataclass
 
 import pytest
 
-from swbt import ExpLocalAddressRecoveryRequired
+from swbt import AdapterIdentityRecoveryRequired
+from swbt.transport._adapter_identity import prepare_adapter_identity
 from swbt.transport._csr_bd_addr import (
     CsrBdAddrRewritePlan,
     CsrBdAddrStore,
     CsrVendorCommand,
 )
-from swbt.transport._exp_local_address import ExpLocalAddress
-from swbt.transport._exp_local_identity import prepare_exp_local_identity
+from swbt.transport._pairing_profile import LocalAddress
 
 
 @dataclass(frozen=True)
@@ -60,7 +60,7 @@ class _FakeSession:
         self.events.append("close")
 
 
-def test_prepare_exp_local_identity_skips_write_when_target_is_already_active() -> None:
+def test_prepare_adapter_identity_skips_write_when_target_is_already_active() -> None:
     session = _FakeSession()
 
     async def open_session(adapter: str) -> _FakeSession:
@@ -69,9 +69,9 @@ def test_prepare_exp_local_identity_skips_write_when_target_is_already_active() 
         return session
 
     result = asyncio.run(
-        prepare_exp_local_identity(
+        prepare_adapter_identity(
             adapter="usb:0",
-            target=ExpLocalAddress.parse("02:12:34:56:78:9A"),
+            target=LocalAddress.parse("02:12:34:56:78:9A"),
             _open_session=open_session,
         )
     )
@@ -138,7 +138,7 @@ class _WritableFakeSession(_FakeSession):
         self.events.append(f"{self.label}:close")
 
 
-def test_prepare_exp_local_identity_rewrites_then_reopens_and_reads_back() -> None:
+def test_prepare_adapter_identity_rewrites_then_reopens_and_reads_back() -> None:
     events: list[str] = []
     sessions = [
         _WritableFakeSession(
@@ -171,9 +171,9 @@ def test_prepare_exp_local_identity_rewrites_then_reopens_and_reads_back() -> No
         events.append("wait_reenumeration")
 
     result = asyncio.run(
-        prepare_exp_local_identity(
+        prepare_adapter_identity(
             adapter="usb:0",
-            target=ExpLocalAddress.parse("02:12:34:56:78:9A"),
+            target=LocalAddress.parse("02:12:34:56:78:9A"),
             reenumeration_poll_interval=0.25,
             _open_session=open_session,
             _sleep=sleep,
@@ -201,7 +201,7 @@ def test_prepare_exp_local_identity_rewrites_then_reopens_and_reads_back() -> No
     assert sessions == []
 
 
-def test_prepare_exp_local_identity_requires_recovery_when_reenumeration_fails() -> None:
+def test_prepare_adapter_identity_requires_recovery_when_reenumeration_fails() -> None:
     events: list[str] = []
     before = _WritableFakeSession(
         address="00:1B:DC:F9:9F:7D",
@@ -224,11 +224,11 @@ def test_prepare_exp_local_identity_requires_recovery_when_reenumeration_fails()
         assert delay == 0.25
         events.append("wait_reenumeration")
 
-    with pytest.raises(ExpLocalAddressRecoveryRequired) as raised:
+    with pytest.raises(AdapterIdentityRecoveryRequired) as raised:
         asyncio.run(
-            prepare_exp_local_identity(
+            prepare_adapter_identity(
                 adapter="usb:0",
-                target=ExpLocalAddress.parse("02:12:34:56:78:9A"),
+                target=LocalAddress.parse("02:12:34:56:78:9A"),
                 reenumeration_timeout=0,
                 reenumeration_poll_interval=0.25,
                 _open_session=open_session,

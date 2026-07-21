@@ -32,8 +32,8 @@ from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.subcommand import SubcommandResponder
 from swbt.report_loop import ReportLoop, ReportSender
 from swbt.state_store import InputStateStore
-from swbt.transport._exp_local_address import ExpLocalProfile
-from swbt.transport._exp_local_identity import prepare_exp_local_identity
+from swbt.transport._adapter_identity import prepare_adapter_identity
+from swbt.transport._pairing_profile import PairingProfile
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
 
 
@@ -60,7 +60,7 @@ class ControllerRuntime:
         Args:
             adapter: Bumble adapter moniker used when the default transport is created.
                 Required unless a custom transport is supplied.
-            profile_path: Optional swbt-owned exp local address profile path.
+            profile_path: Optional swbt-owned pairing profile path.
             report_period_us: Optional periodic input report interval in microseconds.
             device_name: Optional HID device name passed to the default transport.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -75,7 +75,6 @@ class ControllerRuntime:
         config = _SwitchGamepadConfig(
             adapter=adapter,
             profile_path=profile_path,
-            exp_local_controller_kind="pro" if profile_path is not None else None,
             report_period_us=report_period_us,
             device_name=device_name,
             controller_colors=controller_colors,
@@ -98,7 +97,7 @@ class ControllerRuntime:
         self._reporting_mode = reporting_mode
         self._transport = transport
         self._transport_was_injected = transport is not None
-        self._exp_local_profile: ExpLocalProfile | None = None
+        self._pairing_profile: PairingProfile | None = None
         if transport is None:
             self._transport_factory = _BumbleTransportFactory()
         else:
@@ -213,7 +212,7 @@ class ControllerRuntime:
         async with self._lifecycle_lock:
             if self._is_open:
                 return
-            await self._prepare_exp_local_profile()
+            await self._prepare_pairing_profile()
             transport = self._ensure_transport()
             self._record_run_metadata()
             self._connection_state = "opening"
@@ -864,30 +863,26 @@ class ControllerRuntime:
         finally:
             self._disconnect_event.set()
 
-    async def _prepare_exp_local_profile(self) -> None:
+    async def _prepare_pairing_profile(self) -> None:
         if self._transport_was_injected or self._config.profile_path is None:
             return
-        profile = ExpLocalProfile.load(self._config.profile_path)
-        expected_controller_kind = self._config.exp_local_controller_kind
-        if expected_controller_kind is None:
-            msg = "exp local controller kind is required with profile_path"
-            raise InvalidInputError(msg)
-        profile.require_controller_kind(expected_controller_kind)
+        profile = PairingProfile.load(self._config.profile_path)
+        profile.require_controller_kind(self._config.profile.kind)
         adapter = self._config.adapter
         if adapter is None:
-            msg = "adapter is required for exp local address preparation"
+            msg = "adapter is required for pairing profile preparation"
             raise InvalidInputError(msg)
-        result = await prepare_exp_local_identity(
+        result = await prepare_adapter_identity(
             adapter=adapter,
-            target=profile.exp_local_address,
+            target=profile.local_address,
         )
         self._diagnostics.record_event(
-            "exp_local_identity_prepared",
+            "adapter_identity_prepared",
             current_address=result.current_address,
             status=result.status,
             target_address=result.target_address,
         )
-        self._exp_local_profile = profile
+        self._pairing_profile = profile
 
     def _ensure_transport(self) -> HidDeviceTransport:
         if self._transport is None:
@@ -904,11 +899,11 @@ class ControllerRuntime:
                 profile=self._controller_profile,
                 diagnostics=self._diagnostics,
                 profile_path=(
-                    self._config.profile_path if self._exp_local_profile is not None else None
+                    self._config.profile_path if self._pairing_profile is not None else None
                 ),
                 expected_local_bluetooth_address=(
-                    self._exp_local_profile.exp_local_address.bytes
-                    if self._exp_local_profile is not None
+                    self._pairing_profile.local_address.bytes
+                    if self._pairing_profile is not None
                     else None
                 ),
             )

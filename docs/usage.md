@@ -60,13 +60,13 @@ asyncio.run(main())
 
 ### プロファイルの初回作成
 
-全 concrete controller の exp local identity と接続情報を永続化する場合は、最初の 1 回だけ各 class の `create_profile()` を使います。`exp_local_address` は利用者が生成し、同時に使う他の Bluetooth デバイスと重複しない値を選びます。例示した値を共通値として使わず、controller kind と対象機器ごとに管理する値へ置き換えてください。
+すべての具象クラスのアダプタ識別情報と接続情報を永続化する場合は、最初の 1 回だけ各具象クラスの `create_profile()` を使います。`local_address` は利用者が生成し、同時に使う他の Bluetooth デバイスと重複しない値を選びます。例示した値を共通値として使わず、コントローラー形状と対象機器ごとに管理する値へ置き換えてください。
 
 ```python
 pad = await ProController.create_profile(
     adapter="usb:0",
     profile_path="profiles/switch-pro.json",
-    exp_local_address="02:12:34:56:78:9A",
+    local_address="02:12:34:56:78:9A",
     pair_timeout=60.0,
 )
 try:
@@ -75,19 +75,19 @@ finally:
     await pad.close()
 ```
 
-Joy-Con も同じ手順で作成します。左右で同じ `profile_path` または `exp_local_address` を共有しません。
+Joy-Con も同じ手順で作成します。左右で同じ `profile_path` または `local_address` を共有しません。
 
 ```python
 left = await JoyConL.create_profile(
     adapter="usb:0",
     profile_path="profiles/switch-left-joycon.json",
-    exp_local_address="06:12:34:56:78:9A",
+    local_address="06:12:34:56:78:9A",
     pair_timeout=60.0,
 )
 await left.close()
 ```
 
-対象は CSR8510 A10 の揮発領域への書換経路です。アダプタの永続領域は変更しません。既存のパスは上書きされません。ペアリングが失敗してもプロファイルは残るため、作成時と同じ具象クラスの `profile_path` から再試行します。`ExpLocalAddressRecoveryRequired` が送出された場合は、USB ドングルを抜き差ししてから再試行してください。別の controller kind の profile を渡した場合は `ProfileControllerMismatchError` がアダプタを開く前に送出されます。
+対象は CSR8510 A10 の揮発領域への書換経路です。アダプタの永続領域は変更しません。既存のパスは上書きされません。ペアリングが失敗してもプロファイルは残るため、作成時と同じコントローラー形状の `profile_path` から再試行します。`AdapterIdentityRecoveryRequired` が送出された場合は、USB ドングルを抜き差ししてから再試行してください。別のコントローラー形状のプロファイルを渡した場合は `ProfileControllerMismatchError` がアダプタを開く前に送出されます。直接送信型と周期送信型の間で同じコントローラー形状のプロファイルを使う実機確認は未実施です。
 
 ### 接続時の再接続・ペアリング選択
 
@@ -162,7 +162,7 @@ second = ProController(
 )
 ```
 
-1 つの保存ファイルに複数の保存済みペアリング情報を混ぜないでください。全 concrete controller で、controller kind と対象機器ごとに別の `profile_path` を使います。
+1 つの保存ファイルに複数の保存済みペアリング情報を混ぜないでください。すべての具象クラスで、コントローラー形状と対象機器ごとに別の `profile_path` を使います。
 
 ## Joy-Con L/R
 

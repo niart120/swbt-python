@@ -118,23 +118,23 @@ BumbleHidTransport(
 )
 ```
 
-`profile_path` の実際の読み書きは Bumble key store が必要とする reconnect / pairing key update のタイミングで行う。`profile_path` は上位 runtime が adapter open 前に検証し、transport は `key_store.namespaces` だけを Bumble KeyStore interface として読み書きする。envelope の identity と controller kind は保持し、更新時はファイル全体を原子的に置き換える。
+`profile_path` の実際の読み書きは Bumble key store が必要とする reconnect / pairing key update のタイミングで行う。`profile_path` は上位 runtime が adapter open 前に検証し、transport は `key_store.namespaces` だけを Bumble KeyStore interface として読み書きする。envelope の identity と controller shape は保持し、更新時はファイル全体を原子的に置き換える。
 
 ### 3.1.1 接続情報と local BD_ADDR
 
-`profile_path` は bond / link key の保存先だけを選び、local Bluetooth identity は変更しない。`ProController` の exp profile 経路では、利用者が管理する `exp_local_address` と pairing key namespace を同じ profile envelope に保存する。
+`profile_path` は bond / link key の保存先だけを選び、local Bluetooth identity は変更しない。`ProController` の pairing profile 経路では、利用者が管理する `local_address` と pairing key namespace を同じ profile envelope に保存する。
 
 対象は CSR8510 A10 の volatile 操作である。runtime は Bumble transport を作る前に raw CSR session で現在値を読む。現在値が target と異なる場合だけ PSRAM write、warm reset、USB 再列挙、read-back を行う。永続領域は変更しない。現在値が target と一致する場合は write と reset を省略する。
 
-raw session と Bumble transport は同時に adapter を開かない。write 開始後に再列挙または read-back を確定できない場合は `ExpLocalAddressRecoveryRequired` を送出し、pairing を始めない。利用者は専用 USB Bluetooth ドングルを抜き差ししてから再試行する。
+raw session と Bumble transport は同時に adapter を開かない。write 開始後に再列挙または read-back を確定できない場合は `AdapterIdentityRecoveryRequired` を送出し、pairing を始めない。利用者は専用 USB Bluetooth ドングルを抜き差ししてから再試行する。
 
-`BumbleHidTransport` は `power_on()` 後、discoverable / connectable、pairing、active reconnect の前に public address を target と照合する。不一致なら Switch から見える状態へ進まない。準備結果は `exp_local_identity_prepared` diagnostics event に `already_active` または `rewritten` として記録する。
+`BumbleHidTransport` は `power_on()` 後、discoverable / connectable、pairing、active reconnect の前に public address を target と照合する。不一致なら Switch から見える状態へ進まない。準備結果は `adapter_identity_prepared` diagnostics event に `already_active` または `rewritten` として記録する。
 
 `close()` は transport と controller resource を閉じるだけで、volatile address を元へ戻さない。CSR8510 A10 / WinUSB / Bumble 0.0.230 の対象個体では通常 close と raw adapter 再 open をまたいで値を保持し、USB power cycle 後に元へ戻ることを観測した。他 adapter、driver、OS へ一般化しない。
 
 2026-07-20 の unit_052 実機 gate では、同じ対象個体で fresh profile の pairing と通常 close 後、同じ profile による active reconnect が pass した。再接続時は `current = target` のため write / reset を省略し、profile bytes を変更せず、advertising / pairing / key update を行わなかった。Switch 2 / firmware 22.5.0 は利用者確認済みである。
 
-`exp_local_address` の生成、重複回避、同時利用管理は利用者の責任とする。swbt は 6 octet、individual、locally administered、予約 inquiry LAP 以外であることを検査する。factory / baseline address は profile に保存せず、公開 read-only probe も提供しない。
+`local_address` の生成、重複回避、同時利用管理は利用者の責任とする。swbt は 6 octet、individual、locally administered、予約 inquiry LAP 以外であることを検査する。factory / baseline address は profile に保存せず、公開 read-only probe も提供しない。
 
 ### 3.2 Bumble device 生成
 

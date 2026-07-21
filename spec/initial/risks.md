@@ -144,30 +144,30 @@ Switch の初期化 sequence で必要な subcommand への応答が不足する
 - `SubcommandResponder` の unit test を追加してから実機再検証する
 - `0x21` reply を periodic `0x30` より優先する
 
-## 8. exp local identity と reconnect の不確実性
+## 8. adapter identity と reconnect の不確実性
 
 ### 8.1 内容
 
 pairing 情報、link key、active reconnect / incoming reconnect の挙動は Bumble と OS / dongle の組み合わせに依存する。key store だけを分けても local BD_ADDR が同じなら、Switch から見た物理 device identity は分離できない。
 
-Periodic controller の exp profile 経路は、利用者が管理する locally administered address を CSR8510 A10 の volatile 領域へ適用し、同じ JSON envelope に controller kind と pairing key を保存する。これは正式割当の universal EUI-48 を取得・管理する機能ではない。address の生成、重複回避、同時利用管理は利用者の責任である。
+concrete controller の pairing profile 経路は、利用者が管理する locally administered address を CSR8510 A10 の volatile 領域へ適用し、同じ JSON envelope に controller shape と pairing key を保存する。これは正式割当の universal EUI-48 を取得・管理する機能ではない。address の生成、重複回避、同時利用管理は利用者の責任である。
 
 ### 8.2 影響
 
 - 同じ local address を複数 adapter で同時に使うと identity が衝突する
 - volatile write 後の warm reset / USB 再列挙に失敗すると、adapter の現在状態を process から確定できない
 - USB power cycle 後は target address が失われ、次回利用時に再適用が必要になる
-- profile envelope、controller kind、pairing key namespace が不一致だと誤った identity で接続を始める可能性がある
+- profile envelope、controller shape、pairing key namespace が不一致だと誤った identity で接続を始める可能性がある
 - CSR8510 A10 以外の adapter では vendor command または再列挙方式が異なる可能性がある
 
 ### 8.3 対策
 
 - address は 6 octet、individual、locally administered、予約 inquiry LAP 以外であることを adapter open 前に検査する
-- profile envelope に schema version、controller kind、target address、key store namespace map を保存し、生 Bumble JSON は受け付けない
-- profile の controller kind が concrete controller と一致しない場合は、raw preparation と adapter open の前に `ProfileControllerMismatchError` を送出する
+- profile envelope に schema version、controller shape、target address、key store namespace map を保存し、生 Bumble JSON は受け付けない
+- profile の controller shape が concrete controller と一致しない場合は、raw preparation と adapter open の前に `ProfileControllerMismatchError` を送出する
 - current address が target と異なる場合だけ volatile write と warm reset を行い、再列挙後に read-back する
 - Bumble `power_on()` 後、advertising / pairing / reconnect より前に target address を再照合する
-- write 開始後の状態を確定できない場合は `ExpLocalAddressRecoveryRequired` を送出し、専用 USB Bluetooth ドングルの抜き差しを求める
+- write 開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` を送出し、専用 USB Bluetooth ドングルの抜き差しを求める
 - pairing / reconnect の通常失敗は recovery-required にせず、同じ profile から再試行できるようにする
 - `close()` は volatile address を戻さず、次回の同 profile 利用を妨げない
 - factory / baseline address は保存せず、公開 read-only probe も提供しない

@@ -29,7 +29,7 @@ async def main() -> None:
     pad = await ProController.create_profile(
         adapter="usb:0",
         profile_path="profiles/switch-pro.json",
-        exp_local_address="02:12:34:56:78:9A",
+        local_address="02:12:34:56:78:9A",
         pair_timeout=60.0,
     )
     try:
@@ -40,7 +40,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`create_profile()` は新規プロファイルを保存して初回ペアリングを行う。`exp_local_address` の生成と重複回避は利用者が担う。以降の例はこのプロファイルが存在する前提とし、`connect()` は保存済みペアリング情報があれば再接続を優先する。ペアリングの再試行まで許可する場合だけ `allow_pairing=True` を指定する。
+`create_profile()` は新規プロファイルを保存して初回ペアリングを行う。`local_address` の生成と重複回避は利用者が担う。以降の例はこのプロファイルが存在する前提とし、`connect()` は保存済みペアリング情報があれば再接続を優先する。ペアリングの再試行まで許可する場合だけ `allow_pairing=True` を指定する。
 
 ### 2.2 複数ボタンを押す
 
@@ -164,7 +164,7 @@ class ProController(PeriodicSwitchGamepad):
         *,
         adapter: str,
         profile_path: str,
-        exp_local_address: str,
+        local_address: str,
         pair_timeout: float | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
@@ -201,21 +201,21 @@ class DirectProController(DirectSwitchGamepad):
     async def create_profile(...) -> Self: ...
 ```
 
-全 concrete controller は `profile_path` と `create_profile()` を持つ。profile は exp local identity と pairing key を同じ envelope に保存する。
+全 concrete controller は `profile_path` と `create_profile()` を持つ。profile は adapter identity と pairing key を同じ envelope に保存する。
 
 | 引数 | 意味 |
 |---|---|
 | `adapter` | Bumble transport に渡す adapter moniker |
-| `profile_path` | concrete controller が exp local identity と pairing key を読み書きする swbt profile JSON path |
+| `profile_path` | concrete controller が adapter identity と pairing key を読み書きする swbt profile JSON path |
 | `report_period_us` | Periodic だけが受け取る入力レポートの送信周期。`None` は profile の既定値 |
 | `controller_colors` | SPI profile で返す controller body / buttons / left grip / right grip の固定色 |
 | `diagnostics` | trace と counter の設定 |
 
 公開 constructor では `adapter` は必須である。transport 注入と profile 差し替えは内部 test helper に限定し、公開 extension point としない。
 
-concrete controller の `profile_path` は、利用者が選んだ `exp_local_address` と pairing key を同じ swbt profile JSON に保存する。新規 path は具象 class の `create_profile()` で作成し、既存 path は同じ controller kind の constructor に渡して再利用する。異なる kind の profile は `ProfileControllerMismatchError` とし、adapter open 前に拒否する。
+concrete controller の `profile_path` は、利用者が選んだ `local_address` と pairing key を同じ swbt profile JSON に保存する。新規 path は具象 class の `create_profile()` で作成し、既存 path は同じ controller shape の constructor に渡して再利用する。異なる shape の profile は `ProfileControllerMismatchError` とし、adapter open 前に拒否する。
 
-`profile_path` は全 concrete controller の pairing storage を定義する。controller kind または対象機器が異なる場合は保存先を分ける。`profile_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。
+`profile_path` は全 concrete controller の pairing storage を定義する。Pro Controller、Joy-Con L、Joy-Con R の controller shape または対象機器が異なる場合は保存先を分ける。Direct と Periodic の差は runtime の送信方式であり、同じ controller shape では同じ profile を利用できる。`profile_path=None` は永続 bond を持たない一時的な仮想 controller を意味する。
 
 `create_profile()` は path が存在する場合に上書きせず `FileExistsError` を送出する。address は 6 octet の individual / locally administered address だけを受理し、予約 inquiry LAP を拒否する。pairing に失敗した場合も profile は残り、同じ `profile_path` を通常 constructor に渡して再試行できる。
 
@@ -342,7 +342,7 @@ async with JoyConL(
 
 片側 Joy-Con が持たない button / stick は `UnsupportedInputError` とする。左 Joy-Con は A/B/X/Y、right stick などを扱わない。右 Joy-Con は D-pad、left stick などを扱わない。`InputState` を `apply()` または `send()` する場合も同じ検査を行い、不正 state は送信・commit しない。
 
-全 concrete controller は `profile_path` を使える。各 profile envelope は `pro` / `joycon_l` / `joycon_r` / `direct_pro` / `direct_joycon_l` / `direct_joycon_r` の kind を持ち、別 kind の constructor では開けない。同じ対象機器でも controller kind ごとに別の保存 path と `exp_local_address` を管理する。Direct と Periodic 間で profile を共有しない。
+全 concrete controller は `profile_path` を使える。各 profile envelope は `pro` / `joycon_l` / `joycon_r` の controller shape を持ち、別 shape の constructor では開けない。同じ対象機器でも controller shape ごとに別の保存 path と `local_address` を管理する。Direct と Periodic は同じ controller shape の profile を共有できる。実機での方式間再利用は未検証である。
 
 `JoyConPair` は初期 API に含めない。左右を 1 つの controller として束ねる API は、左右別 device の connect / disconnect failure semantics と cleanup を別途設計してから追加する。
 
