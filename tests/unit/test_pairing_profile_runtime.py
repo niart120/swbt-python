@@ -184,13 +184,38 @@ def test_direct_controller_reuses_profile_for_the_same_controller_shape(
             target_address="02:12:34:56:78:9A",
         )
 
+    captured: dict[str, object] = {}
+    transport = FakeHidTransport()
+
+    def create_transport(
+        *,
+        profile_path: str | None,
+        expected_local_bluetooth_address: bytes | None,
+        **_kwargs: object,
+    ) -> HidDeviceTransport:
+        captured["profile_path"] = profile_path
+        captured["expected_local_bluetooth_address"] = expected_local_bluetooth_address
+        return transport
+
     monkeypatch.setattr(gamepad_runtime, "prepare_adapter_identity", prepare)
+    monkeypatch.setattr(
+        gamepad_transport_factory,
+        "create_default_transport",
+        create_transport,
+    )
     pad = controller_cls(adapter="usb:0", profile_path=str(profile_path))
 
-    asyncio.run(pad._runtime._prepare_pairing_profile())
+    asyncio.run(pad.open())
 
     assert pad._runtime._pairing_profile is not None
     assert pad._runtime._pairing_profile.controller_kind is controller_kind
+    assert captured["profile_path"] == str(profile_path)
+    assert captured["expected_local_bluetooth_address"] == bytes.fromhex("02 12 34 56 78 9A")
+    assert transport.open_count == 1
+
+    asyncio.run(pad.close())
+
+    assert transport.close_count == 1
 
 
 def test_profile_target_is_forwarded_to_bumble_power_on_guard(

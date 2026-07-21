@@ -66,7 +66,7 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 |---|---|---|---|---|---|
 | implemented / CI passed | 新規 profile が ReportingMode を含まない controller shape を保存する | regression | unit | no | 新規保存は `pro` / `joycon_l` / `joycon_r`。GitHub Actions CI #142 で確認 |
 | implemented / CI passed | 旧 direct kind を持つ JSON が未対応値として adapter open 前に失敗する | regression | unit | no | `direct_*` を特別扱いせず、既存の `controller_kind` 検証で拒否。GitHub Actions CI #142 で確認 |
-| implemented / CI passed | 同じ controller shape の periodic / direct が profile を相互利用できる | regression | unit | no | runtime guard test を追加。GitHub Actions CI #142 で確認 |
+| implemented / local passed | 同じ controller shape の periodic / direct が profile を相互利用できる | regression | unit | no | Direct controller の `open()` が profile path と local address を fake transport factory へ渡すことを確認 |
 | implemented / CI passed | controller shape が異なる profile は adapter open 前に拒否される | regression | unit | no | `ControllerKind` 比較の guard を GitHub Actions CI #142 で確認 |
 | deferred | Direct / Periodic 間 profile 再利用の実機 pairing / reconnect | characterization | hardware | yes | 明示承認と専用 adapter が必要 |
 
@@ -74,7 +74,7 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| API / usage / hardware docs | profile の再利用範囲 | 本仕様 §6、test | `uv run mkdocs build --strict` | GitHub Actions Docs #99 passed | 実機共有は未検証 |
+| API / usage / hardware docs | プロファイルの再利用範囲 | 本仕様 §6、実装、対象 test | `uv run --with mkdocs mkdocs build --strict` | 2026-07-21 の docs-quality-review と strict build が pass | 実機共有は未検証 |
 
 ## 9. 設計メモ
 
@@ -106,6 +106,8 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 | `uv run pytest tests/unit` | blocked | 同上。Bumble を含む依存が未導入 |
 | `uv run pytest tests/integration` | blocked | 同上 |
 | `uv run mkdocs build --strict` | blocked | 同上 |
+| `uv run pytest tests/unit/test_pairing_profile_runtime.py::test_direct_controller_reuses_profile_for_the_same_controller_shape -q` | passed | 3 passed。P2 review finding の fake transport regression |
+| `uv run --with mkdocs mkdocs build --strict` | passed | 2026-07-21。公開 docs の strict build |
 
 ## 12. 実機実行条件
 
