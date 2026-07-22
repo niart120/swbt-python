@@ -45,7 +45,7 @@ Issue #93 で観測した約 30 ms の ACL drain を、Bumble host が対象 con
 
 - `spec/initial/transport-bumble.md`
 - `spec/initial/testing.md`
-- `spec/wip/unit_059/EXPERIMENTAL_DIRECT_SEND_TIMING_PROBE.md`
+- `spec/complete/unit_059/EXPERIMENTAL_DIRECT_SEND_TIMING_PROBE.md`
 - `spec/hardware-test-log.md`
 
 ## 5. 根拠監査

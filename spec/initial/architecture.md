@@ -90,7 +90,7 @@ resource scope の `open()` / `close()`、明示接続 API の `pair()` / `conne
 
 ### 2.3 `InputStateStore`
 
-現在の入力状態を保持する内部コンポーネント。Periodic の意味的入力操作は store を更新し、`ReportLoop` は送信前に snapshot を取得する。Direct は最後に正常送信した state を保持し、送信失敗では store を更新しない。
+現在の入力状態を保持する内部コンポーネント。Periodic の意味的入力操作は store を更新し、`ReportLoop` は送信前に snapshot を取得する。Direct は最後に transport が受理した state を保持し、受理前の送信失敗では store を更新しない。
 
 複数の asyncio task から同時に入力更新される可能性があるため、更新処理は lock で保護する。
 

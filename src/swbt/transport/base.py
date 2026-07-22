@@ -121,10 +121,13 @@ class HidDeviceTransport(Protocol):
         """
 
     async def send_interrupt(self, payload: bytes) -> None:
-        """Send one HID interrupt report.
+        """Submit one HID interrupt report to the transport.
+
+        Normal return means the transport accepted the payload. It does not
+        guarantee controller flow-control completion or host-side reflection.
 
         Args:
-            payload: HID interrupt report bytes to send.
+            payload: HID interrupt report bytes to submit.
 
         Raises:
             Exception: Implementation-specific send failures.

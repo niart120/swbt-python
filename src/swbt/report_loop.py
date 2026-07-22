@@ -8,7 +8,6 @@ from inspect import isawaitable
 from time import monotonic_ns
 from typing import cast
 
-from swbt._experimental_direct_send_timing import active_direct_send_timing_probe
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.input import InputState
 from swbt.protocol.input_report import InputReportBuilder
@@ -49,11 +48,7 @@ class ReportSender:
         commit_state_store: InputStateStore | None = None,
     ) -> None:
         """Send one input state and optionally commit it before releasing the send lock."""
-        timing_probe = active_direct_send_timing_probe()
-        lock_started_ns = timing_probe.now_ns() if timing_probe is not None else None
         async with self._send_lock:
-            if timing_probe is not None and lock_started_ns is not None:
-                timing_probe.record_elapsed("sender_lock_wait_ns", lock_started_ns)
             await self._send_input_locked(
                 state,
                 reason=reason,
@@ -114,16 +109,7 @@ class ReportSender:
         self._advance_timer()
 
     async def _send_report(self, report: bytes, *, reason: str) -> None:
-        timing_probe = active_direct_send_timing_probe()
-        transport_started_ns = timing_probe.now_ns() if timing_probe is not None else None
-        try:
-            await self._transport.send_interrupt(report)
-        finally:
-            if timing_probe is not None and transport_started_ns is not None:
-                timing_probe.record_elapsed(
-                    "transport_send_duration_ns",
-                    transport_started_ns,
-                )
+        await self._transport.send_interrupt(report)
         if self._diagnostics is not None:
             self._diagnostics.record_report_tx(report_id=report[0], reason=reason)
 

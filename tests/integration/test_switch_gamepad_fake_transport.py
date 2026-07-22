@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import platform
 from collections.abc import Callable
 from importlib import metadata
@@ -372,100 +371,6 @@ def test_direct_send_waits_for_transport_and_commits_exactly_one_report() -> Non
                 await asyncio.gather(send_task, return_exceptions=True)
 
     asyncio.run(run())
-
-
-def test_direct_send_debug_probe_records_lock_and_transport_durations(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    async def run() -> None:
-        transport = FakeHidTransport()
-        state = InputState.neutral().with_buttons([Button.X])
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(report_period_us=60_000_000),
-            transport=transport,
-        )
-
-        async with pad:
-            await transport.connect()
-            await pad.send(state)
-
-    caplog.set_level(logging.DEBUG, logger="swbt.experimental.direct_send_timing")
-
-    asyncio.run(run())
-
-    timing_events = [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.name == "swbt.experimental.direct_send_timing"
-    ]
-
-    assert len(timing_events) == 1
-    event = timing_events[0]
-    assert event["event"] == "direct_send_timing"
-    assert event["operation"] == "send"
-    assert event["input_operation_lock_wait_ns"] >= 0
-    assert event["sender_lock_wait_ns"] >= 0
-    assert event["transport_send_duration_ns"] >= 0
-    assert event["hid_enqueue_duration_ns"] is None
-    assert event["acl_drain_duration_ns"] is None
-    assert event["acl_pending_total_before_enqueue"] is None
-    assert event["acl_pending_total_after_enqueue"] is None
-    assert event["acl_pending_total_after_drain"] is None
-    assert event["outcome"] == "success"
-
-
-def test_direct_send_does_not_emit_experimental_timing_without_debug(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    async def run() -> None:
-        transport = FakeHidTransport()
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(report_period_us=60_000_000),
-            transport=transport,
-        )
-
-        async with pad:
-            await transport.connect()
-            await pad.send(InputState.neutral().with_buttons([Button.X]))
-
-    caplog.set_level(logging.WARNING, logger="swbt.experimental.direct_send_timing")
-
-    asyncio.run(run())
-
-    assert [
-        record for record in caplog.records if record.name == "swbt.experimental.direct_send_timing"
-    ] == []
-
-
-def test_direct_send_debug_probe_preserves_transport_error(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    async def run() -> None:
-        transport = FakeHidTransport(send_interrupt_error=RuntimeError("send failed"))
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(report_period_us=60_000_000),
-            transport=transport,
-        )
-
-        async with pad:
-            await transport.connect()
-
-            with pytest.raises(RuntimeError, match="send failed"):
-                await pad.send(InputState.neutral().with_buttons([Button.X]))
-
-    caplog.set_level(logging.DEBUG, logger="swbt.experimental.direct_send_timing")
-
-    asyncio.run(run())
-
-    timing_events = [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.name == "swbt.experimental.direct_send_timing"
-    ]
-
-    assert len(timing_events) == 1
-    assert timing_events[0]["outcome"] == "error"
-    assert timing_events[0]["transport_send_duration_ns"] >= 0
 
 
 def test_direct_connection_is_non_periodic_and_still_replies_to_subcommands() -> None:

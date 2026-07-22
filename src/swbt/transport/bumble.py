@@ -9,14 +9,9 @@ from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from swbt._experimental_direct_send_timing import active_direct_send_timing_probe
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profiles.pro_controller import default_controller_profile
-from swbt.transport._bumble_acl import (
-    BumbleAclCompletionObserver,
-    bumble_acl_pending,
-    drain_bumble_acl_queue,
-)
+from swbt.transport._bumble_acl import drain_bumble_acl_queue
 from swbt.transport._bumble_hidp import (
     HID_GET_SET_SUCCESS,
     HID_GET_SET_UNSUPPORTED_REQUEST,
@@ -323,7 +318,7 @@ class BumbleHidTransport:
             self._record_event("transport_close_complete", adapter=self._adapter)
 
     async def request_disconnect(self) -> DisconnectRequestResult:
-        """Request HID channel disconnection through Bumble when channels exist."""
+        """Drain queued interrupt data, then request HID channel disconnection."""
         self._require_open()
         if self._runtime is None:
             return DisconnectRequestResult(
@@ -333,6 +328,15 @@ class BumbleHidTransport:
         hid_device = self._runtime.hid_device
         disconnect_steps: list[tuple[str, Callable[[], Awaitable[None]]]] = []
         if hid_device.l2cap_intr_channel is not None:
+            try:
+                await drain_bumble_acl_queue(hid_device.l2cap_intr_channel)
+            except Exception as error:  # noqa: BLE001
+                return DisconnectRequestResult(
+                    status="failed",
+                    reason="acl_drain_failed",
+                    error_type=type(error).__name__,
+                    message=str(error),
+                )
             disconnect_steps.append(("interrupt", hid_device.disconnect_interrupt_channel))
         if hid_device.l2cap_ctrl_channel is not None:
             disconnect_steps.append(("control", hid_device.disconnect_control_channel))
@@ -412,71 +416,12 @@ class BumbleHidTransport:
         self._notify_connected_if_ready()
 
     async def send_interrupt(self, payload: bytes) -> None:
-        """Send one interrupt report."""
+        """Submit one interrupt report to Bumble's L2CAP send path."""
         self._require_open()
         if self._runtime is None or self._runtime.hid_device.l2cap_intr_channel is None:
             msg = "Bumble interrupt channel is not connected"
             raise ClosedError(msg)
-        l2cap_channel = self._runtime.hid_device.l2cap_intr_channel
-        timing_probe = active_direct_send_timing_probe()
-        if timing_probe is None:
-            self._runtime.hid_device.send_data(payload)
-            await drain_bumble_acl_queue(l2cap_channel)
-            return
-
-        timing_probe.record(
-            "acl_pending_total_before_enqueue",
-            bumble_acl_pending(l2cap_channel),
-        )
-        completion_observer = BumbleAclCompletionObserver(
-            l2cap_channel,
-            now_ns=timing_probe.now_ns,
-        )
-        completion_observer.attach()
-        enqueue_started_ns = timing_probe.now_ns()
-        try:
-            completion_observer.arm(enqueue_started_ns)
-            self._runtime.hid_device.send_data(payload)
-            timing_probe.record_elapsed("hid_enqueue_duration_ns", enqueue_started_ns)
-            timing_probe.record(
-                "acl_pending_total_after_enqueue",
-                bumble_acl_pending(l2cap_channel),
-            )
-            drain_started_ns = timing_probe.now_ns()
-            try:
-                await drain_bumble_acl_queue(l2cap_channel)
-            finally:
-                timing_probe.record_elapsed("acl_drain_duration_ns", drain_started_ns)
-                timing_probe.record(
-                    "acl_pending_total_after_drain",
-                    bumble_acl_pending(l2cap_channel),
-                )
-        finally:
-            completion_observer.detach()
-            timing_probe.record(
-                "acl_completion_event_delay_ns",
-                completion_observer.completion_delay_ns,
-            )
-            timing_probe.record(
-                "acl_completion_packet_count",
-                completion_observer.completion_packet_count,
-            )
-            timing_probe.record(
-                "classic_mode_at_enqueue",
-                completion_observer.classic_mode_at_enqueue,
-            )
-            timing_probe.record(
-                "classic_interval_at_enqueue",
-                completion_observer.classic_interval_at_enqueue,
-            )
-            timing_probe.record(
-                "classic_mode_at_completion",
-                completion_observer.classic_mode_at_completion,
-            )
-            timing_probe.record(
-                "classic_interval_at_completion",
-                completion_observer.classic_interval_at_completion,
-            )
+        self._runtime.hid_device.send_data(payload)
 
     async def send_control(self, payload: bytes) -> None:
         """Send one control report."""
