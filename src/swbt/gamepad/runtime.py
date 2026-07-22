@@ -7,6 +7,10 @@ from types import TracebackType
 from typing import Literal
 
 import swbt.gamepad as gamepad_module
+from swbt._experimental_direct_send_timing import (
+    DirectSendTimingProbe,
+    direct_send_timing_probe,
+)
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
 from swbt.errors import (
     ClosedError,
@@ -462,7 +466,11 @@ class ControllerRuntime:
             msg = "send is only available for direct reporting"
             raise InvalidInputError(msg)
         self._validate_input_state(state)
-        await self._send_direct_update(lambda _current: state)
+        with direct_send_timing_probe() as timing_probe:
+            await self._send_direct_update(
+                lambda _current: state,
+                timing_probe=timing_probe,
+            )
 
     async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
         """Replace one or both stick positions without immediate transmission.
@@ -693,8 +701,13 @@ class ControllerRuntime:
     async def _send_direct_update(
         self,
         transform: Callable[[InputState], InputState],
+        *,
+        timing_probe: DirectSendTimingProbe | None = None,
     ) -> None:
+        lock_started_ns = timing_probe.now_ns() if timing_probe is not None else None
         async with self._input_operation_lock:
+            if timing_probe is not None and lock_started_ns is not None:
+                timing_probe.record_elapsed("input_operation_lock_wait_ns", lock_started_ns)
             self._require_connected_for_input()
             candidate = transform(self._state_store.current)
             await self._send_direct_candidate(candidate)

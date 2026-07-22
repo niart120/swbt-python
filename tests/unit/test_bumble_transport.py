@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import warnings
 from collections.abc import Callable
 from io import StringIO
@@ -12,6 +13,7 @@ import pytest
 from bumble.hci import Address
 from bumble.keys import PairingKeys
 
+from swbt._experimental_direct_send_timing import direct_send_timing_probe
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profiles.joycon import JoyConLeftProfile
@@ -1190,6 +1192,58 @@ def test_bumble_send_interrupt_waits_for_acl_queue_drain() -> None:
         await transport.close()
 
     asyncio.run(run())
+
+
+def test_bumble_interrupt_probe_records_acl_queue_timing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        acl_packet_queue = FakeAclPacketQueue()
+        connection = FakeL2capConnection(
+            handle=0x0048,
+            acl_packet_queue=acl_packet_queue,
+        )
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013, connection=connection))
+
+        with direct_send_timing_probe():
+            await transport.send_interrupt(b"\x30")
+
+        await transport.close()
+
+    caplog.set_level(logging.DEBUG, logger="swbt.experimental.direct_send_timing")
+
+    asyncio.run(run())
+
+    timing_events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == "swbt.experimental.direct_send_timing"
+    ]
+
+    assert len(timing_events) == 1
+    event = timing_events[0]
+    assert event["hid_enqueue_duration_ns"] >= 0
+    assert event["acl_pending_total_before_enqueue"] == 1
+    assert event["acl_pending_total_after_enqueue"] == 1
+    assert event["acl_pending_total_after_drain"] == 0
+    assert event["acl_drain_duration_ns"] >= 0
 
 
 def test_bumble_send_interrupt_falls_back_to_host_acl_queue_drain() -> None:

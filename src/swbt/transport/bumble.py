@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from swbt._experimental_direct_send_timing import active_direct_send_timing_probe
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profiles.pro_controller import default_controller_profile
-from swbt.transport._bumble_acl import drain_bumble_acl_queue
+from swbt.transport._bumble_acl import bumble_acl_pending, drain_bumble_acl_queue
 from swbt.transport._bumble_hidp import (
     HID_GET_SET_SUCCESS,
     HID_GET_SET_UNSUPPORTED_REQUEST,
@@ -412,8 +413,33 @@ class BumbleHidTransport:
         if self._runtime is None or self._runtime.hid_device.l2cap_intr_channel is None:
             msg = "Bumble interrupt channel is not connected"
             raise ClosedError(msg)
+        l2cap_channel = self._runtime.hid_device.l2cap_intr_channel
+        timing_probe = active_direct_send_timing_probe()
+        if timing_probe is None:
+            self._runtime.hid_device.send_data(payload)
+            await drain_bumble_acl_queue(l2cap_channel)
+            return
+
+        timing_probe.record(
+            "acl_pending_total_before_enqueue",
+            bumble_acl_pending(l2cap_channel),
+        )
+        enqueue_started_ns = timing_probe.now_ns()
         self._runtime.hid_device.send_data(payload)
-        await drain_bumble_acl_queue(self._runtime.hid_device.l2cap_intr_channel)
+        timing_probe.record_elapsed("hid_enqueue_duration_ns", enqueue_started_ns)
+        timing_probe.record(
+            "acl_pending_total_after_enqueue",
+            bumble_acl_pending(l2cap_channel),
+        )
+        drain_started_ns = timing_probe.now_ns()
+        try:
+            await drain_bumble_acl_queue(l2cap_channel)
+        finally:
+            timing_probe.record_elapsed("acl_drain_duration_ns", drain_started_ns)
+            timing_probe.record(
+                "acl_pending_total_after_drain",
+                bumble_acl_pending(l2cap_channel),
+            )
 
     async def send_control(self, payload: bytes) -> None:
         """Send one control report."""
