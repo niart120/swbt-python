@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 from swbt._experimental_direct_send_timing import active_direct_send_timing_probe
 from swbt.errors import ClosedError, TransportOpenError
 from swbt.protocol.profiles.pro_controller import default_controller_profile
-from swbt.transport._bumble_acl import bumble_acl_pending, drain_bumble_acl_queue
+from swbt.transport._bumble_acl import (
+    BumbleAclCompletionObserver,
+    bumble_acl_pending,
+    drain_bumble_acl_queue,
+)
 from swbt.transport._bumble_hidp import (
     HID_GET_SET_SUCCESS,
     HID_GET_SET_UNSUPPORTED_REQUEST,
@@ -424,21 +428,54 @@ class BumbleHidTransport:
             "acl_pending_total_before_enqueue",
             bumble_acl_pending(l2cap_channel),
         )
-        enqueue_started_ns = timing_probe.now_ns()
-        self._runtime.hid_device.send_data(payload)
-        timing_probe.record_elapsed("hid_enqueue_duration_ns", enqueue_started_ns)
-        timing_probe.record(
-            "acl_pending_total_after_enqueue",
-            bumble_acl_pending(l2cap_channel),
+        completion_observer = BumbleAclCompletionObserver(
+            l2cap_channel,
+            now_ns=timing_probe.now_ns,
         )
-        drain_started_ns = timing_probe.now_ns()
+        completion_observer.attach()
+        enqueue_started_ns = timing_probe.now_ns()
         try:
-            await drain_bumble_acl_queue(l2cap_channel)
-        finally:
-            timing_probe.record_elapsed("acl_drain_duration_ns", drain_started_ns)
+            completion_observer.arm(enqueue_started_ns)
+            self._runtime.hid_device.send_data(payload)
+            timing_probe.record_elapsed("hid_enqueue_duration_ns", enqueue_started_ns)
             timing_probe.record(
-                "acl_pending_total_after_drain",
+                "acl_pending_total_after_enqueue",
                 bumble_acl_pending(l2cap_channel),
+            )
+            drain_started_ns = timing_probe.now_ns()
+            try:
+                await drain_bumble_acl_queue(l2cap_channel)
+            finally:
+                timing_probe.record_elapsed("acl_drain_duration_ns", drain_started_ns)
+                timing_probe.record(
+                    "acl_pending_total_after_drain",
+                    bumble_acl_pending(l2cap_channel),
+                )
+        finally:
+            completion_observer.detach()
+            timing_probe.record(
+                "acl_completion_event_delay_ns",
+                completion_observer.completion_delay_ns,
+            )
+            timing_probe.record(
+                "acl_completion_packet_count",
+                completion_observer.completion_packet_count,
+            )
+            timing_probe.record(
+                "classic_mode_at_enqueue",
+                completion_observer.classic_mode_at_enqueue,
+            )
+            timing_probe.record(
+                "classic_interval_at_enqueue",
+                completion_observer.classic_interval_at_enqueue,
+            )
+            timing_probe.record(
+                "classic_mode_at_completion",
+                completion_observer.classic_mode_at_completion,
+            )
+            timing_probe.record(
+                "classic_interval_at_completion",
+                completion_observer.classic_interval_at_completion,
             )
 
     async def send_control(self, payload: bytes) -> None:

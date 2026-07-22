@@ -330,17 +330,43 @@ class FakeL2capChannel:
 class FakeAclPacketQueue:
     """Fake Bumble ACL packet queue."""
 
-    def __init__(self, *, clears_pending: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        clears_pending: bool = True,
+        completion_handle: int | None = None,
+    ) -> None:
         """Create an empty drain record."""
         self.drained_handles: list[int] = []
+        self.completed_packets: list[tuple[int, int]] = []
         self.pending = 1
         self.clears_pending = clears_pending
+        self.completion_handle = completion_handle
 
     async def drain(self, connection_handle: int) -> None:
         """Record one drain wait."""
         self.drained_handles.append(connection_handle)
         if self.clears_pending:
-            self.pending = 0
+            self.on_packets_completed(1, self.completion_handle or connection_handle)
+
+    def on_packets_completed(self, packet_count: int, connection_handle: int) -> None:
+        """Record the fake HCI ACL completion notification."""
+        self.completed_packets.append((packet_count, connection_handle))
+        self.pending = 0
+
+
+class FakeAclPacketQueueWithoutCompletionHandler:
+    """Fake queue representing a Bumble version without a replaceable handler."""
+
+    def __init__(self) -> None:
+        """Create a queue whose drain can still complete."""
+        self.drained_handles: list[int] = []
+        self.pending = 1
+
+    async def drain(self, connection_handle: int) -> None:
+        """Record and complete the fake drain without a completion callback."""
+        self.drained_handles.append(connection_handle)
+        self.pending = 0
 
 
 class FakeAclPacketQueueHost:
@@ -368,10 +394,12 @@ class FakeDeviceWithAclPacketQueueHost:
 class FakeL2capConnection:
     """Fake L2CAP connection with an ACL packet queue."""
 
-    def __init__(self, *, handle: int, acl_packet_queue: FakeAclPacketQueue) -> None:
+    def __init__(self, *, handle: int, acl_packet_queue: object) -> None:
         """Create a fake connection."""
         self.handle = handle
         self.acl_packet_queue = acl_packet_queue
+        self.classic_mode = 2
+        self.classic_interval = 24
 
 
 class FakeL2capConnectionWithHostQueue:
@@ -1244,6 +1272,169 @@ def test_bumble_interrupt_probe_records_acl_queue_timing(
     assert event["acl_pending_total_after_enqueue"] == 1
     assert event["acl_pending_total_after_drain"] == 0
     assert event["acl_drain_duration_ns"] >= 0
+    assert event["acl_completion_event_delay_ns"] >= 0
+    assert event["acl_completion_packet_count"] == 1
+    assert event["classic_mode_at_enqueue"] == 2
+    assert event["classic_interval_at_enqueue"] == 24
+    assert event["classic_mode_at_completion"] == 2
+    assert event["classic_interval_at_completion"] == 24
+
+
+def test_bumble_interrupt_probe_ignores_other_connection_acl_completion(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        acl_packet_queue = FakeAclPacketQueue(completion_handle=0x0049)
+        connection = FakeL2capConnection(
+            handle=0x0048,
+            acl_packet_queue=acl_packet_queue,
+        )
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013, connection=connection))
+
+        with direct_send_timing_probe():
+            await transport.send_interrupt(b"\x30")
+
+        await transport.close()
+
+    caplog.set_level(logging.DEBUG, logger="swbt.experimental.direct_send_timing")
+
+    asyncio.run(run())
+
+    timing_events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == "swbt.experimental.direct_send_timing"
+    ]
+
+    assert len(timing_events) == 1
+    event = timing_events[0]
+    assert event["acl_completion_event_delay_ns"] is None
+    assert event["acl_completion_packet_count"] is None
+    assert event["classic_mode_at_completion"] is None
+    assert event["classic_interval_at_completion"] is None
+
+
+def test_bumble_interrupt_probe_restores_acl_completion_handler(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def run() -> FakeAclPacketQueue:
+        hid_device = FakeHidDevice()
+        acl_packet_queue = FakeAclPacketQueue()
+        connection = FakeL2capConnection(
+            handle=0x0048,
+            acl_packet_queue=acl_packet_queue,
+        )
+        original_handler = acl_packet_queue.on_packets_completed
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013, connection=connection))
+
+        with direct_send_timing_probe():
+            await transport.send_interrupt(b"\x30")
+        assert acl_packet_queue.on_packets_completed == original_handler
+
+        acl_packet_queue.pending = 1
+        with direct_send_timing_probe():
+            await transport.send_interrupt(b"\x30")
+        assert acl_packet_queue.on_packets_completed == original_handler
+
+        await transport.close()
+        return acl_packet_queue
+
+    caplog.set_level(logging.DEBUG, logger="swbt.experimental.direct_send_timing")
+
+    acl_packet_queue = asyncio.run(run())
+
+    timing_events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == "swbt.experimental.direct_send_timing"
+    ]
+
+    assert acl_packet_queue.completed_packets == [(1, 0x0048), (1, 0x0048)]
+    assert len(timing_events) == 2
+    assert all(event["acl_completion_packet_count"] == 1 for event in timing_events)
+
+
+def test_bumble_interrupt_probe_allows_queue_without_completion_handler(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def run() -> None:
+        hid_device = FakeHidDevice()
+        acl_packet_queue = FakeAclPacketQueueWithoutCompletionHandler()
+        connection = FakeL2capConnection(
+            handle=0x0048,
+            acl_packet_queue=acl_packet_queue,
+        )
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(hid_device=hid_device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013, connection=connection))
+
+        with direct_send_timing_probe():
+            await transport.send_interrupt(b"\x30")
+
+        await transport.close()
+
+    caplog.set_level(logging.DEBUG, logger="swbt.experimental.direct_send_timing")
+
+    asyncio.run(run())
+
+    timing_events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == "swbt.experimental.direct_send_timing"
+    ]
+
+    assert len(timing_events) == 1
+    event = timing_events[0]
+    assert event["outcome"] == "success"
+    assert event["acl_completion_event_delay_ns"] is None
+    assert event["acl_completion_packet_count"] is None
 
 
 def test_bumble_send_interrupt_falls_back_to_host_acl_queue_drain() -> None:
