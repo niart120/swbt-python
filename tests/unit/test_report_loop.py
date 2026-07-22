@@ -10,6 +10,23 @@ from swbt.state_store import InputStateStore
 from swbt.transport.fake import FakeHidTransport
 
 
+class _FakeMonotonicClock:
+    def __init__(self) -> None:
+        self.now_ns = 0
+        self.sleep_delays: list[float] = []
+
+    def __call__(self) -> int:
+        return self.now_ns
+
+    async def sleep(self, delay: float) -> None:
+        self.sleep_delays.append(delay)
+        self.advance_ns(round(delay * 1_000_000_000))
+        await asyncio.sleep(0)
+
+    def advance_ns(self, duration_ns: int) -> None:
+        self.now_ns += duration_ns
+
+
 def test_report_loop_requires_injected_input_report_builder() -> None:
     signature = inspect.signature(ReportLoop)
 
@@ -129,21 +146,30 @@ def test_imu_mode_transition_and_ack_share_periodic_send_lock() -> None:
 
 def test_periodic_loop_waits_for_slow_send_and_uses_latest_state_after_release() -> None:
     class BlockingFakeHidTransport(FakeHidTransport):
-        def __init__(self) -> None:
+        def __init__(self, clock: _FakeMonotonicClock) -> None:
             super().__init__()
+            self.clock = clock
             self.first_send_started = asyncio.Event()
             self.release_first_send = asyncio.Event()
+            self.second_send_started = asyncio.Event()
+            self.hold_second_send = asyncio.Event()
             self.send_attempts = 0
+            self.send_times_ns: list[int] = []
 
         async def send_interrupt(self, payload: bytes) -> None:
             self.send_attempts += 1
+            self.send_times_ns.append(self.clock())
             if self.send_attempts == 1:
                 self.first_send_started.set()
                 await self.release_first_send.wait()
             await super().send_interrupt(payload)
+            if self.send_attempts == 2:
+                self.second_send_started.set()
+                await self.hold_second_send.wait()
 
     async def run() -> None:
-        transport = BlockingFakeHidTransport()
+        clock = _FakeMonotonicClock()
+        transport = BlockingFakeHidTransport(clock)
         await transport.open()
         profile = default_controller_profile()
         state_store = InputStateStore()
@@ -152,21 +178,145 @@ def test_periodic_loop_waits_for_slow_send_and_uses_latest_state_after_release()
             state_store=state_store,
             input_report_builder=InputReportBuilder(profile),
             session=SwitchHidSession(profile),
-            report_period_us=1_000,
+            report_period_us=8_000,
+            clock_ns=clock,
+            _sleep=clock.sleep,
         )
 
         report_loop.start()
         await transport.first_send_started.wait()
-        await asyncio.sleep(0.01)
 
         assert transport.send_attempts == 1
 
         await state_store.apply(InputState.neutral().with_buttons([Button.X]))
+        clock.advance_ns(21_000_000)
         transport.release_first_send.set()
-        reports = await transport.wait_for_interrupt_report_count(2)
+        await transport.second_send_started.wait()
         await report_loop.stop()
 
+        reports = transport.sent_interrupt_reports
+        assert transport.send_times_ns == [8_000_000, 32_000_000]
+        assert clock.sleep_delays == [0.008, 0.003]
         assert reports[0][3:6] == bytes.fromhex("00 00 00")
         assert reports[1][3:6] == bytes.fromhex("02 00 00")
+
+    asyncio.run(run())
+
+
+def test_periodic_loop_uses_fixed_deadlines_when_send_takes_time() -> None:
+    async def run() -> None:
+        clock = _FakeMonotonicClock()
+        send_times_ns: list[int] = []
+        third_send_started = asyncio.Event()
+        hold_third_send = asyncio.Event()
+
+        class ProcessingFakeHidTransport(FakeHidTransport):
+            async def send_interrupt(self, payload: bytes) -> None:
+                send_times_ns.append(clock())
+                await super().send_interrupt(payload)
+                clock.advance_ns(2_000_000)
+                if len(send_times_ns) == 3:
+                    third_send_started.set()
+                    await hold_third_send.wait()
+
+        transport = ProcessingFakeHidTransport()
+        await transport.open()
+        profile = default_controller_profile()
+        report_loop = ReportLoop(
+            transport=transport,
+            state_store=InputStateStore(),
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
+            report_period_us=8_000,
+            clock_ns=clock,
+            _sleep=clock.sleep,
+        )
+
+        report_loop.start()
+        await third_send_started.wait()
+        await report_loop.stop()
+
+        assert send_times_ns == [8_000_000, 16_000_000, 24_000_000]
+        assert clock.sleep_delays == [0.008, 0.006, 0.006]
+
+    asyncio.run(run())
+
+
+def test_periodic_loop_skips_overdue_deadlines_without_burst_catch_up() -> None:
+    async def run() -> None:
+        clock = _FakeMonotonicClock()
+        send_times_ns: list[int] = []
+        second_send_started = asyncio.Event()
+        hold_second_send = asyncio.Event()
+
+        class SlowFirstSendFakeHidTransport(FakeHidTransport):
+            async def send_interrupt(self, payload: bytes) -> None:
+                send_times_ns.append(clock())
+                await super().send_interrupt(payload)
+                if len(send_times_ns) == 1:
+                    clock.advance_ns(21_000_000)
+                else:
+                    second_send_started.set()
+                    await hold_second_send.wait()
+
+        transport = SlowFirstSendFakeHidTransport()
+        await transport.open()
+        profile = default_controller_profile()
+        report_loop = ReportLoop(
+            transport=transport,
+            state_store=InputStateStore(),
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
+            report_period_us=8_000,
+            clock_ns=clock,
+            _sleep=clock.sleep,
+        )
+
+        report_loop.start()
+        await second_send_started.wait()
+        await report_loop.stop()
+
+        assert send_times_ns == [8_000_000, 32_000_000]
+        assert clock.sleep_delays == [0.008, 0.003]
+
+    asyncio.run(run())
+
+
+def test_periodic_loop_sends_when_processing_ends_on_next_deadline() -> None:
+    async def run() -> None:
+        clock = _FakeMonotonicClock()
+        send_times_ns: list[int] = []
+        second_send_started = asyncio.Event()
+        hold_second_send = asyncio.Event()
+
+        class ExactPeriodFakeHidTransport(FakeHidTransport):
+            async def send_interrupt(self, payload: bytes) -> None:
+                send_times_ns.append(clock())
+                await super().send_interrupt(payload)
+                if len(send_times_ns) == 1:
+                    clock.advance_ns(8_000_000)
+                else:
+                    second_send_started.set()
+                    await hold_second_send.wait()
+
+        transport = ExactPeriodFakeHidTransport()
+        await transport.open()
+        profile = default_controller_profile()
+        report_loop = ReportLoop(
+            transport=transport,
+            state_store=InputStateStore(),
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
+            report_period_us=8_000,
+            clock_ns=clock,
+            _sleep=clock.sleep,
+        )
+
+        report_loop.start()
+        await second_send_started.wait()
+        await report_loop.stop()
+
+        assert send_times_ns == [8_000_000, 16_000_000]
+        assert clock.sleep_delays == [0.008]
 
     asyncio.run(run())
