@@ -164,7 +164,7 @@ def test_bumble_hidp_output_report_boundary_is_version_pinned_source_fact() -> N
     assert "SET_REPORT callback receives report_id separated" in value
 
 
-def test_bumble_acl_packet_queue_drain_boundary_is_implementation_policy() -> None:
+def test_bumble_acl_packet_queue_boundary_is_implementation_policy() -> None:
     entry = _entry_by_id("bumble_acl_packet_queue_drain_boundary")
 
     assert entry["classification"] == "implementation fact"
@@ -176,6 +176,8 @@ def test_bumble_acl_packet_queue_drain_boundary_is_implementation_policy() -> No
     assert "Host.send_acl_sdu" in value
     assert "DataPacketQueue exposes pending" in value
     assert "drain(connection_handle)" in value
+    assert "does not inspect or drain the ACL queue per report" in value
+    assert "Before an explicit disconnect" in value
     assert "connection.device.host.get_data_packet_queue(handle)" in value
 
 

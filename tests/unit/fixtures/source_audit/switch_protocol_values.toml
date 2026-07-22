@@ -455,7 +455,7 @@ handoff = ["unit_005"]
 id = "bumble_acl_packet_queue_drain_boundary"
 fixture_name = "bumble_acl_packet_queue_drain_boundary"
 area = "transport"
-value = "Bumble 0.0.230 hid.HID.send_data writes the HID interrupt PDU to the L2CAP interrupt channel; L2CAP send ultimately enqueues ACL packets through Host.send_acl_sdu; DataPacketQueue exposes pending and async drain(connection_handle). swbt-python treats send_interrupt as complete after the matching ACL packet queue drains, using connection.acl_packet_queue when present and falling back to connection.device.host.get_data_packet_queue(handle)."
+value = "Bumble 0.0.230 hid.HID.send_data writes the HID interrupt PDU to the L2CAP interrupt channel; L2CAP send ultimately enqueues ACL packets through Host.send_acl_sdu; DataPacketQueue exposes pending and async drain(connection_handle). swbt-python treats send_interrupt as complete when hid.HID.send_data returns after accepting the payload and does not inspect or drain the ACL queue per report. Before an explicit disconnect, request_disconnect drains the matching queue using connection.acl_packet_queue when present and falling back to connection.device.host.get_data_packet_queue(handle), then disconnects the interrupt and control channels."
 classification = "implementation fact"
 source = [
     '.venv\Lib\site-packages\bumble\hid.py:321-330',
@@ -466,7 +466,7 @@ source = [
     '.venv\Lib\site-packages\bumble\device.py:2076-2082',
 ]
 status = "implementation-policy"
-handoff = ["unit_005"]
+handoff = ["unit_005", "unit_064"]
 
 [[entry]]
 id = "bumble_hidp_output_report_boundary"

@@ -20,8 +20,8 @@
 | actor / boundary | 入力または状態 | 期待する観測結果 | 制約 |
 |---|---|---|---|
 | 周期送信の利用者 | `ProController.apply(state)` または意味的入力操作 | local current state が更新され、後続の周期 report がその時点の状態を送る | 接続と即時送信を要求しない |
-| Direct 送信の利用者 | `DirectProController.send(state)` | 指定状態の `0x30` をちょうど1件送り、送信完了後だけ current state を更新する | 接続済みを要求し、周期 task を開始しない |
-| Direct 送信の利用者 | `press()` / `release()` / `sticks()` / `imu()` / `neutral()` | last successfully sent state から候補を作り、1件送信して成功後だけ確定する | 同時操作を直列化する |
+| Direct 送信の利用者 | `DirectProController.send(state)` | 指定状態の `0x30` をちょうど1件 transport に受理させ、受理後だけ current state を更新する | 接続済みを要求し、周期 task を開始しない |
+| Direct 送信の利用者 | `press()` / `release()` / `sticks()` / `imu()` / `neutral()` | 最後にtransportが受理したstateから候補を作り、1件受理された後だけ確定する | 同時操作を直列化する |
 | Switch host | output report / subcommand | reporting type に関係なく reply を受け取る | input report と同じ送信直列化境界を通す |
 | lifecycle | `close(neutral=True/False)` | `True` は trailing neutral を試み、`False` は通常 input report を追加しない | Direct の `True` は利用者所有の送信契機に対する明示的な例外 |
 
@@ -33,7 +33,7 @@
 - 既存 `ProController` / `JoyConL` / `JoyConR` を `PeriodicSwitchGamepad` の具象型として維持する。
 - `DirectProController` / `DirectJoyConL` / `DirectJoyConR` を追加する。
 - input report と subcommand reply に共通する timer、IMU encoding、送信 lock、diagnostics を共通 sender に集約する。
-- Direct の完全状態送信と意味的入力操作を、送信成功後 commit のトランザクションとして実装する。
+- Direct の完全状態送信と意味的入力操作を、transport受理後commitのトランザクションとして実装する。
 - Direct の input operation を直列化し、`tap()` は押下から解放まで同じ操作 lock を保持する。
 - `snapshot()`、`tap()`、`close()` の reporting type ごとの意味を test と公開文書で固定する。
 - public root exports、API docs、usage、agent brief、initial design を新しい型境界へ追従させる。
@@ -68,7 +68,7 @@
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
 | Switch HID / report bytes | not applicable | not applicable | 既存 `0x30` builder、`0x21` reply、timer、IMU encoding を再利用し、ID、layout、定数を変更しない |
-| Bumble / transport | not applicable | not applicable | `HidDeviceTransport.send_interrupt()` は完了まで待つ既存境界を利用する。Bumble object、SDP、L2CAP、adapter 仮定は追加しない |
+| Bumble / transport | not applicable | not applicable | `HidDeviceTransport.send_interrupt()` の受理まで待つ既存境界を利用する。受理は controller flow-control completion や Switch への反映完了を意味しない。Bumble object、SDP、L2CAP、adapter 仮定は追加しない |
 | OS / driver / adapter | not applicable | not applicable | fake transport の unit / integration test だけで公開型と送信契約を検証する |
 
 ## 6. 振る舞い仕様
@@ -78,16 +78,16 @@
 | 公開型の分離 | root import と class hierarchy を調べる | Periodic / Direct の抽象型と6具象型が import でき、既存3型は Periodic に属する | mode object は公開しない |
 | API の排他性 | method と constructor signature を調べる | Periodic は `apply(state)` を持ち `send(state)` を持たない。Direct は逆で、`report_period_us` を受け取らない | 共通意味操作は両型にある |
 | Periodic 状態更新 | 未接続または接続中に状態操作する | local state を commit し、即時送信しない。接続中は後続周期 report が観測する | 現行後方互換 |
-| Direct 完全状態送信 | 接続中に `send(state)` を await する | 指定状態の `0x30` を1件送り、transport 完了後に current state を更新する | background queue を作らない |
+| Direct 完全状態送信 | 接続中に `send(state)` を await する | 指定状態の `0x30` を1件 transport に受理させ、受理後に current state を更新する | background queue を作らない |
 | Direct 非周期性 | Direct を接続し待機する | 自動 `0x30` を送らない | subcommand reply は自動処理する |
 | Direct rollback | 未接続または送信失敗 | `ClosedError` または transport error を返し、report 成功前の current state を維持する | profile validation 失敗も commit しない |
-| Direct 意味操作 | press / release / sticks / imu / neutral | last successfully sent state から候補を作り、各正常終了につき1件送り、成功後だけ commit する | `lstick` / `rstick` は `sticks` と同じ規則 |
-| Direct 同時操作 | 複数 input operation を同時に開始する | operation lock の取得順に送信と commit が完了し、候補状態が失われない | transport completion の backpressure を返す |
+| Direct 意味操作 | press / release / sticks / imu / neutral | 最後にtransportが受理したstateから候補を作り、各正常終了につき1件受理させ、受理後だけcommitする | `lstick` / `rstick` は `sticks` と同じ規則 |
+| Direct 同時操作 | 複数 input operation を同時に開始する | operation lock の取得順に transport 受理と commit が完了し、候補状態が失われない | transport 受理までの backpressure を返す |
 | tap | held input がある状態で `tap()` | 両型とも押下と解放を送り、対象 button だけを解除する。Direct は押下から解放まで操作 lock を保持する | release 失敗時は最後に送信できた押下状態を維持する |
 | subcommand 自動応答 | Direct 接続中に host output を注入する | `0x21` を自動送信し、prefix は送信順上の current state を使う | input と共通 sender lock / timer を使う |
 | close | Direct で `neutral=True` / `False` | `True` は接続中に neutral 1件を試み、成功後 commit。`False` は input report を追加しない | transport cleanup は両型共通 |
 | profile validation | Pro / Joy-Con L / Joy-Con R の Direct 操作 | Periodic と同じ capability を使い、不正候補を送信・commit しない | profile 実装を複製しない |
-| snapshot | Periodic / Direct の current state を読む | Periodic は最新 local committed state、Direct は最後に正常送信した state を返す | 新しい接続 session は neutral baseline から始める |
+| snapshot | Periodic / Direct の current state を読む | Periodic は最新 local committed state、Direct は最後にtransportが受理したstateを返す | 新しい接続 session は neutral baseline から始める |
 
 ## 7. TDD Test List
 
@@ -99,12 +99,12 @@
 | refactor-done | Direct の `send(state)` が送信完了まで待ち、指定状態の `0x30` をちょうど1件送ってから snapshot を更新する | new | integration | no | 共通 `ReportSender` を抽出し、制御可能な fake transport で完了前後の snapshot と1件送信を確認 |
 | refactor-skipped | Direct は接続後に周期 `0x30` を開始せず、host output には自動応答する | new | integration | no | send transaction の runtime 分岐で expected-green。待機中0件と `0x21` reply のみを確認 |
 | refactor-skipped | Direct の未接続、送信失敗、profile validation 失敗が current state を変更しない | edge | integration | no | send transaction 実装で expected-green。full send と press の transport error、未接続、Joy-Con L unsupported state を固定 |
-| refactor-done | Direct の press / release / sticks / imu / neutral が各1件送信し、成功後だけ状態を確定する | new | integration | no | candidate 生成、profile validation、送信成功後 commit を `_send_direct_update()` に集約 |
+| refactor-done | Direct の press / release / sticks / imu / neutral が各1件受理され、受理後だけ状態を確定する | new | integration | no | candidate生成、profile validation、transport受理後commitを `_send_direct_update()` に集約 |
 | refactor-skipped | Direct の同時入力操作が直列化され、開始順の候補状態と送信順を失わない | edge | integration | no | input operation lock 実装で expected-green。blocking fake transport で2操作目が1操作目完了まで送信開始しないことを固定 |
 | refactor-done | `tap()` が両 reporting type で held input を維持し、Direct の押下・解放を直列化する | regression | integration | no | Direct 専用2段 transaction を追加し、押下から解放まで operation lock を保持 |
 | refactor-skipped | Direct の tap release 失敗時に押下済み current state を維持し、release 再試行で neutral へ戻せる | edge | integration | no | Direct tap transaction で expected-green。最後に成功送信した押下stateと明示release再試行を固定 |
 | refactor-done | Direct input と subcommand reply が共通 timer / send lock を通り、prefix と送信順が一致する | new | unit | no | reply builder 内の state snapshot を共通 sender lock の内側へ移し、timerとprefixを送信順へ一致させた |
-| refactor-done | Direct の `close(neutral=True/False)` が trailing neutral の有無、commit、cleanup を契約どおり処理する | new | integration | no | Direct close を operation lock と共通 sender に接続し、`True` だけが送信成功後 neutral を commit |
+| refactor-done | Direct の `close(neutral=True/False)` が trailing neutral の有無、commit、cleanup を契約どおり処理する | new | integration | no | Direct close を operation lock と共通 sender に接続し、`True` だけがtransport受理後にneutralをcommit |
 | refactor-skipped | Direct Pro / Joy-Con L / Joy-Con R が同じ runtime と profile validation を共有する | new | integration | no | `_ControllerSpec` と共通runtime実装で expected-green。3 profile の正常入力と unsupported input を確認 |
 | refactor-skipped | API docs、usage、agent brief、initial design が送信所有者、完了条件、snapshot、close の違いを説明する | new | unit | no | public docs test に完了条件、送信頻度所有者、subcommand、close の必須語を追加。文書だけの変更で追加 refactor は不要 |
 
@@ -124,7 +124,7 @@ SwitchGamepad
     └── DirectJoyConR
 ```
 
-`SwitchGamepad` の共通意味操作は「現在の論理入力状態を遷移させる」ことを表す。正常終了の意味は、Periodic では local commit、Direct では1件の送信完了と commit である。
+`SwitchGamepad` の共通意味操作は「現在の論理入力状態を遷移させる」ことを表す。正常終了の意味は、Periodic では local commit、Direct では1件の transport 受理と commit である。
 
 ### 8.2 共通 sender
 
@@ -142,15 +142,15 @@ Periodic だけが scheduler と current state snapshot を所有する。Direct
 
 ```text
 input operation lock
-  -> last successfully sent state から candidate を構築
+  -> 最後にtransportが受理したstateからcandidateを構築
   -> profile validation
   -> common sender lock
        -> 0x30 build
-       -> transport.send_interrupt() 完了
+       -> transport.send_interrupt() が受理
        -> candidate commit
 ```
 
-送信失敗では commit しない。`tap()` の release 送信失敗時は、押下 report が最後の成功送信なので押下状態を current state として維持する。
+transport の受理前に失敗した場合は commit しない。`tap()` の release 送信失敗時は、押下 report が最後に受理された report なので押下状態を current state として維持する。
 
 ### 8.4 Tidy decision
 
@@ -170,7 +170,7 @@ Tidy decision:
 | `src/swbt/gamepad/core.py` | modify | reporting type 別 runtime-backed base と6具象型 |
 | `src/swbt/gamepad/runtime.py` | modify | reporting type ごとの状態操作、scheduler、close |
 | `src/swbt/report_loop.py` | modify | 共通 sender 抽出と Periodic scheduler |
-| `src/swbt/state_store.py` | modify | Direct の送信成功後 commit を支える内部境界 |
+| `src/swbt/state_store.py` | modify | Direct のtransport受理後commitを支える内部境界 |
 | `src/swbt/gamepad/output.py` | modify | sender lock 内で current state を使う reply builder |
 | `src/swbt/gamepad/__init__.py`, `src/swbt/__init__.py` | modify | public exports |
 | `src/swbt/_testing/gamepad.py` | modify | Direct fake transport constructor |
@@ -191,11 +191,11 @@ Tidy decision:
 | `uv run pytest tests/unit/test_public_api_boundary.py::test_reporting_types_expose_only_their_owned_full_state_operation tests/unit/test_package_import.py -q` | pass | 5 passed。`apply` / `send` と `report_period_us` の排他性、root export 一覧を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_press_buttons_are_reflected_in_periodic_report tests/integration/test_switch_gamepad_fake_transport.py::test_apply_updates_snapshot_and_next_periodic_report tests/integration/test_switch_gamepad_fake_transport.py::test_state_update_apis_do_not_send_immediate_interrupt_reports tests/integration/test_switch_gamepad_fake_transport.py::test_tap_releases_only_tapped_button_and_preserves_held_buttons -q` | pass | 4 passed。Periodic の周期送信、snapshot、非即時送信、held input を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_waits_for_transport_and_commits_exactly_one_report -q` | red | Direct send が transport へ到達せず、送信開始待ち timeout になる未実装状態を確認 |
-| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_waits_for_transport_and_commits_exactly_one_report -q` | pass | 1 passed。transport 完了前は未完了かつ neutral、完了後は指定 `0x30` 1件と state commit を確認 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_waits_for_transport_and_commits_exactly_one_report -q` | pass | 1 passed。transport 受理前は未完了かつ neutral、受理後は指定 `0x30` 1件と state commit を確認 |
 | `uv run pytest tests/unit/test_report_loop.py tests/integration/test_switch_gamepad_fake_transport.py::test_press_buttons_are_reflected_in_periodic_report tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_sends_subcommand_reply -q` | red | sender 抽出直後に snapshot が lock 外となり `0x21` が周期 `0x30` より先行する回帰を検出 |
 | `uv run pytest tests/unit/test_report_loop.py tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_waits_for_transport_and_commits_exactly_one_report tests/integration/test_switch_gamepad_fake_transport.py::test_press_buttons_are_reflected_in_periodic_report tests/integration/test_switch_gamepad_fake_transport.py::test_output_report_injection_sends_subcommand_reply -q` | pass | 7 passed。snapshot から送信までの周期 lock、Direct commit、subcommand 回帰を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_connection_is_non_periodic_and_still_replies_to_subcommands -q` | pass | 1 passed。接続後60msに自動 `0x30` がなく、Device Info に `0x21` だけを返すことを確認 |
-| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_failures_do_not_change_last_successfully_sent_state tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_rejects_unsupported_profile_state_without_sending -q` | pass | 2 passed。未接続、transport error、profile validation error で last successfully sent state を維持 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_failures_do_not_change_last_successfully_sent_state tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_rejects_unsupported_profile_state_without_sending -q` | pass | 2 passed。未接続、transport error、profile validation errorで最後にtransportが受理したstateを維持 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_semantic_operations_send_once_and_commit_after_success -q` | red | 未接続 `press()` が `ClosedError` を出さず local state を更新する Periodic 挙動を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_semantic_operations_send_once_and_commit_after_success tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_waits_for_transport_and_commits_exactly_one_report tests/integration/test_switch_gamepad_fake_transport.py::test_direct_send_failures_do_not_change_last_successfully_sent_state -q` | pass | 3 passed。7意味操作の1操作1送信、未接続拒否、full send / press failure rollback を確認 |
 | `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_direct_concurrent_operations_are_serialized_without_lost_state -q` | pass | 1 passed。A送信完了前はB送信を開始せず、送信列A、A+Bと最終stateを確認 |
@@ -252,7 +252,7 @@ Tidy decision:
 |---|---|---|
 | scope | pass | 公開 reporting type、共通 sender、Direct transaction、文書更新に限定。raw report API、mode 切替、scheduler 精度、macro は追加していない |
 | 公開 API | pass | unit test で2抽象型、6具象型、`apply` / `send`、`report_period_us` の排他性と root export を固定 |
-| transaction | pass | fake transport で transport 完了後 commit、未接続・入力型・profile・送信失敗 rollback、1操作1送信を確認 |
+| transaction | pass | fake transport で transport 受理後 commit、未接続・入力型・profile・送信失敗 rollback、1操作1送信を確認 |
 | concurrency | pass | input operation lock と sender lock の順序を確認。concurrent operation、Direct `tap()`、input / subcommand 競合テストが pass |
 | lifecycle | pass | Direct の非周期性、subcommand 自動応答、`close(neutral=True/False)`、新 session の neutral baseline を確認 |
 | Periodic 回帰 | pass | 既存状態更新の非即時送信、周期 report、held input、close、全 unit / integration gate が pass |

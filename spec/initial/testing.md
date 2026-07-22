@@ -158,6 +158,8 @@ Fake transport integration tests は `tests/integration/` に置く。
 検証項目:
 
 - `close(neutral=True)` で trailing neutral report が送られる
+- Bumble transport の明示切断では、保留中の interrupt ACL queue を drain してから channel を切断する
+- Bumble ACL queue の drain 失敗では channel を切断せず、失敗結果を返す
 - Direct の `close(neutral=False)` は input report を追加しない
 - disconnect callback で `InputStateStore` が neutral へ戻る
 - 例外発生時にも内部 state が neutral へ戻る
@@ -168,9 +170,9 @@ Fake transport integration tests は `tests/integration/` に置く。
 検証項目:
 
 - 接続後に待機しても周期 `0x30` を送らない
-- `send(state)` が transport 完了まで待ち、成功後だけ state を commit する
+- `send(state)` が transport の受理まで待ち、受理後だけ state を commit する
 - Direct の意味的入力操作が各正常終了につき `0x30` を1件送る
-- 未接続、profile validation、transport 送信失敗で last successfully sent state を維持する
+- 未接続、profile validation、transport受理前の失敗で最後に受理されたstateを維持する
 - concurrent input operation が直列化され、開始順の候補 state を失わない
 - `tap()` が押下から解放まで input operation lock を保持し、解放失敗時は押下 state を維持する
 - Pro Controller / Joy-Con L / Joy-Con R が同じ transaction と profile validation を共有する
@@ -289,6 +291,8 @@ Hardware tests では、少なくとも次の event を trace に残す。
 - `error`
 
 ログ形式は JSON Lines とする。
+
+`report_tx` は report が transport に受理されたことを表す。controller flow-control completion、air delivery、Switch への反映完了は表さない。
 
 ```json
 {"event":"subcommand_rx","subcommand":"0x02","packet_id":18}

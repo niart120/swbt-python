@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 
-from swbt.input import IMUFrame, InputState
+from swbt.input import Button, IMUFrame, InputState
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.protocol.session import SwitchHidSession
@@ -123,5 +123,50 @@ def test_imu_mode_transition_and_ack_share_periodic_send_lock() -> None:
         assert reports[1][14] == 0x40
         assert reports[2][0] == 0x30
         assert reports[2][19] & 0x0F == 0x0E
+
+    asyncio.run(run())
+
+
+def test_periodic_loop_waits_for_slow_send_and_uses_latest_state_after_release() -> None:
+    class BlockingFakeHidTransport(FakeHidTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.first_send_started = asyncio.Event()
+            self.release_first_send = asyncio.Event()
+            self.send_attempts = 0
+
+        async def send_interrupt(self, payload: bytes) -> None:
+            self.send_attempts += 1
+            if self.send_attempts == 1:
+                self.first_send_started.set()
+                await self.release_first_send.wait()
+            await super().send_interrupt(payload)
+
+    async def run() -> None:
+        transport = BlockingFakeHidTransport()
+        await transport.open()
+        profile = default_controller_profile()
+        state_store = InputStateStore()
+        report_loop = ReportLoop(
+            transport=transport,
+            state_store=state_store,
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
+            report_period_us=1_000,
+        )
+
+        report_loop.start()
+        await transport.first_send_started.wait()
+        await asyncio.sleep(0.01)
+
+        assert transport.send_attempts == 1
+
+        await state_store.apply(InputState.neutral().with_buttons([Button.X]))
+        transport.release_first_send.set()
+        reports = await transport.wait_for_interrupt_report_count(2)
+        await report_loop.stop()
+
+        assert reports[0][3:6] == bytes.fromhex("00 00 00")
+        assert reports[1][3:6] == bytes.fromhex("02 00 00")
 
     asyncio.run(run())

@@ -318,7 +318,7 @@ class BumbleHidTransport:
             self._record_event("transport_close_complete", adapter=self._adapter)
 
     async def request_disconnect(self) -> DisconnectRequestResult:
-        """Request HID channel disconnection through Bumble when channels exist."""
+        """Drain queued interrupt data, then request HID channel disconnection."""
         self._require_open()
         if self._runtime is None:
             return DisconnectRequestResult(
@@ -328,6 +328,15 @@ class BumbleHidTransport:
         hid_device = self._runtime.hid_device
         disconnect_steps: list[tuple[str, Callable[[], Awaitable[None]]]] = []
         if hid_device.l2cap_intr_channel is not None:
+            try:
+                await drain_bumble_acl_queue(hid_device.l2cap_intr_channel)
+            except Exception as error:  # noqa: BLE001
+                return DisconnectRequestResult(
+                    status="failed",
+                    reason="acl_drain_failed",
+                    error_type=type(error).__name__,
+                    message=str(error),
+                )
             disconnect_steps.append(("interrupt", hid_device.disconnect_interrupt_channel))
         if hid_device.l2cap_ctrl_channel is not None:
             disconnect_steps.append(("control", hid_device.disconnect_control_channel))
@@ -407,13 +416,12 @@ class BumbleHidTransport:
         self._notify_connected_if_ready()
 
     async def send_interrupt(self, payload: bytes) -> None:
-        """Send one interrupt report."""
+        """Submit one interrupt report to Bumble's L2CAP send path."""
         self._require_open()
         if self._runtime is None or self._runtime.hid_device.l2cap_intr_channel is None:
             msg = "Bumble interrupt channel is not connected"
             raise ClosedError(msg)
         self._runtime.hid_device.send_data(payload)
-        await drain_bumble_acl_queue(self._runtime.hid_device.l2cap_intr_channel)
 
     async def send_control(self, payload: bytes) -> None:
         """Send one control report."""

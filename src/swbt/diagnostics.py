@@ -112,7 +112,7 @@ class DiagnosticsRecorder:
         return diagnostics_event
 
     def record_report_tx(self, *, report_id: int, reason: str) -> DiagnosticsEvent:
-        """Record one sent report and increment its counter."""
+        """Record one transport-accepted report and increment its counter."""
         counter = self._report_counters.get(report_id, 0) + 1
         self._report_counters[report_id] = counter
         return self.record_event(

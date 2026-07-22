@@ -60,7 +60,7 @@ Switch から受け取る output report と subcommand sequence を実機 trace 
 | 項目 | 要否 | 状態 | 根拠 / 理由 |
 |---|---|---|---|
 | Switch HID / report bytes | required | done | `tests/unit/fixtures/source_audit/switch_protocol_values.toml` の `output_report_parser_layout`、`subcommand_reply_0x21_layout`、`subcommand_reply_payloads`、`spi_flash_boundary_and_seed_map`、`raw_rumble_payload` を source fact / implementation fact として使う |
-| Bumble / transport | required | done | `bumble_hid_device_api`、`bumble_hidp_output_report_boundary`、`btstack_reference_hid_sdp_policy`、`bumble_reference_classic_link_policy`、`bumble_acl_packet_queue_drain_boundary` を使う。Bumble `0.0.230` の DATA / SET_REPORT callback 境界、参照実装の HID SDP policy、service name / language base 属性、daemon production の default link policy `ROLE_SWITCH|SNIFF_MODE` = `0x0005`、HID interrupt write 後の ACL queue drain 境界は根拠化済み。実機 sequence の callback timing は M4 実行時の hardware observation として別記録にする |
+| Bumble / transport | required | done | `bumble_hid_device_api`、`bumble_hidp_output_report_boundary`、`btstack_reference_hid_sdp_policy`、`bumble_reference_classic_link_policy`、`bumble_acl_packet_queue_drain_boundary` を使う。Bumble `0.0.230` の DATA / SET_REPORT callback 境界、参照実装の HID SDP policy、service name / language base 属性、daemon production の default link policy `ROLE_SWITCH|SNIFF_MODE` = `0x0005`、ACL queue の投入・drain 境界は根拠化済み。通常送信をenqueue受理、明示切断をdrain境界とする現行方針は unit_064 で更新した。実機 sequence の callback timing は M4 実行時の hardware observation として別記録にする |
 | OS / driver / adapter | required | done | `swbt_daemon_csr8510_winusb_observation` は既存 daemon の条件付き観測であり、Bumble / 別 firmware へ一般化しない。M4 実機 trace は adapter、driver、Bumble version、Switch firmware 付きで `docs/hardware-test-log.md` に記録する |
 
 ## 6. 振る舞い仕様

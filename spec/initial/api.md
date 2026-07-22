@@ -142,7 +142,7 @@ SwitchGamepad
     └── DirectJoyConR
 ```
 
-Periodic の入力操作は local state の確定で正常終了し、レポートループが後続の入力レポートを送る。Direct の入力操作は入力レポート1件の送信完了後に state を確定して正常終了する。Direct の transport 送信が失敗した場合は、最後に正常送信した state を維持する。
+Periodic の入力操作は local state の確定で正常終了し、レポートループが後続の入力レポートを送る。Direct の入力操作は、transport が入力レポート1件を受理した後に state を確定して正常終了する。Bumble transport の受理は `HID.send_data()` が L2CAP 送信経路への投入を受け付けた時点であり、controller flow-control completion や Switch への反映完了を意味しない。transport が受理前に失敗した場合は、最後に受理された state を維持する。
 
 ### 3.1 初期化
 
@@ -299,7 +299,7 @@ def snapshot(self) -> InputSnapshot: ...
 def status(self) -> GamepadStatus: ...
 ```
 
-`snapshot()` は現在入力の snapshot を返す。Periodic は最新の local state、Direct は最後に正常送信した state を返す。新しい接続 session は neutral baseline から始める。`status()` は接続状態、送信 report 数、最後に受け取った subcommand、最後の disconnect 理由などを返す。
+`snapshot()` は現在入力の snapshot を返す。Periodic は最新の local state、Direct は最後に transport が受理した state を返す。新しい接続 session は neutral baseline から始める。`status()` は接続状態、送信 report 数、最後に受け取った subcommand、最後の disconnect 理由などを返す。
 
 `status()` は実機検証と利用者側の監視に使う。高頻度 control path では使わない。
 
