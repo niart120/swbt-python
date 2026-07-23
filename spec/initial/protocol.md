@@ -79,7 +79,10 @@ right = Stick.raw(x=2048, y=2048)
 
 ### 3.4 battery / connection info
 
-battery / connection info は profile の初期値として固定する。実機検証で必要が出るまで public API には出さない。
+battery / connection info は profile の初期値 `0x80` として固定する。上位 nibble の
+`0x8` は満充電かつ非充電、下位 nibble の `0x0` は Pro Controller / Charging Grip
+かつ Switch / USB 外部給電なしを表す。実際の電池残量や給電状態を動的には取得しない。
+動的な通知が必要になるまで public API には出さない。
 
 この値は `ControllerProfile` に置き、test fixture として扱う。
 

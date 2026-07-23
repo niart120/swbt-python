@@ -9,6 +9,10 @@
 - `JoyConL` / `JoyConR` にも `create_profile()` と `profile_path` を追加しました。プロファイルには `joycon_l` / `joycon_r` を保存し、異なるコントローラー種別で開くと `ProfileControllerMismatchError` をアダプタ準備前に送出します。
 - 揮発領域への書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` を送出します。`close()` は接続資源だけを閉じ、書き換えたアドレスを元へ戻しません。
 
+### 修正
+
+- コントローラーの既定通知が、実際には給電されていない状態でも充電中として表示される問題を修正しました。すべての具象クラスで、満充電、非充電、外部給電なしを既定として通知します。実際の電池残量や給電状態を動的に取得する機能は含みません。Pro Controller 相当を使った承認済みの実機確認では期待どおりの表示を確認しましたが、別の Switch ファームウェアでは未検証です。
+
 ### 破壊的変更
 
 - すべての具象クラスから `key_store_path` を削除しました。再接続と初回ペアリングには `profile_path` を使い、新規プロファイルはコンストラクタではなく `await ControllerClass.create_profile(...)` で作成します。

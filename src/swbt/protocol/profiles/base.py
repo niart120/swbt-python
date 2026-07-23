@@ -127,7 +127,7 @@ class ControllerProfile:
     device_info_marker: int = 0x02
     device_info_tail: bytes = b"\x03\x02"
     default_report_period_us: int = 8000
-    battery_connection: int = 0x91
+    battery_connection: int = 0x80
     vibrator_input: int = 0x00
     hid_report_descriptor: bytes = SWITCH_PRO_CONTROLLER_HID_REPORT_DESCRIPTOR
     hid_sdp_policy: HidSdpPolicy = field(default_factory=HidSdpPolicy)
