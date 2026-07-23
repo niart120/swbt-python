@@ -60,13 +60,12 @@ asyncio.run(main())
 
 ### プロファイルの初回作成
 
-すべての具象クラスのアダプタ識別情報と接続情報を永続化する場合は、最初の 1 回だけ各具象クラスの `create_profile()` を使います。`local_address` は利用者が生成し、同時に使う他の Bluetooth デバイスと重複しない値を選びます。例示した値を共通値として使わず、コントローラー形状と対象機器ごとに管理する値へ置き換えてください。
+すべての具象クラスで接続情報を永続化する場合は、最初の 1 回だけ各具象クラスの `create_profile()` を使います。`local_address` を省略すると、揮発領域へ書き込まず、アダプタが現在報告する Bluetooth アドレスをそのまま使います。
 
 ```python
 pad = await ProController.create_profile(
     adapter="usb:0",
     profile_path="profiles/switch-pro.json",
-    local_address="02:12:34:56:78:9A",
     pair_timeout=60.0,
 )
 try:
@@ -75,19 +74,22 @@ finally:
     await pad.close()
 ```
 
-Joy-Con も同じ手順で作成します。左右で同じ `profile_path` または `local_address` を共有しません。
+Joy-Con も同じ手順で作成します。左右で同じ `profile_path` を共有しません。
 
 ```python
 left = await JoyConL.create_profile(
     adapter="usb:0",
     profile_path="profiles/switch-left-joycon.json",
-    local_address="06:12:34:56:78:9A",
     pair_timeout=60.0,
 )
 await left.close()
 ```
 
-対象は CSR8510 A10 の揮発領域への書換経路です。アダプタの永続領域は変更しません。既存のパスは上書きされません。ペアリングが失敗してもプロファイルは残るため、作成時と同じコントローラー形状の `profile_path` から再試行します。`AdapterIdentityRecoveryRequired` が送出された場合は、USB ドングルを抜き差ししてから再試行してください。別のコントローラー形状のプロファイルを渡した場合は `ProfileControllerMismatchError` がアダプタを開く前に送出されます。直接送信型と周期送信型の間で同じコントローラー形状のプロファイルを使う実機確認は未実施です。
+アダプタが報告するアドレスが変わると別 namespace を使い、以前のペアリングキーを自動移行しません。以前の揮発書換値が給電断まで残っている場合は、その値を current public address として使います。
+
+利用者管理のローカルアドレスへ切り替える場合だけ `local_address="02:..."` を指定します。生成と重複回避は利用者の責任です。explicit-address 経路は CSR8510 A10 の揮発領域を書き換えますが、永続領域は変更しません。`AdapterIdentityRecoveryRequired` が送出された場合は、USB ドングルを抜き差ししてから再試行してください。
+
+どちらの経路も既存のパスを上書きしません。ペアリングが失敗してもプロファイルは残るため、作成時と同じコントローラー形状の `profile_path` から再試行します。別のコントローラー形状のプロファイルを渡した場合は `ProfileControllerMismatchError` がアダプタを開く前に送出されます。直接送信型と周期送信型の間で同じコントローラー形状のプロファイルを使う実機確認は未実施です。
 
 ### 接続時の再接続・ペアリング選択
 

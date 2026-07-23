@@ -13,7 +13,7 @@ from bumble.hci import Address
 from bumble.keys import PairingKeys
 
 from swbt.diagnostics import DiagnosticsRecorder
-from swbt.errors import ClosedError, TransportOpenError
+from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
 from swbt.protocol.profiles.joycon import JoyConLeftProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport import bumble as bumble_module
@@ -75,6 +75,7 @@ class FakeBumbleDevice:
         self.connect_calls: list[tuple[str, object, float | None]] = []
         self.connection = FakeBumbleConnection(self.operations)
         self.keystore: object | None = None
+        self.public_address: object | None = None
 
     async def power_on(self) -> None:
         """Record power-on calls."""
@@ -516,6 +517,107 @@ def test_bumble_initialize_device_configures_profile_key_store(
     asyncio.run(run())
 
 
+def test_bumble_adapter_default_profile_uses_powered_on_public_address_namespace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        fake_device = FakeBumbleDevice()
+
+        class FakeDeviceFactory:
+            @staticmethod
+            def from_config_with_hci(config: object, source: object, sink: object) -> object:
+                _ = (config, source, sink)
+                return fake_device
+
+        def create_hid_device(device: object) -> FakeHidDevice:
+            assert isinstance(device, FakeBumbleDevice)
+            return FakeHidDevice()
+
+        monkeypatch.setattr(bumble_device_module, "Device", FakeDeviceFactory)
+        monkeypatch.setattr(bumble_hid_module, "Device", create_hid_device)
+
+        profile_path = tmp_path / "profile.json"
+        PairingProfile.create_new(profile_path, None)
+
+        await bumble_module._default_initialize_device(
+            FakeBumbleHandle(),
+            device_name="Pro Controller",
+            profile=ProControllerProfile(),
+            profile_path=str(profile_path),
+        )
+
+        assert isinstance(fake_device.keystore, bumble_module._PairingProfileKeyStore)
+        fake_device.public_address = Address("00:1B:DC:F9:9F:7D")
+        await cast("Any", fake_device.keystore).update(
+            "01:02:03:04:05:06",
+            _fake_pairing_keys(1),
+        )
+
+        profile = PairingProfile.load(profile_path)
+        assert profile.local_address is None
+        assert set(profile.key_store_namespaces) == {
+            "00:1B:DC:F9:9F:7D",
+        }
+        assert await cast("Any", fake_device.keystore).get_all() == [
+            ("01:02:03:04:05:06", _fake_pairing_keys(1)),
+        ]
+
+        fake_device.public_address = Address("00:1B:DC:F9:9F:7E")
+        assert await cast("Any", fake_device.keystore).get_all() == []
+        await cast("Any", fake_device.keystore).update(
+            "0A:0B:0C:0D:0E:0F",
+            _fake_pairing_keys(2),
+        )
+
+        profile = PairingProfile.load(profile_path)
+        assert set(profile.key_store_namespaces) == {
+            "00:1B:DC:F9:9F:7D",
+            "00:1B:DC:F9:9F:7E",
+        }
+        assert await cast("Any", fake_device.keystore).get_all() == [
+            ("0A:0B:0C:0D:0E:0F", _fake_pairing_keys(2)),
+        ]
+
+    asyncio.run(run())
+
+
+def test_bumble_adapter_default_profile_rejects_unavailable_public_address(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        fake_device = FakeBumbleDevice()
+
+        class FakeDeviceFactory:
+            @staticmethod
+            def from_config_with_hci(config: object, source: object, sink: object) -> object:
+                _ = (config, source, sink)
+                return fake_device
+
+        monkeypatch.setattr(bumble_device_module, "Device", FakeDeviceFactory)
+        monkeypatch.setattr(
+            bumble_hid_module,
+            "Device",
+            lambda _device: FakeHidDevice(),
+        )
+        profile_path = tmp_path / "profile.json"
+        PairingProfile.create_new(profile_path, None)
+
+        await bumble_module._default_initialize_device(
+            FakeBumbleHandle(),
+            device_name="Pro Controller",
+            profile=ProControllerProfile(),
+            profile_path=str(profile_path),
+        )
+
+        with pytest.raises(InvalidKeyStoreError, match="default Bluetooth address"):
+            await cast("Any", fake_device.keystore).get_all()
+        assert PairingProfile.load(profile_path).key_store_namespaces == {}
+
+    asyncio.run(run())
+
+
 def test_bumble_initialize_device_uses_profile_hid_descriptor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -941,6 +1043,41 @@ def test_bumble_start_advertising_rejects_unexpected_address_before_visibility()
     asyncio.run(run())
 
 
+def test_bumble_adapter_default_profile_requires_address_before_visibility() -> None:
+    async def run() -> None:
+        device = FakeBumbleDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            profile_path="pairing-profile.json",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        with pytest.raises(
+            InvalidKeyStoreError,
+            match="adapter default Bluetooth address is unavailable",
+        ):
+            await transport.start_advertising()
+
+        assert device.power_on_count == 1
+        assert device.connectable_calls == []
+        assert device.discoverable_calls == []
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
 def test_bumble_active_reconnect_rejects_unexpected_address_before_connect() -> None:
     async def run() -> None:
         class AddressAfterPowerOnDevice(FakeBumbleDevice):
@@ -967,6 +1104,45 @@ def test_bumble_active_reconnect_rejects_unexpected_address_before_connect() -> 
 
         await transport.open()
         with pytest.raises(RuntimeError, match="expected local Bluetooth address"):
+            await transport.connect_bonded_peer(
+                "AA:BB:CC:DD:EE:FF",
+                connect_timeout=1.0,
+            )
+
+        assert device.power_on_count == 1
+        assert device.connect_calls == []
+        assert device.connectable_calls == []
+        assert device.discoverable_calls == []
+
+        await transport.close()
+
+    asyncio.run(run())
+
+
+def test_bumble_adapter_default_profile_requires_address_before_reconnect() -> None:
+    async def run() -> None:
+        device = FakeBumbleDevice()
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            profile_path="pairing-profile.json",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        with pytest.raises(
+            InvalidKeyStoreError,
+            match="adapter default Bluetooth address is unavailable",
+        ):
             await transport.connect_bonded_peer(
                 "AA:BB:CC:DD:EE:FF",
                 connect_timeout=1.0,

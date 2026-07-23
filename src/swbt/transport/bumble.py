@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from swbt.errors import ClosedError, TransportOpenError
+from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
 from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.transport._bumble_acl import drain_bumble_acl_queue
 from swbt.transport._bumble_hidp import (
@@ -198,6 +198,9 @@ class BumbleHidTransport:
             if expected_local_bluetooth_address is None
             else bytes(expected_local_bluetooth_address)
         )
+        self._require_local_bluetooth_address = (
+            profile_path is not None and expected_local_bluetooth_address is None
+        )
         self._open_transport = _open_transport or _default_open_transport
         if _initialize_device is None:
 
@@ -218,6 +221,7 @@ class BumbleHidTransport:
                 await _default_start_advertising(
                     runtime,
                     expected_local_bluetooth_address=self._expected_local_bluetooth_address,
+                    require_local_bluetooth_address=self._require_local_bluetooth_address,
                 )
 
             self._start_advertising = start_advertising
@@ -649,6 +653,7 @@ class BumbleHidTransport:
         _require_expected_local_bluetooth_address(
             runtime.device,
             self._expected_local_bluetooth_address,
+            require_available=self._require_local_bluetooth_address,
         )
         self._refresh_local_bluetooth_address(runtime)
         if runtime.classic_link_policy_settings is None:
@@ -721,9 +726,24 @@ async def _default_initialize_device(
     )
     if profile_path is not None:
         pairing_profile = PairingProfile.load(profile_path)
+        namespace: str | Callable[[], str]
+        if pairing_profile.local_address is None:
+
+            def resolve_namespace() -> str:
+                address = _device_info_bluetooth_address_from_bumble_address(
+                    getattr(device, "public_address", None)
+                )
+                if address is None:
+                    msg = "adapter default Bluetooth address is unavailable"
+                    raise InvalidKeyStoreError(msg)
+                return address.hex(":").upper()
+
+            namespace = resolve_namespace
+        else:
+            namespace = str(pairing_profile.local_address)
         cast("Any", device).keystore = _PairingProfileKeyStore(
             profile_path=profile_path,
-            namespace=str(pairing_profile.local_address),
+            namespace=namespace,
         )
     service_records = build_hid_service_records(
         profile.hid_report_descriptor,
@@ -747,12 +767,14 @@ async def _default_start_advertising(
     runtime: _BumbleRuntime,
     *,
     expected_local_bluetooth_address: bytes | None = None,
+    require_local_bluetooth_address: bool = False,
 ) -> None:
     if not runtime.device.powered_on:
         await runtime.device.power_on()
     _require_expected_local_bluetooth_address(
         runtime.device,
         expected_local_bluetooth_address,
+        require_available=require_local_bluetooth_address,
     )
     link_policy_settings = await _configure_reference_classic_link_policy(runtime.device)
     if link_policy_settings is not None:
@@ -764,14 +786,18 @@ async def _default_start_advertising(
 def _require_expected_local_bluetooth_address(
     device: _BumbleDeviceRuntime,
     expected_local_bluetooth_address: bytes | None,
+    *,
+    require_available: bool = False,
 ) -> None:
     actual_local_bluetooth_address = _device_info_bluetooth_address_from_bumble_address(
         getattr(device, "public_address", None)
     )
-    if (
-        expected_local_bluetooth_address is None
-        or actual_local_bluetooth_address == expected_local_bluetooth_address
-    ):
+    if expected_local_bluetooth_address is None:
+        if require_available and actual_local_bluetooth_address is None:
+            msg = "adapter default Bluetooth address is unavailable"
+            raise InvalidKeyStoreError(msg)
+        return
+    if actual_local_bluetooth_address == expected_local_bluetooth_address:
         return
     actual_text = (
         "unavailable"

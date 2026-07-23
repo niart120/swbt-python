@@ -20,6 +20,7 @@ from swbt import (
 )
 
 _PROFILE_FILENAME = "pairing-profile-pro.json"
+_ADAPTER_DEFAULT_PROFILE_FILENAME = "pairing-profile-adapter-default-pro.json"
 type JoyConSide = Literal["left", "right"]
 type JoyConController = JoyConL | JoyConR
 type DirectController = DirectProController | DirectJoyConL | DirectJoyConR
@@ -152,6 +153,122 @@ def test_switch_pairing_profile_reuses_target_after_normal_close(
         events,
         "local_bluetooth_address_configured",
         address=target.replace(":", "").lower(),
+    )
+    assert _contains_event(
+        events,
+        "active_reconnect_result",
+        route="active_reconnect",
+        status="connected",
+    )
+    assert not _contains_event(events, "advertising_start")
+    assert not _contains_event(events, "classic_pairing")
+    assert not _contains_event(events, "key_store_update")
+    assert _contains_event(
+        events,
+        "transport_close_complete",
+        adapter=swbt_bumble_adapter,
+    )
+
+
+@pytest.mark.hardware
+def test_switch_adapter_default_profile_fresh_pairing_and_close(
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Pair with the adapter's current public address and close transport resources."""
+    profile_path = swbt_hardware_artifact_dir / _ADAPTER_DEFAULT_PROFILE_FILENAME
+    trace_path = swbt_hardware_artifact_dir / "pairing-profile-adapter-default-fresh-pairing.jsonl"
+    if profile_path.exists():
+        pytest.fail("fresh pairing profile already exists; use a new --swbt-hardware-artifact-dir")
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad = await ProController.create_profile(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                pair_timeout=60.0,
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                await _wait_for_event(trace_path, "key_store_update", timeout_seconds=10.0)
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    payload = json.loads(profile_path.read_text(encoding="utf-8"))
+    events = _read_jsonl(trace_path)
+    namespaces = payload["key_store"]["namespaces"]
+    assert payload["format"] == "swbt.profile"
+    assert payload["schema_version"] == 1
+    assert payload["controller_kind"] == "pro"
+    assert payload["identity"] == {"kind": "adapter-default"}
+    assert len(namespaces) == 1
+    current_address = next(iter(namespaces))
+    assert namespaces[current_address]
+    assert not _contains_event(events, "adapter_identity_prepared")
+    assert _contains_event(events, "bumble_device_initialized")
+    assert _contains_event(
+        events,
+        "local_bluetooth_address_configured",
+        address=current_address.replace(":", "").lower(),
+    )
+    assert _contains_event(events, "key_store_update", status="succeeded")
+    assert _contains_event(
+        events,
+        "transport_close_complete",
+        adapter=swbt_bumble_adapter,
+    )
+
+
+@pytest.mark.hardware
+def test_switch_adapter_default_profile_reuses_address_after_normal_close(
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Reconnect with the current adapter address without pairing fallback."""
+    profile_path = swbt_hardware_artifact_dir / _ADAPTER_DEFAULT_PROFILE_FILENAME
+    trace_path = swbt_hardware_artifact_dir / "pairing-profile-adapter-default-reconnect.jsonl"
+    if not profile_path.exists():
+        pytest.skip(
+            "adapter-default pairing profile is missing; run the fresh pairing test first "
+            "with the same --swbt-hardware-artifact-dir"
+        )
+    original_profile = profile_path.read_bytes()
+    payload = json.loads(original_profile)
+    if payload.get("identity") != {"kind": "adapter-default"}:
+        pytest.fail("existing pairing profile is not an adapter-default profile")
+    namespaces = payload.get("key_store", {}).get("namespaces", {})
+    if not isinstance(namespaces, dict) or len(namespaces) != 1:
+        pytest.fail("adapter-default pairing profile must contain one paired namespace")
+    current_address = next(iter(namespaces))
+    if not isinstance(current_address, str):
+        pytest.fail("adapter-default pairing namespace must be a Bluetooth address string")
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad = ProController(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                result = await pad.try_reconnect(timeout=60.0)
+                assert result.status == "connected"
+                await asyncio.sleep(1.0)
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+    assert profile_path.read_bytes() == original_profile
+    assert not _contains_event(events, "adapter_identity_prepared")
+    assert _contains_event(events, "bumble_device_initialized")
+    assert _contains_event(
+        events,
+        "local_bluetooth_address_configured",
+        address=current_address.replace(":", "").lower(),
     )
     assert _contains_event(
         events,

@@ -1,6 +1,7 @@
 """Bumble JSON key store metadata helpers."""
 
 import copy
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -45,14 +46,24 @@ class _CurrentPreviousProfileKeyStore:
         self,
         *,
         filename: str | Path,
-        namespace: str | None = None,
+        namespace: str | Callable[[], str] | None = None,
     ) -> None:
         if namespace is None:
             msg = "namespace is required"
             raise ValueError(msg)
         self._filename = Path(filename)
-        self._namespace = namespace
+        self._namespace = namespace if isinstance(namespace, str) else None
+        self._namespace_resolver = None if isinstance(namespace, str) else namespace
         self.last_update_previous_saved = False
+
+    def _resolve_namespace(self) -> str:
+        namespace = (
+            self._namespace_resolver() if self._namespace_resolver is not None else self._namespace
+        )
+        if not namespace:
+            msg = "profile key-store namespace is unavailable"
+            raise InvalidKeyStoreError(msg)
+        return namespace
 
     async def update(self, name: str, keys: object) -> None:
         """Write current keys and keep the overwritten current value as previous."""
@@ -101,7 +112,7 @@ class _CurrentPreviousProfileKeyStore:
 
         return cast(
             "_BumbleJsonKeyStoreRuntime",
-            JsonKeyStore(self._namespace, str(self._filename)),
+            JsonKeyStore(self._resolve_namespace(), str(self._filename)),
         )
 
     def _previous_namespace(self, current_store: object) -> str:
@@ -111,9 +122,16 @@ class _CurrentPreviousProfileKeyStore:
 class _PairingProfileNamespaceStore:
     """JsonKeyStore-compatible view over one profile namespace map."""
 
-    def __init__(self, *, profile_path: Path, namespace: str) -> None:
+    def __init__(
+        self,
+        *,
+        profile_path: Path,
+        namespace: str,
+        adapter_default: bool,
+    ) -> None:
         self._profile_path = profile_path
         self.namespace = namespace
+        self._adapter_default = adapter_default
 
     async def load(
         self,
@@ -157,7 +175,13 @@ class _PairingProfileNamespaceStore:
         return await KeyStore.get_resolving_keys(cast("Any", self))
 
     def _require_matching_identity(self, profile: PairingProfile) -> None:
-        if str(profile.local_address) == self.namespace:
+        if profile.local_address is None and self._adapter_default:
+            return
+        if (
+            profile.local_address is not None
+            and not self._adapter_default
+            and str(profile.local_address) == self.namespace
+        ):
             return
         msg = "profile key-store namespace does not match local_address"
         raise InvalidKeyStoreError(msg)
@@ -166,18 +190,21 @@ class _PairingProfileNamespaceStore:
 class _PairingProfileKeyStore(_CurrentPreviousProfileKeyStore):
     """Current/previous Bumble key store persisted inside a profile envelope."""
 
-    def __init__(self, *, profile_path: str | Path, namespace: str) -> None:
+    def __init__(
+        self,
+        *,
+        profile_path: str | Path,
+        namespace: str | Callable[[], str],
+    ) -> None:
         super().__init__(filename=profile_path, namespace=namespace)
 
     def _current_store(self) -> _BumbleJsonKeyStoreRuntime:
-        if self._namespace is None:
-            msg = "profile key-store namespace is required"
-            raise InvalidKeyStoreError(msg)
         return cast(
             "_BumbleJsonKeyStoreRuntime",
             _PairingProfileNamespaceStore(
                 profile_path=self._filename,
-                namespace=self._namespace,
+                namespace=self._resolve_namespace(),
+                adapter_default=self._namespace_resolver is not None,
             ),
         )
 

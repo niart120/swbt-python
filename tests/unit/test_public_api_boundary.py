@@ -196,6 +196,21 @@ def test_reporting_types_expose_only_their_owned_full_state_operation() -> None:
         assert "key_store_path" not in inspect.signature(controller_cls).parameters
 
 
+def test_concrete_create_profile_defaults_local_address_to_adapter_default() -> None:
+    for controller_name in (
+        "ProController",
+        "JoyConL",
+        "JoyConR",
+        "DirectProController",
+        "DirectJoyConL",
+        "DirectJoyConR",
+    ):
+        controller_cls = getattr(swbt, controller_name)
+        parameter = inspect.signature(controller_cls.create_profile).parameters["local_address"]
+
+        assert parameter.default is None
+
+
 def test_rearchitecture_target_public_controller_constructors_hide_config_identity_seams() -> None:
     common_parameters = {
         "adapter",

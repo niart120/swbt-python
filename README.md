@@ -53,7 +53,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Pro Controller 相当の一時的な仮想デバイスを作成し、ペアリング後に A ボタン入力を送信するコードの例です。接続情報を永続化する場合は、利用者が管理するローカル Bluetooth アドレスを `ProController.create_profile()` に渡します。作成手順は[利用例](docs/usage.md)、対応する専用 USB Bluetooth ドングルと復旧手順は[実機準備手順](docs/hardware.md)を参照してください。
+Pro Controller 相当の一時的な仮想デバイスを作成し、ペアリング後に A ボタン入力を送信するコードの例です。接続情報を永続化する場合は `ProController.create_profile()` を使います。`local_address` を省略するとアダプタが現在報告する Bluetooth アドレスを維持し、揮発領域へ書き込みません。利用者管理のローカルアドレスへ切り替える手順は[利用例](docs/usage.md)、対応する専用 USB Bluetooth ドングルと復旧手順は[実機準備手順](docs/hardware.md)を参照してください。
 
 ### Joy-Con L/R
 
@@ -81,7 +81,7 @@ asyncio.run(main())
 
 「持ちかた/順番を変える」画面で Joy-Con としてペアリングする場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送信する必要があります。
 
-Pro Controller、周期送信型 Joy-Con、直接送信型はすべて、利用者管理のローカル Bluetooth アドレスとペアリングキーをまとめる `profile_path` を使います。新規プロファイルは各 class の `create_profile()` で作成し、controller kind ごとに保存先とアドレスを分けてください。native JSON key-store との互換経路はありません。Joy-Con L で右スティックや A/B/X/Y、Joy-Con R で左スティックや十字キーを入力すると `UnsupportedInputError` が送出されます。`JoyConPair` は未実装です。
+Pro Controller、周期送信型 Joy-Con、直接送信型はすべて、Bluetooth アドレスの選択方法とペアリングキーをまとめる `profile_path` を使います。新規プロファイルは各 class の `create_profile()` で作成し、コントローラー形状と対象機器ごとに保存先を分けてください。native JSON key-store との互換経路はありません。Joy-Con L で右スティックや A/B/X/Y、Joy-Con R で左スティックや十字キーを入力すると `UnsupportedInputError` が送出されます。`JoyConPair` は未実装です。
 
 ## 接続方法
 

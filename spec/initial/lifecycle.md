@@ -67,6 +67,8 @@ profile の validation、raw read、volatile write、warm reset、再列挙、re
 
 `open()` は Switch との接続完了を待たず、HID advertising も開始しない。Bluetooth 上で外部から見える接続開始は `pair()`、`connect()`、`reconnect()` が担当する。
 
+adapter-default profile では、`pair()` / `reconnect()` が Bumble device を `power_on()` した後、public address を取得できない場合は `InvalidKeyStoreError` とする。discoverable / connectable の有効化と active reconnect は開始しない。`profile_path=None` の一時 controller 経路にはこの profile 用 guard を適用しない。
+
 ## 4. 接続開始 API
 
 `SwitchGamepad` は resource open と Bluetooth 接続戦略を分ける。
@@ -143,7 +145,7 @@ await pad.close(neutral=True)
 
 close 中に neutral report 送信が失敗した場合、close 全体の完了を優先し、失敗は recoverable な diagnostics error として記録する。
 
-pairing profile を使った場合も `close()` の責務は controller resource と接続を閉じることに限る。volatile address を元へ戻さず、USB ドングルの抜き差しや read-only probe を要求しない。次の controller が同じ profile を開くときに current address が target なら、そのまま接続処理を続行する。
+pairing profile を使った場合も `close()` の責務は controller resource と接続を閉じることに限る。明示 address profile では volatile address を元へ戻さず、USB ドングルの抜き差しや read-only probe を要求しない。次の controller が同じ profile を開くときに current address が target なら、そのまま接続処理を続行する。adapter-default profile は open / close のどちらでも address を書き換えず、次回 `power_on()` 後に報告された current address の namespace を選ぶ。
 
 ## 9. neutral fail-safe
 

@@ -357,14 +357,14 @@ class _PeriodicRuntimeBackedGamepad(_RuntimeBackedGamepad, PeriodicSwitchGamepad
         *,
         adapter: str,
         profile_path: str,
-        local_address: str,
+        local_address: str | None,
         pair_timeout: float | None,
         report_period_us: int | None,
         controller_colors: ControllerColors | None,
         diagnostics: DiagnosticsConfig | None,
     ) -> Self:
         """Create, pair, and clean up a concrete periodic controller profile."""
-        target = LocalAddress.parse(local_address)
+        target = None if local_address is None else LocalAddress.parse(local_address)
         PairingProfile.create_new(
             profile_path,
             target,
@@ -423,7 +423,7 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
         *,
         adapter: str,
         profile_path: str,
-        local_address: str,
+        local_address: str | None = None,
         pair_timeout: float | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
@@ -431,9 +431,11 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
         """Create a new direct pairing profile and pair it.
 
         Args:
-            adapter: Bumble adapter moniker used for volatile identity preparation.
+            adapter: Bumble adapter moniker. An explicit local address may prepare
+                volatile adapter identity state.
             profile_path: New path for the swbt-owned profile JSON.
-            local_address: Individual locally administered Bluetooth address.
+            local_address: Optional individual locally administered Bluetooth address.
+                ``None`` uses the adapter's current default address without rewriting it.
             pair_timeout: Maximum seconds to wait for the initial pairing connection.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
@@ -447,7 +449,7 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
             Exception: Profile preparation or pairing failed. The created profile remains
                 available for a later retry.
         """
-        target = LocalAddress.parse(local_address)
+        target = None if local_address is None else LocalAddress.parse(local_address)
         PairingProfile.create_new(
             profile_path,
             target,
@@ -515,7 +517,7 @@ class ProController(_PeriodicRuntimeBackedGamepad):
         *,
         adapter: str,
         profile_path: str,
-        local_address: str,
+        local_address: str | None = None,
         pair_timeout: float | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
@@ -524,9 +526,11 @@ class ProController(_PeriodicRuntimeBackedGamepad):
         """Create a new pairing profile and pair it.
 
         Args:
-            adapter: Bumble adapter moniker used for volatile identity preparation.
+            adapter: Bumble adapter moniker. An explicit local address may prepare
+                volatile adapter identity state.
             profile_path: New path for the swbt-owned profile JSON.
-            local_address: Individual locally administered Bluetooth address.
+            local_address: Optional individual locally administered Bluetooth address.
+                ``None`` uses the adapter's current default address without rewriting it.
             pair_timeout: Maximum seconds to wait for the initial pairing connection.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -592,7 +596,7 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
         *,
         adapter: str,
         profile_path: str,
-        local_address: str,
+        local_address: str | None = None,
         pair_timeout: float | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
@@ -601,9 +605,11 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
         """Create a new Joy-Con L pairing profile and pair it.
 
         Args:
-            adapter: Bumble adapter moniker used for volatile identity preparation.
+            adapter: Bumble adapter moniker. An explicit local address may prepare
+                volatile adapter identity state.
             profile_path: New path for the swbt-owned profile JSON.
-            local_address: Individual locally administered Bluetooth address.
+            local_address: Optional individual locally administered Bluetooth address.
+                ``None`` uses the adapter's current default address without rewriting it.
             pair_timeout: Maximum seconds to wait for the initial pairing connection.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
@@ -669,7 +675,7 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
         *,
         adapter: str,
         profile_path: str,
-        local_address: str,
+        local_address: str | None = None,
         pair_timeout: float | None = None,
         report_period_us: int | None = None,
         controller_colors: ControllerColors | None = None,
@@ -678,9 +684,11 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
         """Create a new Joy-Con R pairing profile and pair it.
 
         Args:
-            adapter: Bumble adapter moniker used for volatile identity preparation.
+            adapter: Bumble adapter moniker. An explicit local address may prepare
+                volatile adapter identity state.
             profile_path: New path for the swbt-owned profile JSON.
-            local_address: Individual locally administered Bluetooth address.
+            local_address: Optional individual locally administered Bluetooth address.
+                ``None`` uses the adapter's current default address without rewriting it.
             pair_timeout: Maximum seconds to wait for the initial pairing connection.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.

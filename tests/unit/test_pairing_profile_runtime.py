@@ -291,3 +291,46 @@ def test_profile_target_is_forwarded_to_bumble_power_on_guard(
         "status": "already_active",
         "target_address": "02:12:34:56:78:9A",
     }
+
+
+def test_adapter_default_profile_skips_identity_preparation_and_keeps_profile_storage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile_path = tmp_path / "pro.json"
+    PairingProfile.create_new(profile_path, None)
+    captured: dict[str, object] = {}
+    transport = FakeHidTransport()
+
+    async def fail_preparation(**_kwargs: object) -> object:
+        raise AssertionError
+
+    def create_transport(
+        *,
+        profile_path: str | None,
+        expected_local_bluetooth_address: bytes | None,
+        **_kwargs: object,
+    ) -> HidDeviceTransport:
+        captured["profile_path"] = profile_path
+        captured["expected_local_bluetooth_address"] = expected_local_bluetooth_address
+        return transport
+
+    monkeypatch.setattr(gamepad_runtime, "prepare_adapter_identity", fail_preparation)
+    monkeypatch.setattr(
+        gamepad_transport_factory,
+        "create_default_transport",
+        create_transport,
+    )
+    pad = ProController(adapter="usb:0", profile_path=str(profile_path))
+
+    asyncio.run(pad.open())
+
+    assert captured == {
+        "profile_path": str(profile_path),
+        "expected_local_bluetooth_address": None,
+    }
+    assert transport.open_count == 1
+
+    asyncio.run(pad.close())
+
+    assert transport.close_count == 1
