@@ -1,6 +1,6 @@
 # Release Notes
 
-## Unreleased
+## 0.5.0
 
 ### 追加機能
 
