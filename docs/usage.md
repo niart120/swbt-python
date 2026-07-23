@@ -85,9 +85,9 @@ left = await JoyConL.create_profile(
 await left.close()
 ```
 
-アダプタが報告するアドレスが変わると別 namespace を使い、以前のペアリングキーを自動移行しません。以前の揮発書換値が給電断まで残っている場合は、その値を current public address として使います。
+アダプタが報告するアドレスが変わると、ペアリングキーの保存領域も変わり、以前のペアリングキーは自動移行されません。以前に揮発領域へ書き込んだ値が給電断まで残っている場合は、その値を現在の Bluetooth アドレスとして使います。
 
-利用者管理のローカルアドレスへ切り替える場合だけ `local_address="02:..."` を指定します。生成と重複回避は利用者の責任です。explicit-address 経路は CSR8510 A10 の揮発領域を書き換えますが、永続領域は変更しません。`AdapterIdentityRecoveryRequired` が送出された場合は、USB ドングルを抜き差ししてから再試行してください。
+利用者管理のローカルアドレスへ切り替える場合だけ `local_address="02:..."` を指定します。生成と重複回避は利用者の責任です。`local_address` を明示する経路は CSR8510 A10 の揮発領域を書き換えますが、永続領域は変更しません。`AdapterIdentityRecoveryRequired` が送出された場合は、専用 USB Bluetooth ドングルを抜き差ししてから再試行してください。
 
 どちらの経路も既存のパスを上書きしません。ペアリングが失敗してもプロファイルは残るため、作成時と同じコントローラー形状の `profile_path` から再試行します。別のコントローラー形状のプロファイルを渡した場合は `ProfileControllerMismatchError` がアダプタを開く前に送出されます。直接送信型と周期送信型の間で同じコントローラー形状のプロファイルを使う実機確認は未実施です。
 
@@ -309,21 +309,21 @@ await pad.sticks(left=Stick.tilt(0.7, 0.7))
 ### ジャイロだけの設定
 
 ```python
-from swbt import IMSFrame
+from swbt import IMUFrame
 
-await pad.imu(IMSFrame.gyro(100, 0, 0))
+await pad.imu(IMUFrame.gyro(100, 0, 0))
 ```
 
 ### 角速度の指定
 
 ```python
 from math import radians
-from swbt import IMSFrame
+from swbt import IMUFrame
 
 omega_x = radians(90.0)
 omega_y = radians(-45.0)
 omega_z = 0.0
-frame = IMSFrame.gyro_rate(
+frame = IMUFrame.gyro_rate(
     x_rad_s=omega_x,
     y_rad_s=omega_y,
     z_rad_s=omega_z,
@@ -333,26 +333,26 @@ await pad.imu(frame)
 x_rad_s, y_rad_s, z_rad_s = frame.to_gyro_rate()
 ```
 
-`IMSFrame.gyro_rate()` は角速度を rad/s 単位で指定するときに使います。
+`IMUFrame.gyro_rate()` は角速度を rad/s 単位で指定するときに使います。
 
 ### 加速度とジャイロの設定
 
 ```python
-from swbt import IMSFrame
+from swbt import IMUFrame
 
-frame = IMSFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)
+frame = IMUFrame.accel(0, 0, 4096).with_gyro(100, 0, 0)
 await pad.imu(frame)
 ```
 
 ### 3 入力分の個別設定
 
 ```python
-from swbt import IMSFrame
+from swbt import IMUFrame
 
 await pad.imu(
-    IMSFrame.gyro(100, 0, 0),
-    IMSFrame.gyro(120, 0, 0),
-    IMSFrame.gyro(140, 0, 0),
+    IMUFrame.gyro(100, 0, 0),
+    IMUFrame.gyro(120, 0, 0),
+    IMUFrame.gyro(140, 0, 0),
 )
 ```
 

@@ -55,7 +55,7 @@ from swbt import (
 | `ClosedError` | 接続済み、または開かれたリソースを必要とする操作の失敗 |
 | `InvalidInputError` | 引数値または入力値の不正 |
 | `UnsupportedInputError` | プロファイルが対応しない入力の拒否 |
-| `InvalidKeyStoreError` | ペアリング情報の保存形式が未対応、現在の接続先が複数ある、または adapter-default profile で現在の Bluetooth アドレスを取得できない状態 |
+| `InvalidKeyStoreError` | ペアリング情報の保存形式が未対応、現在の接続先が複数ある、またはアダプタ既定アドレスのプロファイルで現在の Bluetooth アドレスを取得できない状態 |
 | `InvalidProfileError` | swbt プロファイル JSON の形式、バージョン、コントローラー種別、アドレスが不正な状態 |
 | `ProfileControllerMismatchError` | swbt プロファイルのコントローラー種別と生成する具象クラスが一致しない状態。`InvalidProfileError` の派生型 |
 | `AdapterIdentityRecoveryRequired` | 揮発領域のアドレス書換開始後の状態を確定できず、専用 USB Bluetooth ドングルの抜き差しが必要な状態 |
@@ -110,7 +110,7 @@ direct_pad = DirectProController(
 
 `ProController`、`JoyConL`、`JoyConR` は周期送信型の具象クラスです。対応する直接送信型の具象クラスは、`DirectProController`、`DirectJoyConL`、`DirectJoyConR` です。`SwitchGamepad` は直接生成しません。
 
-`adapter` は Bumble transport に渡すアダプタ名です。
+`adapter` は Bumble を使う下位の通信実装に渡すアダプタ名です。
 
 すべての具象クラスの `profile_path` は、Bluetooth アドレスの選択方法とペアリングキーを同じ swbt プロファイル JSON に保存するパスです。既存プロファイルを再利用する場合だけコンストラクタに渡します。
 
@@ -118,7 +118,7 @@ direct_pad = DirectProController(
 
 新しいプロファイルは、各具象クラスの `create_profile()` で作成します。`local_address` を省略するか `None` にすると、揮発領域へ書き込まず、アダプタが `power_on()` 後に報告した現在の Bluetooth アドレスを使います。
 
-adapter-default profile で `power_on()` 後も現在の Bluetooth アドレスを取得できない場合は、`InvalidKeyStoreError` を送出します。HID 接続待ち受けや active reconnect は開始しません。
+アダプタ既定アドレスのプロファイルで `power_on()` 後も現在の Bluetooth アドレスを取得できない場合は、`InvalidKeyStoreError` を送出します。HID 接続待ち受けや保存済みペアリング情報を使う再接続は開始しません。
 
 ```python
 pad = await ProController.create_profile(
@@ -134,7 +134,7 @@ finally:
 
 `create_profile()` は既存のパスを上書きしません。別のコントローラー形状のプロファイルは `ProfileControllerMismatchError` になります。ペアリング失敗後もプロファイルは残るため、作成時と同じコントローラー形状の `profile_path` から再試行できます。
 
-利用者管理のローカルアドレスが必要な場合だけ `local_address="02:..."` を明示します。生成と重複回避は利用者の責任です。この explicit-address 経路は CSR8510 A10 の揮発領域を書き換えます。アドレスまたはプロファイルが不正ならアダプタを開く前に失敗し、書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` が送出されます。この場合は専用 USB Bluetooth ドングルを抜き差ししてから再試行します。
+利用者管理のローカルアドレスが必要な場合だけ `local_address="02:..."` を明示します。生成と重複回避は利用者の責任です。`local_address` を明示する経路は CSR8510 A10 の揮発領域を書き換えます。アドレスまたはプロファイルが不正ならアダプタを開く前に失敗し、書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` が送出されます。この場合は専用 USB Bluetooth ドングルを抜き差ししてから再試行します。
 
 `report_period_us` は、周期送信型の具象クラスが使うレポートループの送信周期です。`None` を指定した場合は、既定周期（8 ms）を使います。直接送信型の具象クラスは `report_period_us` を受け取りません。入力レポートの送信頻度は利用者が管理します。
 
@@ -293,6 +293,6 @@ OS、ドングル、ファームウェアをまたぐ互換性は未検証です
 
 ## 例外とトレース出力
 
-例外は `SwbtError` を基底例外とします。アダプタ列挙の失敗では `AdapterDiscoveryError`、利用者入力の不正では `InvalidInputError`、コントローラーが対応しない入力では `UnsupportedInputError`、transport を開けなかった場合は `TransportOpenError`、接続タイムアウトでは `ConnectionTimeoutError`、接続不成立では `ConnectionFailedError`、ペアリング情報の保存形式が一致しない場合、接続候補が複数ある場合、または adapter-default profile で現在の Bluetooth アドレスを取得できない場合は `InvalidKeyStoreError`、プロファイルが不正な場合は `InvalidProfileError` が送出されます。コントローラー種別の不一致は `ProfileControllerMismatchError` で区別できます。揮発領域への書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` が送出されます。
+例外は `SwbtError` を基底例外とします。アダプタ列挙の失敗では `AdapterDiscoveryError`、利用者入力の不正では `InvalidInputError`、コントローラーが対応しない入力では `UnsupportedInputError`、transport を開けなかった場合は `TransportOpenError`、接続タイムアウトでは `ConnectionTimeoutError`、接続不成立では `ConnectionFailedError`、ペアリング情報の保存形式が一致しない場合、接続候補が複数ある場合、またはアダプタ既定アドレスのプロファイルで現在の Bluetooth アドレスを取得できない場合は `InvalidKeyStoreError`、プロファイルが不正な場合は `InvalidProfileError` が送出されます。コントローラー種別の不一致は `ProfileControllerMismatchError` で区別できます。揮発領域への書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` が送出されます。
 
 `DiagnosticsConfig` はトレース出力のための設定です。`trace_writer` にテキストストリームを渡すと、接続状態の遷移、送信したレポート、受信したサブコマンド、エラー、`adapter`、`profile_path` などの実行時メタデータを、1 行 1 件の JSON オブジェクトとして出力します。このトレースログは、実機接続時の挙動確認や失敗時の切り分けに使います。

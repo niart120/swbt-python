@@ -21,14 +21,20 @@
 | firmware | ファームウェア / FW バージョン | `FW`、バージョン表記 | `firmware` | 公開文書の本文では「ファームウェア」を基本とする。 |
 | adapter | アダプタ | `adapter`、Bumble の adapter string | `adapter 名`、`adapter moniker` | 引数名と説明語を分ける。 |
 | adapter name | アダプタ名 / アダプタの名称 | `adapter=...` | `adapter 名`、`adapter moniker` | `adapter=...` に渡す値の説明では「アダプタ名」を使う。 |
+| adapter open | アダプタを開く処理 / アダプタが開けない | 例外名、トレースイベント名 | `adapter open`、見出しの `Adapter Does Not Open` | 動作の説明では「アダプタを開く処理」、障害の見出しでは「アダプタが開けない」と書く。 |
+| adapter-default profile | アダプタ既定アドレスのプロファイル | `local_address=None` | `adapter-default profile` | アダプタが起動後に報告した Bluetooth アドレスを使うプロファイルを指す。 |
+| explicit-address path | `local_address` を明示する経路 | `local_address` | `explicit-address 経路`、`explicit address profile` | API 引数を明示し、利用者が管理するアドレスを使うことが分かるように書く。 |
+| current public address | 現在の Bluetooth アドレス | トレース値、Bumble API 名 | `current public address`、`current address` | 出荷時アドレスとは断定しない。 |
 | no-open snapshot | 開かずに取得した情報 / 列挙時点の情報 | `snapshot()` | `no-open snapshot` | 何を開かず、いつ取得した情報かを具体的に書く。 |
 | USB descriptor | USB ディスクリプター | `USB` | `USB descriptor` | USB 規格の構造名としてカタカナ表記を使う。 |
 | pairing | ペアリング | `allow_pairing`、`pair()` | 地の文の `pairing` | 説明文では「ペアリング」を使う。 |
 | reconnect | 再接続 | `reconnect()` | 地の文の `reconnect` | 説明文では「再接続」を使う。 |
+| active reconnect | 保存済みペアリング情報を使う再接続 / 再接続 | トレースイベント名 | `active reconnect` | 接続待ち受けとの区別が必要な箇所だけ説明を補う。 |
 | bond | 保存済みペアリング情報 / ペアリング情報 | — | `bond`、`保存済み接続情報` | ペアリング後に保存される鍵と相手機器情報を指す。 |
 | current peer | 現在の接続先 / 現在の接続先情報 | — | `current peer` | ペアリング情報の保存ファイルに記録された接続先を利用者向けに説明する。 |
 | pairing key | ペアリングキー | — | `pairing key` | HID 識別情報との対応を説明する。 |
 | key store | ペアリング情報の保存ファイル | `key_store_path` | 地の文の `key store` | 保存済みのペアリング情報と相手機器情報を保持するファイルを指す。 |
+| key-store namespace | ペアリングキーの保存領域 | — | `key-store namespace`、`namespace` | Bluetooth アドレスごとに分かれる保存領域を説明する。 |
 | HID identity | HID 識別情報 | `HID` | `HID identity` | `HID` は残し、`identity` を日本語化する。 |
 | HID advertising | HID 接続待ち受け | `HID` | `advertising`、`HID advertising`、`広告` | 対象機器からの接続を待つ動作として説明する。 |
 | periodic report loop | レポートループ | — | `periodic report loop`、`report loop` | 入力レポートを周期送信する処理を指す。 |
@@ -56,3 +62,4 @@
 | diagnostics | トレース出力 | `DiagnosticsConfig`、`diagnostics` | 地の文の `diagnostics`、`診断`、`ロギング` | 原因を自動判定する機能とは説明しない。 |
 | trace | トレースログ / トレース | `trace`、`JSON Lines trace` | — | ファイルに残る実行記録は「トレースログ」と書く。 |
 | troubleshooting | トラブルシューティング | — | `troubleshooting` | 文書の見出しや導線では日本語化する。 |
+| experimental | experimental | 状態ラベル | `実験的` との混在 | 対応状況を示す既存ラベルとして残してよい。説明文では未確認範囲を具体的に書く。 |

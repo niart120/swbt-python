@@ -1,30 +1,30 @@
-# Hardware
+# 実機準備手順
 
 `swbt-python` の実機接続では、PC の標準 Bluetooth 機能ではなく、Bumble から直接開く専用 USB Bluetooth ドングルを使います。
 最初にドライバーとアダプタ名を確認し、その後に対象機器側でコントローラー接続画面を開いて接続します。
 
-## Setup
+## 準備
 
-### General Requirements
+### 必要なもの
 
 | 項目 | 内容 |
 |---|---|
 | Python | Python 3.12 以降 |
-| USB Bluetooth ドングル | PC の通常 Bluetooth 機能と共有しない専用ドングル |
-| 対象機器 | "持ち方/順番を変える" 画面へ手動で移動できること |
+| 専用 USB Bluetooth ドングル | PC の通常 Bluetooth 機能と共有しない専用ドングル |
+| 対象機器 | 「持ちかた/順番を変える」画面へ手動で移動できること |
 
-### Driver / USB Access
+### ドライバーと USB アクセス
 
 Bumble の `usb:` アダプタは USB HCI transport を libusb 経由で使います。
 ここでのドライバー準備は、OS の Bluetooth 機能で使うドライバーではなく、専用ドングルを Bumble から直接開くための OS 側設定を指します。
 
-| OS | status | 準備 |
+| OS | 対応状況 | 準備 |
 |---|---|---|
-| Windows | supported | Zadig などで専用ドングルに WinUSB / libwdi ドライバーを導入する |
-| Linux | experimental | `libusb-1.0` が使えること、USB デバイスにアクセスできること、kernel / BlueZ が対象ドングルを使用中でないことを確認する |
-| macOS | experimental | `libusb-1.0` が使えること、macOS の Bluetooth stack が外付け HCI を使用しない設定になっていること、必要に応じて libusb の library path を指定する |
+| Windows | 対応済み | Zadig などで専用ドングルに WinUSB / libwdi ドライバーを導入する |
+| Linux | experimental | `libusb-1.0` が使えること、USB デバイスにアクセスできること、カーネルまたは BlueZ が対象ドングルを使用中でないことを確認する |
+| macOS | experimental | `libusb-1.0` が使えること、macOS の Bluetooth スタックが外付け HCI を使用しない設定になっていること、必要に応じて libusb のライブラリ検索パスを指定する |
 
-#### Windows USB & Driver Setup
+#### Windows の USB ドライバー設定
 
 Windows では、Zadig などで専用 USB Bluetooth ドングルに WinUSB / libwdi ドライバーを導入する必要があります。
 
@@ -41,15 +41,15 @@ Zadig での実施手順:
 
 Zadig の操作画面と詳細: [Zadig 2.x User Guide](https://github.com/pbatard/libwdi/wiki/Zadig)。
 
-#### Linux USB & Driver Setup
+#### Linux の USB ドライバー設定
 
-Linux の手順はこの Hardware Guide に整備されていますが、動作検証されていないことに留意してください。
+Linux の手順はこの文書に整備されていますが、動作検証されていないことに留意してください。
 
-Linux では、Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合、OS 側で `apt install libusb-1.0-0` が必要になることがあります。USB デバイスへのアクセス権を付け、kernel / BlueZ がドングルを使用中の場合は `hciconfig hciX down` などで解放する必要があります。
+Linux では、Bumble 同梱の `libusb_package` で `libusb-1.0` が見つからない場合、OS 側で `apt install libusb-1.0-0` が必要になることがあります。USB デバイスへのアクセス権を付け、カーネルまたは BlueZ がドングルを使用中の場合は `hciconfig hciX down` などで解放する必要があります。
 
-#### macOS USB & Driver Setup
+#### macOS の USB ドライバー設定
 
-macOS では、macOS の Bluetooth stack が外付け HCI を使用しないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` の設定が必要になる場合があります。実行前に現在の値を確認します。
+macOS では、macOS の Bluetooth スタックが外付け HCI を使用しないように `sudo nvram bluetoothHostControllerSwitchBehavior="never"` の設定が必要になる場合があります。実行前に現在の値を確認します。
 
 ```console
 nvram bluetoothHostControllerSwitchBehavior
@@ -68,19 +68,19 @@ export DYLD_LIBRARY_PATH=/usr/local/opt/libusb/lib
 uv run swbt-probe adapters --json
 ```
 
-`swbt-python` を source checkout から動かす場合、依存 package の build で `pkgconf` と `openssl@3` が必要になることがあります。
+`swbt-python` をソースコードを取得した作業ツリーから動かす場合、依存パッケージの作成に `pkgconf` と `openssl@3` が必要になることがあります。
 
 ```console
 brew install pkgconf openssl@3
 ```
 
-#### Linux / macOS Verification Scope
+#### Linux / macOS の確認範囲
 
-Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用アダプタを使う前に確認する項目です。接続成功を保証するものではありません。
+Linux / macOS は experimental です。ここに書いた内容は、Bumble から専用 USB Bluetooth ドングルを使う前に確認する項目です。接続成功を保証するものではありません。
 
-Linux 上のアダプタ列挙、アダプタ open、HID 接続待ち受け、ペアリング、再接続、入力反映は未確認です。macOS 15.7.7 / CSR8510 A10 では Pro Controller の限定的な動作確認結果がありますが、Joy-Con profile、別ドングル、別ファームウェアでの互換性は未確認です。macOS CI 上では依存関係のインストール、単体テスト、fake transport を使った結合テスト、パッケージ作成までは確認済みです。
+Linux 上のアダプタ列挙、アダプタを開く処理、HID 接続待ち受け、ペアリング、再接続、入力反映は未確認です。macOS 15.7.7 / CSR8510 A10 では Pro Controller の限定的な動作確認結果がありますが、Joy-Con プロファイル、別ドングル、別ファームウェアでの互換性は未確認です。macOS CI 上では依存関係のインストール、単体テスト、実機を使わない通信実装による結合テスト、パッケージ作成までは確認済みです。
 
-### Adapter Name
+### アダプタ名
 
 ドライバー準備後、Bumble から見えるアダプタ名を確認します。
 
@@ -101,13 +101,13 @@ CLI から確認する場合は `swbt-probe adapters --json` を使います。
 swbt-probe adapters --json
 ```
 
-`list_adapters()` と `swbt-probe adapters --json` はアダプタ一覧確認用です。USB descriptor の読み取りは行いますが、Switch に向けたペアリング、HID 接続待ち受け、レポートループは開始しません。Bumble transport としてデバイスハンドルを開きません。
+`list_adapters()` と `swbt-probe adapters --json` はアダプタ一覧確認用です。USB ディスクリプターの読み取りは行いますが、Switch に向けたペアリング、HID 接続待ち受け、レポートループは開始しません。Bumble を使う下位の通信実装としてデバイスハンドルを開きません。
 
 `adapter` には `usb:0` のような Bumble アダプタ名を指定します。アダプタ名は PC の接続状態で変わるため、コード例の `usb:0` を固定値として扱わないでください。
 
-## Pairing And Reconnect
+## ペアリングと再接続
 
-### pairing profile のアドレス選択
+### ペアリングプロファイルのアドレス選択
 
 アダプタの Bluetooth アドレスを書き換えずに接続情報を永続化する場合は、`local_address` を省略して最初のペアリング用プロファイルを作成します。
 
@@ -120,12 +120,12 @@ pad = await ProController.create_profile(
 await pad.close()
 ```
 
-- この経路は Bumble の `power_on()` 後にアダプタが報告した current public address を使います。出荷時アドレスであることは保証しません。
-- 以前の揮発書換値が USB 給電断まで残っている場合、その値が current default になることがあります。
-- アダプタが別のアドレスを報告した場合は新しい key-store namespace を使い、以前のペアリングキーを自動移行しません。
-- `power_on()` 後も有効な public address を取得できない場合は `InvalidKeyStoreError` とし、HID advertising と active reconnect を開始しません。
+- この経路は Bumble の `power_on()` 後にアダプタが報告した現在の Bluetooth アドレスを使います。出荷時アドレスであることは保証しません。
+- 以前に揮発領域へ書き込んだ値が USB の給電断まで残っている場合、その値が現在の既定アドレスになることがあります。
+- アダプタが別のアドレスを報告した場合は新しいペアリングキーの保存領域を使い、以前のペアリングキーを自動移行しません。
+- `power_on()` 後も有効な Bluetooth アドレスを取得できない場合は `InvalidKeyStoreError` とし、HID 接続待ち受けと保存済みペアリング情報を使う再接続を開始しません。
 
-利用者管理の個別かつローカル管理のアドレスへ切り替える場合だけ、`local_address` を明示します。この explicit-address 経路は CSR8510 A10 の揮発領域を書き換えます。
+利用者管理の個別かつローカル管理のアドレスへ切り替える場合だけ、`local_address` を明示します。`local_address` を明示する経路は CSR8510 A10 の揮発領域を書き換えます。
 
 ```python
 pad = await ProController.create_profile(
@@ -165,26 +165,27 @@ await pad.reconnect(timeout=60.0)
 
 同じコントローラー形状でも、接続先の対象機器を分ける場合はペアリング情報の保存ファイルも分けてください。1 つの保存ファイルは「1 つの対象機器」と「1 つのコントローラー形状」の組み合わせに固定します。
 
-## Controller Profile Verification Matrix
+## コントローラー別の実機確認状況
+
 以下の表は、各コントローラー種別の動作確認状況をまとめたものです。
 
-| Controller profile | Status | Verified scope | Not verified | Profile storage |
+| コントローラー | 確認状況 | 確認済み | 未確認 | プロファイルの保存先 |
 |---|---|---|---|---|
-| Pro Controller | partially verified | 2026-07-20 の unit_052 では explicit address profile の揮発アドレス準備、初回ペアリング、active reconnect を確認。2026-07-24 の unit_066 では同じ Windows 11 / CSR8510 A10 / WinUSB 構成で adapter-default profile の初回ペアリング、profile bytes を変えない active reconnect、再接続時の advertising / pairing / key 更新なしを確認 | adapter-default fresh close の終了時 neutral report、USB 給電断後に current address が変わる場合、Linux、CSR8510 A10 以外、別ファームウェア | 対象機器ごとに別の `profile_path` を使う |
-| Joy-Con L | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 でペアリングプロファイルの揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルによる active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性 | コントローラー形状と対象機器ごとに別の `profile_path` を使う |
-| Joy-Con R | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 でペアリングプロファイルの揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルによる active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性。fresh pairing teardown の Bumble / usb1 callback warning は hardware log を参照 | コントローラー形状と対象機器ごとに別の `profile_path` を使う |
+| Pro Controller | 一部確認済み | 2026-07-20 の unit_052 では `local_address` を明示するプロファイルの揮発アドレス準備、初回ペアリング、保存済みペアリング情報を使う再接続を確認。2026-07-24 の unit_066 では同じ Windows 11 / CSR8510 A10 / WinUSB 構成で、アダプタ既定アドレスのプロファイルによる初回ペアリング、プロファイル内容を変えない再接続、再接続時に HID 接続待ち受け、ペアリング、鍵更新が発生しないことを確認 | アダプタ既定アドレスのプロファイルを初回ペアリング後に終了するときのニュートラル入力、USB の給電断後に現在の Bluetooth アドレスが変わる場合、Linux、CSR8510 A10 以外、別ファームウェア | 対象機器ごとに別の `profile_path` を使う |
+| Joy-Con L | 一部確認済み | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 ファームウェア 22.5.0 で、ペアリングプロファイルの揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルによる再接続を確認 | SDP の細部一致、USB の給電断と再接続後の再適用、OS / ドングル / ファームウェアをまたぐ互換性 | コントローラー形状と対象機器ごとに別の `profile_path` を使う |
+| Joy-Con R | 一部確認済み | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 ファームウェア 22.5.0 で、ペアリングプロファイルの揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルによる再接続を確認 | SDP の細部一致、USB の給電断と再接続後の再適用、OS / ドングル / ファームウェアをまたぐ互換性。初回ペアリング終了時の Bumble / usb1 コールバック警告は実機テストログを参照 | コントローラー形状と対象機器ごとに別の `profile_path` を使う |
 
-## Confirmed Behavior
+## 確認済みの動作
 
-2026-07-07 時点では、Windows 11、CSR8510 A10、WinUSB / libwdi、Switch 2 firmware 22.1.0 の組み合わせで次を確認済みです。
+2026-07-07 時点では、Windows 11、CSR8510 A10、WinUSB / libwdi、Switch 2 ファームウェア 22.1.0 の組み合わせで次を確認済みです。
 
 - Pro Controller の初回ペアリング、保存済みペアリング情報を使う再接続、主要な初期化シーケンス。
-- Pro Controller の Button A / L / R、十字キー、左スティック / 右スティック、ニュートラル復帰、切断。
+- Pro Controller の A / L / R ボタン、十字キー、左スティック / 右スティック、ニュートラル復帰、切断。
 - Joy-Con L/R の登録と利用者指定色。
 - Joy-Con L の十字キー入力、Joy-Con R の ABXY 入力。
 - Joy-Con L/R の対応スティック入力送信とニュートラル復帰。
 
-2026-07-05 時点では、macOS 15.7.7、CSR8510 A10、Homebrew `libusb`、Switch 2、adapter `usb:0` の組み合わせで次を確認済みです。
+2026-07-05 時点では、macOS 15.7.7、CSR8510 A10、Homebrew `libusb`、Switch 2、アダプタ名 `usb:0` の組み合わせで次を確認済みです。
 
 - 初回ペアリング。
 - 保存済みペアリング情報を使う再接続。
@@ -192,48 +193,48 @@ await pad.reconnect(timeout=60.0)
 - ボタン入力の反映。
 - ニュートラル復帰。
 
-確認済み条件のトレースログ、Bumble version、Python version、ドライバー情報はリポジトリ内の `spec/hardware-test-log.md` にあります。
+確認済み条件のトレースログ、Bumble バージョン、Python バージョン、ドライバー情報はリポジトリ内の `spec/hardware-test-log.md` にあります。
 
-## Notes
+## 注意事項
 
 Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluetooth ドングルを使うためのものです。PC に内蔵されている通常 Bluetooth 機能と同じアダプタは使わないでください。
 
-## Troubleshooting
+## トラブルシューティング
 
-### Adapter Does Not Open
+### アダプタが開けない
 
 - 専用 USB Bluetooth ドングルを使っているか確認します。
 - Windows では WinUSB / libwdi に切り替わっているか確認します。
 - 専用ドングルのアダプタ名を指定しているか確認します。
 - `list_adapters()` または `swbt-probe adapters --json` でアダプタ名を確認します。
 - `adapters=[]` は HCI 候補 0 件です。ドライバー、USB 接続、OS 側の占有状態を確認します。
-- `AdapterDiscoveryError` は libusb の読み込みや USB 列挙開始の失敗です。アダプタ open 失敗とは別に扱います。
+- `AdapterDiscoveryError` は libusb の読み込みや USB 列挙開始の失敗です。アダプタを開く処理の失敗とは別に扱います。
 
-### Pairing Timeout
+### ペアリングがタイムアウトする
 
 - 対象機器がコントローラー接続画面にいるか確認します。
 - `pair()` または `connect(..., allow_pairing=True)` を使っているか確認します。
 - トレースログに `advertising_start`、`connection_request`、`host_connection` があるか確認します。
 
-### No Bond
+### 保存済みペアリング情報がない
 
 - `reconnect()` / `try_reconnect()` は保存済みペアリング情報がない場合、`no_bond` として失敗します。
 - 初回接続では `connect(..., allow_pairing=True)` か `pair()` を使います。
 - すべての具象クラスで、コントローラー形状と対象機器ごとに別の `profile_path` を指しているか確認します。
 
-### Adapter Address Is Unavailable
+### アダプタの Bluetooth アドレスを取得できない
 
-- adapter-default profile で `InvalidKeyStoreError` が発生した場合は、トレースログの `local_bluetooth_address_configured` を確認します。
-- event がない場合は、Bumble が `power_on()` 後に public address を取得できていません。HID advertising や active reconnect は開始されていないため、専用ドングルの USB 接続とドライバーを確認してから再試行します。
+- アダプタ既定アドレスのプロファイルで `InvalidKeyStoreError` が発生した場合は、トレースログの `local_bluetooth_address_configured` を確認します。
+- このイベントがない場合は、Bumble が `power_on()` 後に Bluetooth アドレスを取得できていません。HID 接続待ち受けや保存済みペアリング情報を使う再接続は開始されていないため、専用ドングルの USB 接続とドライバーを確認してから再試行します。
 
-### Multiple Current Peers
+### 現在の接続先が複数ある
 
-- 1 つの profile に複数の現在の再接続候補がある状態です。
-- 対象機器ごとに profile を分けます。
-- 復旧する場合は該当 profile を削除し、`create_profile()` で作り直してからペアリングをやり直します。
+- 1 つのプロファイルに複数の現在の再接続候補がある状態です。
+- 対象機器ごとにプロファイルを分けます。
+- 復旧する場合は該当プロファイルを削除し、`create_profile()` で作り直してからペアリングをやり直します。
 
-### Input Is Not Reflected In The UI
+### 入力が対象機器の画面に反映されない
 
 - ペアリングまたは再接続直後の初期通信が終わってから入力を送っているか確認します。
-- `tap()` は即時レポートを送ります。`press()` / `release()` / `sticks()` / `neutral()` は state update API であり、即時送信を保証しません。
+- `tap()` は即時レポートを送ります。`press()` / `release()` / `sticks()` / `neutral()` は状態更新 API であり、即時送信を保証しません。
 - トレースログの `report_tx`、`subcommand_rx`、`subcommand_reply_tx`、`connected`、`disconnected` を確認します。
