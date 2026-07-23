@@ -140,8 +140,9 @@ Fake transport integration tests は `tests/integration/` に置く。
 検証項目:
 
 - `ReportLoop` が periodic `0x30` を fake transport に送る
-- `report_period_us` を短くした test clock で決定的に検証できる
-- 遅延時に過去 tick 分をまとめて送らない
+- 注入した単調時計と fake sleep で、送信処理時間を差し引いても deadline が `report_period_us` 間隔で進むことを決定的に検証できる
+- send が周期を超えた場合は過去 deadline を飛ばし、現在時刻以上の最初の deadline まで待って、過去 tick 分を burst 追送しない
+- overrun 中に入力 state が変わった場合、次回 deadline では古い report を追送せず最新 state を送る
 
 ### 3.3 input report と reply の共通送信順
 

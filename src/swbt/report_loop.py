@@ -130,11 +130,14 @@ class ReportLoop:
         report_period_us: int = 8000,
         diagnostics: DiagnosticsRecorder | None = None,
         clock_ns: Callable[[], int] = monotonic_ns,
+        _sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         sender: ReportSender | None = None,
     ) -> None:
         """Create a report loop helper."""
         self._state_store = state_store
-        self._report_period_seconds = report_period_us / 1_000_000
+        self._report_period_ns = report_period_us * 1_000
+        self._clock_ns = clock_ns
+        self._sleep = _sleep
         self._sender = sender or ReportSender(
             transport=transport,
             input_report_builder=input_report_builder,
@@ -187,9 +190,18 @@ class ReportLoop:
         await self.send_current_input(reason="periodic")
 
     async def _run(self) -> None:
+        next_deadline_ns = self._clock_ns() + self._report_period_ns
         while True:
-            await asyncio.sleep(self._report_period_seconds)
+            while (remaining_ns := next_deadline_ns - self._clock_ns()) > 0:
+                await self._sleep(remaining_ns / 1_000_000_000)
             await self.send_next_report()
+            next_deadline_ns += self._report_period_ns
+            now_ns = self._clock_ns()
+            if next_deadline_ns < now_ns:
+                elapsed_periods = (
+                    now_ns - next_deadline_ns + self._report_period_ns - 1
+                ) // self._report_period_ns
+                next_deadline_ns += elapsed_periods * self._report_period_ns
 
     def _holdoff_periodic_after_reply(self) -> None:
         self._periodic_holdoff_until = (
