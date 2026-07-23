@@ -17,7 +17,8 @@ _RESERVED_INQUIRY_LAP_MIN = 0x9E8B00
 _RESERVED_INQUIRY_LAP_MAX = 0x9E8B3F
 _PROFILE_FORMAT = "swbt.profile"
 _PROFILE_SCHEMA_VERSION = 1
-_PROFILE_IDENTITY_KIND = "exp-local-address"
+_PROFILE_LOCAL_ADDRESS_IDENTITY_KIND = "exp-local-address"
+_PROFILE_ADAPTER_DEFAULT_IDENTITY_KIND = "adapter-default"
 _CONTROLLER_KINDS_BY_PROFILE_VALUE: dict[str, ControllerKind] = {
     "pro": ControllerKind.PRO_CONTROLLER,
     "joycon_l": ControllerKind.JOYCON_LEFT,
@@ -80,7 +81,7 @@ class LocalAddress:
 class PairingProfile:
     """Validated version 1 envelope for one controller shape and its pairing data."""
 
-    local_address: LocalAddress
+    local_address: LocalAddress | None
     key_store_namespaces: KeyStoreNamespaces
     controller_kind: ControllerKind = ControllerKind.PRO_CONTROLLER
 
@@ -88,18 +89,22 @@ class PairingProfile:
     def create_new(
         cls,
         path: str | Path,
-        local_address: LocalAddress,
+        local_address: LocalAddress | None,
         *,
         controller_kind: ControllerKind = ControllerKind.PRO_CONTROLLER,
     ) -> "PairingProfile":
         """Atomically create a new profile without overwriting an existing path."""
-        address = str(local_address)
+        address = None if local_address is None else str(local_address)
         profile = cls(
             local_address=local_address,
-            key_store_namespaces={
-                address: {},
-                f"swbt.previous::{address}": {},
-            },
+            key_store_namespaces=(
+                {}
+                if address is None
+                else {
+                    address: {},
+                    f"swbt.previous::{address}": {},
+                }
+            ),
             controller_kind=controller_kind,
         )
         target = Path(path)
@@ -166,14 +171,19 @@ class PairingProfile:
         return {
             "format": _PROFILE_FORMAT,
             "schema_version": _PROFILE_SCHEMA_VERSION,
-            "identity": {
-                "kind": _PROFILE_IDENTITY_KIND,
-                "address": str(self.local_address),
-            },
+            "identity": self._identity_payload(),
             "controller_kind": _PROFILE_VALUES_BY_CONTROLLER_KIND[self.controller_kind],
             "key_store": {
                 "namespaces": copy.deepcopy(self.key_store_namespaces),
             },
+        }
+
+    def _identity_payload(self) -> dict[str, object]:
+        if self.local_address is None:
+            return {"kind": _PROFILE_ADAPTER_DEFAULT_IDENTITY_KIND}
+        return {
+            "kind": _PROFILE_LOCAL_ADDRESS_IDENTITY_KIND,
+            "address": str(self.local_address),
         }
 
     @classmethod
@@ -201,15 +211,21 @@ class PairingProfile:
         identity = payload.get("identity")
         if not isinstance(identity, dict):
             _invalid_profile("profile identity must be an object")
-        if identity.get("kind") != _PROFILE_IDENTITY_KIND:
+        identity_kind = identity.get("kind")
+        if identity_kind == _PROFILE_ADAPTER_DEFAULT_IDENTITY_KIND:
+            if "address" in identity:
+                _invalid_profile("adapter-default profile identity must not contain an address")
+            address = None
+        elif identity_kind == _PROFILE_LOCAL_ADDRESS_IDENTITY_KIND:
+            address_value = identity.get("address")
+            if not isinstance(address_value, str):
+                _invalid_profile("profile identity address must be a string")
+            try:
+                address = LocalAddress.parse(address_value)
+            except ValueError as error:
+                _invalid_profile(str(error), cause=error)
+        else:
             _invalid_profile("profile identity kind is unsupported")
-        address_value = identity.get("address")
-        if not isinstance(address_value, str):
-            _invalid_profile("profile identity address must be a string")
-        try:
-            address = LocalAddress.parse(address_value)
-        except ValueError as error:
-            _invalid_profile(str(error), cause=error)
 
         key_store = payload.get("key_store")
         if not isinstance(key_store, dict):

@@ -150,11 +150,12 @@ Switch の初期化 sequence で必要な subcommand への応答が不足する
 
 pairing 情報、link key、active reconnect / incoming reconnect の挙動は Bumble と OS / dongle の組み合わせに依存する。key store だけを分けても local BD_ADDR が同じなら、Switch から見た物理 device identity は分離できない。
 
-concrete controller の pairing profile 経路は、利用者が管理する locally administered address を CSR8510 A10 の volatile 領域へ適用し、同じ JSON envelope に controller shape と pairing key を保存する。これは正式割当の universal EUI-48 を取得・管理する機能ではない。address の生成、重複回避、同時利用管理は利用者の責任である。
+concrete controller の pairing profile 経路は、adapter-default または利用者が管理する locally administered address と、controller shape、pairing key を同じ JSON envelope に保存する。adapter-default は volatile 領域を書き換えず、`power_on()` 後に adapter が報告した current address の namespace を使う。factory / baseline address であることは保証しない。明示 address 経路は CSR8510 A10 の volatile 領域へ適用するが、正式割当の universal EUI-48 を取得・管理する機能ではない。address の生成、重複回避、同時利用管理は利用者の責任である。
 
 ### 8.2 影響
 
 - 同じ local address を複数 adapter で同時に使うと identity が衝突する
+- adapter-default profile では current address が変わると別 namespace が選ばれ、以前の pairing key を自動利用できない
 - volatile write 後の warm reset / USB 再列挙に失敗すると、adapter の現在状態を process から確定できない
 - USB power cycle 後は target address が失われ、次回利用時に再適用が必要になる
 - profile envelope、controller shape、pairing key namespace が不一致だと誤った identity で接続を始める可能性がある
@@ -163,7 +164,8 @@ concrete controller の pairing profile 経路は、利用者が管理する loc
 ### 8.3 対策
 
 - address は 6 octet、individual、locally administered、予約 inquiry LAP 以外であることを adapter open 前に検査する
-- profile envelope に schema version、controller shape、target address、key store namespace map を保存し、生 Bumble JSON は受け付けない
+- profile envelope に schema version、controller shape、identity variant、key store namespace map を保存し、生 Bumble JSON は受け付けない
+- adapter-default profile は key-store operation 前に current address を解決し、取得不能なら `InvalidKeyStoreError` として停止する
 - profile の controller shape が concrete controller と一致しない場合は、raw preparation と adapter open の前に `ProfileControllerMismatchError` を送出する
 - current address が target と異なる場合だけ volatile write と warm reset を行い、再列挙後に read-back する
 - Bumble `power_on()` 後、advertising / pairing / reconnect より前に target address を再照合する

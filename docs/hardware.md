@@ -107,14 +107,30 @@ swbt-probe adapters --json
 
 ## Pairing And Reconnect
 
-### Pro Controller の実験用プロファイル
+### pairing profile のアドレス選択
 
-Pro Controller の接続情報を永続化する経路は、CSR8510 A10 の揮発領域の Bluetooth アドレス書換を使います。利用者が管理する個別かつローカル管理のアドレスを `local_address` に指定し、最初のペアリングでプロファイルを作成します。
+アダプタの Bluetooth アドレスを書き換えずに接続情報を永続化する場合は、`local_address` を省略して最初のペアリング用プロファイルを作成します。
 
 ```python
 pad = await ProController.create_profile(
     adapter="usb:0",
     profile_path="profiles/switch-pro.json",
+    pair_timeout=60.0,
+)
+await pad.close()
+```
+
+- この経路は Bumble の `power_on()` 後にアダプタが報告した current public address を使います。出荷時アドレスであることは保証しません。
+- 以前の揮発書換値が USB 給電断まで残っている場合、その値が current default になることがあります。
+- アダプタが別のアドレスを報告した場合は新しい key-store namespace を使い、以前のペアリングキーを自動移行しません。
+- `power_on()` 後も有効な public address を取得できない場合は `InvalidKeyStoreError` とし、HID advertising と active reconnect を開始しません。
+
+利用者管理の個別かつローカル管理のアドレスへ切り替える場合だけ、`local_address` を明示します。この explicit-address 経路は CSR8510 A10 の揮発領域を書き換えます。
+
+```python
+pad = await ProController.create_profile(
+    adapter="usb:0",
+    profile_path="profiles/switch-pro-local-address.json",
     local_address="02:12:34:56:78:9A",
     pair_timeout=60.0,
 )
@@ -154,7 +170,7 @@ await pad.reconnect(timeout=60.0)
 
 | Controller profile | Status | Verified scope | Not verified | Profile storage |
 |---|---|---|---|---|
-| Pro Controller | partially verified | 2026-07-20 の unit_052 では、Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 に対し、`profile_path` 経路で揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルの active reconnect、再接続時の profile bytes 不変と advertising / pairing / key 更新なしを確認 | USB 抜き差し後の再適用、Linux、CSR8510 A10 以外、別ファームウェア | 対象機器ごとに別の `profile_path` を使う |
+| Pro Controller | partially verified | 2026-07-20 の unit_052 では explicit address profile の揮発アドレス準備、初回ペアリング、active reconnect を確認。2026-07-24 の unit_066 では同じ Windows 11 / CSR8510 A10 / WinUSB 構成で adapter-default profile の初回ペアリング、profile bytes を変えない active reconnect、再接続時の advertising / pairing / key 更新なしを確認 | adapter-default fresh close の終了時 neutral report、USB 給電断後に current address が変わる場合、Linux、CSR8510 A10 以外、別ファームウェア | 対象機器ごとに別の `profile_path` を使う |
 | Joy-Con L | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 でペアリングプロファイルの揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルによる active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性 | コントローラー形状と対象機器ごとに別の `profile_path` を使う |
 | Joy-Con R | partially verified | 2026-07-20 に Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 でペアリングプロファイルの揮発アドレス準備、初回ペアリング、通常終了、同一プロファイルによる active reconnect を確認 | SDP の細部一致、USB power cycle 後の再適用、OS / ドングル / ファームウェアをまたぐ互換性。fresh pairing teardown の Bumble / usb1 callback warning は hardware log を参照 | コントローラー形状と対象機器ごとに別の `profile_path` を使う |
 
@@ -204,6 +220,11 @@ Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluet
 - `reconnect()` / `try_reconnect()` は保存済みペアリング情報がない場合、`no_bond` として失敗します。
 - 初回接続では `connect(..., allow_pairing=True)` か `pair()` を使います。
 - すべての具象クラスで、コントローラー形状と対象機器ごとに別の `profile_path` を指しているか確認します。
+
+### Adapter Address Is Unavailable
+
+- adapter-default profile で `InvalidKeyStoreError` が発生した場合は、トレースログの `local_bluetooth_address_configured` を確認します。
+- event がない場合は、Bumble が `power_on()` 後に public address を取得できていません。HID advertising や active reconnect は開始されていないため、専用ドングルの USB 接続とドライバーを確認してから再試行します。
 
 ### Multiple Current Peers
 

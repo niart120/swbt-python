@@ -4,7 +4,8 @@
 
 ### 追加機能
 
-- `ProController.create_profile()` と `ProController(profile_path=...)` を追加しました。利用者が管理する `local_address` とペアリングキーを一つの swbt プロファイル JSON に保存し、CSR8510 A10 の揮発領域にある Bluetooth アドレスを接続前に準備します。
+- `create_profile()` の `local_address` を省略または `None` にできるようにしました。この場合は揮発領域へ書き込まず、アダプタが `power_on()` 後に報告した現在の Bluetooth アドレスを key-store namespace に使います。address を取得できない場合は、HID advertising / active reconnect 前に `InvalidKeyStoreError` とします。
+- `ProController.create_profile()` と `ProController(profile_path=...)` を追加しました。`local_address` を明示した場合は、利用者管理のアドレスとペアリングキーを一つの swbt プロファイル JSON に保存し、CSR8510 A10 の揮発領域にある Bluetooth アドレスを接続前に準備します。
 - `JoyConL` / `JoyConR` にも `create_profile()` と `profile_path` を追加しました。プロファイルには `joycon_l` / `joycon_r` を保存し、異なるコントローラー種別で開くと `ProfileControllerMismatchError` をアダプタ準備前に送出します。
 - 揮発領域への書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` を送出します。`close()` は接続資源だけを閉じ、書き換えたアドレスを元へ戻しません。
 
@@ -17,7 +18,7 @@
 
 ### 対応範囲
 
-対象は CSR8510 A10 の揮発領域への書換経路です。永続領域は変更しません。`local_address` の生成と重複回避は利用者の責任です。CSR8510 A10 以外のドングル、出荷時アドレスの保存、公開の読み取り専用確認 API は対象外です。
+明示的な `local_address` を使う場合の対象は CSR8510 A10 の揮発領域への書換経路です。永続領域は変更しません。`local_address` の生成と重複回避は利用者の責任です。CSR8510 A10 以外のドングル、出荷時アドレスの保存、公開の読み取り専用確認 API は対象外です。`local_address=None` はアダプタが報告する値を使うため CSR 書換経路に入りません。
 
 ## 0.4.0
 

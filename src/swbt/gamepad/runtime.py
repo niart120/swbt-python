@@ -868,6 +868,9 @@ class ControllerRuntime:
             return
         profile = PairingProfile.load(self._config.profile_path)
         profile.require_controller_kind(self._config.profile.kind)
+        self._pairing_profile = profile
+        if profile.local_address is None:
+            return
         adapter = self._config.adapter
         if adapter is None:
             msg = "adapter is required for pairing profile preparation"
@@ -882,7 +885,6 @@ class ControllerRuntime:
             status=result.status,
             target_address=result.target_address,
         )
-        self._pairing_profile = profile
 
     def _ensure_transport(self) -> HidDeviceTransport:
         if self._transport is None:
@@ -904,6 +906,7 @@ class ControllerRuntime:
                 expected_local_bluetooth_address=(
                     self._pairing_profile.local_address.bytes
                     if self._pairing_profile is not None
+                    and self._pairing_profile.local_address is not None
                     else None
                 ),
             )

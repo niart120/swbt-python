@@ -114,6 +114,52 @@ def test_pairing_failure_leaves_profile_available_for_retry(
     assert closed_profiles == [str(profile_path)]
 
 
+@pytest.mark.parametrize(
+    "controller_cls",
+    [
+        ProController,
+        JoyConL,
+        JoyConR,
+        DirectProController,
+        DirectJoyConL,
+        DirectJoyConR,
+    ],
+)
+def test_create_profile_without_local_address_uses_adapter_default_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    controller_cls: type[
+        ProController | JoyConL | JoyConR | DirectProController | DirectJoyConL | DirectJoyConR
+    ],
+) -> None:
+    profile_path = tmp_path / f"{controller_cls.__name__}.json"
+    attempts: list[float | None] = []
+
+    async def fake_pair(
+        self: object,
+        timeout: float | None = None,  # noqa: ASYNC109
+    ) -> None:
+        _ = self
+        attempts.append(timeout)
+
+    monkeypatch.setattr(controller_cls, "pair", fake_pair)
+
+    async def run() -> None:
+        pad = await controller_cls.create_profile(
+            adapter="usb:0",
+            profile_path=str(profile_path),
+            pair_timeout=0.25,
+        )
+        await pad.close()
+
+    asyncio.run(run())
+
+    profile = PairingProfile.load(profile_path)
+    assert profile.local_address is None
+    assert profile.key_store_namespaces == {}
+    assert attempts == [0.25]
+
+
 def test_joycon_l_create_profile_saves_kind_and_leaves_profile_for_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -148,6 +148,16 @@ def test_pairing_profile_loads_supported_pro_controller_envelope(
             "schema_version": 1,
             "controller_kind": "pro",
             "identity": {
+                "kind": "adapter-default",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 1,
+            "controller_kind": "pro",
+            "identity": {
                 "kind": "exp-local-address",
                 "address": "02:12:34:56:78:9A",
             },
@@ -203,6 +213,28 @@ def test_pairing_profile_create_new_atomically_saves_empty_pro_envelope(
         },
     }
     assert list(profile_path.parent.iterdir()) == [profile_path]
+
+
+def test_pairing_profile_create_new_saves_adapter_default_identity(
+    tmp_path: Path,
+) -> None:
+    profile_path = tmp_path / "profiles" / "pro.json"
+
+    profile = PairingProfile.create_new(profile_path, None)
+
+    assert profile.local_address is None
+    assert profile == PairingProfile.load(profile_path)
+    assert json.loads(profile_path.read_text(encoding="utf-8")) == {
+        "format": "swbt.profile",
+        "schema_version": 1,
+        "identity": {
+            "kind": "adapter-default",
+        },
+        "controller_kind": "pro",
+        "key_store": {
+            "namespaces": {},
+        },
+    }
 
 
 def test_pairing_profile_create_new_saves_joycon_l_controller_kind(
