@@ -1,6 +1,6 @@
 ---
 name: docs-wording
-description: "swbt-python の README、docs、release notes、公開 API 説明の日本語文言整理で、プロジェクト固有の訳語、残す英語表記、トレース出力やペアリング情報などの用語をそろえる skill。ユーザが docs 文言整理、用語辞書、訳語統一、release notes の表現確認を依頼したときに使う。"
+description: "swbt-python の README、docs、リリースノート、公開 API 説明の日本語文言整理で、プロジェクト固有の訳語、残す英語表記、トレース出力やペアリング情報などの用語をそろえる skill。ユーザが docs 文言整理、用語辞書、訳語統一、リリースノートの表現確認を依頼したときに使う。"
 ---
 
 # Docs Wording
@@ -10,7 +10,7 @@ swbt-python の公開ドキュメントでは、利用者が API と実機条件
 
 ## 使い方
 
-- README、`docs/`、release notes、公開 API 説明を編集する前に、[用語辞書](references/terminology.md)を全文読む。
+- README、`docs/`、リリースノート、公開 API 説明を編集する前に、[用語辞書](references/terminology.md)を全文読む。
 - 既存の API 名、インポート名、CLI オプション、状態値はそのまま残す。
 - 実機未検証、OS、ドライバー、アダプタ、対象機器に依存する観測は断定しない。
 - `japanese-tech-writing` を併用する場合でも、用語辞書を swbt-python 固有の判断として優先する。
@@ -18,11 +18,11 @@ swbt-python の公開ドキュメントでは、利用者が API と実機条件
 - 英語の分類名を残す必要がある場合は、裸の接頭語ではなく完全な公開クラス名を記載する。
 - 文言変更後は `docs-quality-review` で対象読者、説明順、根拠、未検証範囲を確認する。`git diff --check` と、変更範囲に対応する既存の文書生成または機械的検証だけを実行する。
 
-## Release Notes
+## リリースノート
 
-- Breaking changes は「前バージョンの利用者のコードがどう壊れるか」を箇条書きで書く。
-- 新規追加 API は breaking changes ではなく migration または feature 説明に置く。
-- 過去バージョンに存在しない API を Old API として書かない。
-- 「利用者向け生成 API」のような上位語だけでまとめず、影響を受ける constructor や呼び出し形を直接書く。
-- README と release notes では、実機検証の protocol ID、trace 条件、artifact 名まで書かない。通常利用者に必要な対応状況だけを書き、詳細は `docs/hardware.md` と `spec/hardware-test-log.md` に任せる。
+- 破壊的変更は「前バージョンの利用者のコードがどう壊れるか」を箇条書きで書く。
+- 新規追加 API は破壊的変更ではなく、移行手順または追加機能の説明に置く。
+- 過去バージョンに存在しない API を旧 API として書かない。
+- 「利用者向け生成 API」のような上位語だけでまとめず、影響を受けるコンストラクタや呼び出し形を直接書く。
+- README とリリースノートでは、実機検証のプロトコル ID、トレース条件、成果物名まで書かない。通常利用者に必要な対応状況だけを書き、詳細は `docs/hardware.md` と `spec/hardware-test-log.md` に任せる。
 - 実際の差分に基づく記述を行う。`SwitchGamepad` を直接生成できない、`SwitchGamepadConfig` と transport 注入が公開 API から外れた、トップレベル export が消えた、など。

@@ -1,28 +1,36 @@
-# Release Notes
+# リリースノート
 
 ## 0.5.0
 
 ### 追加機能
 
-- `create_profile()` の `local_address` を省略または `None` にできるようにしました。この場合は揮発領域へ書き込まず、アダプタが `power_on()` 後に報告した現在の Bluetooth アドレスを key-store namespace に使います。address を取得できない場合は、HID advertising / active reconnect 前に `InvalidKeyStoreError` とします。
-- `ProController.create_profile()` と `ProController(profile_path=...)` を追加しました。`local_address` を明示した場合は、利用者管理のアドレスとペアリングキーを一つの swbt プロファイル JSON に保存し、CSR8510 A10 の揮発領域にある Bluetooth アドレスを接続前に準備します。
-- `JoyConL` / `JoyConR` にも `create_profile()` と `profile_path` を追加しました。プロファイルには `joycon_l` / `joycon_r` を保存し、異なるコントローラー種別で開くと `ProfileControllerMismatchError` をアダプタ準備前に送出します。
-- 揮発領域への書換開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` を送出します。`close()` は接続資源だけを閉じ、書き換えたアドレスを元へ戻しません。
+- `ProController`、`JoyConL`、`JoyConR`、`DirectProController`、`DirectJoyConL`、`DirectJoyConR` に `create_profile()` と `profile_path` を追加しました。`create_profile()` は Bluetooth アドレスの選択方法とペアリングキーを一つの swbt プロファイル JSON に保存し、初回ペアリングまで行います。
+- `create_profile()` の `local_address` を省略するか `None` にすると、専用 USB Bluetooth ドングルのアドレスを書き換えず、アダプタが起動後に報告した現在の Bluetooth アドレスにペアリング情報を結び付けます。アドレスを取得できない場合は、HID 接続待ち受けまたは再接続を始める前に `InvalidKeyStoreError` を送出します。
+- 利用者が管理する `local_address` を指定すると、そのアドレスを CSR8510 A10 の揮発領域へ接続前に書き込みます。書き込み開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` を送出します。この場合は専用 USB Bluetooth ドングルを抜き差ししてから再試行してください。
+- 不正または非対応のプロファイルは `InvalidProfileError`、異なるコントローラー形状のプロファイルは `ProfileControllerMismatchError` で区別できます。
 
-### 修正
+### 修正と動作変更
 
-- コントローラーの既定通知が、実際には給電されていない状態でも充電中として表示される問題を修正しました。すべての具象クラスで、満充電、非充電、外部給電なしを既定として通知します。実際の電池残量や給電状態を動的に取得する機能は含みません。Pro Controller 相当を使った承認済みの実機確認では期待どおりの表示を確認しましたが、別の Switch ファームウェアでは未検証です。
+- コントローラーの既定通知が充電中として表示される問題を修正しました。すべての具象クラスで、満充電、非充電を既定として通知します。実際の電池残量や給電状態を動的に取得する機能は含みません。
+- 周期送信型のレポートループを、前回の送信完了後に一定時間待つ方式から、固定時刻を基準にする方式へ変更しました。入力レポートの組み立てと送信に使った時間を次の待機時間から差し引き、遅れた回は連続送信せずに飛ばします。OS や Bluetooth 通信を含む厳密な送信間隔は保証しません。
+- 直接送信型の `send()` と入力操作は、Bumble が入力レポートを送信キューへ受け付けた時点で正常終了し、ライブラリ内部の入力状態を確定します。HCI の送信完了や対象機器への反映までは待ちません。トレースログの `report_tx` も同じ時点を表します。明示的な切断では、保留中の ACL パケットの処理を待ってから通信路を閉じます。
 
 ### 破壊的変更
 
-- すべての具象クラスから `key_store_path` を削除しました。再接続と初回ペアリングには `profile_path` を使い、新規プロファイルはコンストラクタではなく `await ControllerClass.create_profile(...)` で作成します。
-- native JSON key-store の読み込み、互換モード、自動移行はありません。既存ファイルは再利用できないため、コントローラー形状と対象機器ごとに新しいプロファイルを作成してください。
-- `create_profile(..., exp_local_address=...)` は `create_profile(..., local_address=...)` に、`ExpLocalAddressRecoveryRequired` は `AdapterIdentityRecoveryRequired` に改名しました。
-- プロファイルのコントローラー分類から周期送信型／直接送信型を除きました。新規 JSON は `pro` / `joycon_l` / `joycon_r` を保存します。`direct_*` を保存した既存プロファイルは互換ではないため、別の `profile_path` で作り直して再ペアリングしてください。`schema_version` は変更しません。同じコントローラー形状の周期送信型と直接送信型が新しいプロファイルを共有できますが、方式間の実機再利用は未検証です。
+- すべての具象クラスから `key_store_path` を削除しました。ペアリング情報を永続化する場合は、最初に `await ProController.create_profile(...)` など、使用する具象クラスの `create_profile()` で swbt プロファイルを作成し、次回以降はコンストラクタへ `profile_path` を渡してください。一時的な接続などでペアリング情報を保存しない使い方では、`profile_path` を省略できます。
+- `v0.4.0` の `key_store_path` で使用していた JSON 形式のペアリング情報には、読み込み、互換モード、自動移行を用意していません。既存ファイルは再利用できないため、コントローラー形状と対象機器の組み合わせごとに別の `profile_path` を指定して、ペアリングをやり直してください。
+- `swbt-probe pair` の `--key-store` を削除し、作成済みの swbt プロファイルを指定する必須オプション `--profile` に変更しました。
+- トレースログの `run_metadata` から `key_store_path`、`key_store_exists`、`key_store_previous_exists` を削除し、`profile_path` を追加しました。`reconnect_key_store_unavailable` は `reconnect_profile_unavailable` に、理由の `key_store_path_none` は `profile_path_none` に変更しました。
 
-### 対応範囲
+プロファイルの作成と再利用のコード例は[利用例](usage.md)を参照してください。
 
-明示的な `local_address` を使う場合の対象は CSR8510 A10 の揮発領域への書換経路です。永続領域は変更しません。`local_address` の生成と重複回避は利用者の責任です。CSR8510 A10 以外のドングル、出荷時アドレスの保存、公開の読み取り専用確認 API は対象外です。`local_address=None` はアダプタが報告する値を使うため CSR 書換経路に入りません。
+### 実機確認範囲
+
+- Windows 11、CSR8510 A10、WinUSB、Switch 2 ファームウェア 22.5.0 の組み合わせで、利用者管理の `local_address` を使った全具象クラスの初回ペアリング、通常終了、同じプロファイルによる再接続を確認しました。
+- アダプタが報告する現在の Bluetooth アドレスを使う経路は、同じ Windows 11、CSR8510 A10、WinUSB の構成で、Pro Controller 相当の初回ペアリングと再接続を確認しました。
+- 8 ms を指定した周期送信型は、同じ専用 USB Bluetooth ドングルを使った 200 件の観測で、HCI の送信完了間隔の中央値が 8.038 ms になりました。他の OS、専用 USB Bluetooth ドングル、対象機器では未検証です。
+- `local_address` を明示した場合に書き換えるのは CSR8510 A10 の揮発領域だけです。`close()` は書き換えたアドレスを元へ戻しません。アドレスの生成と重複回避は利用者が行ってください。CSR8510 A10 以外の専用 USB Bluetooth ドングル、出荷時アドレスの保存、公開の読み取り専用確認 API は確認対象外です。
+- 同じコントローラー形状の周期送信型と直接送信型は同じプロファイルを受け付けますが、両方式の間で再利用した場合の実機動作は未検証です。詳しい確認条件と残っている制約は[実機準備手順](hardware.md)を参照してください。
 
 ## 0.4.0
 
@@ -46,7 +54,7 @@
 
 ### 実機確認範囲
 
-直接送信型は fake transport を使った単体テストと統合テストで、送信件数、送信成功後の状態確定、失敗時の状態維持、サブコマンド応答、終了時のニュートラル入力を確認しました。専用 USB Bluetooth ドングルと Switch 実機を使った確認は実施していません。HID レポートのバイト配置と Bumble の通信条件は 0.3.0 から変更していません。
+直接送信型は実機を使わない通信実装による単体テストと統合テストで、送信件数、送信成功後の状態確定、失敗時の状態維持、サブコマンド応答、終了時のニュートラル入力を確認しました。専用 USB Bluetooth ドングルと Switch 実機を使った確認は実施していません。HID レポートのバイト配置と Bumble の通信条件は 0.3.0 から変更していません。
 
 ## 0.3.0
 
@@ -67,36 +75,36 @@ Windows 11 / CSR8510 A10 / WinUSB / Switch 2 ファームウェア 22.1.0 で、
 
 ## 0.2.0
 
-### Breaking changes
+### 破壊的変更
 
 v0.1.1 から利用者のコードに影響する破壊的変更は次の通りです。
 
 - `SwitchGamepad(...)` ではコントローラーを作成できなくなりました。v0.1.1 の Pro Controller 相当の使い方は `ProController(...)` に移します。`SwitchGamepad` は共通インターフェース / 型注釈用です。
 - `SwitchGamepadConfig(...)` と `SwitchGamepad.from_config(...)` は公開 API から外れました。`adapter`、`key_store_path`、`report_period_us`、`controller_colors`、トレース出力設定の `diagnostics` は各コントローラーの生成時に渡します。
-- v0.1.1 で使えた `SwitchGamepad(..., transport=...)` と `SwitchGamepad(..., device_name=...)` は利用できません。下位の通信実装を差し替えるエントリーポイントと、HID device name や profile を任意に指定するエントリーポイントは、内部実装とテスト用に限ります。
+- v0.1.1 で使えた `SwitchGamepad(..., transport=...)` と `SwitchGamepad(..., device_name=...)` は利用できません。下位の通信実装を差し替えるエントリーポイントと、HID デバイス名やプロファイルを任意に指定するエントリーポイントは、内部実装とテスト用に限ります。
 - `HidDeviceTransport`、`BondedPeer`、`DisconnectRequestResult` は `swbt` トップレベルの公開 export から外れました。transport 境界は公開拡張点ではなくなりました。
 
-### Migration
+### 移行
 
-| Old API | New API | Notes |
+| v0.1.1 | v0.2.0 | 備考 |
 |---|---|---|
 | `SwitchGamepad(...)` | `ProController(...)` | `SwitchGamepad` は共通インターフェース / 型注釈用。 |
-| `SwitchGamepadConfig(...)` | 各具象クラスの constructor 引数 | `from_config()` は公開 API から削除。 |
+| `SwitchGamepadConfig(...)` | 各具象クラスのコンストラクタ引数 | `from_config()` は公開 API から削除。 |
 | `SwitchGamepad(..., transport=...)` | 公開 API では移行先なし | transport 差し替えは内部テスト用。 |
-| `SwitchGamepad(..., device_name=...)` | `ProController(...)` / `JoyConL(...)` / `JoyConR(...)` | HID identity は具象クラスが選ぶ。 |
+| `SwitchGamepad(..., device_name=...)` | `ProController(...)` / `JoyConL(...)` / `JoyConR(...)` | HID 識別情報は具象クラスが選ぶ。 |
 | `from swbt import HidDeviceTransport, BondedPeer, DisconnectRequestResult` | 公開 API から削除 | transport 内部型はトップレベル export しない。 |
 
 `ProController(...)`、`JoyConL(...)`、`JoyConR(...)` は `adapter`、`key_store_path`、`report_period_us`、`controller_colors`、トレース出力設定の `diagnostics` を受け取ります。Pro Controller、Joy-Con L、Joy-Con R では、同じ対象機器でも `key_store_path` を分けてください。
 
-### New public API
+### 追加した公開 API
 
 - `ProController`、`JoyConL`、`JoyConR` を追加しました。
-- `ControllerColors` で controller body / buttons / grip カラーを指定できます。
+- `ControllerColors` で本体、ボタン、左右グリップの色を指定できます。
 - `list_adapters()` と `AdapterInfo` で、専用 USB Bluetooth ドングル候補をデバイスハンドルを開かずに列挙できます。
-- Joy-Con　L (R) が対応しない入力は `UnsupportedInputError` として扱います。
+- Joy-Con L/R が対応しない入力は `UnsupportedInputError` として扱います。
 
-### Hardware scope
+### 実機確認範囲
 
-Pro Controller 相当では、Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 と macOS 15.7.7 / CSR8510 A10 の観測を記録しています。Linux は手順のみで、アダプタ open、ペアリング、入力反映は未検証です。
+Pro Controller 相当では、Windows 11 / CSR8510 A10 / WinUSB / Switch 2 ファームウェア 22.1.0 と macOS 15.7.7 / CSR8510 A10 の観測を記録しています。Linux は手順のみで、アダプタを開く処理、ペアリング、入力反映は未検証です。
 
-Joy-Con L/R は Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 で部分的に動作確認済みです。確認済み範囲は Joy-Con としての登録、利用者指定色、対応するボタン入力です。スティック入力は送信とニュートラル復帰まで確認しています。詳細な検証状態は `docs/hardware.md` と `spec/hardware-test-log.md` を正本とします。
+Joy-Con L/R は Windows 11 / CSR8510 A10 / WinUSB / Switch 2 ファームウェア 22.1.0 で部分的に動作確認済みです。確認済み範囲は Joy-Con としての登録、利用者指定色、対応するボタン入力です。スティック入力は送信とニュートラル復帰まで確認しています。詳細な検証状態は `docs/hardware.md` と `spec/hardware-test-log.md` を正本とします。

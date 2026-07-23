@@ -6,6 +6,7 @@ Use public imports:
 from swbt import (
     Button,
     DirectJoyConL, DirectJoyConR, DirectProController,
+    IMUFrame,
     InputState,
     JoyConL, JoyConR, ProController,
     PeriodicSwitchGamepad, DirectSwitchGamepad,
@@ -29,8 +30,10 @@ pair_timeout=...)`. This keeps the adapter's current default address and does no
 write volatile identity state. Pass `local_address=...` only when the caller owns
 address generation and collision avoidance. The path must not already exist. Reuse
 the returned connected controller or close it and pass the same `profile_path` to
-`ProController(...)`. The adapter-default path has not been verified on hardware.
-The explicit-address CSR8510 A10 path writes only volatile state. On
+`ProController(...)`. The adapter-default path has been verified for a Pro
+Controller profile on Windows 11 with CSR8510 A10 and WinUSB; other controller
+profiles, operating systems, and adapters remain unverified. The explicit-address
+CSR8510 A10 path writes only volatile state. On
 `AdapterIdentityRecoveryRequired`, unplug and reconnect the dedicated USB Bluetooth
 dongle before retrying.
 
@@ -70,18 +73,18 @@ Rules:
 - Treat an unspecified host IMU mode or mode `0x00` as disabled; the runtime sends a zero IMU block and does not carry host mode or quaternion state across reopen.
 - Use `IMUFrame.accel_g()` or `IMUFrame.with_accel_g()` for acceleration in G, and `IMUFrame.to_accel_g()` for conversion back to G. The scale is fixed at `1/4096 G/raw`.
 - Use `InputState` + `apply()` when buttons, sticks, and IMU must be one complete state.
-- Use `InputState` + `send()` for one complete Direct input report. Awaiting it includes transport completion and state commit.
+- Use `InputState` + `send()` for one complete Direct input report. Awaiting it means Bumble accepted the report for enqueue; it does not guarantee HCI completion or target-device reflection. State commits after enqueue acceptance.
 - Use a separate `profile_path` for every controller shape and target device. When an explicit local address is used, manage it separately as well.
 - Treat unsupported one-sided Joy-Con inputs as `UnsupportedInputError`: left does not support right stick or A/B/X/Y, right does not support left stick or D-pad.
 - Use `SwitchGamepad` only when code accepts either reporting contract. Use `PeriodicSwitchGamepad` or `DirectSwitchGamepad` when the sending contract matters.
 - Instantiate `ProController`, `JoyConL`, or `JoyConR` for Periodic reporting. Instantiate the corresponding `Direct*` class for Direct reporting.
 - Do not call `apply()` on Direct types or `send()` on Periodic types.
 - Do not assume Periodic `press()` / `release()` / `lstick()` / `rstick()` / `sticks()` / `imu()` / `neutral()` send immediately.
-- Direct semantic input operations send one report and commit only after successful transport completion.
+- Direct semantic input operations send one report and commit only after successful enqueue acceptance.
 - Do not pass tuples or raw tuples to stick APIs.
 - Do not invent `pad.gyro()` or `pad.accel()`.
 - Do not invent `hold()`, `sequence()`, `send_current_input()`, fluent builder APIs, or macro helpers.
 - Do not invent `JoyConPair`; paired left/right Joy-Con support is not implemented.
 - Do not show low-level Joy-Con profile classes or the removed side-string Joy-Con wrapper in user-facing examples.
 - Do not import internal modules unless writing swbt's own tests.
-- Do not present Joy-Con hardware compatibility beyond the recorded Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.1.0 profile scenarios. Exact SDP parity, Linux, Joy-Con on macOS, other dongles, other firmware, and pairing-free incoming bond reuse are not confirmed.
+- Do not present Joy-Con hardware compatibility beyond the recorded Windows 11 / CSR8510 A10 / WinUSB / Switch 2 firmware 22.5.0 profile scenarios. Exact SDP parity, Linux, Joy-Con on macOS, other dongles, other firmware, and pairing-free incoming bond reuse are not confirmed.
