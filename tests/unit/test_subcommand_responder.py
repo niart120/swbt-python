@@ -3,6 +3,7 @@ import pytest
 from swbt.errors import ProtocolError
 from swbt.input import IMUFrame, InputState
 from swbt.protocol.imu_report import ImuEncodingState, ImuMode
+from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport, OutputReportParser
 from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
@@ -29,6 +30,14 @@ def _reply(subcommand_id: int, payload: bytes = b"") -> bytes:
         state=InputState.neutral(),
         session=SwitchHidSession(profile),
     )
+
+
+def test_default_reports_full_battery_without_charging_or_external_power() -> None:
+    report = InputReportBuilder().build_0x30(InputState.neutral())
+    reply = _reply(0x02)
+
+    assert report[2] == 0x80
+    assert reply[2] == 0x80
 
 
 @pytest.mark.parametrize("subcommand_id", [0x03, 0x08, 0x30, 0x40, 0x48])
