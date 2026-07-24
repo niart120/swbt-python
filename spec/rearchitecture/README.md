@@ -2,11 +2,17 @@
 
 この文書セットは、Joy-Con 対応後に膨らんだ `swbt-python` の public API、runtime、profile、transport seam を整理するための設計資料である。対象は `spec/rearchitecture/` 配下の設計ノートであり、実装 PR に渡せる判断、移行方針、検証観点を分割して記述する。
 
+## 完了後の更新
+
+この文書セットで計画した初回リアーキテクチャは完了している。Issue #118 / `unit_074` は、その後の不要な実装階層整理として、runtime を知らない純粋 interface と private `_RuntimeBackedGamepad` の分離を上書きした。現行の `SwitchGamepad` は直接生成できない公開共通型であると同時に、共通 public method と `ControllerRuntime` への委譲を所有する。stateful owner は引き続き `ControllerRuntime` とする。
+
+`01`〜`05`に残るmilestone順序や移行途中のclass名は、初回リアーキテクチャの判断履歴として読む。現行構造と競合する場合は、`spec/initial/`と`spec/complete/unit_074/`を優先する。
+
 ## Scope
 
 対象に含めるもの:
 
-- `SwitchGamepad` を public abstract interface に変更する。
+- `SwitchGamepad` を直接生成できない public abstract common type に変更する。
 - `ProController`、`JoyConL`、`JoyConR` を public concrete controller にする。
 - `JoyCon(side="left" | "right")`、`SwitchGamepadConfig(profile=...)`、public `transport=` を削除する。
 - Runtime lifecycle を `ControllerRuntime` に移す。
@@ -43,7 +49,7 @@
    - migration guide
 
 4. `04-runtime-profile-transport-details.md`
-   - `SwitchGamepad` / `_RuntimeBackedGamepad` / `ControllerRuntime` の責務
+   - `SwitchGamepad` / `ControllerRuntime` の責務
    - runtime behavior preservation
    - transport factory
    - profile module split
@@ -61,7 +67,7 @@
 
 ## 中核判断
 
-- `SwitchGamepad` は直接生成しない public abstract interface にする。
+- `SwitchGamepad` は直接生成しない public abstract common type にする。
 - `ProController`、`JoyConL`、`JoyConR` を public concrete controller にする。
 - `JoyCon(side="left" | "right")` は削除する。
 - `SwitchGamepadConfig(profile=...)` は public API から削除する。

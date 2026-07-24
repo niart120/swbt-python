@@ -1,429 +1,13 @@
-"""Public gamepad API."""
+"""Public concrete gamepad controllers."""
 
-from typing import ClassVar, Literal, Self
-
-from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
-from swbt.gamepad._config import _GamepadConfig
-from swbt.gamepad.connection import ConnectionResult
-from swbt.gamepad.interface import (
-    DirectSwitchGamepad,
-    PeriodicSwitchGamepad,
-)
-from swbt.gamepad.output import OutputReportDispatcher
-from swbt.gamepad.runtime import ControllerRuntime
-from swbt.input import Button, IMUFrame, InputState, Stick
-from swbt.protocol.profiles.base import ControllerColors, ControllerProfile
+from swbt.diagnostics import DiagnosticsConfig
+from swbt.gamepad.interface import DirectSwitchGamepad, PeriodicSwitchGamepad
+from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
-from swbt.state_store import InputStateStore
-from swbt.transport._pairing_profile import (
-    LocalAddress,
-    PairingProfile,
-)
 
 
-class _RuntimeBackedGamepad:
-    """Runtime-backed concrete gamepad base.
-
-    The object owns the public API surface and delegates stateful
-    controller work to an internal runtime.
-    """
-
-    _profile: ClassVar[ControllerProfile] = default_controller_profile()
-    _reporting_mode: ClassVar[Literal["periodic", "direct"]] = "periodic"
-
-    def _initialize_runtime(
-        self,
-        *,
-        adapter: str | None,
-        profile_path: str | None,
-        report_period_us: int | None,
-        controller_colors: ControllerColors | None,
-        diagnostics: DiagnosticsConfig | None,
-    ) -> None:
-        config = _GamepadConfig(
-            adapter=adapter,
-            profile_path=profile_path,
-            profile=self._profile,
-            report_period_us=report_period_us,
-            controller_colors=controller_colors,
-        )
-        self._runtime = ControllerRuntime(
-            config,
-            diagnostics=diagnostics,
-            reporting_mode=self._reporting_mode,
-        )
-
-    @property
-    def _state_store(self) -> InputStateStore:
-        return self._runtime._state_store
-
-    @property
-    def _output_report_dispatcher(self) -> OutputReportDispatcher:
-        return self._runtime._output_report_dispatcher
-
-    async def open(self) -> None:
-        """Open the configured transport.
-
-        Opening prepares transport callbacks, diagnostics metadata, and the
-        reporting-type resources. It does not start HID advertising, pairing,
-        or active reconnect.
-
-        Raises:
-            TransportOpenError: Raised by the transport when the adapter cannot be opened.
-            Exception: Propagates unexpected transport open failures after cleanup.
-        """
-        await self._runtime.open()
-
-    async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
-        """Start pairing advertising and wait until the controller is ready for input.
-
-        Args:
-            timeout: Maximum seconds for link connection and protocol initialization.
-                ``None`` waits without a deadline.
-
-        Raises:
-            ConnectionTimeoutError: The timeout elapsed before a connection completed.
-            ClosedError: The transport was unavailable after opening.
-        """
-        await self._runtime.pair(timeout=timeout)
-
-    async def reconnect(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
-        """Reconnect with exactly one bonded peer and raise on failure.
-
-        Args:
-            timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
-                the transport default.
-
-        Raises:
-            ConnectionFailedError: No single bonded peer was available or reconnect failed.
-            ConnectionTimeoutError: The active reconnect attempt timed out.
-        """
-        await self._runtime.reconnect(timeout=timeout)
-
-    async def try_reconnect(
-        self,
-        timeout: float | None = None,  # noqa: ASYNC109
-    ) -> ConnectionResult:
-        """Try active reconnect with exactly one bonded peer.
-
-        Args:
-            timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
-                the transport default.
-
-        Returns:
-            ConnectionResult: Reconnect route, status, selected peer, and peer count.
-        """
-        return await self._runtime.try_reconnect(timeout=timeout)
-
-    async def connect(
-        self,
-        *,
-        timeout: float | None = None,  # noqa: ASYNC109
-        allow_pairing: bool = False,
-    ) -> None:
-        """Connect using bonded reconnect first, then optional pairing fallback.
-
-        Args:
-            timeout: Maximum seconds for each connection attempt. ``None`` uses the
-                lower layer default.
-            allow_pairing: If ``True``, run pairing when no bonded peer is available.
-
-        Raises:
-            ConnectionFailedError: The connection attempt finished without connecting.
-            ConnectionTimeoutError: The connection attempt timed out.
-        """
-        await self._runtime.connect(timeout=timeout, allow_pairing=allow_pairing)
-
-    async def try_connect(
-        self,
-        *,
-        timeout: float | None = None,  # noqa: ASYNC109
-        allow_pairing: bool = False,
-    ) -> ConnectionResult:
-        """Try bonded reconnect first, then optional pairing fallback.
-
-        Args:
-            timeout: Maximum seconds for each connection attempt. ``None`` uses the
-                lower layer default.
-            allow_pairing: If ``True``, run pairing when no bonded peer is available.
-
-        Returns:
-            ConnectionResult: Route and status chosen by reconnect or pairing fallback.
-        """
-        return await self._runtime.try_connect(
-            timeout=timeout,
-            allow_pairing=allow_pairing,
-        )
-
-    async def close(self, *, neutral: bool = True) -> None:
-        """Close the transport and leave the gamepad in a closed state.
-
-        Args:
-            neutral: If ``True``, send a trailing neutral report before disconnect
-                when a connection is active.
-        """
-        await self._runtime.close(neutral=neutral)
-
-    async def press(self, *buttons: Button) -> None:
-        """Add buttons to the current input state.
-
-        Args:
-            buttons: Buttons to add to the current button set.
-
-        A periodic controller commits local state. A direct controller sends one
-        input report and commits only after transmission succeeds.
-        """
-        await self._runtime.press(*buttons)
-
-    async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> None:
-        """Replace one or both stick positions according to the reporting type.
-
-        Args:
-            left: Optional replacement for the left stick.
-            right: Optional replacement for the right stick.
-
-        Raises:
-            InvalidInputError: ``left`` or ``right`` is not a ``Stick``.
-
-        A periodic controller commits local state. A direct controller sends one
-        input report and commits only after transmission succeeds.
-        """
-        await self._runtime.sticks(left=left, right=right)
-
-    async def lstick(self, stick: Stick) -> None:
-        """Replace the left stick position according to the reporting type.
-
-        Args:
-            stick: Replacement for the left stick.
-
-        Raises:
-            InvalidInputError: ``stick`` is not a ``Stick``.
-
-        A periodic controller commits local state. A direct controller sends one
-        input report and commits only after transmission succeeds.
-        """
-        await self._runtime.lstick(stick)
-
-    async def rstick(self, stick: Stick) -> None:
-        """Replace the right stick position according to the reporting type.
-
-        Args:
-            stick: Replacement for the right stick.
-
-        Raises:
-            InvalidInputError: ``stick`` is not a ``Stick``.
-
-        A periodic controller commits local state. A direct controller sends one
-        input report and commits only after transmission succeeds.
-        """
-        await self._runtime.rstick(stick)
-
-    async def imu(self, *frames: IMUFrame) -> None:
-        """Replace IMU frames according to the reporting type.
-
-        Args:
-            frames: One ``IMUFrame`` to repeat across all three IMU slots, or exactly
-                three frames to store in order.
-
-        Raises:
-            InvalidInputError: The frame count is not one or three, or any value is
-                not an ``IMUFrame``.
-
-        This updates local IMU state only and does not send an immediate input report.
-        """
-        await self._runtime.imu(*frames)
-
-    async def release(self, *buttons: Button) -> None:
-        """Remove buttons from the current input state.
-
-        Args:
-            buttons: Buttons to remove from the current button set.
-
-        A periodic controller commits local state. A direct controller sends one
-        input report and commits only after transmission succeeds.
-        """
-        await self._runtime.release(*buttons)
-
-    async def neutral(self) -> None:
-        """Apply ``InputState.neutral()`` according to the reporting type."""
-        await self._runtime.neutral()
-
-    async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
-        """Send a short connected button action.
-
-        Args:
-            buttons: Buttons to press for the tap.
-            duration: Seconds to keep the buttons pressed before release.
-
-        Raises:
-            ClosedError: The gamepad is not open and cannot send input reports.
-
-        The tap sends immediate press and release input reports. The release step
-        removes only the buttons supplied to this call, preserving other held buttons.
-        """
-        await self._runtime.tap(*buttons, duration=duration)
-
-    def status(self) -> GamepadStatus:
-        """Return the current gamepad status.
-
-        Returns:
-            GamepadStatus: Connection state, report counters, rumble bytes, and last error.
-        """
-        return self._runtime.status()
-
-    def snapshot(self) -> InputState:
-        """Return the latest committed input state.
-
-        A periodic controller returns its latest local state. A direct
-        controller returns the last state sent successfully.
-
-        Returns:
-            InputState: Immutable snapshot of the current input state.
-        """
-        return self._runtime.snapshot()
-
-
-class _PeriodicRuntimeBackedGamepad(_RuntimeBackedGamepad, PeriodicSwitchGamepad):
-    """Runtime-backed gamepad with library-owned periodic input transmission."""
-
-    async def apply(self, state: InputState) -> None:
-        """Replace the current input state without immediate transmission.
-
-        Args:
-            state: Complete input state to commit.
-
-        This updates local state only and does not send an immediate input report.
-        """
-        await self._runtime.apply(state)
-
-    @classmethod
-    async def _create_pairing_profile(
-        cls,
-        *,
-        adapter: str,
-        profile_path: str,
-        local_address: str | None,
-        pair_timeout: float | None,
-        report_period_us: int | None,
-        controller_colors: ControllerColors | None,
-        diagnostics: DiagnosticsConfig | None,
-    ) -> Self:
-        """Create, pair, and clean up a concrete periodic controller profile."""
-        target = None if local_address is None else LocalAddress.parse(local_address)
-        PairingProfile.create_new(
-            profile_path,
-            target,
-            controller_kind=cls._profile.kind,
-        )
-        gamepad = cls(
-            adapter=adapter,  # ty: ignore[unknown-argument]
-            profile_path=profile_path,  # ty: ignore[unknown-argument]
-            report_period_us=report_period_us,  # ty: ignore[unknown-argument]
-            controller_colors=controller_colors,  # ty: ignore[unknown-argument]
-            diagnostics=diagnostics,  # ty: ignore[unknown-argument]
-        )
-        try:
-            await gamepad.pair(timeout=pair_timeout)
-        except BaseException:
-            await gamepad.close(neutral=False)
-            raise
-        return gamepad
-
-
-class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
-    """Runtime-backed gamepad with caller-owned input transmission."""
-
-    _reporting_mode = "direct"
-
-    def __init__(
-        self,
-        *,
-        adapter: str | None = None,
-        profile_path: str | None = None,
-        controller_colors: ControllerColors | None = None,
-        diagnostics: DiagnosticsConfig | None = None,
-    ) -> None:
-        """Create a direct-reporting gamepad object.
-
-        Args:
-            adapter: Bumble adapter moniker used for the Bluetooth backend.
-            profile_path: Optional swbt-owned pairing profile path.
-            controller_colors: Optional fixed controller body, button, and grip colors.
-            diagnostics: Optional diagnostics configuration for trace output.
-
-        Raises:
-            InvalidInputError: ``adapter`` is omitted.
-        """
-        self._initialize_runtime(
-            adapter=adapter,
-            profile_path=profile_path,
-            report_period_us=None,
-            controller_colors=controller_colors,
-            diagnostics=diagnostics,
-        )
-
-    @classmethod
-    async def create_profile(
-        cls,
-        *,
-        adapter: str,
-        profile_path: str,
-        local_address: str | None = None,
-        pair_timeout: float | None = None,
-        controller_colors: ControllerColors | None = None,
-        diagnostics: DiagnosticsConfig | None = None,
-    ) -> Self:
-        """Create a new direct pairing profile and pair it.
-
-        Args:
-            adapter: Bumble adapter moniker. An explicit local address may prepare
-                volatile adapter identity state.
-            profile_path: New path for the swbt-owned profile JSON.
-            local_address: Optional individual locally administered Bluetooth address.
-                ``None`` uses the adapter's current default address without rewriting it.
-            pair_timeout: Maximum seconds for link connection and protocol initialization.
-            controller_colors: Optional fixed controller body, button, and grip colors.
-            diagnostics: Optional diagnostics configuration for trace output.
-
-        Returns:
-            The protocol-ready direct controller. The caller owns its lifetime.
-
-        Raises:
-            ValueError: ``local_address`` is invalid.
-            FileExistsError: ``profile_path`` already exists.
-            Exception: Profile preparation or pairing failed. The created profile remains
-                available for a later retry.
-        """
-        target = None if local_address is None else LocalAddress.parse(local_address)
-        PairingProfile.create_new(
-            profile_path,
-            target,
-            controller_kind=cls._profile.kind,
-        )
-        gamepad = cls(
-            adapter=adapter,
-            profile_path=profile_path,
-            controller_colors=controller_colors,
-            diagnostics=diagnostics,
-        )
-        try:
-            await gamepad.pair(timeout=pair_timeout)
-        except BaseException:
-            await gamepad.close(neutral=False)
-            raise
-        return gamepad
-
-    async def send(self, state: InputState) -> None:
-        """Send one complete input state and commit it after transmission.
-
-        Args:
-            state: Complete input state to send.
-        """
-        await self._runtime.send(state)
-
-
-class ProController(_PeriodicRuntimeBackedGamepad):
+class ProController(PeriodicSwitchGamepad):
     """Runtime-backed Pro Controller-compatible gamepad."""
 
     _profile = default_controller_profile()
@@ -457,52 +41,8 @@ class ProController(_PeriodicRuntimeBackedGamepad):
             diagnostics=diagnostics,
         )
 
-    @classmethod
-    async def create_profile(
-        cls,
-        *,
-        adapter: str,
-        profile_path: str,
-        local_address: str | None = None,
-        pair_timeout: float | None = None,
-        report_period_us: int | None = None,
-        controller_colors: ControllerColors | None = None,
-        diagnostics: DiagnosticsConfig | None = None,
-    ) -> Self:
-        """Create a new pairing profile and pair it.
 
-        Args:
-            adapter: Bumble adapter moniker. An explicit local address may prepare
-                volatile adapter identity state.
-            profile_path: New path for the swbt-owned profile JSON.
-            local_address: Optional individual locally administered Bluetooth address.
-                ``None`` uses the adapter's current default address without rewriting it.
-            pair_timeout: Maximum seconds for link connection and protocol initialization.
-            report_period_us: Optional periodic input report interval in microseconds.
-            controller_colors: Optional fixed controller body, button, and grip colors.
-            diagnostics: Optional diagnostics configuration for trace output.
-
-        Returns:
-            ProController: The protocol-ready controller. The caller owns its lifetime.
-
-        Raises:
-            ValueError: ``local_address`` is invalid.
-            FileExistsError: ``profile_path`` already exists.
-            Exception: Profile preparation or pairing failed. The created profile remains
-                available for a later retry.
-        """
-        return await cls._create_pairing_profile(
-            adapter=adapter,
-            profile_path=profile_path,
-            local_address=local_address,
-            pair_timeout=pair_timeout,
-            report_period_us=report_period_us,
-            controller_colors=controller_colors,
-            diagnostics=diagnostics,
-        )
-
-
-class JoyConL(_PeriodicRuntimeBackedGamepad):
+class JoyConL(PeriodicSwitchGamepad):
     """Runtime-backed Joy-Con L-compatible gamepad."""
 
     _profile = JoyConLeftProfile()
@@ -536,52 +76,8 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
             diagnostics=diagnostics,
         )
 
-    @classmethod
-    async def create_profile(
-        cls,
-        *,
-        adapter: str,
-        profile_path: str,
-        local_address: str | None = None,
-        pair_timeout: float | None = None,
-        report_period_us: int | None = None,
-        controller_colors: ControllerColors | None = None,
-        diagnostics: DiagnosticsConfig | None = None,
-    ) -> Self:
-        """Create a new Joy-Con L pairing profile and pair it.
 
-        Args:
-            adapter: Bumble adapter moniker. An explicit local address may prepare
-                volatile adapter identity state.
-            profile_path: New path for the swbt-owned profile JSON.
-            local_address: Optional individual locally administered Bluetooth address.
-                ``None`` uses the adapter's current default address without rewriting it.
-            pair_timeout: Maximum seconds for link connection and protocol initialization.
-            report_period_us: Optional periodic input report interval in microseconds.
-            controller_colors: Optional fixed controller body, button, and grip colors.
-            diagnostics: Optional diagnostics configuration for trace output.
-
-        Returns:
-            JoyConL: The protocol-ready controller. The caller owns its lifetime.
-
-        Raises:
-            ValueError: ``local_address`` is invalid.
-            FileExistsError: ``profile_path`` already exists.
-            Exception: Profile preparation or pairing failed. The created profile remains
-                available for a later retry.
-        """
-        return await cls._create_pairing_profile(
-            adapter=adapter,
-            profile_path=profile_path,
-            local_address=local_address,
-            pair_timeout=pair_timeout,
-            report_period_us=report_period_us,
-            controller_colors=controller_colors,
-            diagnostics=diagnostics,
-        )
-
-
-class JoyConR(_PeriodicRuntimeBackedGamepad):
+class JoyConR(PeriodicSwitchGamepad):
     """Runtime-backed Joy-Con R-compatible gamepad."""
 
     _profile = JoyConRightProfile()
@@ -615,64 +111,101 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
             diagnostics=diagnostics,
         )
 
-    @classmethod
-    async def create_profile(
-        cls,
+
+class DirectProController(DirectSwitchGamepad):
+    """Direct-reporting Pro Controller-compatible gamepad."""
+
+    _profile = default_controller_profile()
+
+    def __init__(
+        self,
         *,
-        adapter: str,
-        profile_path: str,
-        local_address: str | None = None,
-        pair_timeout: float | None = None,
-        report_period_us: int | None = None,
+        adapter: str | None = None,
+        profile_path: str | None = None,
         controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
-    ) -> Self:
-        """Create a new Joy-Con R pairing profile and pair it.
+    ) -> None:
+        """Create a direct-reporting Pro Controller-compatible gamepad.
 
         Args:
-            adapter: Bumble adapter moniker. An explicit local address may prepare
-                volatile adapter identity state.
-            profile_path: New path for the swbt-owned profile JSON.
-            local_address: Optional individual locally administered Bluetooth address.
-                ``None`` uses the adapter's current default address without rewriting it.
-            pair_timeout: Maximum seconds for link connection and protocol initialization.
-            report_period_us: Optional periodic input report interval in microseconds.
+            adapter: Bumble adapter moniker used for the Bluetooth backend.
+            profile_path: Optional swbt-owned pairing profile path.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
 
-        Returns:
-            JoyConR: The protocol-ready controller. The caller owns its lifetime.
-
         Raises:
-            ValueError: ``local_address`` is invalid.
-            FileExistsError: ``profile_path`` already exists.
-            Exception: Profile preparation or pairing failed. The created profile remains
-                available for a later retry.
+            InvalidInputError: ``adapter`` is omitted.
         """
-        return await cls._create_pairing_profile(
+        self._initialize_runtime(
             adapter=adapter,
             profile_path=profile_path,
-            local_address=local_address,
-            pair_timeout=pair_timeout,
-            report_period_us=report_period_us,
+            report_period_us=None,
             controller_colors=controller_colors,
             diagnostics=diagnostics,
         )
 
 
-class DirectProController(_DirectRuntimeBackedGamepad):
-    """Direct-reporting Pro Controller-compatible gamepad."""
-
-    _profile = default_controller_profile()
-
-
-class DirectJoyConL(_DirectRuntimeBackedGamepad):
+class DirectJoyConL(DirectSwitchGamepad):
     """Direct-reporting Joy-Con L-compatible gamepad."""
 
     _profile = JoyConLeftProfile()
 
+    def __init__(
+        self,
+        *,
+        adapter: str | None = None,
+        profile_path: str | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+    ) -> None:
+        """Create a direct-reporting Joy-Con L-compatible gamepad.
 
-class DirectJoyConR(_DirectRuntimeBackedGamepad):
+        Args:
+            adapter: Bumble adapter moniker used for the Bluetooth backend.
+            profile_path: Optional swbt-owned pairing profile path.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+
+        Raises:
+            InvalidInputError: ``adapter`` is omitted.
+        """
+        self._initialize_runtime(
+            adapter=adapter,
+            profile_path=profile_path,
+            report_period_us=None,
+            controller_colors=controller_colors,
+            diagnostics=diagnostics,
+        )
+
+
+class DirectJoyConR(DirectSwitchGamepad):
     """Direct-reporting Joy-Con R-compatible gamepad."""
 
     _profile = JoyConRightProfile()
+
+    def __init__(
+        self,
+        *,
+        adapter: str | None = None,
+        profile_path: str | None = None,
+        controller_colors: ControllerColors | None = None,
+        diagnostics: DiagnosticsConfig | None = None,
+    ) -> None:
+        """Create a direct-reporting Joy-Con R-compatible gamepad.
+
+        Args:
+            adapter: Bumble adapter moniker used for the Bluetooth backend.
+            profile_path: Optional swbt-owned pairing profile path.
+            controller_colors: Optional fixed controller body, button, and grip colors.
+            diagnostics: Optional diagnostics configuration for trace output.
+
+        Raises:
+            InvalidInputError: ``adapter`` is omitted.
+        """
+        self._initialize_runtime(
+            adapter=adapter,
+            profile_path=profile_path,
+            report_period_us=None,
+            controller_colors=controller_colors,
+            diagnostics=diagnostics,
+        )

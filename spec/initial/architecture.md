@@ -9,7 +9,7 @@
 ```text
 利用者コード
   ↓
-SwitchGamepad interface
+SwitchGamepad public ABC / runtime delegation
   ↓
 ControllerRuntime + InputStateStore
   ├─ PeriodicSwitchGamepad → ReportLoop
@@ -82,7 +82,9 @@ resource scope の `open()` / `close()`、明示接続 API の `pair()` / `conne
 
 `PeriodicSwitchGamepad` は `apply(state)` を持ち、`ProController` / `JoyConL` / `JoyConR` が実装する。`DirectSwitchGamepad` は `send(state)` を持ち、`DirectProController` / `DirectJoyConL` / `DirectJoyConR` が実装する。Periodic だけが `report_period_us` を受け取る。公開 API に runtime mode object は出さない。
 
-具象 gamepad は内部に `ControllerRuntime`、`InputStateStore`、`ReportSender`、`SwitchHidProtocol`、`HidDeviceTransport` を保持する。Periodic の runtime だけが `ReportLoop` を保持する。利用者に内部コンポーネントを直接操作させない。
+`SwitchGamepad` は共通 public method と `ControllerRuntime` への参照を所有する。公開 method の実装は、lifecycle、connection、意味的入力、status、snapshot を runtime へ委譲する。`SwitchGamepad` は第三者実装用の runtime 非依存 interface とは扱わない。
+
+stateful owner は `ControllerRuntime` とする。runtime は内部に `InputStateStore`、`ReportSender`、`SwitchHidProtocol`、`HidDeviceTransport` を保持し、Periodic の runtime だけが `ReportLoop` を保持する。利用者に内部コンポーネントを直接操作させない。
 
 各具象 gamepad は controller profile を class 属性として所有する。公開 constructor は profile default と明示引数を内部設定型 `_GamepadConfig` へ正規化し、`ControllerRuntime` の唯一の constructor を呼ぶ。runtime に transport が注入されていればその instance を使い、未指定なら open 時に `create_default_transport()` を直接呼ぶ。transport factory object、constructor 回避、production package 内の test 用 factory は置かない。Bumble transport の import は `create_default_transport()` の関数内に閉じ込める。
 

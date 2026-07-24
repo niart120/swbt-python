@@ -18,7 +18,7 @@ from swbt import (
     ProController,
     SwitchGamepad,
 )
-from swbt.gamepad import core as gamepad_core
+from swbt.gamepad import interface as gamepad_interface
 from swbt.gamepad.runtime import ControllerRuntime
 from swbt.protocol.profiles.base import ControllerProfile
 from swbt.transport.base import HidDeviceTransport
@@ -46,7 +46,7 @@ def _construct_with_transport[ControllerT: _PeriodicController | _DirectControll
     )
     with (
         profile_patch,
-        patch.object(gamepad_core, "ControllerRuntime", runtime_constructor),
+        patch.object(gamepad_interface, "ControllerRuntime", runtime_constructor),
     ):
         return constructor()
 
