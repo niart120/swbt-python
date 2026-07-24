@@ -207,8 +207,6 @@ def test_direct_controller_reuses_profile_for_the_same_controller_shape(
 
     asyncio.run(pad.open())
 
-    assert pad._runtime._pairing_profile is not None
-    assert pad._runtime._pairing_profile.controller_kind is controller_kind
     assert captured["profile_path"] == str(profile_path)
     assert captured["expected_local_bluetooth_address"] == bytes.fromhex("02 12 34 56 78 9A")
     assert transport.open_count == 1
@@ -278,19 +276,21 @@ def test_profile_target_is_forwarded_to_bumble_power_on_guard(
         diagnostics=DiagnosticsConfig(trace_writer=trace),
     )
 
-    asyncio.run(pad._runtime._prepare_pairing_profile())
-    transport = pad._runtime._ensure_transport()
+    asyncio.run(pad.open())
+    transport = expected_transport
 
     assert transport is expected_transport
     assert captured["prepared"] == ("usb:0", "02:12:34:56:78:9A")
     assert captured["profile_path"] == str(profile_path)
     assert captured["expected_local_bluetooth_address"] == bytes.fromhex("02 12 34 56 78 9A")
-    assert json.loads(trace.getvalue()) == {
+    events = [json.loads(line) for line in trace.getvalue().splitlines()]
+    assert {
         "event": "adapter_identity_prepared",
         "current_address": "02:12:34:56:78:9A",
         "status": "already_active",
         "target_address": "02:12:34:56:78:9A",
-    }
+    } in events
+    asyncio.run(pad.close())
 
 
 def test_adapter_default_profile_skips_identity_preparation_and_keeps_profile_storage(

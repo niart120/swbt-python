@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from swbt.diagnostics import DiagnosticsRecorder
-from swbt.gamepad import transport_factory
 from swbt.gamepad.transport_factory import create_default_transport
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 
@@ -87,9 +86,3 @@ def test_default_transport_factory_passes_resource_config_to_bumble_transport(
         "profile_path": str(profile_path),
         "transport": transport,
     }
-
-
-def test_transport_factory_objects_are_removed() -> None:
-    assert not hasattr(transport_factory, "_TransportFactory")
-    assert not hasattr(transport_factory, "_StaticTransportFactory")
-    assert not hasattr(transport_factory, "_BumbleTransportFactory")

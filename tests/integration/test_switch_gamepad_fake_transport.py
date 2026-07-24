@@ -44,6 +44,7 @@ from tests.gamepad_factory import (  # ty: ignore[unresolved-import]
     make_joycon_l,
     make_joycon_r,
     make_pro_controller,
+    state_lock_for,
 )
 
 _OUTPUT_REPORT_PREFIX = bytes.fromhex("01 00 00 00 00 00 00 00 00 00")
@@ -3042,7 +3043,7 @@ def test_concurrent_press_and_release_preserve_button_state() -> None:
 def test_concurrent_press_waiting_on_state_lock_uses_latest_state() -> None:
     async def run() -> None:
         pad = make_pro_controller(transport=FakeHidTransport())
-        state_lock = pad._state_store._lock
+        state_lock = state_lock_for(pad)
 
         await state_lock.acquire()
         try:

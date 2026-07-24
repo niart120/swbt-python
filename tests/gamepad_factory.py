@@ -1,8 +1,10 @@
 """Gamepad constructors that inject fake transports through the runtime boundary."""
 
+import asyncio
 from collections.abc import Callable
 from contextlib import nullcontext
 from functools import partial
+from typing import Any, cast
 from unittest.mock import patch
 
 from swbt import (
@@ -14,6 +16,7 @@ from swbt import (
     JoyConL,
     JoyConR,
     ProController,
+    SwitchGamepad,
 )
 from swbt.gamepad import core as gamepad_core
 from swbt.gamepad.runtime import ControllerRuntime
@@ -22,6 +25,12 @@ from swbt.transport.base import HidDeviceTransport
 
 type _PeriodicController = ProController | JoyConL | JoyConR
 type _DirectController = DirectProController | DirectJoyConL | DirectJoyConR
+
+
+def state_lock_for(pad: SwitchGamepad) -> asyncio.Lock:
+    """Expose the state lock only to deterministic race-test fixtures."""
+    runtime = cast("Any", pad)
+    return runtime._state_store._lock
 
 
 def _construct_with_transport[ControllerT: _PeriodicController | _DirectController](
