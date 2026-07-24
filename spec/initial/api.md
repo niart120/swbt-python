@@ -103,27 +103,9 @@ asyncio.run(main())
 
 ### 2.5 fake transport を使う
 
-```python
-import asyncio
-from swbt import Button
-from swbt._testing.gamepad import make_pro_controller
-from swbt.transport.fake import FakeHidTransport
+fake transport はこの repository の unit test と integration test で使い、公開 package から test 用 controller factory は提供しない。repository 内の test は `tests/gamepad_factory.py` から公開 controller constructor を呼び、`ControllerRuntime` の transport だけを test 側で差し替える。利用者向け constructor に `transport` や `profile` は追加しない。
 
-async def main() -> None:
-    transport = FakeHidTransport()
-
-    async with make_pro_controller(transport=transport) as pad:
-        pairing = asyncio.create_task(pad.pair(timeout=1.0))
-        await transport.connect()
-        await pairing
-        await pad.tap(Button.A)
-
-    assert transport.sent_interrupt_reports
-
-asyncio.run(main())
-```
-
-fake transport は unit test と integration test 用であり、実機接続には使わない。
+fake transport は実機接続には使わない。
 
 ## 3. controller 型
 

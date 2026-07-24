@@ -84,6 +84,8 @@ resource scope の `open()` / `close()`、明示接続 API の `pair()` / `conne
 
 具象 gamepad は内部に `ControllerRuntime`、`InputStateStore`、`ReportSender`、`SwitchHidProtocol`、`HidDeviceTransport` を保持する。Periodic の runtime だけが `ReportLoop` を保持する。利用者に内部コンポーネントを直接操作させない。
 
+各具象 gamepad は controller profile を class 属性として所有する。公開 constructor は profile default と明示引数を内部設定型 `_GamepadConfig` へ正規化し、`ControllerRuntime` の唯一の constructor を呼ぶ。runtime に transport が注入されていればその instance を使い、未指定なら open 時に `create_default_transport()` を直接呼ぶ。transport factory object、constructor 回避、production package 内の test 用 factory は置かない。Bumble transport の import は `create_default_transport()` の関数内に閉じ込める。
+
 ### 2.2 `InputState`
 
 ボタン、左右スティック、IMU frame を表す値オブジェクト。外部から渡された後に内容が変わらないよう、immutable な設計に寄せる。`InputState` は button、stick、IMU それぞれの builder を持ち、complete state を組み立てて Periodic の `apply()` または Direct の `send()` に渡せるようにする。

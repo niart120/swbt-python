@@ -1,82 +1,14 @@
-"""Configuration models for gamepad construction and runtime setup."""
+"""Normalized configuration for gamepad construction and runtime setup."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from swbt.errors import InvalidInputError
 from swbt.protocol.profiles.base import ControllerColors, ControllerProfile
-from swbt.protocol.profiles.pro_controller import default_controller_profile
 
 
-@dataclass(frozen=True)
-class _SwitchGamepadConfig:
-    """Configuration used to construct a concrete gamepad.
-
-    Attributes:
-        adapter: Bumble adapter moniker, such as ``"usb:0"``.
-        profile_path: Path to a swbt-owned pairing profile.
-        profile: Fixed controller identity and protocol profile.
-        report_period_us: Periodic input report interval in microseconds.
-        device_name: HID device name advertised to the host.
-        controller_colors: Fixed controller body, button, and grip colors for SPI profile data.
-    """
-
-    adapter: str | None = None
-    profile_path: str | None = None
-    profile: ControllerProfile = field(default_factory=default_controller_profile)
-    report_period_us: int | None = None
-    device_name: str | None = None
-    controller_colors: ControllerColors | None = None
-
-    def __post_init__(self) -> None:
-        """Validate resource configuration."""
-        if not isinstance(self.profile, ControllerProfile):
-            msg = "profile must be a ControllerProfile"
-            raise InvalidInputError(msg)
-        if self.report_period_us is None:
-            object.__setattr__(
-                self,
-                "report_period_us",
-                self.profile.default_report_period_us,
-            )
-        elif self.report_period_us <= 0:
-            msg = "report_period_us must be positive"
-            raise InvalidInputError(msg)
-        if self.device_name is None:
-            object.__setattr__(self, "device_name", self.profile.device_name)
-        if self.controller_colors is not None and not isinstance(
-            self.controller_colors, ControllerColors
-        ):
-            msg = "controller_colors must be a ControllerColors"
-            raise InvalidInputError(msg)
-
-
-@dataclass(frozen=True)
-class _ControllerSpec:
-    """Internal controller identity selected by a concrete controller class."""
-
-    profile: ControllerProfile
-
-    def build_config(
-        self,
-        *,
-        adapter: str | None,
-        report_period_us: int | None,
-        controller_colors: ControllerColors | None,
-        profile_path: str | None = None,
-    ) -> _SwitchGamepadConfig:
-        """Create internal construction config from public constructor options."""
-        return _SwitchGamepadConfig(
-            adapter=adapter,
-            profile_path=profile_path,
-            profile=self.profile,
-            report_period_us=report_period_us,
-            controller_colors=controller_colors,
-        )
-
-
-@dataclass(frozen=True)
-class _RuntimeConfig:
-    """Normalized internal configuration for ControllerRuntime."""
+@dataclass(frozen=True, init=False)
+class _GamepadConfig:
+    """Normalized internal configuration shared by a controller and its runtime."""
 
     adapter: str | None
     profile_path: str | None
@@ -85,17 +17,37 @@ class _RuntimeConfig:
     device_name: str
     controller_colors: ControllerColors | None
 
-    @classmethod
-    def from_public_config(cls, config: _SwitchGamepadConfig) -> "_RuntimeConfig":
-        """Create normalized runtime configuration from public construction config."""
-        if config.report_period_us is None or config.device_name is None:
-            msg = "_SwitchGamepadConfig was not normalized"
+    def __init__(
+        self,
+        *,
+        profile: ControllerProfile,
+        adapter: str | None = None,
+        profile_path: str | None = None,
+        report_period_us: int | None = None,
+        device_name: str | None = None,
+        controller_colors: ControllerColors | None = None,
+    ) -> None:
+        """Validate and normalize controller construction values."""
+        if not isinstance(profile, ControllerProfile):
+            msg = "profile must be a ControllerProfile"
             raise InvalidInputError(msg)
-        return cls(
-            adapter=config.adapter,
-            profile_path=config.profile_path,
-            profile=config.profile,
-            report_period_us=config.report_period_us,
-            device_name=config.device_name,
-            controller_colors=config.controller_colors,
+        normalized_report_period = (
+            profile.default_report_period_us if report_period_us is None else report_period_us
         )
+        if normalized_report_period <= 0:
+            msg = "report_period_us must be positive"
+            raise InvalidInputError(msg)
+        if controller_colors is not None and not isinstance(controller_colors, ControllerColors):
+            msg = "controller_colors must be a ControllerColors"
+            raise InvalidInputError(msg)
+
+        object.__setattr__(self, "adapter", adapter)
+        object.__setattr__(self, "profile_path", profile_path)
+        object.__setattr__(self, "profile", profile)
+        object.__setattr__(self, "report_period_us", normalized_report_period)
+        object.__setattr__(
+            self,
+            "device_name",
+            profile.device_name if device_name is None else device_name,
+        )
+        object.__setattr__(self, "controller_colors", controller_colors)

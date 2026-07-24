@@ -26,13 +26,6 @@ from swbt import (
     Stick,
     SwitchGamepad,
 )
-from swbt._testing.gamepad import (
-    make_direct_joycon_l,
-    make_direct_pro_controller,
-    make_joycon_l,
-    make_joycon_r,
-    make_pro_controller,
-)
 from swbt.errors import (
     ClosedError,
     ConnectionFailedError,
@@ -41,10 +34,17 @@ from swbt.errors import (
     InvalidKeyStoreError,
     UnsupportedInputError,
 )
-from swbt.gamepad._config import _SwitchGamepadConfig
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
+from tests.gamepad_factory import (  # ty: ignore[unresolved-import]
+    make_direct_joycon_l,
+    make_direct_joycon_r,
+    make_direct_pro_controller,
+    make_joycon_l,
+    make_joycon_r,
+    make_pro_controller,
+)
 
 _OUTPUT_REPORT_PREFIX = bytes.fromhex("01 00 00 00 00 00 00 00 00 00")
 
@@ -53,6 +53,22 @@ def _joycon_class(side: Literal["left", "right"]) -> Callable[..., JoyConL | Joy
     if side == "left":
         return make_joycon_l
     return make_joycon_r
+
+
+def _controller_factory(
+    controller_class: type[
+        ProController | JoyConL | JoyConR | DirectProController | DirectJoyConL | DirectJoyConR
+    ],
+) -> Callable[..., object]:
+    factories: dict[type[object], Callable[..., object]] = {
+        ProController: make_pro_controller,
+        JoyConL: make_joycon_l,
+        JoyConR: make_joycon_r,
+        DirectProController: make_direct_pro_controller,
+        DirectJoyConL: make_direct_joycon_l,
+        DirectJoyConR: make_direct_joycon_r,
+    }
+    return factories[controller_class]
 
 
 async def _complete_protocol_handshake(transport: FakeHidTransport) -> None:
@@ -281,9 +297,12 @@ def test_all_concrete_controllers_share_protocol_ready_connection_boundary(
 ) -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        pad = controller_class._from_config(
-            _SwitchGamepadConfig(profile=profile),
-            transport=transport,
+        pad = cast(
+            "SwitchGamepad",
+            _controller_factory(controller_class)(
+                transport=transport,
+                profile=profile,
+            ),
         )
 
         pairing = asyncio.create_task(pad.pair(timeout=1.0))
@@ -679,10 +698,7 @@ def test_direct_send_waits_for_transport_and_commits_exactly_one_report() -> Non
     async def run() -> None:
         transport = BlockingFakeHidTransport()
         state = InputState.neutral().with_buttons([Button.X])
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(report_period_us=60_000_000),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
 
         async with pad:
             transport.release_send.set()
@@ -757,10 +773,7 @@ def test_direct_send_failures_do_not_change_last_successfully_sent_state() -> No
 
     async def run() -> None:
         transport = ToggleFailFakeHidTransport()
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
         sent = InputState.neutral().with_buttons([Button.A])
         rejected = InputState.neutral().with_buttons([Button.X])
 
@@ -814,19 +827,13 @@ def test_direct_send_rejects_unsupported_profile_state_without_sending() -> None
 
 def test_direct_semantic_operations_send_once_and_commit_after_success() -> None:
     async def run() -> None:
-        unopened = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=FakeHidTransport(),
-        )
+        unopened = make_direct_pro_controller(transport=FakeHidTransport())
         with pytest.raises(ClosedError):
             await unopened.press(Button.A)
         assert unopened.snapshot() == InputState.neutral()
 
         transport = FakeHidTransport()
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
         left = Stick.up()
         right = Stick.right()
         frame = IMUFrame.gyro(100, -100, 50)
@@ -885,10 +892,7 @@ def test_direct_concurrent_operations_are_serialized_without_lost_state() -> Non
 
     async def run() -> None:
         transport = SequencedFakeHidTransport()
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
         await pad.open()
         await _connect_protocol_ready(transport)
 
@@ -917,10 +921,7 @@ def test_direct_concurrent_operations_are_serialized_without_lost_state() -> Non
 def test_direct_tap_sends_press_and_release_once_while_preserving_held_input() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
         held = InputState.neutral().with_buttons([Button.ZL])
 
         await pad.open()
@@ -962,10 +963,7 @@ def test_direct_tap_keeps_pressed_state_when_release_send_fails() -> None:
 
     async def run() -> None:
         transport = FailSecondSendFakeHidTransport()
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
         pressed = InputState.neutral().with_buttons([Button.A])
 
         await pad.open()
@@ -991,10 +989,7 @@ def test_direct_tap_keeps_pressed_state_when_release_send_fails() -> None:
 def test_direct_tap_serializes_concurrent_input_until_release() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
         await pad.open()
         await _connect_protocol_ready(transport)
 
@@ -1039,10 +1034,7 @@ def test_direct_subcommand_reply_uses_state_committed_by_prior_serialized_input(
 
     async def run() -> None:
         transport = BlockFirstSendFakeHidTransport()
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
         state = InputState.neutral().with_buttons([Button.A])
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
@@ -1070,10 +1062,7 @@ def test_direct_subcommand_reply_uses_state_committed_by_prior_serialized_input(
 def test_direct_close_controls_trailing_neutral_report() -> None:
     async def close_with(neutral: bool) -> tuple[FakeHidTransport, int]:
         transport = FakeHidTransport()
-        pad = DirectProController._from_config(
-            _SwitchGamepadConfig(),
-            transport=transport,
-        )
+        pad = make_direct_pro_controller(transport=transport)
         held = InputState.neutral().with_buttons([Button.A])
 
         await pad.open()
@@ -1115,9 +1104,12 @@ def test_direct_controller_profiles_share_send_and_validation_contract(
 ) -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        pad = controller_cls._from_config(
-            _SwitchGamepadConfig(profile=profile),
-            transport=transport,
+        pad = cast(
+            "DirectProController | DirectJoyConL | DirectJoyConR",
+            _controller_factory(controller_cls)(
+                transport=transport,
+                profile=profile,
+            ),
         )
         await pad.open()
         await _connect_protocol_ready(transport)
@@ -1747,10 +1739,11 @@ def test_output_report_injection_uses_default_controller_colors_when_none() -> N
     asyncio.run(run())
 
 
-def test_from_config_output_report_injection_uses_configured_controller_colors() -> None:
+def test_public_constructor_uses_configured_controller_colors() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        config = _SwitchGamepadConfig(
+        pad = make_pro_controller(
+            transport=transport,
             controller_colors=ControllerColors(
                 body=0x102030,
                 buttons=0x405060,
@@ -1761,7 +1754,7 @@ def test_from_config_output_report_injection_uses_configured_controller_colors()
         )
         request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
 
-        async with ProController._from_config(config, transport=transport):
+        async with pad:
             await transport.connect()
 
             await transport.inject_interrupt_data(request_controller_colors)
@@ -1776,10 +1769,11 @@ def test_from_config_output_report_injection_uses_configured_controller_colors()
     asyncio.run(run())
 
 
-def test_from_config_uses_profile_controller_colors_when_colors_are_unspecified() -> None:
+def test_profile_controller_colors_are_used_when_colors_are_unspecified() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        config = _SwitchGamepadConfig(
+        pad = make_pro_controller(
+            transport=transport,
             profile=ProControllerProfile(
                 controller_colors=ControllerColors(
                     body=0x010203,
@@ -1793,7 +1787,7 @@ def test_from_config_uses_profile_controller_colors_when_colors_are_unspecified(
         )
         request_controller_colors = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 10 50 60 00 00 0c")
 
-        async with ProController._from_config(config, transport=transport):
+        async with pad:
             await transport.connect()
 
             await transport.inject_interrupt_data(request_controller_colors)
@@ -1840,15 +1834,16 @@ def test_joycon_uses_side_default_controller_colors_when_colors_are_unspecified(
     asyncio.run(run())
 
 
-def test_from_config_profile_reaches_periodic_input_report_builder() -> None:
+def test_test_profile_reaches_periodic_input_report_builder() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        config = _SwitchGamepadConfig(
+        pad = make_pro_controller(
+            transport=transport,
             profile=ProControllerProfile(battery_connection=0x92),
             report_period_us=1000,
         )
 
-        async with ProController._from_config(config, transport=transport):
+        async with pad:
             await _connect_protocol_ready(transport)
 
             report = await transport.wait_for_interrupt_report_id(0x30)
@@ -1859,16 +1854,17 @@ def test_from_config_profile_reaches_periodic_input_report_builder() -> None:
     asyncio.run(run())
 
 
-def test_from_config_joycon_profile_reaches_device_info_reply() -> None:
+def test_joycon_profile_reaches_device_info_reply() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
-        config = _SwitchGamepadConfig(
+        pad = make_joycon_l(
+            transport=transport,
             profile=JoyConLeftProfile(),
             report_period_us=1000,
         )
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
-        async with JoyConL._from_config(config, transport=transport):
+        async with pad:
             await transport.connect()
 
             await transport.inject_interrupt_data(request_device_info)

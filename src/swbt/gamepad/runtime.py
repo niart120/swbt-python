@@ -4,10 +4,10 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import replace
-from types import TracebackType
 from typing import Literal
 
 import swbt.gamepad as gamepad_module
+import swbt.gamepad.transport_factory as transport_factory_module
 from swbt.diagnostics import DiagnosticsConfig, DiagnosticsRecorder, GamepadStatus
 from swbt.errors import (
     ClosedError,
@@ -15,20 +15,15 @@ from swbt.errors import (
     ConnectionTimeoutError,
     InvalidInputError,
 )
-from swbt.gamepad._config import _RuntimeConfig, _SwitchGamepadConfig
+from swbt.gamepad._config import _GamepadConfig
 from swbt.gamepad.connection import (
     ConnectionResult,
     ConnectionWorkflow,
     raise_if_connection_failed,
 )
 from swbt.gamepad.output import OutputReportDispatcher
-from swbt.gamepad.transport_factory import (
-    _BumbleTransportFactory,
-    _StaticTransportFactory,
-)
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.input_report import InputReportBuilder
-from swbt.protocol.profiles.base import ControllerColors
 from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.subcommand import SubcommandResponder
 from swbt.report_loop import ReportLoop, ReportSender
@@ -49,62 +44,32 @@ class ControllerRuntime:
 
     def __init__(
         self,
+        config: _GamepadConfig,
         *,
-        adapter: str | None = None,
-        profile_path: str | None = None,
-        report_period_us: int | None = None,
-        device_name: str | None = None,
-        controller_colors: ControllerColors | None = None,
         diagnostics: DiagnosticsConfig | None = None,
+        reporting_mode: Literal["periodic", "direct"] = "periodic",
         transport: HidDeviceTransport | None = None,
     ) -> None:
-        """Create a gamepad object.
+        """Create a fully initialized gamepad runtime.
 
         Args:
-            adapter: Bumble adapter moniker used when the default transport is created.
-                Required unless a custom transport is supplied.
-            profile_path: Optional swbt-owned pairing profile path.
-            report_period_us: Optional periodic input report interval in microseconds.
-            device_name: Optional HID device name passed to the default transport.
-            controller_colors: Optional fixed controller body, button, and grip colors.
+            config: Normalized controller and transport resource configuration.
             diagnostics: Optional diagnostics configuration for trace output.
+            reporting_mode: Owner of normal input report scheduling.
             transport: Optional HID transport instance. When supplied, no Bumble
                 transport is created by the constructor.
 
         Raises:
-            InvalidInputError: ``adapter`` is omitted for the default transport or
-                ``report_period_us`` is not positive.
+            InvalidInputError: ``adapter`` is omitted for the default transport.
         """
-        config = _SwitchGamepadConfig(
-            adapter=adapter,
-            profile_path=profile_path,
-            report_period_us=report_period_us,
-            device_name=device_name,
-            controller_colors=controller_colors,
-        )
-        self._init_from_config(config, diagnostics=diagnostics, transport=transport)
-
-    def _init_from_config(
-        self,
-        config: _SwitchGamepadConfig,
-        *,
-        diagnostics: DiagnosticsConfig | None,
-        reporting_mode: Literal["periodic", "direct"] = "periodic",
-        transport: HidDeviceTransport | None,
-    ) -> None:
-        runtime_config = _RuntimeConfig.from_public_config(config)
-        if transport is None and runtime_config.adapter is None:
+        if transport is None and config.adapter is None:
             msg = "adapter is required when no custom transport is supplied"
             raise InvalidInputError(msg)
-        self._config = runtime_config
+        self._config = config
         self._reporting_mode = reporting_mode
         self._transport = transport
         self._transport_was_injected = transport is not None
         self._pairing_profile: PairingProfile | None = None
-        if transport is None:
-            self._transport_factory = _BumbleTransportFactory()
-        else:
-            self._transport_factory = _StaticTransportFactory(transport)
         self._state_store = InputStateStore()
         self._diagnostics = DiagnosticsRecorder(
             trace_writer=diagnostics.trace_writer if diagnostics is not None else None
@@ -155,60 +120,6 @@ class ControllerRuntime:
             transport_was_injected=self._transport_was_injected,
             wait_for_connected=self._wait_for_reconnect_connected_for_workflow,
         )
-
-    @classmethod
-    def from_config(
-        cls,
-        config: _SwitchGamepadConfig,
-        *,
-        diagnostics: DiagnosticsConfig | None = None,
-        reporting_mode: Literal["periodic", "direct"] = "periodic",
-        transport: HidDeviceTransport | None = None,
-    ) -> "ControllerRuntime":
-        """Create a runtime from an explicit resource configuration.
-
-        Args:
-            config: Resource configuration for the runtime.
-            diagnostics: Optional diagnostics configuration for trace output.
-            reporting_mode: Internal owner of normal input report scheduling.
-            transport: Optional HID transport instance.
-
-        Returns:
-            ControllerRuntime: A runtime configured from ``config``.
-        """
-        runtime = cls.__new__(cls)
-        runtime._init_from_config(
-            config,
-            diagnostics=diagnostics,
-            reporting_mode=reporting_mode,
-            transport=transport,
-        )
-        return runtime
-
-    async def __aenter__(self) -> "ControllerRuntime":
-        """Open the runtime for an async context manager.
-
-        Returns:
-            ControllerRuntime: This runtime after resources have been opened.
-        """
-        await self.open()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        """Close the gamepad when leaving an async context manager.
-
-        Args:
-            exc_type: Exception type from the managed block, if one was raised.
-            exc: Exception instance from the managed block, if one was raised.
-            traceback: Traceback from the managed block, if one was raised.
-        """
-        _ = (exc_type, exc, traceback)
-        await self.close(neutral=True)
 
     async def open(self) -> None:
         """Open the configured transport.
@@ -1051,24 +962,29 @@ class ControllerRuntime:
                 msg = "adapter is required when no custom transport is supplied"
                 raise InvalidInputError(msg)
             adapter = self._config.adapter
-            if adapter is None:
-                msg = "adapter is required when no custom transport is supplied"
-                raise InvalidInputError(msg)
-            self._transport = self._transport_factory.create(
-                adapter=adapter,
-                device_name=self._config.device_name,
-                profile=self._controller_profile,
-                diagnostics=self._diagnostics,
-                profile_path=(
-                    self._config.profile_path if self._pairing_profile is not None else None
-                ),
-                expected_local_bluetooth_address=(
-                    self._pairing_profile.local_address.bytes
-                    if self._pairing_profile is not None
-                    and self._pairing_profile.local_address is not None
-                    else None
-                ),
+            profile_path = self._config.profile_path if self._pairing_profile is not None else None
+            expected_local_bluetooth_address = (
+                self._pairing_profile.local_address.bytes
+                if self._pairing_profile is not None
+                and self._pairing_profile.local_address is not None
+                else None
             )
+            if profile_path is None and expected_local_bluetooth_address is None:
+                self._transport = transport_factory_module.create_default_transport(
+                    adapter=adapter,
+                    device_name=self._config.device_name,
+                    profile=self._controller_profile,
+                    diagnostics=self._diagnostics,
+                )
+            else:
+                self._transport = transport_factory_module.create_default_transport(
+                    adapter=adapter,
+                    device_name=self._config.device_name,
+                    profile=self._controller_profile,
+                    diagnostics=self._diagnostics,
+                    profile_path=profile_path,
+                    expected_local_bluetooth_address=expected_local_bluetooth_address,
+                )
         return self._transport
 
 

@@ -132,7 +132,7 @@ Fake transport integration tests は `tests/integration/` に置く。
 
 検証項目:
 
-- internal fake transport constructor で Periodic / Direct の `async with` が動く
+- tests 配下の support が公開 controller constructor を通して fake transport を注入し、Periodic / Direct の `async with` が動く
 - `open()` 後に fake transport が open 済みになる
 - `close()` 後に fake transport が closed になる
 - `close()` を複数回呼んでも破綻しない
