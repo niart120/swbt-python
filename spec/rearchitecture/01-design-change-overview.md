@@ -135,7 +135,7 @@ async def accept_any_controller(pad: SwitchGamepad) -> None:
 
 ### Alternative D: test / power user 用に `transport=` を残す
 
-却下。Public constructor からは消す。内部 `_TransportFactory` と test helper で十分である。Backend extensibility は別設計にする。
+却下。公開コンストラクターからは消す。repository 内のテスト補助で十分である。下位通信実装を拡張する機能は別途設計する。
 
 ## Success criteria
 

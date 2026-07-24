@@ -34,7 +34,9 @@ uv sync --dev
 同じ内容は `docs/` 配下でも確認できます。
 
 ## 利用例
+
 ### Pro Controller
+
 ```python
 import asyncio
 from swbt import Button, ProController
@@ -53,7 +55,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Pro Controller 相当の一時的な仮想デバイスを作成し、ペアリング後に A ボタン入力を送信するコードの例です。接続情報を永続化する場合は `ProController.create_profile()` を使います。`local_address` を省略するとアダプタが現在報告する Bluetooth アドレスを維持し、揮発領域へ書き込みません。利用者管理のローカルアドレスへ切り替える手順は[利用例](docs/usage.md)、対応する専用 USB Bluetooth ドングルと復旧手順は[実機準備手順](docs/hardware.md)を参照してください。
+Pro Controller 相当の仮想デバイスを作成し、ペアリング後に A ボタン入力を送信する例です。
+
+接続情報を保存して再利用する場合は、先に `ProController.create_profile()` で `profile_path` を作成します。アドレスの選択方法と復旧手順は[利用例](docs/usage.md)、専用 USB Bluetooth ドングルの準備は[実機準備手順](docs/hardware.md)を参照してください。
 
 ### Joy-Con L/R
 
@@ -78,9 +82,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-「持ちかた/順番を変える」画面で Joy-Con としてペアリングする場合も、接続後に登録用の SR+SL 入力を追加送信する必要はありません。ライブラリは Joy-Con 用の初期化応答を返し、0 以外のプレイヤーライトが設定されるまで `connect()` を完了しません。Joy-Con L/R の `Button.SL` と `Button.SR` は、接続後に利用者が送る通常のボタン入力として引き続き利用できます。
+「持ちかた/順番を変える」画面でペアリングするときも、登録用の SR+SL 入力を追加送信する必要はありません。`connect()` は Joy-Con 用の初期化とプレイヤーライトの設定が完了してから戻ります。
 
-Pro Controller、周期送信型 Joy-Con、直接送信型はすべて、Bluetooth アドレスの選択方法とペアリングキーをまとめる `profile_path` を使います。新規プロファイルは各具象クラスの `create_profile()` で作成し、コントローラー形状と対象機器ごとに保存先を分けてください。v0.4.0 の `key_store_path` で使用していた JSON 形式のペアリング情報との互換経路はありません。Joy-Con L で右スティックや A/B/X/Y、Joy-Con R で左スティックや十字キーを入力すると `UnsupportedInputError` が送出されます。`JoyConPair` は未実装です。
+`profile_path` はコントローラー形状と対象機器ごとに分けます。Joy-Con L では右スティックと A/B/X/Y、Joy-Con R では左スティックと十字キーを使えません。これらを指定すると `UnsupportedInputError` が送出されます。`JoyConPair` は未実装です。
 
 ## 接続方法
 
@@ -90,15 +94,11 @@ Pro Controller、周期送信型 Joy-Con、直接送信型はすべて、Bluetoo
 
 ### 確認済み構成
 
-2026-07-24 時点では、Windows 11 / CSR8510 A10 / WinUSB / `usb:0` で、Pro Controller、Joy-Con L、Joy-Con R の初回ペアリング、保存済みプロファイルを使う再接続、初期化完了後のオブジェクト返却を確認済みです。Joy-Con L/R は、登録用の SR+SL 入力を追加送信せずに初期化を完了しました。
-
-同じ Windows 構成で、Pro Controller の主要なボタン / スティック入力、ニュートラル復帰と、Joy-Con L/R の対応ボタン / スティック入力も確認しています。確認済み範囲と未確認範囲の詳細は[実機準備手順](https://niart120.github.io/swbt-python/hardware/)にあります。
-
-macOS 15.7.7 / CSR8510 A10 では、Pro Controller のペアリング、保存済みペアリング情報を使う再接続、ボタン入力、ニュートラル復帰を記録しています。
+Windows 11 / CSR8510 A10 / WinUSB では、Pro Controller、Joy-Con L、Joy-Con R のペアリング、再接続、対応する入力操作を確認しています。macOS 15.7.7 / CSR8510 A10 では Pro Controller の限定的な動作を確認しています。条件と未確認範囲は[実機準備手順](https://niart120.github.io/swbt-python/hardware/)を参照してください。
 
 ### 実験的構成
 
-Linux は experimental です。手順は[実機準備手順](https://niart120.github.io/swbt-python/hardware/)に整備されていますが、専用 USB Bluetooth ドングルにアクセスできるか、ペアリングできるか、入力が反映されるかは未確認です。macOS は Pro Controller の一部挙動のみ検証済みです。Joy-Con、別ドングル、別ファームウェアでの互換性は未確認です。
+Linux は experimental です。専用 USB Bluetooth ドングルへのアクセス、ペアリング、入力反映は未確認です。macOS の Joy-Con、別ドングル、別ファームウェアでの互換性も未確認です。
 
 ## 開発
 
