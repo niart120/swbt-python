@@ -7,7 +7,7 @@
 | 分類 | 実機 | Bumble | 目的 |
 |---|---:|---:|---|
 | Unit tests | 不要 | 不要 | 入力状態、report 生成、parser、subcommand を固定する |
-| Fake transport integration tests | 不要 | 不要 | Periodic / Direct gamepad、`ReportSender`、`ReportLoop` の振る舞いを検証する |
+| Fake transport integration tests | 不要 | 不要 | handshake、Periodic / Direct gamepad、`ReportSender`、`ReportLoop` の振る舞いを検証する |
 | Bumble adapter tests | 不要または adapter のみ | 必要 | adapter open、power on、close を検証する |
 | Hardware tests | 必要 | 必要 | Switch との pairing、L2CAP、入力反映を確認する |
 
@@ -161,8 +161,10 @@ Fake transport integration tests は `tests/integration/` に置く。
   未受信中だけ1秒間隔で再送する
 - 最初の有効な subcommand を parse した後は起動 report を再送しない
 - supported `0x03 30` reply 後は neutral `0x30` の requested report mode を開始する
+- readyを成立させるreplyの受理後、`ProtocolHandshake`を停止・回収してから接続APIを完了する
+- ready後のoutput reportは同じdispatcher、session、senderで1回だけ処理する
 - ready 前の利用者 state は wire へ出ず、subcommand reply prefix も neutral になる
-- ready 後は Periodic が利用者 state の送信を継続し、Direct は自動 `0x30` を停止する
+- ready 後は Periodic が利用者 state の送信を継続し、Direct は全lifecycleで`ReportLoop`を持たず自動 `0x30` を送らない
 - reply 送信失敗または ready 前 disconnect は timeout を待たず接続失敗になる
 
 ### 3.4 neutral fail-safe

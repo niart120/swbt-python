@@ -2,6 +2,7 @@
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from inspect import isawaitable
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.input import InputState
@@ -17,7 +18,7 @@ from swbt.state_store import InputStateStore
 ReplyBuilder = Callable[[], bytes | Awaitable[bytes]]
 ReplySender = Callable[[ReplyBuilder], Awaitable[bytes]]
 ReplySenderRequirement = Callable[[], None]
-ProtocolStateUpdated = Callable[[], None]
+ProtocolStateUpdated = Callable[[], Awaitable[None] | None]
 SubcommandReceived = Callable[[int], None]
 
 
@@ -117,7 +118,9 @@ class OutputReportDispatcher:
             report_id=_format_report_id(reply[0]),
             subcommand_id=subcommand_id,
         )
-        self.protocol_state_updated()
+        updated = self.protocol_state_updated()
+        if isawaitable(updated):
+            await updated
 
 
 def _format_report_id(report_id: int) -> str:

@@ -12,7 +12,8 @@
 SwitchGamepad public ABC / runtime delegation
   ↓
 ControllerRuntime + InputStateStore
-  ├─ PeriodicSwitchGamepad → ReportLoop
+  ├─ ProtocolHandshake [initializing中だけ]
+  ├─ PeriodicSwitchGamepad → ReportLoop [ready後だけ]
   └─ DirectSwitchGamepad → input operation lock
                     ↓
                ReportSender ← OutputReportDispatcher
@@ -38,6 +39,7 @@ Nintendo Switch
 | Input model | ボタン、スティック、IMU の状態表現 | `InputState`, `Button`, `Stick` |
 | State store | 現在入力の保持と snapshot 提供 | `InputStateStore` |
 | Report sender | input / reply 共通の送信直列化、timer、IMU encoding | `ReportSender` |
+| Protocol handshake | link接続からready / failureまでの自動neutral送信と終了通知 | `ProtocolHandshake` |
 | Report loop | Periodic だけの周期 scheduling | `ReportLoop` |
 | Switch HID protocol | report 生成、output report 解析、subcommand 応答 | `SwitchHidProtocol`, `SubcommandResponder` |
 | Transport interface | HID Device transport の抽象化 | `HidDeviceTransport` |
@@ -84,7 +86,7 @@ resource scope の `open()` / `close()`、明示接続 API の `pair()` / `conne
 
 `SwitchGamepad` は共通 public method と `ControllerRuntime` への参照を所有する。公開 method の実装は、lifecycle、connection、意味的入力、status、snapshot を runtime へ委譲する。`SwitchGamepad` は第三者実装用の runtime 非依存 interface とは扱わない。
 
-stateful owner は `ControllerRuntime` とする。runtime は内部に `InputStateStore`、`ReportSender`、`SwitchHidProtocol`、`HidDeviceTransport` を保持し、Periodic の runtime だけが `ReportLoop` を保持する。利用者に内部コンポーネントを直接操作させない。
+stateful owner は `ControllerRuntime` とする。runtime は内部に `InputStateStore`、`ReportSender`、`SwitchHidProtocol`、`HidDeviceTransport` を保持する。link接続からprotocol readyまでは、同じsessionとsenderを借用する期限付き`ProtocolHandshake`を保持する。Periodic の runtime はready後だけ`ReportLoop`を保持し、Directは全lifecycleで生成しない。利用者に内部コンポーネントを直接操作させない。
 
 各具象 gamepad は controller profile を class 属性として所有する。公開 constructor は profile default と明示引数を内部設定型 `_GamepadConfig` へ正規化し、`ControllerRuntime` の唯一の constructor を呼ぶ。runtime に transport が注入されていればその instance を使い、未指定なら open 時に `create_default_transport()` を直接呼ぶ。transport factory object、constructor 回避、production package 内の test 用 factory は置かない。Bumble transport の import は `create_default_transport()` の関数内に閉じ込める。
 
@@ -102,9 +104,11 @@ stateful owner は `ControllerRuntime` とする。runtime は内部に `InputSt
 
 ### 2.4 `ReportSender` / `ReportLoop`
 
-`ReportSender` は `0x30` input report と `0x21` subcommand reply に共通する send lock、timer byte、接続 session の IMU encoding、transport 送信、トレース出力を所有する。reply の state prefix も send lock 内で取得し、実際の送信順と一致させる。
+`ReportSender` は `0x30` input report と `0x21` subcommand reply に共通する send lock、timer byte、接続 session の IMU encoding、transport 送信、トレース出力を所有する。reply後の自動input holdoffもここで管理する。reply の state prefix も send lock 内で取得し、実際の送信順と一致させる。
 
-`ReportLoop` は Periodic だけが所有する scheduler であり、一定周期で current state を `ReportSender` へ渡す。Direct は `ReportLoop` を生成せず、input operation lock 内で候補 state を `ReportSender` へ渡す。output report / subcommand は両型で自動処理し、同じ `ReportSender` へ入る。
+`ProtocolHandshake` はlink接続直後のbootstrap neutralと、supported report modeからreadyまでのneutralを送る。readyまたはfailureで停止・破棄し、sender、session、dispatcherはRuntimeに残る。
+
+`ReportLoop` は Periodic だけがready後に所有する scheduler であり、一定周期で current state を `ReportSender` へ渡す。Direct は `ReportLoop` を生成せず、input operation lock 内で候補 state を `ReportSender` へ渡す。output report / subcommand は両型で自動処理し、同じ `ReportSender` へ入る。
 
 送信周期の初期値は `8000us` とする。ただし、この値は既定値であり、全環境での最適値とは扱わない。実送信時刻は diagnostics に記録する。
 

@@ -126,8 +126,6 @@ def test_normalized_config_uses_profile_report_period_unless_user_overrides(
             session: object | None = None,
             diagnostics: object | None = None,
             sender: object | None = None,
-            is_user_input_enabled: object | None = None,
-            stop_when_user_input_enabled: bool = False,
         ) -> None:
             _ = (
                 transport,
@@ -136,10 +134,11 @@ def test_normalized_config_uses_profile_report_period_unless_user_overrides(
                 session,
                 diagnostics,
                 sender,
-                is_user_input_enabled,
-                stop_when_user_input_enabled,
             )
             captured_periods.append(report_period_us)
+
+        def start(self) -> None:
+            return None
 
         async def stop(self) -> None:
             return None
@@ -152,6 +151,7 @@ def test_normalized_config_uses_profile_report_period_unless_user_overrides(
             transport=FakeHidTransport(),
         )
         await runtime.open()
+        runtime._start_periodic_report_loop()
         await runtime.close(neutral=False)
         return captured_periods[-1]
 

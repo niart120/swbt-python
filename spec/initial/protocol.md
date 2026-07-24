@@ -170,7 +170,7 @@ class OutputReport:
 
 Switch からの subcommand に対しては、`0x21` subcommand reply を生成する。
 
-`0x21` reply と periodic `0x30` input report は、`ReportSender` の同じ lock と timer を使う。output report callback は `send_subcommand_reply()` を直接呼び、reply 完了後に `ReportLoop` が periodic 送信の holdoff を設定する。reply payload の生成は `SubcommandResponder` が担当する。
+`0x21` reply と自動 `0x30` input report は、`ReportSender` の同じ lock と timer を使う。output report callback は `send_subcommand_reply()` を直接呼び、reply 完了後に`ReportSender`が自動inputのholdoffを設定する。reply payload の生成は `SubcommandResponder` が担当する。
 
 ### 5.2 共有 sender
 
@@ -190,7 +190,7 @@ HidDeviceTransport.send_interrupt()
 
 ### 5.3 reply 後 holdoff の理由
 
-`0x21` を callback 内で送信した後、`ReportLoop` は一定時間 periodic `0x30` を holdoff する。これにより、送信済み reply の直後に次の periodic input を続けない。すでに送信 lock を取得している input report は中断せず、reply はその完了後に同じ timer sequence で送る。
+`0x21`をcallback内で送信した後、`ReportSender`は一定時間の自動`0x30`をholdoffする。対象は`ProtocolHandshake`とready後`ReportLoop`であり、明示Direct入力とtrailing neutralは対象にしない。これにより、送信済みreplyの直後に次の自動inputを続けない。すでに送信lockを取得しているinput reportは中断せず、replyはその完了後に同じtimer sequenceで送る。300 msの必要性は未検証であり、既存互換の値として維持する。
 
 ## 6. 初期対応 subcommand
 
