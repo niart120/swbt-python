@@ -2,7 +2,7 @@
 
 from swbt.gamepad.connection import ConnectionResult, ConnectionStatus
 from swbt.gamepad.constants import DISCONNECT_REQUEST_TIMEOUT_SECONDS
-from swbt.gamepad.core import (
+from swbt.gamepad.controllers import (
     DirectJoyConL,
     DirectJoyConR,
     DirectProController,

@@ -88,7 +88,7 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 |---|---|---|
 | `src/swbt/transport/_pairing_profile.py` | modify | `ControllerKind` 化と shape-only の値だけの受理 |
 | `src/swbt/gamepad/_config.py` | modify | profile kind config の削除 |
-| `src/swbt/gamepad/core.py` | modify | direct / periodic 共通の shape 利用 |
+| `src/swbt/gamepad/controllers.py` | modify | direct / periodic 共通の shape 利用 |
 | `src/swbt/gamepad/runtime.py` | modify | protocol profile の kind による guard |
 | `tests/` | modify | legacy / cross-mode / mismatch 回帰 |
 | `docs/`, `spec/initial/` | modify | profile 共有範囲の説明 |
