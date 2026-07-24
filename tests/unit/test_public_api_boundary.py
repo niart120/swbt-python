@@ -414,8 +414,17 @@ def test_default_transport_without_key_store_records_reconnect_limitation(
                 device_name: str,
                 profile: ProControllerProfile,
                 diagnostics: object,
+                profile_path: str | None,
+                expected_local_bluetooth_address: bytes | None,
             ) -> None:
-                _ = (adapter, device_name, profile, diagnostics)
+                _ = (
+                    adapter,
+                    device_name,
+                    profile,
+                    diagnostics,
+                    profile_path,
+                    expected_local_bluetooth_address,
+                )
 
             async def open(self) -> None:
                 return None
@@ -428,6 +437,9 @@ def test_default_transport_without_key_store_records_reconnect_limitation(
 
             async def request_disconnect(self) -> DisconnectRequestResult:
                 return DisconnectRequestResult(status="unavailable")
+
+            def local_bluetooth_address(self) -> bytes | None:
+                return None
 
             async def bonded_peer_address(self) -> str | None:
                 return None

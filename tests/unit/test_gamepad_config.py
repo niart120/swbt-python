@@ -27,8 +27,16 @@ def test_normalized_config_uses_profile_device_name_unless_user_overrides(
                 device_name: str,
                 profile: ProControllerProfile,
                 diagnostics: object,
+                profile_path: str | None,
+                expected_local_bluetooth_address: bytes | None,
             ) -> None:
-                _ = (adapter, profile, diagnostics)
+                _ = (
+                    adapter,
+                    profile,
+                    diagnostics,
+                    profile_path,
+                    expected_local_bluetooth_address,
+                )
                 captured_config["device_name"] = device_name
 
             async def open(self) -> None:
@@ -42,6 +50,9 @@ def test_normalized_config_uses_profile_device_name_unless_user_overrides(
 
             async def request_disconnect(self) -> DisconnectRequestResult:
                 return DisconnectRequestResult(status="unavailable")
+
+            def local_bluetooth_address(self) -> bytes | None:
+                return None
 
             async def bonded_peer_address(self) -> str | None:
                 return None
