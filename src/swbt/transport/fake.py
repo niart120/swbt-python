@@ -267,7 +267,7 @@ class FakeHidTransport:
         self,
         count: int,
         *,
-        max_wait: float = 0.5,
+        max_wait: float = 1.0,
     ) -> tuple[bytes, ...]:
         """Wait until at least count interrupt reports have been recorded."""
         async with asyncio.timeout(max_wait):
