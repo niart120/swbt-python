@@ -22,7 +22,7 @@ from swbt import (
 )
 ```
 
-## top-level export
+## トップレベルの公開要素
 
 トップレベルの公開 API と主な用途を説明します。
 
@@ -154,7 +154,7 @@ async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json
 
 `async with` は、`open()` から `close(neutral=True)` までのリソースを管理します。`__aenter__()` は、HID 接続待ち受け、ペアリング、ペアリング情報を用いた再接続を開始しません。
 
-`open()` は、transport、下位レイヤーのコールバック、トレース出力、送信処理を準備します。周期送信型ではレポートループも準備し、直接送信型では周期タスクを作りません。HID 接続待ち受けは開始しません。transport を開く処理に失敗した場合は、`TransportOpenError` または下位レイヤーの例外が送出されます。
+`open()` は、transport、下位レイヤーのコールバック、トレース出力、送信処理を準備します。周期送信型では通常のレポートループも準備します。直接送信型は、利用者の入力を周期送信するタスクを `open()` では作りません。HID 接続待ち受けは開始しません。transport を開く処理に失敗した場合は、`TransportOpenError` または下位レイヤーの例外が送出されます。
 
 `close(neutral=True)` は、接続中ならニュートラル入力を試み、周期送信型のレポートループを停止し、接続先に対する切断要求を試み、最後に transport を閉じます。直接送信型でも、`close(neutral=True)` に限ってニュートラル入力を 1 件送信し、成功後に入力状態を確定します。`close(neutral=False)` は、終了処理用の入力レポートを追加しません。
 
@@ -168,7 +168,7 @@ async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json
 | `connect(timeout=None, allow_pairing=False)` | 保存済みペアリング情報があれば再接続を優先し、ない場合は `allow_pairing=True` のときだけペアリングを試みる。 |
 | `try_connect(timeout=None, allow_pairing=False)` | `connect()` と同じ戦略で接続を試み、接続結果を `ConnectionResult` として返す。 |
 
-`pair()` / `connect()` / `reconnect()` は、HID リンクがつながっただけでは戻りません。対象機器から通常入力レポート `0x30` が選択され、0 以外のプレイヤーライトが設定され、その応答送信が完了すると成功します。`create_profile()` も同じ条件を満たした controller object だけを返します。接続初期化中の `status().connection_state` は `"initializing"`、利用可能になると `"connected"` です。
+`pair()` / `connect()` / `reconnect()` は、HID リンクがつながっただけでは戻りません。対象機器から通常入力レポート `0x30` が選択され、0 以外のプレイヤーライトが設定され、その応答送信が完了すると成功します。`create_profile()` も同じ条件を満たしたコントローラーオブジェクトだけを返します。接続初期化中の `status().connection_state` は `"initializing"`、利用可能になると `"connected"` です。
 
 接続できない場合や初期サブコマンドへの応答に失敗した場合は `ConnectionFailedError`、リンク接続から初期化完了までの期限を超えた場合は `ConnectionTimeoutError` が送出されます。現在の接続先が複数記録されたプロファイルまたはペアリング情報の保存ファイルを指定した場合は、`InvalidKeyStoreError` が送出されます。
 
@@ -213,7 +213,7 @@ async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json
 
 ### 直接送信型
 
-直接送信型の操作が正常終了すると、入力レポート 1 件の送信と入力状態の確定が完了します。`DirectProController`、`DirectJoyConL`、`DirectJoyConR` はレポートループを持ちません。完全な入力状態は `send(state)` で送信します。意味的な入力操作も、最後に正常送信した状態から候補を作り、送信に成功した場合だけ確定します。未接続、プロファイル検査、transport 送信で失敗した場合、`snapshot()` は直前に正常送信した状態を維持します。
+直接送信型の操作が正常終了すると、入力レポート 1 件の送信と入力状態の確定が完了します。`DirectProController`、`DirectJoyConL`、`DirectJoyConR` は、接続初期化後に利用者入力を周期送信しません。接続初期化中は、対象機器が通常入力レポート `0x30` を選択してからプレイヤー割り当てが完了するまで、ニュートラル入力を内部で周期送信します。完全な入力状態は `send(state)` で送信します。意味的な入力操作も、最後に正常送信した状態から候補を作り、送信に成功した場合だけ確定します。未接続、プロファイル検査、transport 送信で失敗した場合、`snapshot()` は直前に正常送信した状態を維持します。
 
 直接送信型では、`press()`、`release()`、`sticks()`、`lstick()`、`rstick()`、`imu()`、`neutral()` が正常終了するたびに入力レポートを 1 件送信します。直接送信型の `send(state)` と意味的な入力操作は接続済みであることを必要とし、送信に失敗した場合は入力状態を確定しません。
 
@@ -287,8 +287,8 @@ async with JoyConL(
 
 `apply(state)` と `send(state)` でも同じ制約を検査します。`JoyConL` または `DirectJoyConL` に右スティック入力や `A`、`B`、`X`、`Y` 入力を含む `InputState`、`JoyConR` または `DirectJoyConR` に左スティック入力や十字キー入力を含む `InputState` を渡すと `UnsupportedInputError` が送出されます。
 
-すべての具象クラスは `profile_path` を使えます。プロファイルは `pro` / `joycon_l` / `joycon_r` のコントローラー形状を持つため、異なるコントローラー形状では別の保存先を使ってください。直接送信型と周期送信型は同じコントローラー形状のプロファイルを共有できますが、方式間再利用の実機検証は未実施です。
-Joy-Con の初期化では、ライブラリが `0x04` 応答に SL / SR の保持時間を返します。追加の SR+SL 入力レポートは自動送信しません。この応答だけで Joy-Con L/R が 0 以外のプレイヤーライトへ到達するかは実機未検証です。到達しない場合、接続 API は成功せずタイムアウトします。
+すべての具象クラスは `profile_path` を使えます。プロファイルは `pro` / `joycon_l` / `joycon_r` のコントローラー形状を持つため、異なるコントローラー形状では別の保存先を使ってください。直接送信型と周期送信型は同じコントローラー形状のプロファイルを共有できます。Pro Controller では方式間の再利用を実機確認済みですが、Joy-Con L/R では未確認です。
+Joy-Con の初期化では、ライブラリが `0x04` 応答に SL / SR の保持時間を返します。登録用の SR+SL 入力レポートを追加送信する必要はありません。2026-07-24 に Windows 11 / CSR8510 A10 / WinUSB の構成で、Joy-Con L/R ともこの応答だけで 0 以外のプレイヤーライトへ到達することを確認しました。別の OS、ドングル、対象機器のファームウェアでは未確認です。
 
 OS、ドングル、ファームウェアをまたぐ互換性は未検証です。
 

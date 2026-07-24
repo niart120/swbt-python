@@ -8,7 +8,7 @@
 channel が開いた時点ではなく、Switch の初期 subcommand に応答し、通常入力を
 受け付けられる protocol ready へ到達した時点として定義する。
 
-`create_profile()` は protocol ready に到達してから controller object を返す。
+`create_profile()` は protocol ready に到達してからコントローラーオブジェクトを返す。
 `pair()`、`reconnect()`、`connect()` と対応する `try_*` API も同じ完了境界を使う。
 Periodic / Direct の送信方式はこの境界を共有する。
 
@@ -94,15 +94,15 @@ Periodic / Direct の送信方式はこの境界を共有する。
 | Joy-Con L 登録 | 初期 sequence の応答後に SR+SL `000030` を hold して登録成功 | hardware observation | `spec/hardware-test-log.md` 2026-07-06 / 2026-07-07 | tested condition only |
 | Joy-Con R 登録 | 初期 sequence の応答後に SR+SL `300000` を hold して登録成功。`0x22` を追加観測 | hardware observation | `spec/hardware-test-log.md` 2026-07-07 | tested condition only |
 | 全 profile 共通の固定 required set | firmware と profile を問わず 9 種類すべてが必須 | unverified hypothesis | stable source なし | completion gate にしない |
-| `0x30` ACK | swbt-python / joycontrol は `0x80`、既存 source-audit fixture と swbt-daemon は `0xb0` | implementation fact conflict | local implementations、joycontrol | fixtureを再監査し、ACK固定値をready判定に使わない。`0x80`は今回の全profile実機runで受理 |
+| player lights ACK | `0x30 SET_PLAYER_LIGHTS` は swbt-python / joycontrol / swbt-daemon とも simple ACK `0x80`。`0x31 GET_PLAYER_LIGHTS` は player lights 1 byte を伴う ACK `0xb0` | implementation fact | local implementations、joycontrol | `0x30` と `0x31` を分離して source-audit fixture を訂正。現行 swbt-python は `0x31` 未実装 |
 
 ### 5.2 未解決事項
 
 - Joy-Con L/R は今回のSwitch / adapter環境で、profile対応した`0x04` replyだけにより
   追加のSR+SL input reportなしでnonzero player lightsへ到達した。別firmwareやadapterへ
   一般化できる根拠はない。
-- `0x30` ACK の `0x80` / `0xb0` 差は実装間差分として残る。現行swbt-pythonの
-  `0x80` は今回の全profile実機runで受理されたが、cross-firmware guaranteeにはしない。
+- `0x30 SET_PLAYER_LIGHTS` の ACK は `0x80` で実装間差分はない。`0xb0` は
+  `0x31 GET_PLAYER_LIGHTS` の ACK であり、現行swbt-pythonは`0x31`を実装していない。
 - Nintendo 公式の公開 protocol 仕様は確認できていない。source fact は公開された
   reverse engineering notes の記述範囲を表す。
 
@@ -289,7 +289,7 @@ Direct は ready 前の利用者 input operation を拒否する。subcommand re
 | `tests/unit/test_subcommand_responder.py` | modify | profile 対応 `0x04`、`0x30` validation |
 | `tests/unit/test_protocol_session.py` | new | ready predicate と reset |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | 全 profile / reporting type の lifecycle |
-| `tests/unit/fixtures/source_audit/switch_protocol_values.toml` | modify | trigger elapsed policy と `0x30` ACK conflict の監査結果 |
+| `tests/unit/fixtures/source_audit/switch_protocol_values.toml` | modify | trigger elapsed policy と player lights SET / GET ACK の監査結果 |
 | `tests/hardware/test_pairing_profile.py` | modify | profile ごとの ready trace / UI gate |
 | `spec/initial/api.md` | modify | object return / connected semantics |
 | `spec/initial/lifecycle.md` | modify | initializing / ready state |
@@ -364,7 +364,7 @@ Direct は ready 前の利用者 input operation を拒否する。subcommand re
 - [x] 固定 subcommand 集合を public completion gate から除外した
 - [x] Joy-Con の profile 対応 trigger elapsed policy を記録した
 - [x] 実機実行条件を記録した
-- [x] `0x30` ACK conflict を再監査した
+- [x] `0x30` / `0x31` の ACK を再監査し、SET / GET の混同を訂正した
 - [x] 実装と local gate を完了した
 - [x] Pro Controller / Joy-Con L / Joy-Con R の実機 gate を完了した
 - [x] 初期設計文書へ完了後の contract を反映した

@@ -61,7 +61,7 @@ handoff = ["unit_001", "unit_005"]
 id = "subcommand_reply_payloads"
 fixture_name = "subcommand_reply_payload_classification"
 area = "protocol"
-value = "simple ACK=0x80; device info ACK=0x82; trigger buttons elapsed ACK=0x83; SPI read ACK=0x90; MCU config ACK=0xa0; player lights ACK=0xb0"
+value = "simple ACK=0x80, including SET_PLAYER_LIGHTS 0x30; device info ACK=0x82; trigger buttons elapsed ACK=0x83; SPI read ACK=0x90; MCU config ACK=0xa0; GET_PLAYER_LIGHTS 0x31 ACK=0xb0 with one-byte player-lights data"
 classification = "implementation fact"
 source = [
     'E:\documents\VSCodeWorkspace\swbt-daemon\spec\references\switch-subcommand-dispatcher-core.md',
@@ -255,7 +255,7 @@ handoff = ["unit_069"]
 id = "protocol_ready_player_lights_policy"
 fixture_name = "protocol_ready_player_lights_policy"
 area = "protocol"
-value = "swbt-python treats a connection as protocol ready only after supported report mode 0x30 and a nonzero player-lights 0x30 payload have both been accepted and replied to in the same SwitchHidSession. The 0x30 payload is a player-light bitfield; zero is an observed intermediate value. joycontrol waits for player lights after replying. swbt-python and joycontrol use ACK 0x80, while the older swbt-daemon audit records 0xb0, so ACK equality is not part of the readiness predicate."
+value = "swbt-python treats a connection as protocol ready only after supported report mode 0x30 and a nonzero SET_PLAYER_LIGHTS 0x30 payload have both been accepted and replied to in the same SwitchHidSession. The payload is a player-light bitfield; zero is an observed intermediate value. joycontrol waits for player lights after replying. swbt-python, joycontrol, and swbt-daemon use simple ACK 0x80 for SET_PLAYER_LIGHTS 0x30. ACK 0xb0 belongs to GET_PLAYER_LIGHTS 0x31 with one-byte player-lights data, which swbt-python does not currently implement. ACK equality is not part of the readiness predicate."
 classification = "implementation fact"
 source = [
     'https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/d2ece786a81b5b72a7ddc2742ce97a2afa7a637f/bluetooth_hid_subcommands_notes.md',

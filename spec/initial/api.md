@@ -202,7 +202,7 @@ class DirectProController(DirectSwitchGamepad):
 
 全 concrete controller は `profile_path` と `create_profile()` を持つ。profile は adapter identity の選択方法と pairing key を同じ envelope に保存する。
 
-`create_profile()` は HID control / interrupt channel の接続だけでは controller object
+`create_profile()` は HID control / interrupt channel の接続だけではコントローラーオブジェクト
 を返さない。同じ接続 session で `0x03 30` と 0 以外の `0x30` player lights を受信し、
 各 reply の transport 送信が完了した protocol ready 後に返す。この完了条件は
 Pro Controller、Joy-Con L/R、Periodic / Direct で共通とする。
