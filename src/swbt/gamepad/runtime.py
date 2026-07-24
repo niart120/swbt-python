@@ -16,11 +16,7 @@ from swbt.errors import (
     InvalidInputError,
 )
 from swbt.gamepad._config import _GamepadConfig
-from swbt.gamepad.connection import (
-    ConnectionResult,
-    ConnectionWorkflow,
-    raise_if_connection_failed,
-)
+from swbt.gamepad.connection import ConnectionResult
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.input_report import InputReportBuilder
@@ -108,18 +104,6 @@ class ControllerRuntime:
         self._is_open = False
         self._close_in_progress = False
         self._configured_device_info_bluetooth_address: bytes | None = None
-        self._connection_workflow = ConnectionWorkflow(
-            clear_connected=self._prepare_connection_attempt,
-            close_neutral=self._close_neutral_for_connection_workflow,
-            diagnostics=self._diagnostics,
-            ensure_open=self.open,
-            get_transport=self._connection_transport,
-            profile_path=self._config.profile_path,
-            pair=self._pair_for_connection_workflow,
-            set_connection_state=self._set_connection_state,
-            transport_was_injected=self._transport_was_injected,
-            wait_for_connected=self._wait_for_reconnect_connected_for_workflow,
-        )
 
     async def open(self) -> None:
         """Open the configured transport.
@@ -255,7 +239,7 @@ class ControllerRuntime:
             ConnectionTimeoutError: The active reconnect attempt timed out.
         """
         result = await self.try_reconnect(timeout=timeout)
-        raise_if_connection_failed(result)
+        self._raise_if_connection_failed(result)
 
     async def try_reconnect(
         self,
@@ -270,7 +254,95 @@ class ControllerRuntime:
         Returns:
             ConnectionResult: Reconnect route, status, selected peer, and peer count.
         """
-        return await self._connection_workflow.try_reconnect(timeout=timeout)
+        await self.open()
+        transport = self._require_connection_transport()
+        if self._config.profile_path is None and not self._transport_was_injected:
+            self._diagnostics.record_event(
+                "reconnect_profile_unavailable",
+                reason="profile_path_none",
+                route="active_reconnect",
+            )
+        peer_address = await transport.bonded_peer_address()
+        peer_count = 0 if peer_address is None else 1
+        self._diagnostics.record_event(
+            "bonded_peers_discovered",
+            peer_count=peer_count,
+            selection="none" if peer_address is None else "selected",
+        )
+        if peer_address is None:
+            self._diagnostics.record_event(
+                "active_reconnect_result",
+                peer_count=0,
+                route="active_reconnect",
+                status="no_bond",
+            )
+            return ConnectionResult(
+                route="active_reconnect",
+                status="no_bond",
+                peer_count=0,
+            )
+
+        self._connection_state = "reconnecting"
+        self._prepare_connection_attempt()
+        self._diagnostics.record_event(
+            "active_reconnect_attempt",
+            peer_address=peer_address,
+            route="active_reconnect",
+        )
+        try:
+
+            async def reconnect_and_wait() -> None:
+                await transport.connect_bonded_peer(
+                    peer_address,
+                    connect_timeout=timeout,
+                )
+                await self._wait_for_reconnect_connected(max_wait=None)
+
+            if timeout is None:
+                await reconnect_and_wait()
+            else:
+                async with asyncio.timeout(timeout):
+                    await reconnect_and_wait()
+        except TimeoutError:
+            self._diagnostics.record_event(
+                "active_reconnect_result",
+                failure_reason="connection_timeout",
+                peer_address=peer_address,
+                route="active_reconnect",
+                status="timeout",
+            )
+            await self.close(neutral=True)
+            return ConnectionResult(
+                route="active_reconnect",
+                status="timeout",
+                peer_address=peer_address,
+                peer_count=1,
+            )
+        except asyncio.CancelledError as error:
+            if _current_task_is_cancelling():
+                raise
+            return await self._record_active_reconnect_transport_error(
+                error,
+                peer_address=peer_address,
+            )
+        except Exception as error:  # noqa: BLE001
+            return await self._record_active_reconnect_transport_error(
+                error,
+                peer_address=peer_address,
+            )
+
+        self._diagnostics.record_event(
+            "active_reconnect_result",
+            peer_address=peer_address,
+            route="active_reconnect",
+            status="connected",
+        )
+        return ConnectionResult(
+            route="active_reconnect",
+            status="connected",
+            peer_address=peer_address,
+            peer_count=1,
+        )
 
     async def connect(
         self,
@@ -293,7 +365,7 @@ class ControllerRuntime:
             timeout=timeout,
             allow_pairing=allow_pairing,
         )
-        raise_if_connection_failed(result)
+        self._raise_if_connection_failed(result)
 
     async def try_connect(
         self,
@@ -311,10 +383,21 @@ class ControllerRuntime:
         Returns:
             ConnectionResult: Route and status chosen by reconnect or pairing fallback.
         """
-        return await self._connection_workflow.try_connect(
-            timeout=timeout,
-            allow_pairing=allow_pairing,
+        reconnect_result = await self.try_reconnect(timeout=timeout)
+        if reconnect_result.status != "no_bond" or not allow_pairing:
+            return reconnect_result
+        self._diagnostics.record_event(
+            "connect_pairing_fallback",
+            reason="no_bond",
+            route="pairing",
         )
+        try:
+            await self.pair(timeout=timeout)
+        except ConnectionTimeoutError:
+            return ConnectionResult(route="pairing", status="timeout")
+        except ConnectionFailedError:
+            return ConnectionResult(route="pairing", status="failed")
+        return ConnectionResult(route="pairing", status="connected")
 
     async def close(self, *, neutral: bool = True) -> None:
         """Close the transport and leave the gamepad in a closed state.
@@ -702,29 +785,50 @@ class ControllerRuntime:
             return self._config.adapter
         return "custom"
 
-    def _connection_transport(self) -> HidDeviceTransport | None:
+    def _require_connection_transport(self) -> HidDeviceTransport:
+        if self._transport is None:
+            msg = "gamepad is not open"
+            raise ClosedError(msg)
         return self._transport
 
-    async def _close_neutral_for_connection_workflow(self) -> None:
+    def _raise_if_connection_failed(self, result: ConnectionResult) -> None:
+        if result.status == "connected":
+            return
+        if result.status == "timeout":
+            msg = "connection timed out"
+            raise ConnectionTimeoutError(msg)
+        msg = f"connection failed: {result.status}"
+        raise ConnectionFailedError(msg)
+
+    async def _record_active_reconnect_transport_error(
+        self,
+        error: BaseException,
+        *,
+        peer_address: str,
+    ) -> ConnectionResult:
+        self._diagnostics.record_event(
+            "active_reconnect_result",
+            error_type=type(error).__name__,
+            failure_reason="transport_error",
+            message=str(error),
+            peer_address=peer_address,
+            route="active_reconnect",
+            status="failed",
+        )
+        self._diagnostics.record_error(error, recoverable=True)
         await self.close(neutral=True)
-
-    async def _pair_for_connection_workflow(self, timeout: float | None) -> None:  # noqa: ASYNC109
-        await self.pair(timeout=timeout)
-
-    def _set_connection_state(self, state: str) -> None:
-        self._connection_state = state
+        return ConnectionResult(
+            route="active_reconnect",
+            status="failed",
+            peer_address=peer_address,
+            peer_count=1,
+        )
 
     def _prepare_connection_attempt(self) -> None:
         self._connected_event.clear()
         self._connection_attempt_event.clear()
         self._connection_attempt_error = None
         self._connection_route = None
-
-    async def _wait_for_reconnect_connected_for_workflow(
-        self,
-        timeout: float | None,  # noqa: ASYNC109
-    ) -> None:
-        await self._wait_for_reconnect_connected(max_wait=timeout)
 
     async def _wait_for_disconnect_request_closed(self) -> bool:
         try:
@@ -996,3 +1100,8 @@ def _format_optional_byte(value: int | None) -> str | None:
 
 def _format_subcommands(subcommands: frozenset[int]) -> list[str]:
     return [f"0x{subcommand_id:02x}" for subcommand_id in sorted(subcommands)]
+
+
+def _current_task_is_cancelling() -> bool:
+    task = asyncio.current_task()
+    return task is not None and task.cancelling() > 0

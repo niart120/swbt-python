@@ -37,20 +37,6 @@ class DisconnectRequestResult:
     message: str | None = None
 
 
-@dataclass(frozen=True)
-class BondedPeer:
-    """Peer address discovered from a transport key store.
-
-    Args:
-        address: Bluetooth address of the bonded peer.
-
-    Attributes:
-        address: Bluetooth address of the bonded peer.
-    """
-
-    address: str
-
-
 class HidDeviceTransport(Protocol):
     """Abstract HID device transport used by concrete gamepads."""
 
@@ -86,17 +72,15 @@ class HidDeviceTransport(Protocol):
             bytes | None: Six-byte Bluetooth address, or ``None`` when unavailable.
         """
 
-    async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
-        """Return current reconnect candidates.
+    async def bonded_peer_address(self) -> str | None:
+        """Return the current reconnect peer address, when one exists.
 
-        Implementations must return zero or one peer. A transport that stores
-        multiple historical peers must expose only the current reconnect target
-        here. Multiple current peers are an invalid transport or key-store state
-        and should raise InvalidKeyStoreError rather than returning multiple
-        BondedPeer values.
+        Implementations must return the sole current peer address or ``None``.
+        Multiple current peers are an invalid transport or key-store state and
+        must raise ``InvalidKeyStoreError`` rather than selecting one.
 
         Returns:
-            tuple[BondedPeer, ...]: Zero or one current reconnect candidate.
+            str | None: The current reconnect peer address, or ``None``.
 
         Raises:
             InvalidKeyStoreError: More than one current reconnect candidate exists.
@@ -111,7 +95,7 @@ class HidDeviceTransport(Protocol):
         """Start an active reconnect attempt to a bonded peer.
 
         Args:
-            peer_address: Bluetooth address selected from ``list_bonded_peers()``.
+            peer_address: Bluetooth address returned by ``bonded_peer_address()``.
             connect_timeout: Maximum seconds for the reconnect attempt. ``None``
                 uses the transport default.
 

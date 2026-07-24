@@ -31,7 +31,7 @@ from swbt.transport._bumble_lifecycle import (
 )
 from swbt.transport._bumble_sdp import build_hid_service_records
 from swbt.transport._pairing_profile import PairingProfile
-from swbt.transport.base import BondedPeer, DisconnectRequestResult
+from swbt.transport.base import DisconnectRequestResult
 
 if TYPE_CHECKING:
     from bumble.transport.common import TransportSink, TransportSource
@@ -369,17 +369,20 @@ class BumbleHidTransport:
             return None
         return self._runtime.local_bluetooth_address
 
-    async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
-        """Return bonded peer addresses from the Bumble key store."""
+    async def bonded_peer_address(self) -> str | None:
+        """Return the sole current peer address from the Bumble key store."""
         self._require_open()
         if self._runtime is None:
-            return ()
+            return None
         await self._ensure_classic_runtime_ready(self._runtime)
         key_store = self._runtime.device.keystore
         if key_store is None:
-            return ()
+            return None
         entries = await key_store.get_all()
-        return tuple(BondedPeer(address=address) for address, _keys in entries)
+        if len(entries) > 1:
+            msg = "key store contains multiple current peers"
+            raise InvalidKeyStoreError(msg)
+        return entries[0][0] if entries else None
 
     async def connect_bonded_peer(
         self,

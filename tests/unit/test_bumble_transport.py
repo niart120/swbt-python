@@ -459,6 +459,18 @@ class FakeFailingKeyStore:
         return []
 
 
+class FakeStaticKeyStore:
+    """Fake key store with fixed current reconnect entries."""
+
+    def __init__(self, entries: list[tuple[str, object]]) -> None:
+        """Store entries returned by ``get_all()``."""
+        self._entries = entries
+
+    async def get_all(self) -> list[tuple[str, object]]:
+        """Return the configured current reconnect entries."""
+        return self._entries
+
+
 class FakeOpenError(Exception):
     """Fake exception raised by an injected opener."""
 
@@ -508,6 +520,41 @@ def test_bumble_initialize_device_configures_profile_key_store(
         )
 
         assert isinstance(fake_device.keystore, bumble_module._PairingProfileKeyStore)
+
+    asyncio.run(run())
+
+
+def test_bumble_bonded_peer_address_represents_zero_or_one_current_peer() -> None:
+    async def run() -> None:
+        device = FakeBumbleDevice()
+        key_store = FakeStaticKeyStore([])
+        device.keystore = key_store
+
+        async def open_transport(adapter: str) -> FakeBumbleHandle:
+            _ = adapter
+            return FakeBumbleHandle()
+
+        async def initialize_device(opened_handle: object) -> bumble_module._BumbleRuntime:
+            assert isinstance(opened_handle, FakeBumbleHandle)
+            return _fake_runtime(device=device)
+
+        transport = BumbleHidTransport(
+            adapter="usb:0",
+            _open_transport=open_transport,
+            _initialize_device=initialize_device,
+        )
+
+        await transport.open()
+        assert await transport.bonded_peer_address() is None
+
+        key_store._entries = [("01:02:03:04:05:06", object())]
+        assert await transport.bonded_peer_address() == "01:02:03:04:05:06"
+
+        key_store._entries.append(("0A:0B:0C:0D:0E:0F", object()))
+        with pytest.raises(InvalidKeyStoreError, match="multiple current peers"):
+            await transport.bonded_peer_address()
+
+        await transport.close()
 
     asyncio.run(run())
 

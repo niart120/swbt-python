@@ -29,12 +29,11 @@ class HidDeviceTransport(Protocol):
     async def start_advertising(self) -> None: ...
     async def close(self) -> None: ...
     async def request_disconnect(self) -> DisconnectRequestResult: ...
-    async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
-        """Return current reconnect candidates.
+    async def bonded_peer_address(self) -> str | None:
+        """Return the current reconnect address, or None when no bond exists.
 
-        Implementations must return zero or one peer. Multiple current peers are
-        an invalid transport or key-store state and should raise
-        InvalidKeyStoreError rather than returning multiple BondedPeer values.
+        Multiple current peers are an invalid transport or key-store state and
+        raise InvalidKeyStoreError rather than selecting one.
         """
     async def connect_bonded_peer(
         self,
@@ -92,9 +91,9 @@ HID control channel は host-to-device data の受信に使う。device-to-host 
 
 ### 2.6 reconnect / key store
 
-`list_bonded_peers()` と `connect_bonded_peer()` は、active reconnect のための最小境界である。key store は transport の構築時点で決まる。上位層は injected transport を後から再設定しない。
+`bonded_peer_address()` と `connect_bonded_peer()` は、active reconnect のための最小境界である。key store は transport の構築時点で決まる。上位層は injected transport を後から再設定しない。
 
-`list_bonded_peers()` は current reconnect candidate だけを見る。candidate が 0 件なら空 tuple、1 件ならその peer、2 件以上なら unsupported shape として `InvalidKeyStoreError` を投げる。historical / previous peer は返さない。JSON entry の順序や最終更新推定で current peer を選ばない。
+`bonded_peer_address()` は current reconnect candidate だけを見る。candidate が 0 件なら `None`、1 件なら address、2 件以上なら unsupported shape として `InvalidKeyStoreError` を投げる。historical / previous peer は返さない。JSON entry の順序や最終更新推定で current peer を選ばない。
 
 ## 3. `BumbleHidTransport`
 

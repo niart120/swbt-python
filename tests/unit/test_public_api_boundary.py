@@ -31,7 +31,7 @@ from swbt.gamepad import transport_factory as gamepad_transport_factory
 from swbt.gamepad._config import _GamepadConfig
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
-from swbt.transport.base import BondedPeer, DisconnectRequestResult, HidDeviceTransport
+from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
 from swbt.transport.fake import FakeHidTransport
 from tests.gamepad_factory import make_pro_controller  # ty: ignore[unresolved-import]
 
@@ -426,8 +426,8 @@ def test_normalized_config_uses_profile_device_name_unless_user_overrides(
             async def request_disconnect(self) -> DisconnectRequestResult:
                 return DisconnectRequestResult(status="unavailable")
 
-            async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
-                return ()
+            async def bonded_peer_address(self) -> str | None:
+                return None
 
             async def connect_bonded_peer(
                 self,
@@ -610,12 +610,15 @@ def test_hid_transport_has_no_key_store_mutation_hook() -> None:
     assert not hasattr(HidDeviceTransport, "configure_key_store_path")
 
 
-def test_hid_transport_bonded_peer_listing_documents_current_candidate_contract() -> None:
-    doc = inspect.getdoc(HidDeviceTransport.list_bonded_peers)
+def test_hid_transport_bonded_peer_address_documents_current_peer_contract() -> None:
+    signature = inspect.signature(HidDeviceTransport.bonded_peer_address)
+    annotation_text = repr(signature.return_annotation)
+    doc = inspect.getdoc(HidDeviceTransport.bonded_peer_address)
 
+    assert list(signature.parameters) == ["self"]
+    assert "str | None" in annotation_text
     assert doc is not None
-    assert "current reconnect candidates" in doc
-    assert "zero or one peer" in doc
+    assert "current reconnect peer address" in doc
     assert "InvalidKeyStoreError" in doc
 
 
@@ -660,8 +663,8 @@ def test_default_transport_without_key_store_records_reconnect_limitation(
             async def request_disconnect(self) -> DisconnectRequestResult:
                 return DisconnectRequestResult(status="unavailable")
 
-            async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
-                return ()
+            async def bonded_peer_address(self) -> str | None:
+                return None
 
             async def connect_bonded_peer(
                 self,
