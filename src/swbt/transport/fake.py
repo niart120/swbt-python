@@ -5,7 +5,6 @@ from typing import Literal
 
 from swbt.errors import ClosedError, InvalidKeyStoreError
 from swbt.transport.base import (
-    BondedPeer,
     ConnectedCallback,
     ControlDataCallback,
     DisconnectedCallback,
@@ -157,13 +156,13 @@ class FakeHidTransport:
         """Return the configured fake local Bluetooth address."""
         return self._local_bluetooth_address
 
-    async def list_bonded_peers(self) -> tuple[BondedPeer, ...]:
-        """Return the fake current reconnect candidate configured by a test."""
+    async def bonded_peer_address(self) -> str | None:
+        """Return the fake current reconnect address configured by a test."""
         self._require_open()
         if len(self._bonded_peer_addresses) > 1:
             msg = "fake transport contains multiple current reconnect candidates"
             raise InvalidKeyStoreError(msg)
-        return tuple(BondedPeer(address=address) for address in self._bonded_peer_addresses)
+        return self._bonded_peer_addresses[0] if self._bonded_peer_addresses else None
 
     async def connect_bonded_peer(
         self,

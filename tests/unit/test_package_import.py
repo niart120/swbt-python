@@ -69,7 +69,6 @@ def test_rearchitecture_target_root_hides_internal_transport_type() -> None:
 
     assert "HidDeviceTransport" not in public_exports
     assert "DisconnectRequestResult" not in public_exports
-    assert "BondedPeer" not in public_exports
 
 
 def test_rearchitecture_target_root_hides_internal_config_type() -> None:

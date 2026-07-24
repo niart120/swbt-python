@@ -1,62 +1,20 @@
-import asyncio
-import json
-from io import StringIO
+"""Connection ownership boundaries."""
 
-from swbt.diagnostics import DiagnosticsRecorder
-from swbt.gamepad.connection import ConnectionWorkflow
-from swbt.transport.fake import FakeHidTransport
+from swbt.gamepad import connection
+from swbt.gamepad.runtime import ControllerRuntime
+from swbt.transport.base import HidDeviceTransport
 
 
-def test_connection_workflow_records_no_bond_result() -> None:
-    async def run() -> None:
-        trace = StringIO()
-        transport = FakeHidTransport()
-
-        async def ensure_open() -> None:
-            await transport.open()
-
-        async def close_neutral() -> None:
-            await transport.close()
-
-        async def pair(timeout: float | None) -> None:  # noqa: ASYNC109
-            _ = timeout
-
-        async def wait_for_connected(timeout: float | None) -> None:  # noqa: ASYNC109
-            _ = timeout
-
-        def set_connection_state(state: str) -> None:
-            _ = state
-
-        def clear_connected() -> None:
-            return
-
-        workflow = ConnectionWorkflow(
-            clear_connected=clear_connected,
-            close_neutral=close_neutral,
-            diagnostics=DiagnosticsRecorder(trace_writer=trace),
-            ensure_open=ensure_open,
-            get_transport=lambda: transport,
-            profile_path=None,
-            pair=pair,
-            set_connection_state=set_connection_state,
-            transport_was_injected=False,
-            wait_for_connected=wait_for_connected,
-        )
-
-        result = await workflow.try_reconnect(timeout=0.1)
-        events = [json.loads(line) for line in trace.getvalue().splitlines()]
-
-        assert result.status == "no_bond"
-        assert {
-            "event": "reconnect_profile_unavailable",
-            "reason": "profile_path_none",
-            "route": "active_reconnect",
-        } in events
-        assert {
-            "event": "active_reconnect_result",
-            "peer_count": 0,
-            "route": "active_reconnect",
-            "status": "no_bond",
-        } in events
-
-    asyncio.run(run())
+def test_runtime_owns_connection_workflow_and_transport_exposes_single_peer() -> None:
+    assert not hasattr(connection, "ConnectionWorkflow")
+    assert not hasattr(connection, "EnsureOpen")
+    assert not hasattr(HidDeviceTransport, "list_bonded_peers")
+    assert hasattr(HidDeviceTransport, "bonded_peer_address")
+    for helper_name in (
+        "_connection_transport",
+        "_close_neutral_for_connection_workflow",
+        "_pair_for_connection_workflow",
+        "_set_connection_state",
+        "_wait_for_reconnect_connected_for_workflow",
+    ):
+        assert not hasattr(ControllerRuntime, helper_name)
