@@ -6,7 +6,9 @@ import swbt
 
 
 def test_production_package_has_no_test_gamepad_factory_module() -> None:
-    assert importlib.util.find_spec("swbt._testing.gamepad") is None
+    testing_package = importlib.util.find_spec("swbt._testing")
+
+    assert testing_package is None or importlib.util.find_spec("swbt._testing.gamepad") is None
 
 
 def test_package_exports_public_gamepad_surface() -> None:
