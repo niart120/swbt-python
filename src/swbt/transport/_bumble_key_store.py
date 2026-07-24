@@ -3,7 +3,7 @@
 import copy
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import InvalidKeyStoreError
@@ -12,46 +12,16 @@ from swbt.transport._pairing_profile import KeyStoreNamespaces, PairingProfile
 PREVIOUS_NAMESPACE_PREFIX = "swbt.previous::"
 
 
-class _BumbleJsonKeyStoreRuntime(Protocol):
-    namespace: str
-
-    async def load(
-        self,
-    ) -> tuple[dict[str, dict[str, dict[str, object]]], dict[str, dict[str, object]]]:
-        """Load the full JSON DB and this store's current key map."""
-
-    async def save(self, db: dict[str, dict[str, dict[str, object]]]) -> None:
-        """Save the full JSON DB."""
-
-    async def get(self, name: str) -> object | None:
-        """Return one key entry."""
-
-    async def get_all(self) -> list[tuple[str, object]]:
-        """Return all current key entries."""
-
-    async def delete(self, name: str) -> None:
-        """Delete one current key entry."""
-
-    async def delete_all(self) -> None:
-        """Delete all current key entries."""
-
-    async def get_resolving_keys(self) -> object:
-        """Return LE resolving keys for Bumble internals."""
-
-
-class _CurrentPreviousProfileKeyStore:
-    """Bumble-compatible JSON key store with one previous generation."""
+class _PairingProfileKeyStore:
+    """Bumble-compatible profile key store with one previous generation."""
 
     def __init__(
         self,
         *,
-        filename: str | Path,
-        namespace: str | Callable[[], str] | None = None,
+        profile_path: str | Path,
+        namespace: str | Callable[[], str],
     ) -> None:
-        if namespace is None:
-            msg = "namespace is required"
-            raise ValueError(msg)
-        self._filename = Path(filename)
+        self._profile_path = Path(profile_path)
         self._namespace = namespace if isinstance(namespace, str) else None
         self._namespace_resolver = None if isinstance(namespace, str) else namespace
         self.last_update_previous_saved = False
@@ -107,16 +77,16 @@ class _CurrentPreviousProfileKeyStore:
         """Return current LE resolving keys for Bumble internals."""
         return await self._current_store().get_resolving_keys()
 
-    def _current_store(self) -> _BumbleJsonKeyStoreRuntime:
-        from bumble.keys import JsonKeyStore  # noqa: PLC0415
-
-        return cast(
-            "_BumbleJsonKeyStoreRuntime",
-            JsonKeyStore(self._resolve_namespace(), str(self._filename)),
+    def _current_store(self) -> "_PairingProfileNamespaceStore":
+        return _PairingProfileNamespaceStore(
+            profile_path=self._profile_path,
+            namespace=self._resolve_namespace(),
+            adapter_default=self._namespace_resolver is not None,
         )
 
-    def _previous_namespace(self, current_store: object) -> str:
-        return f"{PREVIOUS_NAMESPACE_PREFIX}{cast('Any', current_store).namespace}"
+    @staticmethod
+    def _previous_namespace(current_store: "_PairingProfileNamespaceStore") -> str:
+        return f"{PREVIOUS_NAMESPACE_PREFIX}{current_store.namespace}"
 
 
 class _PairingProfileNamespaceStore:
@@ -187,28 +157,6 @@ class _PairingProfileNamespaceStore:
         raise InvalidKeyStoreError(msg)
 
 
-class _PairingProfileKeyStore(_CurrentPreviousProfileKeyStore):
-    """Current/previous Bumble key store persisted inside a profile envelope."""
-
-    def __init__(
-        self,
-        *,
-        profile_path: str | Path,
-        namespace: str | Callable[[], str],
-    ) -> None:
-        super().__init__(filename=profile_path, namespace=namespace)
-
-    def _current_store(self) -> _BumbleJsonKeyStoreRuntime:
-        return cast(
-            "_BumbleJsonKeyStoreRuntime",
-            _PairingProfileNamespaceStore(
-                profile_path=self._filename,
-                namespace=self._resolve_namespace(),
-                adapter_default=self._namespace_resolver is not None,
-            ),
-        )
-
-
 class _DiagnosticKeyStore:
     """Key store wrapper that records write outcome without logging key material."""
 
@@ -263,7 +211,7 @@ class _DiagnosticKeyStore:
         return getattr(self._key_store, name)
 
     def _generation_fields(self) -> dict[str, object]:
-        if not isinstance(self._key_store, _CurrentPreviousProfileKeyStore):
+        if not isinstance(self._key_store, _PairingProfileKeyStore):
             return {}
         return {
             "generation": "current",
