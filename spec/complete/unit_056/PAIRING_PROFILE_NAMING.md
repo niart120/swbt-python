@@ -61,16 +61,16 @@
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| implemented / smoke passed | `local_address` で作成した profile が従来の JSON payload を保存・読み込みできる | regression | unit | no | system Python の smoke test で確認。pytest は環境遮断 |
-| implemented / blocked | adapter identity 準備失敗が新しい例外型で復旧を要求する | regression | unit | no | adapter は開かない fake session。pytest は環境遮断 |
-| implemented / blocked | concrete controller が `local_address` で profile を作成して再利用できる | regression | integration | no | fake transport。pytest は環境遮断 |
+| green | `local_address` で作成した profile が従来の JSON payload を保存・読み込みできる | regression | unit | no | 現行 unit test と CI で確認 |
+| green | adapter identity 準備失敗が新しい例外型で復旧を要求する | regression | unit | no | adapterを開かない fake sessionで確認 |
+| green | concrete controller が `local_address` で profile を作成して再利用できる | regression | integration | no | fake transport integrationで確認 |
 
 ## 8. 文書検証計画
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| API / usage / hardware docs | profile の作成と再利用 | 本仕様 §6、実装 | `uv run mkdocs build --strict` | manual pass / build blocked | `uv` cache が read-only |
-| release notes / agent brief | 例外名と用語 | 本仕様 §6、実装 | link / build | manual pass / build blocked | `uv` cache が read-only |
+| API / usage / hardware docs | profile の作成と再利用 | 本仕様 §6、実装 | `uv run --group docs mkdocs build --strict` | done | none |
+| release notes / agent brief | 例外名と用語 | 本仕様 §6、実装 | link / diff review | done | none |
 
 ## 9. 設計メモ
 
@@ -97,10 +97,10 @@
 | GitHub Actions CI #142 | passed | 新規 shape-only 値の保存と `direct_*` の未対応扱いを含む unit / integration test |
 | `ruff 0.15.20 format --check .` | passed | CI と同じ Ruff version を一時領域で実行 |
 | `ruff 0.15.20 check .` | passed | CI と同じ Ruff version を一時領域で実行 |
-| `uv run ty check --no-progress` | blocked | 同上 |
-| `uv run pytest tests/unit` | blocked | 同上。Bumble を含む依存が未導入 |
-| `uv run pytest tests/integration` | blocked | 同上 |
-| `uv run mkdocs build --strict` | blocked | 同上 |
+| `uv run ty check --no-progress` | pass | current mainでAll checks passed |
+| `uv run pytest tests/unit` | pass | current mainで439 passed |
+| `uv run pytest tests/integration` | pass | current mainで154 passed |
+| `uv run --group docs mkdocs build --strict` | pass | current mainでstrict build成功 |
 
 ## 12. 実機実行条件
 
@@ -115,7 +115,7 @@
 
 ## 13. 先送り事項
 
-- ReportingMode 分類の削除は unit_057 で扱う。
+- none（ReportingMode 分類の削除は unit_057 で完了）
 
 ## 14. チェックリスト
 

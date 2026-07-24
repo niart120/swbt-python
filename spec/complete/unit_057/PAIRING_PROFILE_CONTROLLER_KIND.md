@@ -64,17 +64,17 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| implemented / CI passed | 新規 profile が ReportingMode を含まない controller shape を保存する | regression | unit | no | 新規保存は `pro` / `joycon_l` / `joycon_r`。GitHub Actions CI #142 で確認 |
-| implemented / CI passed | 旧 direct kind を持つ JSON が未対応値として adapter open 前に失敗する | regression | unit | no | `direct_*` を特別扱いせず、既存の `controller_kind` 検証で拒否。GitHub Actions CI #142 で確認 |
-| implemented / local passed | 同じ controller shape の periodic / direct が profile を相互利用できる | regression | unit | no | Direct controller の `open()` が profile path と local address を fake transport factory へ渡すことを確認 |
-| implemented / CI passed | controller shape が異なる profile は adapter open 前に拒否される | regression | unit | no | `ControllerKind` 比較の guard を GitHub Actions CI #142 で確認 |
+| green | 新規 profile が ReportingMode を含まない controller shape を保存する | regression | unit | no | 新規保存は `pro` / `joycon_l` / `joycon_r`。CIと現行unitで確認 |
+| green | 旧 direct kind を持つ JSON が未対応値として adapter open 前に失敗する | regression | unit | no | `direct_*` を特別扱いせず、既存の `controller_kind` 検証で拒否 |
+| green | 同じ controller shape の periodic / direct が profile を相互利用できる | regression | unit | no | fake transport regression 3 passed |
+| green | controller shape が異なる profile は adapter open 前に拒否される | regression | unit | no | `ControllerKind`比較のguardを確認 |
 | deferred | Direct / Periodic 間 profile 再利用の実機 pairing / reconnect | characterization | hardware | yes | 明示承認と専用 adapter が必要 |
 
 ## 8. 文書検証計画
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| API / usage / hardware docs | プロファイルの再利用範囲 | 本仕様 §6、実装、対象 test | `uv run --with mkdocs mkdocs build --strict` | 2026-07-21 の docs-quality-review と strict build が pass | 実機共有は未検証 |
+| API / usage / hardware docs | プロファイルの再利用範囲 | 本仕様 §6、実装、対象 test | `uv run --group docs mkdocs build --strict` | done | Direct / Periodicの実機共有はdeferred |
 
 ## 9. 設計メモ
 
@@ -102,10 +102,10 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 | GitHub Actions CI #142 | passed | 新規 shape-only 値の保存と `direct_*` の未対応扱いを含む unit / integration test |
 | `ruff 0.15.20 format --check .` | passed | CI と同じ Ruff version を一時領域で実行 |
 | `ruff 0.15.20 check .` | passed | CI と同じ Ruff version を一時領域で実行 |
-| `uv run ty check --no-progress` | blocked | 同上 |
-| `uv run pytest tests/unit` | blocked | 同上。Bumble を含む依存が未導入 |
-| `uv run pytest tests/integration` | blocked | 同上 |
-| `uv run mkdocs build --strict` | blocked | 同上 |
+| `uv run ty check --no-progress` | pass | current mainでAll checks passed |
+| `uv run pytest tests/unit` | pass | current mainで439 passed |
+| `uv run pytest tests/integration` | pass | current mainで154 passed |
+| `uv run --group docs mkdocs build --strict` | pass | current mainでstrict build成功 |
 | `uv run pytest tests/unit/test_pairing_profile_runtime.py::test_direct_controller_reuses_profile_for_the_same_controller_shape -q` | passed | 3 passed。P2 review finding の fake transport regression |
 | `uv run --with mkdocs mkdocs build --strict` | passed | 2026-07-21。公開 docs の strict build |
 
@@ -113,16 +113,16 @@ pairing profile の `controller_kind` から、入力レポートの送信方式
 
 | 項目 | 内容 |
 |---|---|
-| 実機要否 | required for deferred characterization |
-| 承認範囲 | dedicated adapter open、target Switch pairing、active reconnect、normal close |
-| adapter | 実行直前に確認する専用 adapter |
+| 実機要否 | not required for this unit（deferred characterization only） |
+| 承認範囲 | この完了ではなし。将来実行する場合は明示承認を取得する |
+| adapter | この完了では該当なし |
 | 実行遮断 | 環境変数による実行遮断は採用しない。明示承認、対象 adapter、command、cleanup plan で管理する |
-| log / artifact | `spec/hardware-test-log.md` に環境、command、result、cleanup を記録する |
-| cleanup | normal close 後に dedicated adapter を切り離す |
+| log / artifact | この完了では新規記録なし。将来実行時は `spec/hardware-test-log.md` に記録する |
+| cleanup | この完了では該当なし |
 
 ## 13. 先送り事項
 
-- Direct / Periodic 間での実機 pairing / reconnect は hardware characterization として別途実行する。
+- Direct / Periodic 間での実機 pairing / reconnect は、今回のprofile shape分離の完了条件に含めない。fake transportで公開契約を確認済みであり、実機再検証の追加価値は低いため、release gateで必要になった場合だけ専用hardware runとして扱う。
 
 ## 14. チェックリスト
 
