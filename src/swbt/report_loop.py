@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from inspect import isawaitable
-from time import monotonic_ns
+from time import monotonic, monotonic_ns
 from typing import cast
 
 from swbt.diagnostics import DiagnosticsRecorder
@@ -33,6 +33,7 @@ class ReportSender:
         session: SwitchHidSession,
         diagnostics: DiagnosticsRecorder | None = None,
         clock_ns: Callable[[], int] = monotonic_ns,
+        monotonic_time: Callable[[], float] = monotonic,
     ) -> None:
         """Create a session-scoped serialized report sender."""
         self._transport = transport
@@ -40,6 +41,7 @@ class ReportSender:
         self._session = session
         self._diagnostics = diagnostics
         self._clock_ns = clock_ns
+        self._monotonic_time = monotonic_time
         self._timer = 0
         self._send_lock = asyncio.Lock()
         self._automatic_input_holdoff_until = 0.0
@@ -126,11 +128,11 @@ class ReportSender:
 
     def _hold_off_automatic_input_after_reply(self) -> None:
         self._automatic_input_holdoff_until = (
-            asyncio.get_running_loop().time() + REPLY_PERIODIC_HOLDOFF_SECONDS
+            self._monotonic_time() + REPLY_PERIODIC_HOLDOFF_SECONDS
         )
 
     def _is_automatic_input_held_off(self) -> bool:
-        return asyncio.get_running_loop().time() < self._automatic_input_holdoff_until
+        return self._monotonic_time() < self._automatic_input_holdoff_until
 
 
 class ReportLoop:
