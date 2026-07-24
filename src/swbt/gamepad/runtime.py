@@ -464,10 +464,7 @@ class ControllerRuntime:
         def transform(current: InputState) -> InputState:
             return current.with_buttons((*current.buttons, *buttons))
 
-        if self._reporting_mode == "direct":
-            await self._send_direct_update(transform)
-            return
-        await self._state_store.update(
+        await self._update_input_state(
             transform,
             validate=self._controller_profile.validate_input_state,
         )
@@ -513,10 +510,7 @@ class ControllerRuntime:
         def transform(current: InputState) -> InputState:
             return current.with_sticks(left_stick=left, right_stick=right)
 
-        if self._reporting_mode == "direct":
-            await self._send_direct_update(transform)
-            return
-        await self._state_store.update(
+        await self._update_input_state(
             transform,
             validate=self._controller_profile.validate_input_state,
         )
@@ -560,10 +554,7 @@ class ControllerRuntime:
 
         This updates local IMU state only and does not send an immediate input report.
         """
-        if self._reporting_mode == "direct":
-            await self._send_direct_update(lambda current: current.with_imu(*frames))
-            return
-        await self._state_store.update(lambda current: current.with_imu(*frames))
+        await self._update_input_state(lambda current: current.with_imu(*frames))
 
     async def release(self, *buttons: Button) -> None:
         """Remove buttons from the current input state.
@@ -578,20 +569,14 @@ class ControllerRuntime:
         def transform(current: InputState) -> InputState:
             return current.with_buttons(current.buttons.difference(buttons))
 
-        if self._reporting_mode == "direct":
-            await self._send_direct_update(transform)
-            return
-        await self._state_store.update(
+        await self._update_input_state(
             transform,
             validate=self._controller_profile.validate_input_state,
         )
 
     async def neutral(self) -> None:
         """Return local input state to ``InputState.neutral()`` without immediate transmission."""
-        if self._reporting_mode == "direct":
-            await self._send_direct_update(lambda _current: InputState.neutral())
-            return
-        await self._state_store.apply(InputState.neutral())
+        await self._update_input_state(lambda _current: InputState.neutral())
 
     async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
         """Send a short connected button action.
@@ -725,6 +710,18 @@ class ControllerRuntime:
             self._require_connected_for_input()
             candidate = transform(self._state_store.current)
             await self._send_direct_candidate(candidate)
+
+    async def _update_input_state(
+        self,
+        transform: Callable[[InputState], InputState],
+        *,
+        validate: Callable[[InputState], None] | None = None,
+    ) -> None:
+        """Apply one semantic input transformation for the reporting mode."""
+        if self._reporting_mode == "direct":
+            await self._send_direct_update(transform)
+            return
+        await self._state_store.update(transform, validate=validate)
 
     async def _send_direct_candidate(self, candidate: InputState) -> None:
         self._controller_profile.validate_input_state(candidate)
