@@ -133,16 +133,6 @@ class HidDeviceTransport(Protocol):
             Exception: Implementation-specific send failures.
         """
 
-    async def send_control(self, payload: bytes) -> None:
-        """Send one HID control report.
-
-        Args:
-            payload: HID control report bytes to send.
-
-        Raises:
-            Exception: Implementation-specific send failures.
-        """
-
     def on_interrupt_data(self, callback: InterruptDataCallback) -> None:
         """Register a callback for interrupt-channel host data.
 

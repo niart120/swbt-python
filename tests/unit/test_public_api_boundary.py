@@ -477,9 +477,6 @@ def test_from_config_uses_profile_device_name_unless_user_overrides(
             async def send_interrupt(self, payload: bytes) -> None:
                 _ = payload
 
-            async def send_control(self, payload: bytes) -> None:
-                _ = payload
-
             def on_interrupt_data(self, callback: object) -> None:
                 _ = callback
 
@@ -709,9 +706,6 @@ def test_default_transport_without_key_store_records_reconnect_limitation(
                 _ = (peer_address, connect_timeout)
 
             async def send_interrupt(self, payload: bytes) -> None:
-                _ = payload
-
-            async def send_control(self, payload: bytes) -> None:
                 _ = payload
 
             def on_interrupt_data(self, callback: object) -> None:

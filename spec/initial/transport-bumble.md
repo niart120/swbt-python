@@ -44,7 +44,6 @@ class HidDeviceTransport(Protocol):
     ) -> None: ...
 
     async def send_interrupt(self, payload: bytes) -> None: ...
-    async def send_control(self, payload: bytes) -> None: ...
 
     def on_interrupt_data(
         self,
@@ -85,15 +84,13 @@ HID interrupt channel へ bytes を投入する。protocol 層から渡される
 
 interrupt channel が存在する場合は、その connection に対応する Bumble ACL packet queue を drain してから interrupt、control の順に L2CAP 切断を要求する。drain が失敗した場合は `DisconnectRequestResult(status="failed", reason="acl_drain_failed")` を返し、チャネル切断へ進まない。通常送信に drain を戻すための設定フラグは設けない。
 
-### 2.5 `send_control`
-
-HID control channel へ bytes を送る。初期実装で使わない場合でも interface には残す。
-
-### 2.6 receive callback
+### 2.5 receive callback
 
 Bumble の callback で受け取った data は、transport 内で最小限の整形だけを行い、上位 callback へ渡す。
 
-### 2.7 reconnect / key store
+HID control channel は host-to-device data の受信に使う。device-to-host report の送信は interrupt channel に集約し、production call site がない outbound control 送信 method は transport interface に置かない。
+
+### 2.6 reconnect / key store
 
 `list_bonded_peers()` と `connect_bonded_peer()` は、active reconnect のための最小境界である。key store は transport の構築時点で決まる。上位層は injected transport を後から再設定しない。
 

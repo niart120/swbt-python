@@ -49,8 +49,7 @@ def test_subcommand_reply_uses_shared_timer_sequence() -> None:
         reply[1] = 0xAA
 
         await report_loop.send_current_input()
-        report_loop.queue_reply(bytes(reply))
-        await report_loop.send_next_report()
+        await report_loop.send_subcommand_reply(lambda: bytes(reply))
         await report_loop.send_current_input()
 
         reports = transport.sent_interrupt_reports
@@ -75,8 +74,7 @@ def test_subcommand_reply_holds_off_following_periodic_report() -> None:
         )
         reply = bytes([0x21, *([0] * 49)])
 
-        report_loop.queue_reply(reply)
-        await report_loop.send_next_report()
+        await report_loop.send_subcommand_reply(lambda: reply)
         report_count_after_reply = len(transport.sent_interrupt_reports)
 
         await report_loop.send_next_report()

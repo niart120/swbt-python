@@ -67,20 +67,15 @@ class GamepadStatus:
 
 
 class DiagnosticsRecorder:
-    """Record a small in-memory diagnostics event history."""
+    """Record bounded diagnostics aggregates and optional JSON Lines traces."""
 
     def __init__(self, trace_writer: TextIO | None = None) -> None:
         """Create an empty recorder."""
-        self._events: list[DiagnosticsEvent] = []
         self._report_counters: dict[int, int] = {}
         self._last_subcommand_id: int | None = None
         self._raw_rumble: bytes | None = None
+        self._last_error: DiagnosticsEvent | None = None
         self._trace_writer = trace_writer
-
-    @property
-    def events(self) -> tuple[DiagnosticsEvent, ...]:
-        """Return recorded events in order."""
-        return tuple(self._events)
 
     @property
     def report_counters(self) -> dict[int, int]:
@@ -100,10 +95,7 @@ class DiagnosticsRecorder:
     @property
     def last_error(self) -> DiagnosticsEvent | None:
         """Return the latest error event."""
-        for event in reversed(self._events):
-            if event.event == "error":
-                return event
-        return None
+        return self._last_error
 
     def record_event(self, event: str, **fields: object) -> DiagnosticsEvent:
         """Record a diagnostics event with schema fields."""
@@ -155,21 +147,6 @@ class DiagnosticsRecorder:
             **fields,
         )
 
-    def record_state_transition(
-        self,
-        *,
-        previous: str,
-        next_state: str,
-        reason: str,
-    ) -> DiagnosticsEvent:
-        """Record one lifecycle state transition."""
-        return self.record_event(
-            "state_transition",
-            previous=previous,
-            next=next_state,
-            reason=reason,
-        )
-
     def record_error(self, error: BaseException, *, recoverable: bool) -> DiagnosticsEvent:
         """Record an exception as an error event."""
         event = DiagnosticsEvent(
@@ -178,11 +155,11 @@ class DiagnosticsRecorder:
             message=str(error),
             recoverable=recoverable,
         )
+        self._last_error = event
         self._append(event)
         return event
 
     def _append(self, event: DiagnosticsEvent) -> None:
-        self._events.append(event)
         if self._trace_writer is None:
             return
         payload: dict[str, object] = {"event": event.event}

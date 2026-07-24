@@ -241,7 +241,6 @@ class FakeHidDevice:
         self.l2cap_ctrl_channel: object | None = None
         self.handlers: dict[str, Callable[[bytes], None]] = {}
         self.interrupt_payloads: list[bytes] = []
-        self.control_payloads: list[tuple[int, bytes]] = []
         self.disconnect_calls: list[str] = []
         self.connect_calls: list[str] = []
         self.disconnect_error: Exception | None = None
@@ -259,10 +258,6 @@ class FakeHidDevice:
     def send_data(self, data: bytes) -> None:
         """Record interrupt data."""
         self.interrupt_payloads.append(data)
-
-    def send_control_data(self, report_type: int, data: bytes) -> None:
-        """Record control data."""
-        self.control_payloads.append((report_type, data))
 
     def register_set_report_cb(self, callback: Callable[[int, int, int, bytes], object]) -> None:
         """Register a fake SET_REPORT callback."""
@@ -838,7 +833,8 @@ def test_bumble_concurrent_close_waits_for_in_flight_close() -> None:
     async def run() -> None:
         handle = BlockingHandle()
         device = FakeBumbleDevice()
-        diagnostics = DiagnosticsRecorder()
+        trace = StringIO()
+        diagnostics = DiagnosticsRecorder(trace_writer=trace)
 
         async def open_transport(adapter: str) -> BlockingHandle:
             _ = adapter
@@ -870,7 +866,9 @@ def test_bumble_concurrent_close_waits_for_in_flight_close() -> None:
         await asyncio.wait_for(second_close, timeout=0.1)
 
         close_events = [
-            event for event in diagnostics.events if event.event == "transport_close_complete"
+            event
+            for line in trace.getvalue().splitlines()
+            if (event := json.loads(line))["event"] == "transport_close_complete"
         ]
         assert len(close_events) == 1
         assert handle.close_count == 1
@@ -1318,7 +1316,7 @@ def test_bumble_set_report_callback_forwards_output_report() -> None:
     asyncio.run(run())
 
 
-def test_bumble_send_fails_until_l2cap_channels_are_connected() -> None:
+def test_bumble_interrupt_send_fails_until_l2cap_channel_is_connected() -> None:
     async def run() -> None:
         async def open_transport(adapter: str) -> FakeBumbleHandle:
             _ = adapter
@@ -1337,8 +1335,6 @@ def test_bumble_send_fails_until_l2cap_channels_are_connected() -> None:
         await transport.open()
         with pytest.raises(ClosedError):
             await transport.send_interrupt(b"\x30")
-        with pytest.raises(ClosedError):
-            await transport.send_control(b"\x01")
 
         await transport.close()
 

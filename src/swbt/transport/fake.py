@@ -51,7 +51,6 @@ class FakeHidTransport:
         self._connected_emitted = False
         self._disconnect_request_sent_interrupt_count: int | None = None
         self._sent_interrupt_reports: list[bytes] = []
-        self._sent_control_reports: list[bytes] = []
         self._interrupt_report_event = asyncio.Event()
         self._disconnect_request_event = asyncio.Event()
         self._close_start_event = asyncio.Event()
@@ -89,11 +88,6 @@ class FakeHidTransport:
         """Clear captured interrupt reports without changing transport state."""
         self._sent_interrupt_reports.clear()
         self._interrupt_report_event.clear()
-
-    @property
-    def sent_control_reports(self) -> tuple[bytes, ...]:
-        """Return control reports sent by the gamepad."""
-        return tuple(self._sent_control_reports)
 
     @property
     def disconnect_request_sent_interrupt_count(self) -> int | None:
@@ -292,11 +286,6 @@ class FakeHidTransport:
                         return report
                 self._interrupt_report_event.clear()
                 await self._interrupt_report_event.wait()
-
-    async def send_control(self, payload: bytes) -> None:
-        """Record a control report."""
-        self._require_open()
-        self._sent_control_reports.append(bytes(payload))
 
     def on_interrupt_data(self, callback: InterruptDataCallback) -> None:
         """Register an interrupt data callback."""

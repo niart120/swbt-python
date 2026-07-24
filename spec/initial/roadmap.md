@@ -95,7 +95,7 @@ M7 packaging / examples / CLI
 - `apply()` / `sticks()` / `neutral()` を実装する
 - `press()` / `release()` / `tap()` を実装する
 - `ReportLoop` で periodic `0x30` を送る
-- reply queue 優先制御を実装する
+- reply と periodic input を共通 sender で直列化し、reply 後 holdoff を実装する
 - close 時の neutral fail-safe を実装する
 
 ### 3.4 完了条件

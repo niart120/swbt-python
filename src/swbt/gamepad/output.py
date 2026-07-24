@@ -31,7 +31,7 @@ def _ignore_subcommand_received(_subcommand_id: int) -> None:
 
 @dataclass
 class OutputReportDispatcher:
-    """Parse host output reports, record diagnostics, and enqueue replies."""
+    """Parse host output reports, record diagnostics, and send replies."""
 
     diagnostics: DiagnosticsRecorder
     require_reply_sender: ReplySenderRequirement

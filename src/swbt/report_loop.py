@@ -1,7 +1,6 @@
 """Input report sender used by SwitchGamepad."""
 
 import asyncio
-from collections import deque
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from inspect import isawaitable
@@ -81,11 +80,6 @@ class ReportSender:
             await self._send_subcommand_report_locked(report)
             return report
 
-    async def send_subcommand_report(self, report: bytes) -> None:
-        """Send an already-built subcommand reply under the shared send lock."""
-        async with self._send_lock:
-            await self._send_subcommand_report_locked(report)
-
     async def _send_subcommand_report_locked(self, report: bytes) -> None:
         reply = bytearray(report)
         if reply and reply[0] == 0x21:
@@ -153,7 +147,6 @@ class ReportLoop:
             diagnostics=diagnostics,
             clock_ns=clock_ns,
         )
-        self._reply_queue: deque[bytes] = deque()
         self._periodic_holdoff_until = 0.0
         self._task: asyncio.Task[None] | None = None
 
@@ -186,16 +179,8 @@ class ReportLoop:
         self._holdoff_periodic_after_reply()
         return report
 
-    def queue_reply(self, report: bytes) -> None:
-        """Queue one subcommand reply for priority transmission."""
-        self._reply_queue.append(bytes(report))
-
     async def send_next_report(self) -> None:
-        """Send the next queued reply or current input report."""
-        if self._reply_queue:
-            await self._sender.send_subcommand_report(self._reply_queue.popleft())
-            self._holdoff_periodic_after_reply()
-            return
+        """Send current periodic input unless a recent reply holds it off."""
         if self._is_periodic_held_off():
             return
         await self.send_current_input(reason="periodic")

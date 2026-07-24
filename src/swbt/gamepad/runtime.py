@@ -569,7 +569,7 @@ class ControllerRuntime:
         if self._reporting_mode == "direct":
             await self._send_direct_update(lambda current: current.with_imu(*frames))
             return
-        await self._state_store.imu(*frames)
+        await self._state_store.update(lambda current: current.with_imu(*frames))
 
     async def release(self, *buttons: Button) -> None:
         """Remove buttons from the current input state.
@@ -597,7 +597,7 @@ class ControllerRuntime:
         if self._reporting_mode == "direct":
             await self._send_direct_update(lambda _current: InputState.neutral())
             return
-        await self._state_store.neutral()
+        await self._state_store.apply(InputState.neutral())
 
     async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
         """Send a short connected button action.
@@ -692,7 +692,7 @@ class ControllerRuntime:
                     return
                 await self._send_direct_candidate(InputState.neutral())
             return
-        await self._state_store.neutral()
+        await self._state_store.apply(InputState.neutral())
         if self._report_loop is None or not self._connected_event.is_set():
             return
         await self._report_loop.send_current_input()
@@ -1002,7 +1002,7 @@ class ControllerRuntime:
             self._fail_protocol_initialization(ConnectionFailedError(msg))
         self._connected_event.clear()
         try:
-            await self._state_store.neutral()
+            await self._state_store.apply(InputState.neutral())
             await self._stop_handshake_bootstrap()
             if self._report_loop is not None:
                 await self._report_loop.stop()
