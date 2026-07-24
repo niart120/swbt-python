@@ -125,6 +125,11 @@ def test_rearchitecture_target_switch_gamepad_is_abstract_interface() -> None:
         SwitchGamepad()
 
 
+def test_switch_gamepad_does_not_reexpose_runtime_internals() -> None:
+    assert not hasattr(SwitchGamepad, "_state_store")
+    assert not hasattr(SwitchGamepad, "_output_report_dispatcher")
+
+
 def test_rearchitecture_target_public_concrete_controllers_share_interface() -> None:
     for controller_name in ("ProController", "JoyConL", "JoyConR"):
         controller_cls = getattr(swbt, controller_name)

@@ -8,11 +8,9 @@ from typing import ClassVar, Literal, Self
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
 from swbt.gamepad._config import _GamepadConfig
 from swbt.gamepad.connection import ConnectionResult
-from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.runtime import ControllerRuntime
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.profiles.base import ControllerColors, ControllerProfile
-from swbt.state_store import InputStateStore
 from swbt.transport._pairing_profile import LocalAddress, PairingProfile
 
 
@@ -82,14 +80,6 @@ class SwitchGamepad(ABC):
             await gamepad.close(neutral=False)
             raise
         return gamepad
-
-    @property
-    def _state_store(self) -> InputStateStore:
-        return self._runtime._state_store
-
-    @property
-    def _output_report_dispatcher(self) -> OutputReportDispatcher:
-        return self._runtime._output_report_dispatcher
 
     async def __aenter__(self) -> Self:
         """Open the gamepad for an async context manager.

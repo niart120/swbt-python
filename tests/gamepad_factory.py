@@ -19,6 +19,7 @@ from swbt import (
     SwitchGamepad,
 )
 from swbt.gamepad import interface as gamepad_interface
+from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.runtime import ControllerRuntime
 from swbt.protocol.profiles.base import ControllerProfile
 from swbt.transport.base import HidDeviceTransport
@@ -29,8 +30,14 @@ type _DirectController = DirectProController | DirectJoyConL | DirectJoyConR
 
 def state_lock_for(pad: SwitchGamepad) -> asyncio.Lock:
     """Expose the state lock only to deterministic race-test fixtures."""
-    runtime = cast("Any", pad)
+    runtime = cast("Any", pad)._runtime
     return runtime._state_store._lock
+
+
+def output_report_dispatcher_for(pad: SwitchGamepad) -> OutputReportDispatcher:
+    """Expose the output dispatcher only to test fixtures and probes."""
+    runtime = cast("Any", pad)._runtime
+    return runtime._output_report_dispatcher
 
 
 def _construct_with_transport[ControllerT: _PeriodicController | _DirectController](

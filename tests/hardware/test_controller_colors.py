@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 import pytest
+from tests.gamepad_factory import output_report_dispatcher_for  # ty: ignore[unresolved-import]
 
 from swbt import ControllerColors, DiagnosticsConfig, InputState, ProController
 from swbt.protocol.output_report import OutputReport
@@ -607,7 +608,7 @@ def _install_spi_probe(
     device_info_data: bytes | None = None,
     expected_controller_color_bytes: bytes,
 ) -> None:
-    dispatcher = pad._output_report_dispatcher
+    dispatcher = output_report_dispatcher_for(pad)
     dispatcher.subcommand_responder = RecordingSubcommandResponder(
         dispatcher.subcommand_responder,
         trace,
