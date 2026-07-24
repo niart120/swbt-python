@@ -4,18 +4,26 @@
 
 現行 Joy-Con 対応では、profile-aware な report / subcommand / transport への道筋はできている。一方で、public API は `JoyCon` が具象 `SwitchGamepad` を継承し、`SwitchGamepadConfig` で profile 注入でき、テスト用 transport も constructor に渡せる形になっている。
 
-この形は短期的には便利だが、controller identity、runtime lifecycle、public config、test seam が同じ場所に集まりすぎている。リアーキテクチャでは、identity selection を public concrete class に閉じ、runtime 機構を private implementation に移す。
+この形は短期的には便利だが、controller identity、runtime lifecycle、public config、test seam が同じ場所に集まりすぎている。リアーキテクチャでは、identity selection を public concrete class に閉じ、stateful runtime を `ControllerRuntime` に移す。初回移行後のIssue #118では、共通public methodの委譲を`SwitchGamepad`へ集約した。
 
 ```text
 Target public inheritance
 
-SwitchGamepad                # abstract public interface。受け取る型
+SwitchGamepad                # abstract public common type。受け取る型と共通実装
   ↑
-_RuntimeBackedGamepad        # private delegation base。export しない
+PeriodicSwitchGamepad        # library-owned schedule
   ↑
   ├─ ProController           # public concrete controller
   ├─ JoyConL                 # public concrete controller
   └─ JoyConR                 # public concrete controller
+
+SwitchGamepad
+  ↑
+DirectSwitchGamepad          # caller-owned schedule
+  ↑
+  ├─ DirectProController
+  ├─ DirectJoyConL
+  └─ DirectJoyConR
 ```
 
 中心ルールは次である。
@@ -26,7 +34,7 @@ _RuntimeBackedGamepad        # private delegation base。export しない
 
 以下は、maintainer が明示的に再検討しない限り、このリアーキテクチャの前提とする。
 
-1. `SwitchGamepad` は具象 controller ではなく、直接生成できない public abstract interface にする。
+1. `SwitchGamepad` は具象 controller ではなく、直接生成できない public abstract common type にする。
 2. public concrete controller は `ProController`、`JoyConL`、`JoyConR` の 3 つにする。
 3. `JoyCon(side="left" | "right")` は削除する。互換 wrapper として残さない。
 4. `SwitchGamepadConfig(profile=...)` は public API から削除する。

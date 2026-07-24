@@ -99,23 +99,26 @@ swbt.JoyConR(.)
 ```
 
 ```text
-SwitchGamepad                # abstract public interface
+SwitchGamepad                # abstract public common type + runtime delegation
   ↑
-_RuntimeBackedGamepad        # private runtime delegation base
-  ↑
-  ├─ ProController
-  ├─ JoyConL
-  └─ JoyConR
+  ├─ PeriodicSwitchGamepad
+  │   ├─ ProController
+  │   ├─ JoyConL
+  │   └─ JoyConR
+  └─ DirectSwitchGamepad
+      ├─ DirectProController
+      ├─ DirectJoyConL
+      └─ DirectJoyConR
 ```
 
-`SwitchGamepad` は runtime を知らない。`_RuntimeBackedGamepad` だけが `ControllerRuntime` を知る。public concrete controller は controller identity を選び、内部 builder に resource config を渡す。
+`SwitchGamepad` は共通public methodと`ControllerRuntime`への委譲を所有する。`ControllerRuntime`はstateful runtimeを所有し、public concrete controllerはcontroller identityと公開constructor signatureを定義する。
 
 ## Target module structure
 
 ```text
 src/swbt/gamepad/
   __init__.py
-  interface.py          # public SwitchGamepad abstract interface
+  interface.py          # public abstract types and shared runtime delegation
   controllers.py        # public ProController, JoyConL, JoyConR
   runtime.py            # internal ControllerRuntime
   _config.py            # internal _RuntimeConfig, _ControllerSpec, _build_runtime

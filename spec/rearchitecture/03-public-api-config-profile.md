@@ -49,7 +49,7 @@ async def accept_any_controller(pad: SwitchGamepad) -> None:
 すべての concrete controller で同じ public signature を使う。
 
 ```python
-class ProController(_RuntimeBackedGamepad):
+class ProController(PeriodicSwitchGamepad):
     def __init__(
         self,
         *,
@@ -61,7 +61,7 @@ class ProController(_RuntimeBackedGamepad):
     ) -> None: ...
 
 
-class JoyConL(_RuntimeBackedGamepad):
+class JoyConL(PeriodicSwitchGamepad):
     def __init__(
         self,
         *,
@@ -73,7 +73,7 @@ class JoyConL(_RuntimeBackedGamepad):
     ) -> None: ...
 
 
-class JoyConR(_RuntimeBackedGamepad):
+class JoyConR(PeriodicSwitchGamepad):
     def __init__(
         self,
         *,
@@ -134,7 +134,7 @@ _JOYCON_R_SPEC = _ControllerSpec(profile_factory=JoyConRightProfile)
 ```
 
 ```python
-class ProController(_RuntimeBackedGamepad):
+class ProController(PeriodicSwitchGamepad):
     def __init__(self, *, adapter: str, **options: object) -> None:
         super().__init__(
             _build_runtime(

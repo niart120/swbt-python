@@ -172,6 +172,7 @@ def test_reporting_types_expose_only_their_owned_full_state_operation() -> None:
         assert hasattr(controller_cls, "apply")
         assert not hasattr(controller_cls, "send")
         assert "report_period_us" in inspect.signature(controller_cls).parameters
+        assert "report_period_us" in inspect.signature(controller_cls.create_profile).parameters
 
     for controller_name in (
         "DirectProController",
@@ -182,6 +183,7 @@ def test_reporting_types_expose_only_their_owned_full_state_operation() -> None:
         assert hasattr(controller_cls, "send")
         assert not hasattr(controller_cls, "apply")
         assert "report_period_us" not in inspect.signature(controller_cls).parameters
+        assert "report_period_us" not in inspect.signature(controller_cls.create_profile).parameters
         assert "profile_path" in inspect.signature(controller_cls).parameters
         assert hasattr(controller_cls, "create_profile")
         assert "key_store_path" not in inspect.signature(controller_cls).parameters

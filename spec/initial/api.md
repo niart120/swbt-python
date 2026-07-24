@@ -109,7 +109,7 @@ fake transport は実機接続には使わない。
 
 ## 3. controller 型
 
-`SwitchGamepad` は lifecycle、connection、status、意味的入力操作を共有する抽象型であり、直接生成しない。`PeriodicSwitchGamepad` と `DirectSwitchGamepad` が入力レポートの送信所有者を型として固定する。
+`SwitchGamepad` は lifecycle、connection、status、意味的入力操作を共有する抽象型であり、直接生成しない。第三者が独自 runtime を実装するための extension point ではなく、library が提供する具象 controller を受け取る共通型とする。共通操作は `SwitchGamepad` が `ControllerRuntime` へ委譲し、`PeriodicSwitchGamepad` と `DirectSwitchGamepad` が入力レポートの送信所有者を型として固定する。
 
 ```text
 SwitchGamepad

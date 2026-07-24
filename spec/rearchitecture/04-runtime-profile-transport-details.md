@@ -4,56 +4,17 @@
 
 ### `SwitchGamepad`
 
-`SwitchGamepad` は public abstract interface とする。全 controller が共有する操作 contract だけを定義する。
+`SwitchGamepad` は直接生成できない public abstract common type とする。第三者が独自
+runtimeを実装するextension pointではなく、libraryが提供する具象controllerを受け取る型と、
+共通public methodの実装所有者を兼ねる。
 
 ```python
 class SwitchGamepad(ABC):
-    @abstractmethod
-    async def open(self) -> None: ...
+    _runtime: ControllerRuntime
 
     @abstractmethod
-    async def close(self, *, neutral: bool = True) -> None: ...
-
-    @abstractmethod
-    async def connect(
-        self,
-        *,
-        timeout: float | None = None,
-        allow_pairing: bool = False,
-    ) -> None: ...
-
-    @abstractmethod
-    async def press(self, *buttons: Button) -> None: ...
-
-    @abstractmethod
-    async def release(self, *buttons: Button) -> None: ...
-
-    @abstractmethod
-    async def tap(self, *buttons: Button, duration: float = 0.08) -> None: ...
-
-    @abstractmethod
-    async def neutral(self) -> None: ...
-
-    @abstractmethod
-    async def apply(self, state: InputState) -> None: ...
-
-    @abstractmethod
-    def snapshot(self) -> InputState: ...
-
-    @abstractmethod
-    def status(self) -> GamepadStatus: ...
-```
-
-`__aenter__` / `__aexit__` は共通実装として interface に置いてよい。これらは状態を持たず、抽象メソッドだけに依存する。
-
-### `_RuntimeBackedGamepad`
-
-`_RuntimeBackedGamepad` は private implementation base とする。root export しない。
-
-```python
-class _RuntimeBackedGamepad(SwitchGamepad):
-    def __init__(self, runtime: ControllerRuntime) -> None:
-        self._runtime = runtime
+    def __init__(self) -> None:
+        """Concrete controllerがidentityと公開signatureを定義する。"""
 
     async def open(self) -> None:
         await self._runtime.open()
@@ -72,18 +33,6 @@ class _RuntimeBackedGamepad(SwitchGamepad):
     async def press(self, *buttons: Button) -> None:
         await self._runtime.press(*buttons)
 
-    async def release(self, *buttons: Button) -> None:
-        await self._runtime.release(*buttons)
-
-    async def tap(self, *buttons: Button, duration: float = 0.08) -> None:
-        await self._runtime.tap(*buttons, duration=duration)
-
-    async def neutral(self) -> None:
-        await self._runtime.neutral()
-
-    async def apply(self, state: InputState) -> None:
-        await self._runtime.apply(state)
-
     def snapshot(self) -> InputState:
         return self._runtime.snapshot()
 
@@ -91,24 +40,30 @@ class _RuntimeBackedGamepad(SwitchGamepad):
         return self._runtime.status()
 ```
 
-Test で controller object が必要な場合は、private test helper 経由にする。public docs には載せない。
+`__aenter__` / `__aexit__`、lifecycle、connection、意味的入力、status、snapshotの
+実装は`SwitchGamepad`に一度だけ置く。`PeriodicSwitchGamepad.apply()`と
+`DirectSwitchGamepad.send()`は送信所有者ごとの公開型が実装する。6具象classは
+controller identityと公開constructor signatureを定義する。
 
 ### `ControllerRuntime`
 
-実行状態は `ControllerRuntime` が持つ。
+実行状態は`ControllerRuntime`が持つ。`SwitchGamepad`がruntimeへの参照を持つことと、
+runtime内部のstateful ownerであることは分けて扱う。
 
 ```text
 ControllerRuntime
   owns InputStateStore
   owns DiagnosticsRecorder
   owns OutputReportDispatcher
-  owns ConnectionWorkflow
+  owns reconnect / pairing fallback
   owns ReportLoop
   owns HidDeviceTransport
   owns ControllerProfile
 ```
 
-`SwitchGamepad` は runtime を知らない。`_RuntimeBackedGamepad` だけが runtime を知る。
+Testでfake transportを注入する場合は、repository内のtest helperから
+`ControllerRuntime` constructorだけを差し替える。public constructorに`transport`や
+runtime objectは公開しない。
 
 ## Runtime behavior preservation
 
@@ -195,41 +150,22 @@ tests/helpers/fake_transport.py          # unit test だけなら preferred
 src/swbt/_testing/fake_transport.py      # repo 外 integration test に必要なら可。ただし root export しない
 ```
 
-Suggested helper:
+Current test helper:
 
 ```python
-def make_test_runtime(
+def _construct_with_transport(
+    controller_type: type[ControllerT],
     *,
-    spec: _ControllerSpec,
     transport: HidDeviceTransport,
-    adapter: str = "test-adapter",
-    report_period_us: int | None = None,
-) -> ControllerRuntime:
-    return _build_runtime(
-        spec=spec,
-        adapter=adapter,
-        key_store_path=None,
-        report_period_us=report_period_us,
-        controller_colors=None,
-        diagnostics=None,
-        transport_factory=_StaticTransportFactory(transport),
-    )
+    constructor: Callable[[], ControllerT],
+) -> ControllerT:
+    runtime_constructor = partial(ControllerRuntime, transport=transport)
+    with patch.object(gamepad_interface, "ControllerRuntime", runtime_constructor):
+        return constructor()
 ```
 
-Controller object が必要な test では、private test helper を使う。
-
-```python
-def make_test_controller(
-    cls: type[_RuntimeBackedGamepad],
-    *,
-    spec: _ControllerSpec,
-    transport: HidDeviceTransport,
-) -> _RuntimeBackedGamepad:
-    runtime = make_test_runtime(spec=spec, transport=transport)
-    return cls._from_runtime_for_tests(runtime)
-```
-
-これは user-facing docs に出さない。
+repository内の`tests/gamepad_factory.py`だけがこの差し替えを所有する。production packageに
+test専用factory、public `transport=`、constructor bypassは追加しない。
 
 ## Profile module split
 
