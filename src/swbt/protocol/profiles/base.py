@@ -135,6 +135,7 @@ class ControllerProfile:
     accelerometer_calibration: AccelerometerCalibration = DEFAULT_ACCELEROMETER_CALIBRATION
     gyro_calibration: GyroCalibration = DEFAULT_GYRO_CALIBRATION
     button_bits: ButtonBitMap = field(default_factory=lambda: PRO_CONTROLLER_BUTTON_BITS)
+    pairing_trigger_buttons: tuple[Button, ...] = (Button.L, Button.R)
     imu_enable_modes: tuple[int, ...] = (0x00, 0x01)
     supports_left_stick: bool = True
     supports_right_stick: bool = True

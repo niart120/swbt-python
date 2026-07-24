@@ -10,6 +10,7 @@ from typing import Literal, cast
 import pytest
 
 import swbt.gamepad as gamepad_module
+import swbt.gamepad.runtime as gamepad_runtime_module
 from swbt import (
     Button,
     ControllerColors,
@@ -45,11 +46,33 @@ from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport.fake import FakeHidTransport
 
+_OUTPUT_REPORT_PREFIX = bytes.fromhex("01 00 00 00 00 00 00 00 00 00")
+
 
 def _joycon_class(side: Literal["left", "right"]) -> Callable[..., JoyConL | JoyConR]:
     if side == "left":
         return make_joycon_l
     return make_joycon_r
+
+
+async def _complete_protocol_handshake(transport: FakeHidTransport) -> None:
+    await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("03 30"))
+    await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("30 01"))
+
+
+async def _connect_protocol_ready(transport: FakeHidTransport) -> None:
+    await transport.connect()
+    await _complete_protocol_handshake(transport)
+    transport.clear_sent_interrupt_reports()
+
+
+async def _wait_for_transport_event(
+    transport: FakeHidTransport,
+    event: str,
+) -> None:
+    async with asyncio.timeout(0.1):
+        while event not in transport.events:  # noqa: ASYNC110
+            await asyncio.sleep(0)
 
 
 def _imu_frame_bytes(frame: IMUFrame) -> bytes:
@@ -101,16 +124,330 @@ def test_pair_starts_advertising_and_waits_for_fake_connection() -> None:
             assert transport.events == ("open", "start_advertising")
 
             await transport.connect()
+            await asyncio.sleep(0)
+
+            assert pairing.done() is False
+            assert pad.status().connection_state == "initializing"
+
+            await _complete_protocol_handshake(transport)
             await asyncio.wait_for(pairing, timeout=0.1)
 
         assert transport.events == (
             "open",
             "start_advertising",
             "connected",
+            "interrupt_rx",
+            "interrupt_rx",
             "request_disconnect",
             "disconnect_request_closed",
             "close",
         )
+
+    asyncio.run(run())
+
+
+def test_pair_waits_until_ready_subcommand_reply_is_transport_accepted() -> None:
+    async def run() -> None:
+        send_interrupt_wait = asyncio.Event()
+        send_interrupt_wait.set()
+        transport = FakeHidTransport(send_interrupt_wait=send_interrupt_wait)
+
+        async with make_direct_pro_controller(transport=transport) as pad:
+            pairing = asyncio.create_task(pad.pair(timeout=1.0))
+            await asyncio.sleep(0)
+            await transport.connect()
+            await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("03 30"))
+
+            send_interrupt_wait.clear()
+            player_lights = asyncio.create_task(
+                transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("30 01"))
+            )
+            await asyncio.sleep(0)
+
+            assert player_lights.done() is False
+            assert pairing.done() is False
+            assert pad.status().connection_state == "initializing"
+
+            send_interrupt_wait.set()
+            await player_lights
+            await asyncio.wait_for(pairing, timeout=0.1)
+
+    asyncio.run(run())
+
+
+def test_pair_fails_and_cleans_up_when_ready_reply_send_fails() -> None:
+    class PlayerLightsReplyError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("player lights reply failed")
+
+    class FailPlayerLightsReplyFakeHidTransport(FakeHidTransport):
+        async def send_interrupt(self, payload: bytes) -> None:
+            if payload[0] == 0x21 and payload[14] == 0x30:
+                raise PlayerLightsReplyError
+            await super().send_interrupt(payload)
+
+    async def run() -> None:
+        transport = FailPlayerLightsReplyFakeHidTransport()
+        pad = make_direct_pro_controller(transport=transport)
+
+        pairing = asyncio.create_task(pad.pair(timeout=1.0))
+        await _wait_for_transport_event(transport, "start_advertising")
+        await transport.connect()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("03 30"))
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("30 01"))
+
+        with pytest.raises(ConnectionFailedError):
+            await asyncio.wait_for(pairing, timeout=0.1)
+
+        assert pad.status().connection_state == "closed"
+        assert transport.is_open is False
+
+    asyncio.run(run())
+
+
+def test_pair_fails_immediately_when_link_disconnects_before_protocol_ready() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = make_pro_controller(transport=transport)
+
+        pairing = asyncio.create_task(pad.pair(timeout=1.0))
+        await _wait_for_transport_event(transport, "start_advertising")
+        await transport.connect()
+        await transport.disconnect(reason=0x13)
+
+        with pytest.raises(ConnectionFailedError):
+            await asyncio.wait_for(pairing, timeout=0.1)
+
+        assert pad.status().connection_state == "closed"
+        assert transport.is_open is False
+
+    asyncio.run(run())
+
+
+def test_pair_fails_immediately_for_unsupported_subcommand_before_ready() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = make_pro_controller(transport=transport)
+
+        pairing = asyncio.create_task(pad.pair(timeout=1.0))
+        await _wait_for_transport_event(transport, "start_advertising")
+        await transport.connect()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("ff"))
+
+        with pytest.raises(ConnectionFailedError):
+            await asyncio.wait_for(pairing, timeout=0.1)
+
+        assert pad.status().connection_state == "closed"
+        assert transport.is_open is False
+
+    asyncio.run(run())
+
+
+def test_try_connect_returns_failed_for_disconnect_before_protocol_ready() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = make_pro_controller(transport=transport)
+
+        connecting = asyncio.create_task(pad.try_connect(timeout=1.0, allow_pairing=True))
+        await _wait_for_transport_event(transport, "start_advertising")
+        await transport.connect()
+        await transport.disconnect(reason=0x13)
+
+        result = await asyncio.wait_for(connecting, timeout=0.1)
+
+        assert result.route == "pairing"
+        assert result.status == "failed"
+        assert pad.status().connection_state == "closed"
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("controller_class", "profile"),
+    [
+        (ProController, ProControllerProfile()),
+        (JoyConL, JoyConLeftProfile()),
+        (JoyConR, JoyConRightProfile()),
+        (DirectProController, ProControllerProfile()),
+        (DirectJoyConL, JoyConLeftProfile()),
+        (DirectJoyConR, JoyConRightProfile()),
+    ],
+)
+def test_all_concrete_controllers_share_protocol_ready_connection_boundary(
+    controller_class: type[
+        ProController | JoyConL | JoyConR | DirectProController | DirectJoyConL | DirectJoyConR
+    ],
+    profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
+) -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = controller_class._from_config(
+            _SwitchGamepadConfig(profile=profile),
+            transport=transport,
+        )
+
+        pairing = asyncio.create_task(pad.pair(timeout=1.0))
+        await _wait_for_transport_event(transport, "start_advertising")
+        await transport.connect()
+        await asyncio.sleep(0)
+
+        assert pairing.done() is False
+        assert pad.status().connection_state == "initializing"
+
+        await _complete_protocol_handshake(transport)
+        await asyncio.wait_for(pairing, timeout=0.1)
+
+        assert pad.status().connection_state == "connected"
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_periodic_bootstrap_stops_after_first_subcommand_then_starts_when_ready() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = make_pro_controller(transport=transport, report_period_us=1000)
+        await pad.open()
+        await pad.press(Button.A)
+        await transport.connect()
+
+        bootstrap_report = await transport.wait_for_interrupt_report_id(0x30)
+
+        assert pad.status().connection_state == "initializing"
+        assert bootstrap_report[3:6] == bytes.fromhex("00 00 00")
+
+        transport.clear_sent_interrupt_reports()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("02"))
+        await asyncio.sleep(0.02)
+
+        assert [report[0] for report in transport.sent_interrupt_reports] == [0x21]
+        assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+        transport.clear_sent_interrupt_reports()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("03 30"))
+        initializing_report = await transport.wait_for_interrupt_report_id(0x30)
+
+        assert pad.status().connection_state == "initializing"
+        assert initializing_report[3:6] == bytes.fromhex("00 00 00")
+
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("30 01"))
+        transport.clear_sent_interrupt_reports()
+        await transport.wait_for_interrupt_report_id(0x30)
+
+        input_report = next(
+            report for report in transport.sent_interrupt_reports if report[0] == 0x30
+        )
+        assert input_report[3:6] == bytes.fromhex("08 00 00")
+
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_handshake_bootstrap_retries_until_first_subcommand(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        monkeypatch.setattr(
+            gamepad_runtime_module,
+            "HANDSHAKE_BOOTSTRAP_RETRY_SECONDS",
+            0.001,
+        )
+        transport = FakeHidTransport()
+        pad = make_pro_controller(transport=transport)
+        await pad.open()
+        await transport.connect()
+
+        await transport.wait_for_interrupt_report_count(2)
+        assert [report[0] for report in transport.sent_interrupt_reports] == [0x30, 0x30]
+
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("02"))
+        reports_after_reply = len(transport.sent_interrupt_reports)
+        await asyncio.sleep(0.01)
+
+        assert len(transport.sent_interrupt_reports) == reports_after_reply
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_direct_input_is_rejected_until_protocol_ready() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = make_direct_pro_controller(transport=transport)
+        await pad.open()
+        await transport.connect()
+
+        with pytest.raises(ClosedError):
+            await pad.press(Button.A)
+
+        await _complete_protocol_handshake(transport)
+        transport.clear_sent_interrupt_reports()
+        await pad.press(Button.A)
+
+        assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("08 00 00")
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_direct_bootstrap_stops_after_first_subcommand_and_remains_nonperiodic() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = make_direct_pro_controller(transport=transport)
+        await pad.open()
+        await transport.connect()
+
+        bootstrap_report = await transport.wait_for_interrupt_report_id(0x30)
+
+        assert pad.status().connection_state == "initializing"
+        assert bootstrap_report[3:6] == bytes.fromhex("00 00 00")
+
+        transport.clear_sent_interrupt_reports()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("02"))
+        await asyncio.sleep(0.02)
+
+        assert [report[0] for report in transport.sent_interrupt_reports] == [0x21]
+        transport.clear_sent_interrupt_reports()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("03 30"))
+        initializing_report = await transport.wait_for_interrupt_report_id(0x30)
+
+        assert pad.status().connection_state == "initializing"
+        assert initializing_report[3:6] == bytes.fromhex("00 00 00")
+
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("30 01"))
+        transport.clear_sent_interrupt_reports()
+        await asyncio.sleep(0.03)
+
+        assert pad.status().connection_state == "connected"
+        assert transport.sent_interrupt_reports == ()
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_protocol_ready_trace_occurs_once_after_the_completing_reply() -> None:
+    async def run() -> None:
+        trace = StringIO()
+        transport = FakeHidTransport()
+
+        async with make_pro_controller(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        ):
+            await transport.connect()
+            await _complete_protocol_handshake(transport)
+            await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("30 01"))
+
+        events = [json.loads(line) for line in trace.getvalue().splitlines()]
+        event_names = [event["event"] for event in events]
+        ready_index = event_names.index("protocol_ready")
+
+        assert event_names.count("protocol_ready") == 1
+        assert event_names[ready_index - 1] == "subcommand_reply_tx"
+        assert events[ready_index]["observed_subcommands"] == ["0x03", "0x30"]
+        assert events[ready_index]["profile_kind"] == "pro_controller"
+        assert events[ready_index]["route"] == "active_reconnect"
 
     asyncio.run(run())
 
@@ -126,7 +463,7 @@ def test_incoming_connection_trace_does_not_use_active_reconnect_events() -> Non
         ) as pad:
             pairing = asyncio.create_task(pad.pair(timeout=1.0))
             await asyncio.sleep(0)
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await asyncio.wait_for(pairing, timeout=0.1)
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
@@ -256,7 +593,7 @@ def test_press_buttons_are_reflected_in_periodic_report() -> None:
         transport = FakeHidTransport()
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.press(Button.L, Button.R)
 
             start_count = len(transport.sent_interrupt_reports)
@@ -274,7 +611,7 @@ def test_release_buttons_clears_next_periodic_report() -> None:
         transport = FakeHidTransport()
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             await pad.press(Button.L, Button.R)
             pressed_count = len(transport.sent_interrupt_reports)
@@ -294,7 +631,7 @@ def test_release_only_clears_requested_buttons_in_next_periodic_report() -> None
         transport = FakeHidTransport()
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             await pad.press(Button.A, Button.L, Button.R)
             pressed_count = len(transport.sent_interrupt_reports)
@@ -315,7 +652,7 @@ def test_apply_updates_snapshot_and_next_periodic_report() -> None:
         state = InputState.neutral().with_buttons([Button.X])
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.apply(state)
 
             assert pad.snapshot() == state
@@ -348,22 +685,26 @@ def test_direct_send_waits_for_transport_and_commits_exactly_one_report() -> Non
         )
 
         async with pad:
-            await transport.connect()
+            transport.release_send.set()
+            await _connect_protocol_ready(transport)
+            transport.send_started.clear()
+            transport.release_send.clear()
+            ready_report_count = len(transport.sent_interrupt_reports)
             send_task = asyncio.create_task(pad.send(state))
             try:
                 await asyncio.wait_for(transport.send_started.wait(), timeout=0.1)
 
                 assert send_task.done() is False
-                assert transport.sent_interrupt_reports == ()
+                assert len(transport.sent_interrupt_reports) == ready_report_count
                 assert pad.snapshot() == InputState.neutral()
 
                 transport.release_send.set()
                 await asyncio.wait_for(send_task, timeout=0.1)
 
                 assert pad.snapshot() == state
-                assert len(transport.sent_interrupt_reports) == 1
-                assert transport.sent_interrupt_reports[0][0] == 0x30
-                assert transport.sent_interrupt_reports[0][3:6] == bytes.fromhex("02 00 00")
+                assert len(transport.sent_interrupt_reports) == ready_report_count + 1
+                assert transport.sent_interrupt_reports[-1][0] == 0x30
+                assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("02 00 00")
             finally:
                 transport.release_send.set()
                 if not send_task.done():
@@ -380,17 +721,20 @@ def test_direct_connection_is_non_periodic_and_still_replies_to_subcommands() ->
         pad = make_direct_pro_controller(transport=transport)
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
+        ready_report_count = len(transport.sent_interrupt_reports)
         await asyncio.sleep(0.03)
 
-        assert transport.sent_interrupt_reports == ()
+        assert len(transport.sent_interrupt_reports) == ready_report_count
 
         await transport.inject_interrupt_data(request_device_info)
         reply = await transport.wait_for_interrupt_report_id(0x21)
         await asyncio.sleep(0.03)
 
         assert reply[14] == 0x02
-        assert [report[0] for report in transport.sent_interrupt_reports] == [0x21]
+        assert [report[0] for report in transport.sent_interrupt_reports[ready_report_count:]] == [
+            0x21
+        ]
 
         await pad.close(neutral=False)
 
@@ -426,7 +770,7 @@ def test_direct_send_failures_do_not_change_last_successfully_sent_state() -> No
         assert transport.sent_interrupt_reports == ()
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
         await pad.send(sent)
 
         with pytest.raises(InvalidInputError):
@@ -455,7 +799,7 @@ def test_direct_send_rejects_unsupported_profile_state_without_sending() -> None
         unsupported = InputState.neutral().with_buttons([Button.A])
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
 
         with pytest.raises(UnsupportedInputError):
             await pad.send(unsupported)
@@ -488,7 +832,7 @@ def test_direct_semantic_operations_send_once_and_commit_after_success() -> None
         frame = IMUFrame.gyro(100, -100, 50)
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
 
         await pad.press(Button.A)
         assert pad.snapshot() == InputState.neutral().with_buttons([Button.A])
@@ -530,6 +874,9 @@ def test_direct_concurrent_operations_are_serialized_without_lost_state() -> Non
             self.send_count = 0
 
         async def send_interrupt(self, payload: bytes) -> None:
+            if payload[0] != 0x30:
+                await super().send_interrupt(payload)
+                return
             index = self.send_count
             self.send_count += 1
             self.send_started[index].set()
@@ -543,7 +890,7 @@ def test_direct_concurrent_operations_are_serialized_without_lost_state() -> Non
             transport=transport,
         )
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
 
         press_a = asyncio.create_task(pad.press(Button.A))
         await asyncio.wait_for(transport.send_started[0].wait(), timeout=0.1)
@@ -577,7 +924,7 @@ def test_direct_tap_sends_press_and_release_once_while_preserving_held_input() -
         held = InputState.neutral().with_buttons([Button.ZL])
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
         await pad.send(held)
         start_count = len(transport.sent_interrupt_reports)
 
@@ -605,6 +952,9 @@ def test_direct_tap_keeps_pressed_state_when_release_send_fails() -> None:
             self.fail_second_send = True
 
         async def send_interrupt(self, payload: bytes) -> None:
+            if payload[0] != 0x30:
+                await super().send_interrupt(payload)
+                return
             self.send_count += 1
             if self.fail_second_send and self.send_count == 2:
                 raise ExpectedReleaseError
@@ -619,7 +969,7 @@ def test_direct_tap_keeps_pressed_state_when_release_send_fails() -> None:
         pressed = InputState.neutral().with_buttons([Button.A])
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
 
         with pytest.raises(ExpectedReleaseError):
             await pad.tap(Button.A, duration=0)
@@ -646,7 +996,7 @@ def test_direct_tap_serializes_concurrent_input_until_release() -> None:
             transport=transport,
         )
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
 
         tap = asyncio.create_task(pad.tap(Button.A, duration=0.02))
         await transport.wait_for_interrupt_report_count(1)
@@ -678,6 +1028,9 @@ def test_direct_subcommand_reply_uses_state_committed_by_prior_serialized_input(
             self.send_count = 0
 
         async def send_interrupt(self, payload: bytes) -> None:
+            if payload[0] != 0x30:
+                await super().send_interrupt(payload)
+                return
             self.send_count += 1
             if self.send_count == 1:
                 self.first_send_started.set()
@@ -694,7 +1047,7 @@ def test_direct_subcommand_reply_uses_state_committed_by_prior_serialized_input(
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
 
         input_send = asyncio.create_task(pad.send(state))
         await asyncio.wait_for(transport.first_send_started.wait(), timeout=0.1)
@@ -706,8 +1059,7 @@ def test_direct_subcommand_reply_uses_state_committed_by_prior_serialized_input(
 
         reports = transport.sent_interrupt_reports
         assert [report[0] for report in reports] == [0x30, 0x21]
-        assert reports[0][1] == 0
-        assert reports[1][1] == 1
+        assert reports[1][1] == (reports[0][1] + 1) & 0xFF
         assert reports[1][3:6] == bytes.fromhex("08 00 00")
 
         await pad.close(neutral=False)
@@ -725,7 +1077,7 @@ def test_direct_close_controls_trailing_neutral_report() -> None:
         held = InputState.neutral().with_buttons([Button.A])
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
         await pad.send(held)
         before_close = len(transport.sent_interrupt_reports)
         await pad.close(neutral=neutral)
@@ -768,7 +1120,7 @@ def test_direct_controller_profiles_share_send_and_validation_contract(
             transport=transport,
         )
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
 
         await pad.press(supported)
         before = pad.snapshot()
@@ -797,7 +1149,7 @@ def test_apply_reflects_left_and_right_sticks_in_next_periodic_report() -> None:
         )
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.apply(state)
 
             start_count = len(transport.sent_interrupt_reports)
@@ -818,7 +1170,7 @@ def test_sticks_left_updates_only_left_stick_and_preserves_buttons_and_right_sti
         left_stick = Stick.normalized(x=1.0, y=-1.0)
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.apply(initial)
 
             await pad.sticks(left=left_stick)
@@ -844,7 +1196,7 @@ def test_sticks_right_updates_only_right_stick_and_preserves_buttons_and_left_st
         right_stick = Stick.normalized(x=-1.0, y=1.0)
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.apply(initial)
 
             await pad.sticks(right=right_stick)
@@ -869,7 +1221,7 @@ def test_sticks_updates_left_and_right_in_same_committed_state() -> None:
         right_stick = Stick.normalized(x=-1.0, y=1.0)
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             await pad.sticks(left=left_stick, right=right_stick)
 
@@ -896,7 +1248,7 @@ def test_lstick_updates_only_left_stick_and_preserves_buttons_and_right_stick() 
         left_stick = Stick.up()
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.apply(initial)
 
             await pad.lstick(left_stick)
@@ -922,7 +1274,7 @@ def test_rstick_updates_only_right_stick_and_preserves_buttons_and_left_stick() 
         right_stick = Stick.down()
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.apply(initial)
 
             await pad.rstick(right_stick)
@@ -985,7 +1337,7 @@ def test_imu_updates_repeat_frame_and_preserves_buttons_and_sticks() -> None:
         enable_standard_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 01")
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await transport.inject_interrupt_data(enable_standard_imu)
             await transport.wait_for_interrupt_report_id(0x21)
             await pad.apply(initial)
@@ -1017,7 +1369,7 @@ def test_imu_updates_three_frames_in_order() -> None:
         enable_standard_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 01")
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await transport.inject_interrupt_data(enable_standard_imu)
             await transport.wait_for_interrupt_report_id(0x21)
 
@@ -1172,7 +1524,7 @@ def test_neutral_updates_snapshot_and_clears_next_periodic_report() -> None:
         pressed = InputState.neutral().with_buttons([Button.A])
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.apply(pressed)
             pressed_count = len(transport.sent_interrupt_reports)
             pressed_reports = await transport.wait_for_interrupt_report_count(pressed_count + 1)
@@ -1214,7 +1566,7 @@ def test_imu_mode_02_output_switches_periodic_input_to_quaternion_motion() -> No
             transport=transport,
             report_period_us=10_000_000,
         ) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await transport.inject_interrupt_data(enable_quaternion_imu)
             await transport.wait_for_interrupt_report_id(0x21)
 
@@ -1242,7 +1594,7 @@ def test_imu_mode_01_ack_switches_next_input_to_standard_raw() -> None:
             transport=transport,
             report_period_us=10_000_000,
         ) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.imu(*frames)
             await transport.inject_interrupt_data(enable_standard_imu)
             reply = await transport.wait_for_interrupt_report_id(0x21)
@@ -1278,7 +1630,7 @@ def test_quaternion_imu_modes_switch_all_profiles_to_mode_2_input(
             trigger = Button.ZR
 
         async with pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.imu(IMUFrame.accel(0, 0, 4096))
             await transport.inject_interrupt_data(enable_quaternion_imu)
             reply = await transport.wait_for_interrupt_report_id(0x21)
@@ -1329,7 +1681,7 @@ def test_pair_refreshes_transport_bluetooth_address_after_advertising_for_device
 
             assert transport.events == ("open", "start_advertising")
 
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await asyncio.wait_for(pairing, timeout=0.1)
 
             await transport.inject_interrupt_data(request_device_info)
@@ -1497,7 +1849,7 @@ def test_from_config_profile_reaches_periodic_input_report_builder() -> None:
         )
 
         async with ProController._from_config(config, transport=transport):
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             report = await transport.wait_for_interrupt_report_id(0x30)
 
@@ -1572,7 +1924,7 @@ def test_joycon_wrapper_sends_sr_sl_order_button_input(
         transport = FakeHidTransport()
 
         async with _joycon_class(side)(transport=transport, report_period_us=10_000_000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             start_count = len(transport.sent_interrupt_reports)
             await pad.tap(Button.SR, Button.SL, duration=0)
@@ -1605,7 +1957,7 @@ def test_joycon_wrapper_holds_sr_sl_in_periodic_input(
         transport = FakeHidTransport()
 
         async with _joycon_class(side)(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             start_count = len(transport.sent_interrupt_reports)
             await pad.press(Button.SR, Button.SL)
@@ -1654,7 +2006,7 @@ def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
 
         async with make_pro_controller(transport=transport, report_period_us=100_000):
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             start_count = len(transport.sent_interrupt_reports)
             await transport.inject_interrupt_data(request_device_info)
@@ -1672,7 +2024,7 @@ def test_imu_mode_ack_precedes_first_periodic_input_in_the_new_format() -> None:
         enable_quaternion_imu = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 40 02")
 
         async with make_pro_controller(transport=transport, report_period_us=100_000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.imu(IMUFrame.accel(0, 0, 4096))
 
             start_count = len(transport.sent_interrupt_reports)
@@ -1704,14 +2056,14 @@ def test_reopened_connection_does_not_inherit_host_requested_session_state() -> 
         disable_vibration = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 48 00")
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
         await transport.inject_interrupt_data(set_report_mode)
         await transport.inject_interrupt_data(enable_quaternion_imu)
         await transport.inject_interrupt_data(enable_vibration)
         await pad.close(neutral=True)
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
         try:
             start_count = len(transport.sent_interrupt_reports)
             await pad.tap(Button.ZL, duration=0)
@@ -1725,7 +2077,9 @@ def test_reopened_connection_does_not_inherit_host_requested_session_state() -> 
             session_events = [
                 event for event in events if event["event"] == "subcommand_session_state"
             ]
-            assert session_events[-1]["report_mode"] is None
+            assert session_events[-1]["report_mode"] == "0x30"
+            assert session_events[-1]["player_lights"] == "0x01"
+            assert session_events[-1]["protocol_ready"] is True
             assert session_events[-1]["imu_mode"] == "0x00"
             assert session_events[-1]["imu_enabled"] is False
             assert session_events[-1]["vibration_enabled"] is False
@@ -1780,7 +2134,7 @@ def test_report_tx_counter_distinguishes_0x21_and_0x30() -> None:
             transport=transport,
             report_period_us=1000,
         ) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.press(Button.A)
             await transport.wait_for_interrupt_report_id(0x30)
 
@@ -1859,7 +2213,7 @@ def test_output_report_injection_records_subcommand_session_state() -> None:
             transport=transport,
             report_period_us=1000,
         ):
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await transport.inject_interrupt_data(request_report_mode)
             reply = await transport.wait_for_interrupt_report_id(0x21)
 
@@ -1874,6 +2228,8 @@ def test_output_report_injection_records_subcommand_session_state() -> None:
             "imu_encoding_format": "disabled",
             "imu_mode": "0x00",
             "packet_id": 0x21,
+            "player_lights": "0x01",
+            "protocol_ready": False,
             "report_mode": "0x3f",
             "report_mode_supported": False,
             "subcommand_id": "0x03",
@@ -1922,7 +2278,7 @@ def test_status_returns_report_counters_last_subcommand_and_raw_rumble() -> None
         request_device_info = bytes.fromhex("01 2a 10 11 12 13 14 15 16 17 02")
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.tap(Button.A, duration=0)
 
             await transport.inject_interrupt_data(request_device_info)
@@ -1930,7 +2286,7 @@ def test_status_returns_report_counters_last_subcommand_and_raw_rumble() -> None
 
             status = pad.status()
 
-            assert status.report_counters == {0x30: 2, 0x21: 1}
+            assert status.report_counters == {0x30: 2, 0x21: 3}
             assert status.last_subcommand_id == 0x02
             assert status.raw_rumble == bytes.fromhex("10 11 12 13 14 15 16 17")
 
@@ -1943,7 +2299,7 @@ def test_close_with_neutral_records_trailing_neutral_report() -> None:
         pad = make_pro_controller(transport=transport, report_period_us=100_000)
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
         await pad.press(Button.A)
         await pad.close(neutral=True)
 
@@ -1960,7 +2316,7 @@ def test_connected_close_requests_disconnect_after_trailing_neutral() -> None:
         pad = make_pro_controller(transport=transport, report_period_us=100_000)
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
         await pad.press(Button.A)
 
         await pad.close(neutral=True)
@@ -1968,6 +2324,8 @@ def test_connected_close_requests_disconnect_after_trailing_neutral() -> None:
         assert transport.events == (
             "open",
             "connected",
+            "interrupt_rx",
+            "interrupt_rx",
             "request_disconnect",
             "disconnect_request_closed",
             "close",
@@ -2191,9 +2549,19 @@ def test_close_request_failure_records_failure_and_closes_transport() -> None:
 
 
 def test_close_treats_trailing_neutral_send_failure_as_best_effort() -> None:
+    class NeutralSendError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("neutral failed")
+
+    class FailInputFakeHidTransport(FakeHidTransport):
+        async def send_interrupt(self, payload: bytes) -> None:
+            if payload[0] == 0x30:
+                raise NeutralSendError
+            await super().send_interrupt(payload)
+
     async def run() -> None:
         trace = StringIO()
-        transport = FakeHidTransport(send_interrupt_error=RuntimeError("neutral failed"))
+        transport = FailInputFakeHidTransport()
         pad = make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
@@ -2201,7 +2569,7 @@ def test_close_treats_trailing_neutral_send_failure_as_best_effort() -> None:
         )
 
         await pad.open()
-        await transport.connect()
+        await _connect_protocol_ready(transport)
         await pad.press(Button.A)
         await pad.close(neutral=True)
 
@@ -2212,7 +2580,7 @@ def test_close_treats_trailing_neutral_send_failure_as_best_effort() -> None:
         assert transport.close_count == 1
         assert {
             "event": "error",
-            "error_type": "RuntimeError",
+            "error_type": "NeutralSendError",
             "message": "neutral failed",
             "recoverable": True,
         } in events
@@ -2260,8 +2628,12 @@ def test_fake_l2cap_channels_must_both_open_before_connection_is_complete() -> N
 
             await transport.open_l2cap_channel("interrupt")
 
+            assert pad.status().connection_state == "initializing"
+
+            await _complete_protocol_handshake(transport)
+
             assert pad.status().connection_state == "connected"
-            assert transport.events == (
+            assert transport.events[:4] == (
                 "open",
                 "l2cap_control_open",
                 "l2cap_interrupt_open",
@@ -2276,7 +2648,7 @@ def test_disconnect_callback_neutralizes_state_and_stops_report_loop() -> None:
         transport = FakeHidTransport()
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.press(Button.A)
             await transport.wait_for_interrupt_report_id(0x30)
 
@@ -2338,6 +2710,10 @@ def test_pair_timeout_records_advertising_failure_position_in_trace() -> None:
 
         assert {
             "event": "connection_timeout",
+            "observed_subcommands": [],
+            "player_lights": None,
+            "report_mode": None,
+            "stage": "protocol_initialization",
             "state": "advertising",
             "timeout": 0.001,
         } in events
@@ -2347,6 +2723,24 @@ def test_pair_timeout_records_advertising_failure_position_in_trace() -> None:
             "request_disconnect_unavailable",
             "close",
         )
+
+    asyncio.run(run())
+
+
+def test_pair_timeout_budget_includes_start_advertising() -> None:
+    class BlockingAdvertisingFakeHidTransport(FakeHidTransport):
+        async def start_advertising(self) -> None:
+            await asyncio.Event().wait()
+
+    async def run() -> None:
+        transport = BlockingAdvertisingFakeHidTransport()
+        pad = make_pro_controller(transport=transport)
+
+        with pytest.raises(ConnectionTimeoutError):
+            await pad.pair(timeout=0.001)
+
+        assert transport.is_open is False
+        assert pad.status().connection_state == "closed"
 
     asyncio.run(run())
 
@@ -2365,13 +2759,20 @@ def test_reconnect_records_bonded_peer_selection_without_advertising(
 ) -> None:
     async def run() -> None:
         trace = StringIO()
-        transport = FakeHidTransport(bonded_peer_addresses=peer_addresses)
+        transport = FakeHidTransport(
+            bonded_peer_addresses=peer_addresses,
+            active_reconnect_auto_connect=False,
+        )
 
         async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
-            result = await pad.try_reconnect(timeout=0.1)
+            reconnect = asyncio.create_task(pad.try_reconnect(timeout=0.1))
+            if peer_addresses:
+                await _wait_for_transport_event(transport, "active_reconnect")
+                await _connect_protocol_ready(transport)
+            result = await reconnect
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
 
@@ -2420,13 +2821,19 @@ def test_connect_prefers_active_reconnect_when_one_bond_exists() -> None:
     async def run() -> None:
         trace = StringIO()
         peer_address = "01:02:03:04:05:06"
-        transport = FakeHidTransport(bonded_peer_addresses=(peer_address,))
+        transport = FakeHidTransport(
+            bonded_peer_addresses=(peer_address,),
+            active_reconnect_auto_connect=False,
+        )
 
         async with make_pro_controller(
             diagnostics=DiagnosticsConfig(trace_writer=trace),
             transport=transport,
         ) as pad:
-            await pad.connect(timeout=0.1)
+            connecting = asyncio.create_task(pad.connect(timeout=0.1))
+            await _wait_for_transport_event(transport, "active_reconnect")
+            await _connect_protocol_ready(transport)
+            await connecting
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
 
@@ -2461,7 +2868,7 @@ def test_try_connect_returns_pairing_result_when_no_bond_and_allowed() -> None:
 
             assert transport.events == ("open", "start_advertising")
 
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             result = await asyncio.wait_for(connect_task, timeout=0.1)
 
         events = [json.loads(line) for line in trace.getvalue().splitlines()]
@@ -2613,7 +3020,7 @@ def test_concurrent_press_and_release_preserve_button_state() -> None:
         transport = FakeHidTransport()
 
         async with make_pro_controller(transport=transport, report_period_us=1000) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             await asyncio.gather(
                 pad.press(Button.L),
@@ -2726,7 +3133,7 @@ def test_tap_button_a_records_press_and_release_reports() -> None:
         transport = FakeHidTransport()
 
         async with make_pro_controller(transport=transport) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             await pad.tap(Button.A, duration=0)
 
@@ -2745,7 +3152,7 @@ def test_tap_releases_only_tapped_button_and_preserves_held_buttons() -> None:
         transport = FakeHidTransport()
 
         async with make_pro_controller(transport=transport) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
             await pad.press(Button.ZL)
 
             await pad.tap(Button.A, duration=0)
@@ -2773,11 +3180,21 @@ def test_tap_before_connection_does_not_leave_pressed_state() -> None:
 
 
 def test_tap_send_failure_releases_pressed_state() -> None:
+    class InputSendError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("send failed")
+
+    class FailInputFakeHidTransport(FakeHidTransport):
+        async def send_interrupt(self, payload: bytes) -> None:
+            if payload[0] == 0x30:
+                raise InputSendError
+            await super().send_interrupt(payload)
+
     async def run() -> None:
-        transport = FakeHidTransport(send_interrupt_error=RuntimeError("send failed"))
+        transport = FailInputFakeHidTransport()
 
         async with make_pro_controller(transport=transport) as pad:
-            await transport.connect()
+            await _connect_protocol_ready(transport)
 
             with pytest.raises(RuntimeError, match="send failed"):
                 await pad.tap(Button.A, duration=0)
@@ -2794,7 +3211,16 @@ def test_fake_connected_callback_sets_connected_status() -> None:
         async with make_pro_controller(transport=transport) as pad:
             await transport.connect()
 
+            assert pad.status().connection_state == "initializing"
+
+            await _complete_protocol_handshake(transport)
+
             assert pad.status().connection_state == "connected"
-            assert transport.events == ("open", "connected")
+            assert transport.events == (
+                "open",
+                "connected",
+                "interrupt_rx",
+                "interrupt_rx",
+            )
 
     asyncio.run(run())

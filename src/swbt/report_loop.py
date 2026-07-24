@@ -19,6 +19,10 @@ REPLY_PERIODIC_HOLDOFF_SECONDS = 0.3
 ReplyBuilder = Callable[[], bytes | Awaitable[bytes]]
 
 
+def _user_input_enabled_by_default() -> bool:
+    return True
+
+
 class ReportSender:
     """Serialize input reports and subcommand replies for one HID session."""
 
@@ -132,9 +136,13 @@ class ReportLoop:
         clock_ns: Callable[[], int] = monotonic_ns,
         _sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         sender: ReportSender | None = None,
+        is_user_input_enabled: Callable[[], bool] = _user_input_enabled_by_default,
+        stop_when_user_input_enabled: bool = False,
     ) -> None:
         """Create a report loop helper."""
         self._state_store = state_store
+        self._is_user_input_enabled = is_user_input_enabled
+        self._stop_when_user_input_enabled = stop_when_user_input_enabled
         self._report_period_ns = report_period_us * 1_000
         self._clock_ns = clock_ns
         self._sleep = _sleep
@@ -167,6 +175,9 @@ class ReportLoop:
 
     async def send_current_input(self, *, reason: str = "input") -> None:
         """Send one 0x30 input report for the current state."""
+        if not self._is_user_input_enabled():
+            await self._sender.send_input(InputState.neutral(), reason=reason)
+            return
         await self._sender.send_current_input(self._state_store, reason=reason)
 
     async def send_subcommand_reply(self, build_report: ReplyBuilder) -> bytes:
@@ -194,6 +205,8 @@ class ReportLoop:
         while True:
             while (remaining_ns := next_deadline_ns - self._clock_ns()) > 0:
                 await self._sleep(remaining_ns / 1_000_000_000)
+            if self._stop_when_user_input_enabled and self._is_user_input_enabled():
+                return
             await self.send_next_report()
             next_deadline_ns += self._report_period_ns
             now_ns = self._clock_ns()

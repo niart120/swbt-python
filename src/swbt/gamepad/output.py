@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from swbt.diagnostics import DiagnosticsRecorder
+from swbt.input import InputState
 from swbt.protocol.output_report import OutputReportParser
 from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.subcommand import (
@@ -16,6 +17,16 @@ from swbt.state_store import InputStateStore
 ReplyBuilder = Callable[[], bytes | Awaitable[bytes]]
 ReplySender = Callable[[ReplyBuilder], Awaitable[bytes]]
 ReplySenderRequirement = Callable[[], None]
+ProtocolStateUpdated = Callable[[], None]
+SubcommandReceived = Callable[[int], None]
+
+
+def _ignore_protocol_state_update() -> None:
+    pass
+
+
+def _ignore_subcommand_received(_subcommand_id: int) -> None:
+    pass
 
 
 @dataclass
@@ -27,6 +38,8 @@ class OutputReportDispatcher:
     send_subcommand_reply: ReplySender
     session: SwitchHidSession
     state_store: InputStateStore
+    protocol_state_updated: ProtocolStateUpdated = _ignore_protocol_state_update
+    subcommand_received: SubcommandReceived = _ignore_subcommand_received
     output_report_parser: OutputReportParser = field(default_factory=OutputReportParser)
     subcommand_responder: SubcommandResponder = field(default_factory=SubcommandResponder)
 
@@ -45,15 +58,22 @@ class OutputReportDispatcher:
         )
         if output_report.subcommand_id is None:
             return
+        self.subcommand_received(output_report.subcommand_id)
         self.diagnostics.record_subcommand_rx(
             packet_id=output_report.packet_id,
             subcommand_id=output_report.subcommand_id,
         )
+        self.session.observe_subcommand(output_report.subcommand_id)
         self.require_reply_sender()
+        state_before_reply = self.session.state
         try:
 
             async def build_reply() -> bytes:
-                state = await self.state_store.snapshot()
+                state = (
+                    await self.state_store.snapshot()
+                    if self.session.state.protocol_ready
+                    else InputState.neutral()
+                )
                 return self.subcommand_responder.respond(
                     output_report,
                     state=state,
@@ -62,12 +82,16 @@ class OutputReportDispatcher:
 
             reply = await self.send_subcommand_reply(build_reply)
         except UnsupportedSubcommandError:
+            self.session.restore_state(state_before_reply)
             self.diagnostics.record_event(
                 "unsupported_subcommand",
                 packet_id=output_report.packet_id,
                 payload=output_report.subcommand_payload.hex(),
                 subcommand_id=subcommand_id,
             )
+            raise
+        except BaseException:
+            self.session.restore_state(state_before_reply)
             raise
         if output_report.subcommand_id in SESSION_STATE_SUBCOMMANDS:
             session_state = self.session.state
@@ -79,6 +103,8 @@ class OutputReportDispatcher:
                 packet_id=output_report.packet_id,
                 report_mode=_format_optional_byte(session_state.report_mode),
                 report_mode_supported=session_state.report_mode_supported,
+                player_lights=_format_optional_byte(session_state.player_lights),
+                protocol_ready=session_state.protocol_ready,
                 subcommand_id=subcommand_id,
                 unsupported_report_mode=_format_optional_byte(
                     session_state.unsupported_report_mode
@@ -91,6 +117,7 @@ class OutputReportDispatcher:
             report_id=_format_report_id(reply[0]),
             subcommand_id=subcommand_id,
         )
+        self.protocol_state_updated()
 
 
 def _format_report_id(report_id: int) -> str:

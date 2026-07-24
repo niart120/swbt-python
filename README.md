@@ -29,7 +29,7 @@ uv sync --dev
 - [API リファレンス](https://niart120.github.io/swbt-python/api/)
 - [利用例](https://niart120.github.io/swbt-python/usage/)
 - [実機準備手順](https://niart120.github.io/swbt-python/hardware/)
-- [Agent Brief](https://niart120.github.io/swbt-python/agent-brief/)
+- [AI エージェント向け要約](https://niart120.github.io/swbt-python/agent-brief/)
 
 同じ内容は `docs/` 配下でも確認できます。
 
@@ -70,7 +70,6 @@ async def main() -> None:
         profile_path="switch-left-joycon-profile.json",
     ) as left:
         await left.connect(timeout=30.0, allow_pairing=True)
-        await left.tap(Button.SR, Button.SL)
         await left.tap(Button.L)
         await left.lstick(Stick.left())
         await left.neutral()
@@ -79,7 +78,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-「持ちかた/順番を変える」画面で Joy-Con としてペアリングする場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送信する必要があります。
+「持ちかた/順番を変える」画面で Joy-Con としてペアリングする場合も、接続後に登録用の SR+SL 入力を追加送信する必要はありません。ライブラリは Joy-Con 用の初期化応答を返し、0 以外のプレイヤーライトが設定されるまで `connect()` を完了しません。Joy-Con L/R の `Button.SL` と `Button.SR` は、接続後に利用者が送る通常のボタン入力として引き続き利用できます。
 
 Pro Controller、周期送信型 Joy-Con、直接送信型はすべて、Bluetooth アドレスの選択方法とペアリングキーをまとめる `profile_path` を使います。新規プロファイルは各具象クラスの `create_profile()` で作成し、コントローラー形状と対象機器ごとに保存先を分けてください。v0.4.0 の `key_store_path` で使用していた JSON 形式のペアリング情報との互換経路はありません。Joy-Con L で右スティックや A/B/X/Y、Joy-Con R で左スティックや十字キーを入力すると `UnsupportedInputError` が送出されます。`JoyConPair` は未実装です。
 
@@ -91,9 +90,9 @@ Pro Controller、周期送信型 Joy-Con、直接送信型はすべて、Bluetoo
 
 ### 確認済み構成
 
-2026-07-07 時点では、Windows 11 / CSR8510 A10 / WinUSB / `usb:0` / Switch 2 ファームウェア 22.1.0 で、Pro Controller のペアリング、保存済みペアリング情報を使う再接続、主要なボタン / スティック入力、ニュートラル復帰を確認済みです。
+2026-07-24 時点では、Windows 11 / CSR8510 A10 / WinUSB / `usb:0` で、Pro Controller、Joy-Con L、Joy-Con R の初回ペアリング、保存済みプロファイルを使う再接続、初期化完了後のオブジェクト返却を確認済みです。Joy-Con L/R は、登録用の SR+SL 入力を追加送信せずに初期化を完了しました。
 
-同じ Windows 構成で、Joy-Con L/R も部分的に動作確認済みです。確認済み範囲と未確認範囲の詳細は[実機準備手順](https://niart120.github.io/swbt-python/hardware/)にあります。
+同じ Windows 構成で、Pro Controller の主要なボタン / スティック入力、ニュートラル復帰と、Joy-Con L/R の対応ボタン / スティック入力も確認しています。確認済み範囲と未確認範囲の詳細は[実機準備手順](https://niart120.github.io/swbt-python/hardware/)にあります。
 
 macOS 15.7.7 / CSR8510 A10 では、Pro Controller のペアリング、保存済みペアリング情報を使う再接続、ボタン入力、ニュートラル復帰を記録しています。
 
