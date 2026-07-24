@@ -2,8 +2,9 @@
 
 import asyncio
 import json
+import sys
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TextIO
 
 import pytest
 
@@ -21,6 +22,7 @@ from swbt import (
 
 _PROFILE_FILENAME = "pairing-profile-pro.json"
 _ADAPTER_DEFAULT_PROFILE_FILENAME = "pairing-profile-adapter-default-pro.json"
+_DIRECT_INPUT_OBSERVATION_SECONDS = 30.0
 type JoyConSide = Literal["left", "right"]
 type JoyConController = JoyConL | JoyConR
 type DirectController = DirectProController | DirectJoyConL | DirectJoyConR
@@ -409,7 +411,7 @@ def test_switch_joycon_pairing_profile_reuses_target_after_normal_close(
     ("name", "controller_cls", "controller_kind", "button"),
     _DIRECT_CASES,
 )
-def test_switch_direct_pairing_profile_fresh_pairing_send_and_close(
+def test_switch_direct_pairing_profile_fresh_pairing_holds_input_before_close(
     name: str,
     controller_cls: type[DirectProController] | type[DirectJoyConL] | type[DirectJoyConR],
     controller_kind: Literal["pro", "joycon_l", "joycon_r"],
@@ -418,7 +420,12 @@ def test_switch_direct_pairing_profile_fresh_pairing_send_and_close(
     swbt_local_address: str,
     swbt_hardware_artifact_dir: Path,
 ) -> None:
-    """Pair one Direct controller, send input, and close it neutrally."""
+    """Pair one Direct controller and hold sent input before neutral close.
+
+    A pytest pass proves enqueue, pre-close ordering, profile state, and cleanup.
+    Human-visible Switch input reflection during the observation window must
+    still be recorded in spec/hardware-test-log.md.
+    """
     profile_path = swbt_hardware_artifact_dir / f"pairing-profile-direct-{name}.json"
     trace_path = swbt_hardware_artifact_dir / f"pairing-profile-direct-{name}-fresh-pairing.jsonl"
     if profile_path.exists():
@@ -427,6 +434,7 @@ def test_switch_direct_pairing_profile_fresh_pairing_send_and_close(
 
     async def run() -> None:
         with trace_path.open("w", encoding="utf-8") as trace:
+            _record_direct_input_observation_start(trace, name=name, button=button)
             pad: DirectController = await controller_cls.create_profile(
                 adapter=swbt_bumble_adapter,
                 profile_path=str(profile_path),
@@ -438,8 +446,24 @@ def test_switch_direct_pairing_profile_fresh_pairing_send_and_close(
                 await _wait_for_event(trace_path, "key_store_update", timeout_seconds=10.0)
                 await pad.send(sent_state)
                 assert pad.snapshot() == sent_state
+                await _hold_direct_input_before_close(
+                    pad,
+                    trace,
+                    name=name,
+                    button=button,
+                )
             finally:
+                _record_probe_event(
+                    trace,
+                    "manual_direct_input_checkpoint",
+                    operation="close_start",
+                )
                 await pad.close(neutral=True)
+                _record_probe_event(
+                    trace,
+                    "manual_direct_input_cleanup",
+                    connection_state=pad.status().connection_state,
+                )
 
     asyncio.run(run())
 
@@ -452,6 +476,7 @@ def test_switch_direct_pairing_profile_fresh_pairing_send_and_close(
     assert _contains_event(events, "adapter_identity_prepared")
     assert _contains_event(events, "key_store_update", status="succeeded")
     assert _contains_event(events, "transport_close_complete", adapter=swbt_bumble_adapter)
+    _assert_direct_input_observation_order(events, button=button)
 
 
 @pytest.mark.hardware
@@ -519,6 +544,119 @@ def test_switch_direct_pairing_profile_reuses_target_after_normal_close(
     assert _contains_event(events, "transport_close_complete", adapter=swbt_bumble_adapter)
 
 
+def _record_direct_input_observation_start(
+    trace: TextIO,
+    *,
+    name: str,
+    button: Button,
+) -> None:
+    _record_probe_event(
+        trace,
+        "manual_direct_input_checkpoint",
+        button=button.name,
+        controller=name,
+        expected_switch_screen="controller_search_or_change_grip_order",
+        observation_seconds=_DIRECT_INPUT_OBSERVATION_SECONDS,
+        operation="operator_prepare_input_observation",
+    )
+    sys.stderr.write(
+        "SWBT hardware: Direct input reflection observation; "
+        "expected_switch_screen=controller_search_or_change_grip_order; "
+        f"controller={name}; button={button.name}; "
+        f"holding {_DIRECT_INPUT_OBSERVATION_SECONDS:.0f}s before close\n"
+    )
+    sys.stderr.flush()
+
+
+async def _hold_direct_input_before_close(
+    pad: DirectController,
+    trace: TextIO,
+    *,
+    name: str,
+    button: Button,
+) -> None:
+    _record_probe_event(
+        trace,
+        "manual_direct_input_checkpoint",
+        button=button.name,
+        controller=name,
+        operation="direct_input_enqueued",
+        report_0x30_count=pad.status().report_counters.get(0x30, 0),
+    )
+    await asyncio.sleep(_DIRECT_INPUT_OBSERVATION_SECONDS)
+    _record_probe_event(
+        trace,
+        "manual_direct_input_checkpoint",
+        button=button.name,
+        controller=name,
+        observation_seconds=_DIRECT_INPUT_OBSERVATION_SECONDS,
+        operation="pre_close_observation_window_complete",
+        report_0x30_count=pad.status().report_counters.get(0x30, 0),
+    )
+
+
+def _assert_direct_input_observation_order(
+    events: list[dict[str, Any]],
+    *,
+    button: Button,
+) -> None:
+    operator_prepare = _first_event_index(
+        events,
+        "manual_direct_input_checkpoint",
+        button=button.name,
+        expected_switch_screen="controller_search_or_change_grip_order",
+        observation_seconds=_DIRECT_INPUT_OBSERVATION_SECONDS,
+        operation="operator_prepare_input_observation",
+    )
+    direct_report = _first_event_index(
+        events,
+        "report_tx",
+        reason="direct",
+        report_id="0x30",
+    )
+    enqueued = _first_event_index(
+        events,
+        "manual_direct_input_checkpoint",
+        button=button.name,
+        operation="direct_input_enqueued",
+    )
+    observation_complete = _first_event_index(
+        events,
+        "manual_direct_input_checkpoint",
+        button=button.name,
+        observation_seconds=_DIRECT_INPUT_OBSERVATION_SECONDS,
+        operation="pre_close_observation_window_complete",
+    )
+    close_start = _first_event_index(
+        events,
+        "manual_direct_input_checkpoint",
+        operation="close_start",
+    )
+    transport_close = _first_event_index(events, "transport_close_complete")
+    cleanup = _first_event_index(
+        events,
+        "manual_direct_input_cleanup",
+        connection_state="closed",
+    )
+    assert (
+        operator_prepare
+        < direct_report
+        < enqueued
+        < observation_complete
+        < close_start
+        < transport_close
+        < cleanup
+    )
+
+
+def _record_probe_event(trace: TextIO, event: str, **fields: object) -> None:
+    payload: dict[str, object] = {"event": event}
+    payload.update(fields)
+    trace.write(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+    trace.write("\n")
+    trace.flush()
+
+
 async def _wait_for_event(
     trace_path: Path,
     event_name: str,
@@ -549,6 +687,20 @@ def _first_event(events: list[dict[str, Any]], event_name: str) -> dict[str, Any
         if event.get("event") == event_name:
             return event
     msg = f"missing event: {event_name}"
+    raise AssertionError(msg)
+
+
+def _first_event_index(
+    events: list[dict[str, Any]],
+    event_name: str,
+    **expected: object,
+) -> int:
+    for index, event in enumerate(events):
+        if event.get("event") != event_name:
+            continue
+        if all(event.get(key) == value for key, value in expected.items()):
+            return index
+    msg = f"missing event: {event_name} {expected}"
     raise AssertionError(msg)
 
 
