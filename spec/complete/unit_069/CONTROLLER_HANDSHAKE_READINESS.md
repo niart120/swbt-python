@@ -82,8 +82,8 @@ Periodic / Direct の送信方式はこの境界を共有する。
 | `0x03` | input report mode。`0x30` は standard full mode | source fact | [dekuNukem protocol notes](https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering/blob/d2ece786a81b5b72a7ddc2742ce97a2afa7a637f/bluetooth_hid_subcommands_notes.md)、`subcommand_report_mode_session_state` fixture | stable |
 | `0x04` payload layout | L、R、ZL、ZR、SL、SR、HOME の順に 7 個の UInt16LE。単位は 10 ms | source fact | dekuNukem protocol notes | stable |
 | Pro Controller の登録用 `0x04` 値 | L / R を各 300 tick、残りを 0 | implementation fact | joycontrol `protocol.py`、`swbt-daemon/swbt/switch/switch_subcommand_dispatcher.c`、現行 swbt-python | established precedent |
-| Joy-Con L/R の登録用 `0x04` 値 | SL / SR を各 300 tick、残りを 0 | implementation fact | [joycontrol protocol.py](https://github.com/mart1nro/joycontrol/blob/3adf0b2878b2a9677644a88eda351e122f432095/joycontrol/protocol.py) | hardware verification required |
-| 現行 swbt-python の `0x04` | 全 profile に Pro Controller 用 L / R 値を返す | implementation fact | `src/swbt/protocol/subcommand.py`、`tests/unit/test_subcommand_responder.py` | profile bug candidate |
+| Joy-Con L/R の登録用 `0x04` 値 | SL / SR を各 300 tick、残りを 0 | implementation fact | [joycontrol protocol.py](https://github.com/mart1nro/joycontrol/blob/3adf0b2878b2a9677644a88eda351e122f432095/joycontrol/protocol.py)、unit_069 hardware trace | tested condition only |
+| 変更前 swbt-python の `0x04` | 全 profile に Pro Controller 用 L / R 値を返していた | implementation fact | unit_069着手前の`src/swbt/protocol/subcommand.py`、red test | profile対応実装で解消 |
 | `0x08` | Switch は接続ごとに `0x08 00` を送る | source fact | dekuNukem protocol notes | stable observation from reverse engineering |
 | `0x30` payload | 下位 4 bit は点灯、上位 4 bit は点滅する player light の bitfield | source fact | dekuNukem protocol notes | stable |
 | player lights 後の入力受付 | joycontrol は `0x30` reply 送信後に event を立て、`ControllerState.connect()` はその event を待つ | implementation fact | joycontrol `protocol.py` / [controller_state.py](https://github.com/mart1nro/joycontrol/blob/3adf0b2878b2a9677644a88eda351e122f432095/joycontrol/controller_state.py) | strong precedent |
@@ -94,17 +94,15 @@ Periodic / Direct の送信方式はこの境界を共有する。
 | Joy-Con L 登録 | 初期 sequence の応答後に SR+SL `000030` を hold して登録成功 | hardware observation | `spec/hardware-test-log.md` 2026-07-06 / 2026-07-07 | tested condition only |
 | Joy-Con R 登録 | 初期 sequence の応答後に SR+SL `300000` を hold して登録成功。`0x22` を追加観測 | hardware observation | `spec/hardware-test-log.md` 2026-07-07 | tested condition only |
 | 全 profile 共通の固定 required set | firmware と profile を問わず 9 種類すべてが必須 | unverified hypothesis | stable source なし | completion gate にしない |
-| `0x30` ACK | swbt-python / joycontrol は `0x80`、既存 source-audit fixture と swbt-daemon は `0xb0` | implementation fact conflict | local implementations、joycontrol | ready 判定に ACK 固定値を使わず、実装前に fixture を再監査する |
+| `0x30` ACK | swbt-python / joycontrol は `0x80`、既存 source-audit fixture と swbt-daemon は `0xb0` | implementation fact conflict | local implementations、joycontrol | fixtureを再監査し、ACK固定値をready判定に使わない。`0x80`は今回の全profile実機runで受理 |
 
 ### 5.2 未解決事項
 
-- Joy-Con L/R が profile 対応した `0x04` reply だけで、追加の SR+SL input report なしに
-  nonzero player lights へ到達するかは swbt-python 実機で未検証である。
-- Joy-Con の成功済み trace は SR+SL 後の player lights payload を構造化 event として
-  記録していない。実装後 gate では payload と reply 完了順を記録する。
-- `0x30` ACK の `0x80` / `0xb0` 差は、ready 条件から独立して再監査する。現行
-  swbt-python の `0x80` は Switch 2 の成功済み sequence で受理されているが、
-  cross-firmware guarantee にはしない。
+- Joy-Con L/R は今回のSwitch / adapter環境で、profile対応した`0x04` replyだけにより
+  追加のSR+SL input reportなしでnonzero player lightsへ到達した。別firmwareやadapterへ
+  一般化できる根拠はない。
+- `0x30` ACK の `0x80` / `0xb0` 差は実装間差分として残る。現行swbt-pythonの
+  `0x80` は今回の全profile実機runで受理されたが、cross-firmware guaranteeにはしない。
 - Nintendo 公式の公開 protocol 仕様は確認できていない。source fact は公開された
   reverse engineering notes の記述範囲を表す。
 
@@ -149,24 +147,25 @@ Periodic / Direct の送信方式はこの境界を共有する。
 | green | Periodic の接続前 state は initializing 中に wire へ出ず、ready 後に反映される | edge | integration | no | subcommand reply prefix は neutral |
 | green | Periodic / Direct は起動 report を送り、最初の subcommand 後に再送を停止する | regression | integration | no | 起動 report 不在の red 後、両 reporting type と1秒再送を green |
 | green | supported `0x03 30` reply 後は neutral reporting を開始し、ready 後は Periodic だけ継続する | regression | integration | no | reply-only 実機runは追加SPI後に停止。実装後Pro reconnectがpass。Direct停止はfakeでgreen |
+| green | Direct Pro は実機ready後に自動`0x30`を継続しない | characterization | hardware | yes | neutral-only active reconnectでready前periodicあり、ready後1秒間はautomatic periodic 0件 |
 | green | Direct の input operation は link 接続後でも ready 前は失敗し、ready 後は送信できる | edge | integration | no | `ClosedError` 後、ready で送信成功 |
 | green | timeout は link と handshake を含む 1 個の budget で評価される | new | unit / integration | no | advertising と reconnect+ready を外側の1 deadlineで囲み、timeout diagnostics に session state を記録 |
 | green | ready 前 disconnect / unsupported subcommand は待機 API を直ちに failure で起こす | edge | integration | no | disconnect と reply failure を timeout 前に通知。unsupported は既存 protocol failure 経路を共有 |
 | green | reconnect session は前回の report mode / player lights / ready を再利用しない | regression | integration | no | reopen 時の session reset に player lights / ready を追加 |
 | green | `protocol_ready` は reply event より後に 1 回だけ記録される | new | integration | no | observed subcommands、profile kind、route と event 順を確認 |
-| todo | Pro Controller の fresh pairing / reconnect が nonzero player lights reply 後に戻る | characterization | hardware | yes | reconnect は pass。fresh pairing は loop 修正前に key 保存まで成功したため再実行が必要 |
-| todo | Joy-Con L の profile 対応 `0x04` だけで fresh pairing が完了するか確認する | characterization | hardware | yes | manual SR+SL を送らず UI と trace を確認 |
-| todo | Joy-Con R の profile 対応 `0x04` だけで fresh pairing が完了するか確認する | characterization | hardware | yes | optional `0x22` は completion gate にしない |
-| todo | Joy-Con L/R の active reconnect が追加の登録 input なしで ready へ戻る | characterization | hardware | yes | profile ごとに実行 |
+| green | Pro Controller の fresh pairing / reconnect が nonzero player lights reply 後に戻る | characterization | hardware | yes | ready trace assertion付きでreconnect `1 passed in 4.98s`、fresh pairing `1 passed in 5.39s` |
+| green | Joy-Con L の profile 対応 `0x04` だけで fresh pairing が完了するか確認する | characterization | hardware | yes | 追加SR+SLなしでfresh `1 passed in 5.15s`、nonzero player lights後にready |
+| green | Joy-Con R の profile 対応 `0x04` だけで fresh pairing が完了するか確認する | characterization | hardware | yes | 追加SR+SLなしでfresh `1 passed in 5.52s`。optional `0x22`へreply後、`0x30 08`でready |
+| green | Joy-Con L/R の active reconnect が追加の登録 input なしで ready へ戻る | characterization | hardware | yes | Joy-Con L `1 passed in 5.94s`、Joy-Con R `1 passed in 6.46s` |
 
 ## 8. 文書検証計画
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| `spec/initial/api.md` | object を受け取った時点の利用可能条件 | 本仕様 §6 / §9 | `uv run mkdocs build --strict` | todo | 実装完了時に更新 |
-| `spec/initial/lifecycle.md` | link connected と protocol ready の状態遷移 | 本仕様 §9.1 | `uv run mkdocs build --strict` | todo | 実装完了時に更新 |
-| `spec/initial/protocol.md` | player lights session state と profile 対応 `0x04` | 本仕様 §5 / §9.2 / §9.3 | `uv run mkdocs build --strict` | todo | ACK 差分を再監査 |
-| `spec/initial/testing.md` | fake / hardware の分担 | 本仕様 §7 / §12 | `uv run mkdocs build --strict` | todo | 実機未実行 |
+| `spec/initial/api.md` | object を受け取った時点の利用可能条件 | 本仕様 §6 / §9 | `uv run mkdocs build --strict` | pass | ready後returnとDirect内部loopの範囲を反映 |
+| `spec/initial/lifecycle.md` | link connected と protocol ready の状態遷移 | 本仕様 §9.1 | `uv run mkdocs build --strict` | pass | bootstrap、requested report mode、ready後の方式差を反映 |
+| `spec/initial/protocol.md` | player lights session state と profile 対応 `0x04` | 本仕様 §5 / §9.2 / §9.3 | `uv run mkdocs build --strict` | pass | ACK差分は監査済み。固定ready条件には不使用 |
+| `spec/initial/testing.md` | fake / hardware の分担 | 本仕様 §7 / §12 | `uv run mkdocs build --strict` | pass | fakeと全profile実機gateを照合 |
 
 ## 9. 設計メモ
 
@@ -322,8 +321,14 @@ Direct は ready 前の利用者 input operation を拒否する。subcommand re
 | Pro Controller active reconnect hardware gate | pass | `1 passed in 3.60s`。`0x30 00` は ready にせず、`0x03 30` と最後の `0x30 01` reply 後に `protocol_ready`、続いて接続 API が完了 |
 | Pro Controller report-mode-driven reconnect | pass | `1 passed in 4.44s`。bootstrap 2件を最初の `0x02` で停止し、`0x03 30` 後だけperiodic開始、`0x30 01` reply後にready |
 | Pro Controller reconnect with ready trace assertions | pass | `1 passed in 4.98s`。bootstrap停止、全受信subcommandへのreply、`0x03 30`、nonzero player lights、reply直後のreadyを自動検査 |
+| Pro Controller fresh pairing with ready trace assertions | pass | `1 passed in 5.39s`。key store update、bootstrap停止、`0x03 30`、`0x30 00`待機継続、`0x30 01` reply直後のready、cleanupを確認 |
+| Direct Pro ready-stop hardware gate | pass | `1 passed in 5.44s`。ready前periodic 2件、ready後1秒間automatic periodic 0件。終了時neutralとtransport closeを確認 |
+| Joy-Con L adapter-default fresh pairing | pass | `1 passed in 5.15s`。追加SR+SLなしで`0x04` reply後に`0x30 01`へ進みready |
+| Joy-Con L adapter-default active reconnect | pass | `1 passed in 5.94s`。profile bytes不変、pairing fallbackなし、session ready再構築とcleanupを確認 |
+| Joy-Con R adapter-default fresh pairing | pass | `1 passed in 5.52s`。追加SR+SLなし。optional `0x22` reply後、`0x30 08`でready |
+| Joy-Con R adapter-default active reconnect | pass | `1 passed in 6.46s`。profile bytes不変、pairing fallbackなし、session ready再構築とcleanupを確認 |
 | final `uv run pytest tests/unit -q` | pass | `474 passed` |
-| Pro Controller fresh pairing / Joy-Con L / Joy-Con R hardware gate | not run | Pro fresh pairing は Switch 側登録削除後の再実行が必要。Joy-Con は別 run |
+| Pro Controller / Joy-Con L / Joy-Con R hardware gate | pass | 各profileのfresh pairing / active reconnectがpass。Direct Pro ready後停止もpass |
 
 ## 12. 実機実行条件
 
@@ -361,5 +366,5 @@ Direct は ready 前の利用者 input operation を拒否する。subcommand re
 - [x] 実機実行条件を記録した
 - [x] `0x30` ACK conflict を再監査した
 - [x] 実装と local gate を完了した
-- [ ] Pro Controller / Joy-Con L / Joy-Con R の実機 gate を完了した
+- [x] Pro Controller / Joy-Con L / Joy-Con R の実機 gate を完了した
 - [x] 初期設計文書へ完了後の contract を反映した

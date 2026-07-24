@@ -291,6 +291,177 @@ def test_switch_adapter_default_profile_reuses_address_after_normal_close(
 
 
 @pytest.mark.hardware
+def test_switch_direct_adapter_default_profile_stops_automatic_reports_after_ready(
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Reconnect Direct Pro and stop requested report mode after protocol readiness."""
+    profile_path = swbt_hardware_artifact_dir / _ADAPTER_DEFAULT_PROFILE_FILENAME
+    trace_path = (
+        swbt_hardware_artifact_dir / "pairing-profile-direct-adapter-default-reconnect.jsonl"
+    )
+    if not profile_path.exists():
+        pytest.skip(
+            "adapter-default pairing profile is missing; run the fresh pairing test first "
+            "with the same --swbt-hardware-artifact-dir"
+        )
+    original_profile = profile_path.read_bytes()
+    payload = json.loads(original_profile)
+    if payload.get("identity") != {"kind": "adapter-default"}:
+        pytest.fail("existing pairing profile is not an adapter-default profile")
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad = DirectProController(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                result = await pad.try_reconnect(timeout=60.0)
+                assert result.status == "connected"
+                await asyncio.sleep(1.0)
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+    _assert_protocol_ready_handshake(events, profile_kind="pro_controller")
+    _assert_direct_stops_automatic_reports_after_ready(events)
+    assert profile_path.read_bytes() == original_profile
+    assert _contains_event(
+        events,
+        "active_reconnect_result",
+        route="active_reconnect",
+        status="connected",
+    )
+    assert not _contains_event(events, "advertising_start")
+    assert not _contains_event(events, "classic_pairing")
+    assert not _contains_event(events, "key_store_update")
+    assert _contains_event(
+        events,
+        "transport_close_complete",
+        adapter=swbt_bumble_adapter,
+    )
+
+
+@pytest.mark.hardware
+@pytest.mark.parametrize(("side", "controller_cls", "controller_kind"), _JOYCON_CASES)
+def test_switch_joycon_adapter_default_profile_fresh_pairing_and_close(
+    side: JoyConSide,
+    controller_cls: type[JoyConL] | type[JoyConR],
+    controller_kind: Literal["joycon_l", "joycon_r"],
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Pair one Joy-Con profile with the adapter's current public address."""
+    profile_path = (
+        swbt_hardware_artifact_dir / f"pairing-profile-adapter-default-joycon-{side}.json"
+    )
+    trace_path = (
+        swbt_hardware_artifact_dir
+        / f"pairing-profile-adapter-default-joycon-{side}-fresh-pairing.jsonl"
+    )
+    if profile_path.exists():
+        pytest.fail("fresh Joy-Con profile already exists; use a new artifact directory")
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad = await controller_cls.create_profile(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                pair_timeout=60.0,
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                await _wait_for_event(trace_path, "key_store_update", timeout_seconds=10.0)
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    payload = json.loads(profile_path.read_text(encoding="utf-8"))
+    events = _read_jsonl(trace_path)
+    _assert_protocol_ready_handshake(events, profile_kind=f"joycon_{side}")
+    namespaces = payload["key_store"]["namespaces"]
+    assert payload["format"] == "swbt.profile"
+    assert payload["schema_version"] == 1
+    assert payload["controller_kind"] == controller_kind
+    assert payload["identity"] == {"kind": "adapter-default"}
+    assert len(namespaces) == 1
+    assert namespaces[next(iter(namespaces))]
+    assert not _contains_event(events, "adapter_identity_prepared")
+    assert _contains_event(events, "key_store_update", status="succeeded")
+    assert _contains_event(
+        events,
+        "transport_close_complete",
+        adapter=swbt_bumble_adapter,
+    )
+
+
+@pytest.mark.hardware
+@pytest.mark.parametrize(("side", "controller_cls", "controller_kind"), _JOYCON_CASES)
+def test_switch_joycon_adapter_default_profile_reuses_address_after_normal_close(
+    side: JoyConSide,
+    controller_cls: type[JoyConL] | type[JoyConR],
+    controller_kind: Literal["joycon_l", "joycon_r"],
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Reconnect one adapter-default Joy-Con profile without pairing fallback."""
+    profile_path = (
+        swbt_hardware_artifact_dir / f"pairing-profile-adapter-default-joycon-{side}.json"
+    )
+    trace_path = (
+        swbt_hardware_artifact_dir
+        / f"pairing-profile-adapter-default-joycon-{side}-reconnect.jsonl"
+    )
+    if not profile_path.exists():
+        pytest.skip("adapter-default Joy-Con profile is missing; run the matching fresh test first")
+    original_profile = profile_path.read_bytes()
+    payload = json.loads(original_profile)
+    if payload.get("identity") != {"kind": "adapter-default"}:
+        pytest.fail("existing Joy-Con profile is not an adapter-default profile")
+    if payload.get("controller_kind") != controller_kind:
+        pytest.fail("existing pairing profile does not match the requested Joy-Con side")
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad: JoyConController = controller_cls(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                result = await pad.try_reconnect(timeout=60.0)
+                assert result.status == "connected"
+                await asyncio.sleep(1.0)
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+    _assert_protocol_ready_handshake(events, profile_kind=f"joycon_{side}")
+    assert profile_path.read_bytes() == original_profile
+    assert _contains_event(
+        events,
+        "active_reconnect_result",
+        route="active_reconnect",
+        status="connected",
+    )
+    assert not _contains_event(events, "advertising_start")
+    assert not _contains_event(events, "classic_pairing")
+    assert not _contains_event(events, "key_store_update")
+    assert _contains_event(
+        events,
+        "transport_close_complete",
+        adapter=swbt_bumble_adapter,
+    )
+
+
+@pytest.mark.hardware
 @pytest.mark.parametrize(("side", "controller_cls", "controller_kind"), _JOYCON_CASES)
 def test_switch_joycon_pairing_profile_fresh_pairing_and_close(
     side: JoyConSide,
@@ -324,6 +495,7 @@ def test_switch_joycon_pairing_profile_fresh_pairing_and_close(
 
     payload = json.loads(profile_path.read_text(encoding="utf-8"))
     events = _read_jsonl(trace_path)
+    _assert_protocol_ready_handshake(events, profile_kind=f"joycon_{side}")
     target = swbt_local_address.upper()
     assert payload["format"] == "swbt.profile"
     assert payload["schema_version"] == 1
@@ -385,6 +557,7 @@ def test_switch_joycon_pairing_profile_reuses_target_after_normal_close(
     asyncio.run(run())
 
     events = _read_jsonl(trace_path)
+    _assert_protocol_ready_handshake(events, profile_kind=f"joycon_{side}")
     assert profile_path.read_bytes() == original_profile
     assert _contains_event(
         events,
@@ -471,6 +644,11 @@ def test_switch_direct_pairing_profile_fresh_pairing_holds_input_before_close(
 
     payload = json.loads(profile_path.read_text(encoding="utf-8"))
     events = _read_jsonl(trace_path)
+    _assert_protocol_ready_handshake(
+        events,
+        profile_kind=_runtime_profile_kind(controller_kind),
+    )
+    _assert_direct_stops_automatic_reports_after_ready(events)
     target = swbt_local_address.upper()
     assert payload["controller_kind"] == controller_kind
     assert payload["identity"]["address"] == target
@@ -527,6 +705,11 @@ def test_switch_direct_pairing_profile_reuses_target_after_normal_close(
     asyncio.run(run())
 
     events = _read_jsonl(trace_path)
+    _assert_protocol_ready_handshake(
+        events,
+        profile_kind=_runtime_profile_kind(controller_kind),
+    )
+    _assert_direct_stops_automatic_reports_after_ready(events)
     assert profile_path.read_bytes() == original_profile
     assert _contains_event(
         events,
@@ -723,13 +906,15 @@ def _assert_protocol_ready_handshake(
     *,
     profile_kind: str,
 ) -> None:
-    bootstrap_reports = [
-        event
-        for event in events
+    bootstrap_report_indexes = [
+        index
+        for index, event in enumerate(events)
         if event.get("event") == "report_tx" and event.get("reason") == "handshake_bootstrap"
     ]
-    bootstrap_stops = [
-        event for event in events if event.get("event") == "handshake_bootstrap_stopped"
+    bootstrap_stop_indexes = [
+        index
+        for index, event in enumerate(events)
+        if event.get("event") == "handshake_bootstrap_stopped"
     ]
     received = [
         (event.get("packet_id"), event.get("subcommand_id"))
@@ -745,11 +930,14 @@ def _assert_protocol_ready_handshake(
         index for index, event in enumerate(events) if event.get("event") == "protocol_ready"
     ]
 
-    assert bootstrap_reports
-    assert len(bootstrap_stops) == 1
-    assert bootstrap_stops[0].get("reason") == "subcommand_received"
+    assert bootstrap_report_indexes
+    assert len(bootstrap_stop_indexes) == 1
+    bootstrap_stop_index = bootstrap_stop_indexes[0]
+    bootstrap_stop = events[bootstrap_stop_index]
+    assert bootstrap_stop.get("reason") == "subcommand_received"
+    assert bootstrap_report_indexes[-1] < bootstrap_stop_index
     assert received
-    assert bootstrap_stops[0].get("subcommand_id") == received[0][1]
+    assert bootstrap_stop.get("subcommand_id") == received[0][1]
     assert replied == received
     assert len(ready_indexes) == 1
 
@@ -761,3 +949,27 @@ def _assert_protocol_ready_handshake(
     assert {"0x03", "0x30"} <= set(ready.get("observed_subcommands", []))
     assert ready_index > 0
     assert events[ready_index - 1].get("event") == "subcommand_reply_tx"
+
+
+def _runtime_profile_kind(
+    controller_kind: Literal["pro", "joycon_l", "joycon_r"],
+) -> str:
+    return {
+        "pro": "pro_controller",
+        "joycon_l": "joycon_left",
+        "joycon_r": "joycon_right",
+    }[controller_kind]
+
+
+def _assert_direct_stops_automatic_reports_after_ready(
+    events: list[dict[str, Any]],
+) -> None:
+    ready_index = _first_event_index(events, "protocol_ready")
+    automatic_report_indexes = [
+        index
+        for index, event in enumerate(events)
+        if event.get("event") == "report_tx" and event.get("reason") == "periodic"
+    ]
+
+    assert automatic_report_indexes
+    assert automatic_report_indexes[-1] < ready_index
