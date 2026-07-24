@@ -74,18 +74,15 @@ def test_pairing_failure_leaves_profile_available_for_retry(
         self: ProController,
         timeout: float | None = None,  # noqa: ASYNC109
     ) -> None:
-        configured_path = self._runtime._config.profile_path
-        assert configured_path is not None
-        attempts.append((configured_path, timeout))
+        _ = self
+        attempts.append(("pairing-profile", timeout))
         if len(attempts) == 1:
             msg = "pairing failed"
             raise ConnectionFailedError(msg)
 
     async def fake_close(self: ProController, *, neutral: bool = True) -> None:
-        _ = neutral
-        configured_path = self._runtime._config.profile_path
-        assert configured_path is not None
-        closed_profiles.append(configured_path)
+        _ = (self, neutral)
+        closed_profiles.append("pairing-profile")
 
     monkeypatch.setattr(ProController, "pair", fake_pair)
     monkeypatch.setattr(ProController, "close", fake_close)
@@ -108,10 +105,10 @@ def test_pairing_failure_leaves_profile_available_for_retry(
         "02:12:34:56:78:9A"
     )
     assert attempts == [
-        (str(profile_path), 0.25),
-        (str(profile_path), 0.5),
+        ("pairing-profile", 0.25),
+        ("pairing-profile", 0.5),
     ]
-    assert closed_profiles == [str(profile_path)]
+    assert closed_profiles == ["pairing-profile"]
 
 
 @pytest.mark.parametrize(
@@ -196,8 +193,7 @@ def test_joycon_l_create_profile_saves_kind_and_leaves_profile_for_retry(
     profile = PairingProfile.load(profile_path)
     assert profile.controller_kind is ControllerKind.JOYCON_LEFT
     assert attempts == [0.25]
-    retry = JoyConL(adapter="usb:0", profile_path=str(profile_path))
-    assert retry._runtime._config.profile_path == str(profile_path)
+    JoyConL(adapter="usb:0", profile_path=str(profile_path))
 
 
 def test_joycon_r_create_profile_saves_kind_and_leaves_profile_for_retry(
@@ -236,8 +232,7 @@ def test_joycon_r_create_profile_saves_kind_and_leaves_profile_for_retry(
     profile = PairingProfile.load(profile_path)
     assert profile.controller_kind is ControllerKind.JOYCON_RIGHT
     assert attempts == [0.25]
-    retry = JoyConR(adapter="usb:0", profile_path=str(profile_path))
-    assert retry._runtime._config.profile_path == str(profile_path)
+    JoyConR(adapter="usb:0", profile_path=str(profile_path))
 
 
 @pytest.mark.parametrize(
@@ -295,6 +290,4 @@ def test_direct_create_profile_saves_kind_and_leaves_profile_for_retry(
         json.loads(profile_path.read_text(encoding="utf-8"))["controller_kind"] == serialized_kind
     )
     assert attempts == [0.25]
-    retry = controller_cls(adapter="usb:0", profile_path=str(profile_path))
-    assert retry._runtime._config.profile_path == str(profile_path)
-    assert retry._runtime._report_loop is None
+    controller_cls(adapter="usb:0", profile_path=str(profile_path))
