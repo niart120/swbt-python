@@ -113,11 +113,19 @@ class ConnectionWorkflow:
             route="active_reconnect",
         )
         try:
-            await transport.connect_bonded_peer(
-                peer.address,
-                connect_timeout=timeout,
-            )
-            await self.wait_for_connected(timeout)
+
+            async def reconnect_and_wait() -> None:
+                await transport.connect_bonded_peer(
+                    peer.address,
+                    connect_timeout=timeout,
+                )
+                await self.wait_for_connected(None)
+
+            if timeout is None:
+                await reconnect_and_wait()
+            else:
+                async with asyncio.timeout(timeout):
+                    await reconnect_and_wait()
         except TimeoutError:
             self.diagnostics.record_event(
                 "active_reconnect_result",
@@ -172,6 +180,8 @@ class ConnectionWorkflow:
             await self.pair(timeout)
         except ConnectionTimeoutError:
             return ConnectionResult(route="pairing", status="timeout")
+        except ConnectionFailedError:
+            return ConnectionResult(route="pairing", status="failed")
         return ConnectionResult(route="pairing", status="connected")
 
     def _transport(self) -> HidDeviceTransport:

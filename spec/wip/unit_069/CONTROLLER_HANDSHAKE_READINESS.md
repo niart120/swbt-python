@@ -130,22 +130,22 @@ Periodic / Direct の送信方式はこの境界を共有する。
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | `0x04` reply は Pro Controller で L / R = 300 tick を返す | regression | unit | no | 現行 byte を保持 |
-| todo | `0x04` reply は Joy-Con L/R で SL / SR = 300 tick を返す | new | unit | no | profile parameterized |
-| todo | `0x30 00` は session に記録されるが protocol ready にならない | new | unit | no | empty payload も edge test |
-| todo | supported `0x03 30` と nonzero `0x30` が同じ session で揃うと ready predicate が成立する | new | unit | no | 到着順を入れ替えて確認 |
-| todo | `0x30` reply の transport 受理前には ready event が発火しない | regression | integration | no | delayed fake send |
-| todo | `0x30` reply の送信失敗は ready にせず接続失敗へ伝播する | edge | integration | no | session 値だけで成功させない |
-| todo | HID channel 接続だけでは `pair()` が完了せず、state は `initializing` になる | regression | integration | no | current behavior との差分 |
-| todo | known set の一部を省略または重複しても ready predicate が揃えば `pair()` が完了する | edge | integration | no | 固定 required set を作らない |
-| todo | Pro / Joy-Con L / Joy-Con R の `create_profile()` は protocol ready 後だけ object を返す | new | integration | no | factory parameterized |
-| todo | Periodic / Direct の全 concrete controller が同じ ready 境界を使う | new | integration | no | reporting type parameterized |
-| todo | Periodic の接続前 state は initializing 中に wire へ出ず、ready 後に反映される | edge | integration | no | subcommand reply prefix も neutral |
-| todo | Direct の input operation は link 接続後でも ready 前は失敗し、ready 後は送信できる | edge | integration | no | public connected boundary |
-| todo | timeout は link と handshake を含む 1 個の budget で評価される | new | unit / integration | no | observed state を diagnostics に含める |
-| todo | ready 前 disconnect / unsupported subcommand は待機 API を直ちに failure で起こす | edge | integration | no | timeout まで待たない |
-| todo | reconnect session は前回の report mode / player lights / ready を再利用しない | regression | integration | no | session reset |
-| todo | `protocol_ready` は reply event より後に 1 回だけ記録される | new | integration | no | payload、profile kind、route を記録 |
+| green | `0x04` reply は Pro Controller で L / R = 300 tick を返す | regression | unit | no | 現行 byte を保持。profile 対応実装後も pass |
+| green | `0x04` reply は Joy-Con L/R で SL / SR = 300 tick を返す | new | unit | no | profile parameterized。全 profile 共通 L/R 値による red 後に green |
+| green | `0x30 00` は session に記録されるが protocol ready にならない | new | unit | no | simple ACK から session state へ移し、zero で ready にならないことを確認 |
+| green | supported `0x03 30` と nonzero `0x30` が同じ session で揃うと ready predicate が成立する | new | unit | no | 到着順と点灯 / 点滅 bit を入れ替え、constant-false red 後に green |
+| green | `0x30` reply の transport 受理前には ready event が発火しない | regression | integration | no | Direct fake send を event で停止し、受理後だけ pair 完了 |
+| green | `0x30` reply の送信失敗は ready にせず接続失敗へ伝播する | edge | integration | no | session state を送信前へ戻し、pair failure と cleanup を確認 |
+| green | HID channel 接続だけでは `pair()` が完了せず、state は `initializing` になる | regression | integration | no | link 接続直後に完了する red 後、link / ready event を分離 |
+| green | known set の一部を省略または重複しても ready predicate が揃えば `pair()` が完了する | edge | integration | no | `0x03` / `0x30` だけで完了し、`0x30` 重複でも再発火しない |
+| green | Pro / Joy-Con L / Joy-Con R の `create_profile()` は protocol ready 後だけ object を返す | new | integration | no | 全 concrete class の `pair()` 境界と factory の委譲・失敗 cleanup を確認 |
+| green | Periodic / Direct の全 concrete controller が同じ ready 境界を使う | new | integration | no | 6 concrete class parameterized |
+| green | Periodic の接続前 state は initializing 中に wire へ出ず、ready 後に反映される | edge | integration | no | loop は ready 後に開始し、subcommand reply prefix は neutral |
+| green | Direct の input operation は link 接続後でも ready 前は失敗し、ready 後は送信できる | edge | integration | no | `ClosedError` 後、ready で送信成功 |
+| green | timeout は link と handshake を含む 1 個の budget で評価される | new | unit / integration | no | advertising と reconnect+ready を外側の1 deadlineで囲み、timeout diagnostics に session state を記録 |
+| green | ready 前 disconnect / unsupported subcommand は待機 API を直ちに failure で起こす | edge | integration | no | disconnect と reply failure を timeout 前に通知。unsupported は既存 protocol failure 経路を共有 |
+| green | reconnect session は前回の report mode / player lights / ready を再利用しない | regression | integration | no | reopen 時の session reset に player lights / ready を追加 |
+| green | `protocol_ready` は reply event より後に 1 回だけ記録される | new | integration | no | observed subcommands、profile kind、route と event 順を確認 |
 | todo | Pro Controller の fresh pairing / reconnect が nonzero player lights reply 後に戻る | characterization | hardware | yes | exact sequence は assertion しない |
 | todo | Joy-Con L の profile 対応 `0x04` だけで fresh pairing が完了するか確認する | characterization | hardware | yes | manual SR+SL を送らず UI と trace を確認 |
 | todo | Joy-Con R の profile 対応 `0x04` だけで fresh pairing が完了するか確認する | characterization | hardware | yes | optional `0x22` は completion gate にしない |
@@ -292,11 +292,17 @@ Direct は ready 前の利用者 input operation を拒否する。subcommand re
 |---|---|---|
 | `git diff --check` | pass | tracked 差分に whitespace error なし。新規仕様書は末尾空白を別途検査 |
 | `uv run mkdocs build --strict` | pass | 設計文書とリンクの機械検証 |
-| `uv run ruff format --check .` | not run | 実装後 |
-| `uv run ruff check .` | not run | 実装後 |
-| `uv run ty check --no-progress` | not run | 実装後 |
-| `uv run pytest tests/unit` | not run | 実装後 |
-| `uv run pytest tests/integration` | not run | 実装後 |
+| `uv run pytest tests/unit/test_subcommand_responder.py::test_trigger_buttons_elapsed_subcommand_builds_pairing_reply tests/unit/test_subcommand_responder.py::test_joycon_trigger_buttons_elapsed_reports_sr_sl_pairing_hold -q` | pass | `3 passed`。Joy-Con は red `2 failed` を確認後に profile 対応して green |
+| `uv run pytest tests/unit/test_protocol_session.py::test_zero_player_lights_is_recorded_without_protocol_readiness tests/unit/test_subcommand_responder.py::test_simple_ack_subcommands_build_0x21_reply -q` | pass | `6 passed`。player lights field 不在の red 後に `0x30 00` state を実装 |
+| `uv run pytest tests/unit/test_protocol_session.py -q` | pass | `3 passed`。ready predicate の red `2 failed` 後に report mode + nonzero player lights 条件で green |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_pair_starts_advertising_and_waits_for_fake_connection -q` | pass | `1 passed`。link 接続だけで pair task が完了する red 後に `initializing` / ready event を分離 |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py::test_pair_waits_until_ready_subcommand_reply_is_transport_accepted -q` | pass | `1 passed`。fake transport に delayed send がない red 後、受理待ちを追加して ready event 順を確認 |
+| `uv run ruff format --check .` | pass | `100 files already formatted` |
+| `uv run ruff check .` | pass | `All checks passed!` |
+| `uv run ty check --no-progress` | pass | `All checks passed!` |
+| `uv run pytest tests/unit -q` | pass | `474 passed` |
+| `uv run pytest tests/integration -q` | pass | `152 passed` |
+| `uv run mkdocs build --strict` | pass | 公開 docs と初期設計のリンク・site build |
 | Pro / Joy-Con L / Joy-Con R hardware gate | not run | 明示承認が必要 |
 
 ## 12. 実機実行条件
@@ -333,7 +339,7 @@ Direct は ready 前の利用者 input operation を拒否する。subcommand re
 - [x] 固定 subcommand 集合を public completion gate から除外した
 - [x] Joy-Con の profile 対応 trigger elapsed policy を記録した
 - [x] 実機実行条件を記録した
-- [ ] `0x30` ACK conflict を再監査した
-- [ ] 実装と local gate を完了した
+- [x] `0x30` ACK conflict を再監査した
+- [x] 実装と local gate を完了した
 - [ ] Pro Controller / Joy-Con L / Joy-Con R の実機 gate を完了した
-- [ ] 初期設計文書へ完了後の contract を反映した
+- [x] 初期設計文書へ完了後の contract を反映した

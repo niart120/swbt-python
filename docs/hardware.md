@@ -214,7 +214,7 @@ Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluet
 
 - 対象機器がコントローラー接続画面にいるか確認します。
 - `pair()` または `connect(..., allow_pairing=True)` を使っているか確認します。
-- トレースログに `advertising_start`、`connection_request`、`host_connection` があるか確認します。
+- トレースログに `protocol_initialization_started` がなければ、HID リンク接続前に停止しています。イベントがあり `protocol_ready` がなければ、`subcommand_rx`、`subcommand_reply_tx`、`protocol_initialization_failed`、`connection_timeout` を確認します。
 
 ### 保存済みペアリング情報がない
 
@@ -235,6 +235,6 @@ Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluet
 
 ### 入力が対象機器の画面に反映されない
 
-- ペアリングまたは再接続直後の初期通信が終わってから入力を送っているか確認します。
+- `pair()` / `connect()` / `reconnect()` が正常終了しているか確認します。正常終了は初期サブコマンド応答とプレイヤー割り当ての完了を含みます。
 - `tap()` は即時レポートを送ります。`press()` / `release()` / `sticks()` / `neutral()` は状態更新 API であり、即時送信を保証しません。
-- トレースログの `report_tx`、`subcommand_rx`、`subcommand_reply_tx`、`connected`、`disconnected` を確認します。
+- トレースログの `protocol_ready`、`report_tx`、`subcommand_rx`、`subcommand_reply_tx`、`disconnected` を確認します。

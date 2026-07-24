@@ -1,7 +1,7 @@
 """Subcommand reply generation."""
 
 from swbt.errors import ProtocolError
-from swbt.input import InputState
+from swbt.input import Button, InputState
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport
 from swbt.protocol.profiles.base import ControllerProfile
@@ -9,11 +9,20 @@ from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.protocol.session import SwitchHidSession
 from swbt.protocol.spi import VirtualSpiFlash
 
-SIMPLE_ACK_SUBCOMMANDS = {0x08, 0x30}
-SESSION_STATE_SUBCOMMANDS = frozenset({0x03, 0x40, 0x48})
+SIMPLE_ACK_SUBCOMMANDS = {0x08}
+SESSION_STATE_SUBCOMMANDS = frozenset({0x03, 0x30, 0x40, 0x48})
 SUPPORTED_INPUT_REPORT_MODE = 0x30
 DEFAULT_DEVICE_INFO_BLUETOOTH_ADDRESS = b"\x00\x00\x00\x00\x00\x00"
-TRIGGER_BUTTONS_ELAPSED_DATA = bytes.fromhex("2c 01 2c 01 00 00 00 00 00 00 00 00 00 00")
+TRIGGER_BUTTONS_ELAPSED_PAIRING_TICKS = 300
+TRIGGER_BUTTONS_ELAPSED_ORDER = (
+    Button.L,
+    Button.R,
+    Button.ZL,
+    Button.ZR,
+    Button.SL,
+    Button.SR,
+    Button.HOME,
+)
 MCU_CONFIG_DATA = bytes.fromhex(
     "01 00 ff 00 08 00 1b 01 00 00 00 00 00 00 00 00 00 00 00 00 "
     "00 00 00 00 00 00 00 00 00 00 00 00 00 c8"
@@ -99,12 +108,17 @@ class SubcommandResponder:
                 output_report.subcommand_payload,
                 _require_session(session),
             )
+        if subcommand_id == 0x30:
+            return 0x80, self._set_player_lights(
+                output_report.subcommand_payload,
+                _require_session(session),
+            )
         if subcommand_id in SIMPLE_ACK_SUBCOMMANDS:
             return 0x80, b""
         if subcommand_id == 0x02:
             return 0x82, self._profile.build_device_info(self._device_info_bluetooth_address)
         if subcommand_id == 0x04:
-            return 0x83, TRIGGER_BUTTONS_ELAPSED_DATA
+            return 0x83, _trigger_buttons_elapsed_data(self._profile)
         if subcommand_id == 0x10:
             return 0x90, self._spi_read_reply_data(output_report.subcommand_payload)
         if subcommand_id == 0x21:
@@ -128,6 +142,10 @@ class SubcommandResponder:
 
     def _set_vibration_enabled(self, payload: bytes, session: SwitchHidSession) -> bytes:
         session.set_vibration_enabled(_enable_payload(payload, "enable vibration"))
+        return b""
+
+    def _set_player_lights(self, payload: bytes, session: SwitchHidSession) -> bytes:
+        session.set_player_lights(_first_payload_byte(payload, "set player lights"))
         return b""
 
     def _spi_read_reply_data(self, payload: bytes) -> bytes:
@@ -166,6 +184,19 @@ def _first_payload_byte(payload: bytes, subcommand_name: str) -> int:
         msg = f"{subcommand_name} subcommand must include one argument byte"
         raise ProtocolError(msg)
     return payload[0]
+
+
+def _trigger_buttons_elapsed_data(profile: ControllerProfile) -> bytes:
+    data = bytearray(14)
+    elapsed = TRIGGER_BUTTONS_ELAPSED_PAIRING_TICKS.to_bytes(2, "little")
+    for button in profile.pairing_trigger_buttons:
+        try:
+            offset = TRIGGER_BUTTONS_ELAPSED_ORDER.index(button) * 2
+        except ValueError as error:
+            msg = f"unsupported trigger elapsed button: {button.name}"
+            raise ProtocolError(msg) from error
+        data[offset : offset + 2] = elapsed
+    return bytes(data)
 
 
 def _require_session(session: SwitchHidSession | None) -> SwitchHidSession:

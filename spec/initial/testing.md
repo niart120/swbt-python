@@ -89,10 +89,12 @@ Unit tests は `tests/unit/` に置く。
 - `0x02` request device info に reply できる
 - `0x03` set report mode に reply できる
 - `0x04` trigger buttons elapsed time に reply できる
+- `0x04` は Pro で L/R、Joy-Con L/R で SL/SR の保持時間を返す
 - `0x08` shipment / pairing related に reply できる
 - `0x10` SPI flash read に reply できる
 - `0x21` NFC/IR MCU config に reply できる
 - `0x30` set player lights に reply できる
+- supported report mode と 0 以外の player lights が同じ session で揃った場合だけ ready になる
 - `0x40` enable IMU に reply できる
 - `0x40`のaccepted modeがdisabled / standard / quaternionのencoding形式を選び、同一modeの再要求でもencoding stateを初期化する
 - 未対応IMU modeがsession stateを変更しない
@@ -153,6 +155,10 @@ Fake transport integration tests は `tests/integration/` に置く。
 - `0x40` の session 遷移と ACK が input report と同じ sender lock で直列化され、新形式の `0x30` が ACK を追い越さない
 - Direct input の直後に並ぶ reply の state prefix と timer が実際の送信順に一致する
 - close後の再openで前回接続のhost要求状態とquaternion状態を引き継がない
+- link 接続だけでは接続 API が戻らず、reply 送信完了後の protocol ready で戻る
+- Pro Controller / Joy-Con L/R と Periodic / Direct が同じ ready 境界を共有する
+- ready 前の Periodic state は wire へ出ず、subcommand reply prefix は neutral になる
+- reply 送信失敗または ready 前 disconnect は timeout を待たず接続失敗になる
 
 ### 3.4 neutral fail-safe
 

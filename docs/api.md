@@ -162,13 +162,15 @@ async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json
 
 | メソッド | 契約 |
 |---|---|
-| `pair(timeout=None)` | 初回ペアリング用 API。HID 接続待ち受けを開始し、ホストからの接続を待つ。 |
-| `reconnect(timeout=None)` | 保存済みペアリング情報が 1 件ある場合だけ、そのペアリング情報を用いた再接続を試みる。 |
+| `pair(timeout=None)` | 初回ペアリング用 API。HID 接続待ち受けを開始し、リンク接続後の初期サブコマンド応答とプレイヤー割り当てまで待つ。 |
+| `reconnect(timeout=None)` | 保存済みペアリング情報が 1 件ある場合だけ再接続を試み、初期サブコマンド応答とプレイヤー割り当てまで待つ。 |
 | `try_reconnect(timeout=None)` | 再接続を試みた結果を `ConnectionResult` として返す。 |
 | `connect(timeout=None, allow_pairing=False)` | 保存済みペアリング情報があれば再接続を優先し、ない場合は `allow_pairing=True` のときだけペアリングを試みる。 |
 | `try_connect(timeout=None, allow_pairing=False)` | `connect()` と同じ戦略で接続を試み、接続結果を `ConnectionResult` として返す。 |
 
-`connect()` / `reconnect()` は、成功した場合だけ値を返します。接続できない場合は `ConnectionFailedError`、タイムアウト時は `ConnectionTimeoutError` が送出されます。現在の接続先が複数記録されたプロファイルまたはペアリング情報の保存ファイルを指定した場合は、`InvalidKeyStoreError` が送出されます。
+`pair()` / `connect()` / `reconnect()` は、HID リンクがつながっただけでは戻りません。対象機器から通常入力レポート `0x30` が選択され、0 以外のプレイヤーライトが設定され、その応答送信が完了すると成功します。`create_profile()` も同じ条件を満たした controller object だけを返します。接続初期化中の `status().connection_state` は `"initializing"`、利用可能になると `"connected"` です。
+
+接続できない場合や初期サブコマンドへの応答に失敗した場合は `ConnectionFailedError`、リンク接続から初期化完了までの期限を超えた場合は `ConnectionTimeoutError` が送出されます。現在の接続先が複数記録されたプロファイルまたはペアリング情報の保存ファイルを指定した場合は、`InvalidKeyStoreError` が送出されます。
 
 `ConnectionResult` は、`route`、`status`、`peer_address`、`peer_count` を持ちます。`status` は `"connected"`（接続済み）、`"no_bond"`（接続先なし）、`"timeout"`（タイムアウト）、`"failed"`（接続失敗）のいずれかです。
 
@@ -278,7 +280,6 @@ async with JoyConL(
     profile_path="profiles/switch-left-joycon.json",
 ) as left:
     await left.connect(timeout=30.0, allow_pairing=True)
-    await left.tap(Button.SR, Button.SL)
     await left.lstick(Stick.left())
     await left.tap(Button.L)
     await left.rstick(Stick.right())  # UnsupportedInputError
@@ -287,7 +288,7 @@ async with JoyConL(
 `apply(state)` と `send(state)` でも同じ制約を検査します。`JoyConL` または `DirectJoyConL` に右スティック入力や `A`、`B`、`X`、`Y` 入力を含む `InputState`、`JoyConR` または `DirectJoyConR` に左スティック入力や十字キー入力を含む `InputState` を渡すと `UnsupportedInputError` が送出されます。
 
 すべての具象クラスは `profile_path` を使えます。プロファイルは `pro` / `joycon_l` / `joycon_r` のコントローラー形状を持つため、異なるコントローラー形状では別の保存先を使ってください。直接送信型と周期送信型は同じコントローラー形状のプロファイルを共有できますが、方式間再利用の実機検証は未実施です。
-「持ちかた/順番を変える」画面で単体 Joy-Con として順番登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送る必要があります。
+Joy-Con の初期化では、ライブラリが `0x04` 応答に SL / SR の保持時間を返します。追加の SR+SL 入力レポートは自動送信しません。この応答だけで Joy-Con L/R が 0 以外のプレイヤーライトへ到達するかは実機未検証です。到達しない場合、接続 API は成功せずタイムアウトします。
 
 OS、ドングル、ファームウェアをまたぐ互換性は未検証です。
 

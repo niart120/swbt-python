@@ -130,11 +130,11 @@ class _RuntimeBackedGamepad:
         await self._runtime.open()
 
     async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
-        """Start pairing advertising and wait for a host connection.
+        """Start pairing advertising and wait until the controller is ready for input.
 
         Args:
-            timeout: Maximum seconds to wait for a connection. ``None`` waits until
-                the host connects.
+            timeout: Maximum seconds for link connection and protocol initialization.
+                ``None`` waits without a deadline.
 
         Raises:
             ConnectionTimeoutError: The timeout elapsed before a connection completed.
@@ -436,12 +436,12 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
             profile_path: New path for the swbt-owned profile JSON.
             local_address: Optional individual locally administered Bluetooth address.
                 ``None`` uses the adapter's current default address without rewriting it.
-            pair_timeout: Maximum seconds to wait for the initial pairing connection.
+            pair_timeout: Maximum seconds for link connection and protocol initialization.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
 
         Returns:
-            The paired direct controller. The caller owns its lifetime.
+            The protocol-ready direct controller. The caller owns its lifetime.
 
         Raises:
             ValueError: ``local_address`` is invalid.
@@ -531,13 +531,13 @@ class ProController(_PeriodicRuntimeBackedGamepad):
             profile_path: New path for the swbt-owned profile JSON.
             local_address: Optional individual locally administered Bluetooth address.
                 ``None`` uses the adapter's current default address without rewriting it.
-            pair_timeout: Maximum seconds to wait for the initial pairing connection.
+            pair_timeout: Maximum seconds for link connection and protocol initialization.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
 
         Returns:
-            ProController: The paired controller. The caller owns its lifetime.
+            ProController: The protocol-ready controller. The caller owns its lifetime.
 
         Raises:
             ValueError: ``local_address`` is invalid.
@@ -610,13 +610,13 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
             profile_path: New path for the swbt-owned profile JSON.
             local_address: Optional individual locally administered Bluetooth address.
                 ``None`` uses the adapter's current default address without rewriting it.
-            pair_timeout: Maximum seconds to wait for the initial pairing connection.
+            pair_timeout: Maximum seconds for link connection and protocol initialization.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
 
         Returns:
-            JoyConL: The paired controller. The caller owns its lifetime.
+            JoyConL: The protocol-ready controller. The caller owns its lifetime.
 
         Raises:
             ValueError: ``local_address`` is invalid.
@@ -689,13 +689,13 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
             profile_path: New path for the swbt-owned profile JSON.
             local_address: Optional individual locally administered Bluetooth address.
                 ``None`` uses the adapter's current default address without rewriting it.
-            pair_timeout: Maximum seconds to wait for the initial pairing connection.
+            pair_timeout: Maximum seconds for link connection and protocol initialization.
             report_period_us: Optional periodic input report interval in microseconds.
             controller_colors: Optional fixed controller body, button, and grip colors.
             diagnostics: Optional diagnostics configuration for trace output.
 
         Returns:
-            JoyConR: The paired controller. The caller owns its lifetime.
+            JoyConR: The protocol-ready controller. The caller owns its lifetime.
 
         Raises:
             ValueError: ``local_address`` is invalid.

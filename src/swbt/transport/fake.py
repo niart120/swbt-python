@@ -26,6 +26,7 @@ class FakeHidTransport:
         active_reconnect_auto_connect: bool = True,
         active_reconnect_error: BaseException | None = None,
         send_interrupt_error: Exception | None = None,
+        send_interrupt_wait: asyncio.Event | None = None,
         local_bluetooth_address: bytes | None = None,
         close_wait: asyncio.Event | None = None,
     ) -> None:
@@ -39,6 +40,7 @@ class FakeHidTransport:
         self._active_reconnect_auto_connect = active_reconnect_auto_connect
         self._active_reconnect_error = active_reconnect_error
         self._send_interrupt_error = send_interrupt_error
+        self._send_interrupt_wait = send_interrupt_wait
         self._local_bluetooth_address = (
             None if local_bluetooth_address is None else bytes(local_bluetooth_address)
         )
@@ -82,6 +84,11 @@ class FakeHidTransport:
     def sent_interrupt_reports(self) -> tuple[bytes, ...]:
         """Return interrupt reports sent by the gamepad."""
         return tuple(self._sent_interrupt_reports)
+
+    def clear_sent_interrupt_reports(self) -> None:
+        """Clear captured interrupt reports without changing transport state."""
+        self._sent_interrupt_reports.clear()
+        self._interrupt_report_event.clear()
 
     @property
     def sent_control_reports(self) -> tuple[bytes, ...]:
@@ -249,6 +256,8 @@ class FakeHidTransport:
     async def send_interrupt(self, payload: bytes) -> None:
         """Record an interrupt report."""
         self._require_open()
+        if self._send_interrupt_wait is not None:
+            await self._send_interrupt_wait.wait()
         if self._send_interrupt_error is not None:
             raise self._send_interrupt_error
         self._sent_interrupt_reports.append(bytes(payload))

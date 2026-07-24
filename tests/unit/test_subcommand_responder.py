@@ -5,7 +5,7 @@ from swbt.input import IMUFrame, InputState
 from swbt.protocol.imu_report import ImuEncodingState, ImuMode
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.output_report import OutputReport, OutputReportParser
-from swbt.protocol.profiles.base import ControllerColors
+from swbt.protocol.profiles.base import ControllerColors, ControllerProfile
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.protocol.session import SwitchHidSession
@@ -49,6 +49,14 @@ def test_simple_ack_subcommands_build_0x21_reply(subcommand_id: int) -> None:
     assert reply[13] == 0x80
     assert reply[14] == subcommand_id
     assert reply[15:] == bytes(35)
+
+
+def test_player_lights_subcommand_requires_one_argument_byte() -> None:
+    with pytest.raises(
+        ProtocolError,
+        match="set player lights subcommand must include one argument byte",
+    ):
+        _reply(0x30)
 
 
 def test_device_info_subcommand_builds_profile_reply() -> None:
@@ -97,6 +105,20 @@ def test_trigger_buttons_elapsed_subcommand_builds_pairing_reply() -> None:
     assert reply[14] == 0x04
     assert reply[15:29] == bytes.fromhex("2c 01 2c 01 00 00 00 00 00 00 00 00 00 00")
     assert reply[29:] == bytes(21)
+
+
+@pytest.mark.parametrize("profile", [JoyConLeftProfile(), JoyConRightProfile()])
+def test_joycon_trigger_buttons_elapsed_reports_sr_sl_pairing_hold(
+    profile: ControllerProfile,
+) -> None:
+    reply = SubcommandResponder(profile=profile).respond(
+        _subcommand_report(0x04),
+        state=InputState.neutral(),
+    )
+
+    assert reply[13] == 0x83
+    assert reply[14] == 0x04
+    assert reply[15:29] == bytes.fromhex("00 00 00 00 00 00 00 00 2c 01 2c 01 00 00")
 
 
 def test_set_input_report_mode_updates_session_state() -> None:

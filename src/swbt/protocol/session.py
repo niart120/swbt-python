@@ -19,14 +19,25 @@ class SwitchHidSessionState:
     report_mode: int | None = None
     report_mode_supported: bool = False
     unsupported_report_mode: int | None = None
+    player_lights: int | None = None
     imu_mode: ImuMode = ImuMode.DISABLED
     imu_encoding_state: ImuEncodingState = field(default_factory=ImuEncodingState)
     vibration_enabled: bool = False
+    observed_subcommands: frozenset[int] = frozenset()
 
     @property
     def imu_enabled(self) -> bool:
         """Return whether the host selected an active IMU mode."""
         return self.imu_mode is not ImuMode.DISABLED
+
+    @property
+    def protocol_ready(self) -> bool:
+        """Return whether the host selected usable reports and assigned player lights."""
+        return (
+            self.report_mode_supported
+            and self.player_lights is not None
+            and self.player_lights != 0x00
+        )
 
     @property
     def imu_encoding_format(self) -> str:
@@ -82,6 +93,17 @@ class SwitchHidSession:
             unsupported_report_mode=None if supported else mode,
         )
 
+    def observe_subcommand(self, subcommand_id: int) -> None:
+        """Record one subcommand observed during this HID connection."""
+        self._state = replace(
+            self._state,
+            observed_subcommands=self._state.observed_subcommands | {subcommand_id},
+        )
+
+    def restore_state(self, state: SwitchHidSessionState) -> None:
+        """Restore a prior immutable state after a reply send did not complete."""
+        self._state = state
+
     def set_imu_mode(self, mode: int) -> None:
         """Start a new IMU encoding epoch for an accepted host mode."""
         self._state = apply_imu_mode_request(
@@ -89,6 +111,10 @@ class SwitchHidSession:
             requested_mode=mode,
             accepted_modes=self._profile.imu_enable_modes,
         )
+
+    def set_player_lights(self, player_lights: int) -> None:
+        """Record one host-selected player-light bitfield."""
+        self._state = replace(self._state, player_lights=player_lights)
 
     def set_vibration_enabled(self, enabled: bool) -> None:
         """Record the host-selected vibration enable state."""

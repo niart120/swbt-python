@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 
+from swbt.input import Button
 from swbt.protocol.buttons import (
     JOYCON_LEFT_BUTTON_BITS,
     JOYCON_RIGHT_BUTTON_BITS,
@@ -63,6 +64,7 @@ class JoyConLeftProfile(ControllerProfile):
     hid_sdp_policy: HidSdpPolicy = field(default_factory=_joycontrol_hid_sdp_policy)
     controller_colors: ControllerColors = field(default_factory=_joycon_left_controller_colors)
     button_bits: ButtonBitMap = field(default_factory=lambda: JOYCON_LEFT_BUTTON_BITS)
+    pairing_trigger_buttons: tuple[Button, ...] = (Button.SL, Button.SR)
     imu_enable_modes: tuple[int, ...] = _JOYCON_IMU_ENABLE_MODES
     supports_left_stick: bool = True
     supports_right_stick: bool = False
@@ -79,6 +81,7 @@ class JoyConRightProfile(ControllerProfile):
     hid_sdp_policy: HidSdpPolicy = field(default_factory=_joycontrol_hid_sdp_policy)
     controller_colors: ControllerColors = field(default_factory=_joycon_right_controller_colors)
     button_bits: ButtonBitMap = field(default_factory=lambda: JOYCON_RIGHT_BUTTON_BITS)
+    pairing_trigger_buttons: tuple[Button, ...] = (Button.SL, Button.SR)
     imu_enable_modes: tuple[int, ...] = _JOYCON_IMU_ENABLE_MODES
     supports_left_stick: bool = False
     supports_right_stick: bool = True

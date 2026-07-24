@@ -32,6 +32,8 @@ REQUIRED_ENTRY_IDS = {
     "joycon_standard_stick_availability",
     "subcommand_report_mode_session_state",
     "subcommand_imu_vibration_enable_state",
+    "profile_aware_trigger_buttons_elapsed",
+    "protocol_ready_player_lights_policy",
     "subcommand_nfc_ir_mcu_state",
     "subcommand_nfc_ir_mcu_state_ack_policy",
     "pro_controller_imu_enable_mode_02_observation",

@@ -13,7 +13,8 @@
 | `opened` | transport と内部 resource は開いているが、Bluetooth 上の接続開始処理はしていない |
 | `advertising` | Switch から発見・接続可能な状態 |
 | `pairing` | pairing または初回接続処理中 |
-| `connected` | HID control / interrupt channel が利用可能 |
+| `initializing` | HID control / interrupt channel は利用可能だが、初期 subcommand 応答と player assignment が未完了 |
+| `connected` | supported report mode と 0 以外の player lights が同じ session で揃い、対応 reply の送信が完了した |
 | `disconnecting` | close または disconnect 処理中 |
 | `failed` | 継続不能な例外が発生した状態 |
 
@@ -32,6 +33,8 @@ advertising
   ↓ host connection started
 pairing
   ↓ HID channels ready
+initializing
+  ↓ protocol ready
 connected
   ↓ close() / disconnect
  disconnecting
@@ -89,14 +92,23 @@ current namespace に複数 peer がある key store は旧形式または不正
 
 transport から connected callback を受けたら、次を行う。
 
-1. 状態を `connected` にする
-2. connection metadata を diagnostics に記録する
-3. Periodic は `ReportLoop` を開始する。Direct は周期送信を開始しない
-4. neutral `InputState` を送信対象にする
+1. 状態を `initializing` にする
+2. link 接続と接続 route を diagnostics に記録する
+3. host output report を受信し、subcommand reply を送れる状態にする
+4. supported `0x03 30` と 0 以外の `0x30` player lights が同じ session で揃うまで待つ
+5. predicate を成立させた reply の transport 送信後に状態を `connected` にする
+6. Periodic は `ReportLoop` を開始する。Direct は周期送信を開始しない
 
-HID control / interrupt channel の両方が必要な場合、transport 側で両 channel が利用可能になった時点を connected とする。
+HID control / interrupt channel の両方が利用可能になった時点は link connected であり、
+public な接続完了ではない。`0x30 00` は初期化途中として記録し、成功条件にしない。
+初期化中の Periodic 入力レポートは開始せず、subcommand reply の入力 prefix は neutral
+state を使う。
 
-接続待ちの timeout は、`pair()` / `connect()` / `reconnect()` の呼び出し単位で扱う。成功必須 API では時間内に `connected` へ到達しない場合は `ConnectionTimeoutError` を投げ、diagnostics に失敗時の状態を記録する。`try_connect()` / `try_reconnect()` では `ConnectionResult(status="timeout")` を返す。
+接続待ちの timeout は、`pair()` / `connect()` / `reconnect()` の呼び出し単位で 1 個の
+deadline として扱い、advertising または active reconnect から protocol ready までを
+含める。時間内に `connected` へ到達しない場合は `ConnectionTimeoutError`、reply
+送信失敗や ready 前 disconnect は `ConnectionFailedError` とし、half-ready 接続を
+cleanup する。`try_connect()` / `try_reconnect()` は対応する `timeout` / `failed` を返す。
 
 ## 6. 入力送信中の処理
 

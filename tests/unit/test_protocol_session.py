@@ -1,8 +1,18 @@
 import pytest
 
 from swbt.errors import ProtocolError
+from swbt.input import InputState
 from swbt.protocol.imu_report import ImuEncodingState, ImuMode
-from swbt.protocol.session import SwitchHidSessionState, apply_imu_mode_request
+from swbt.protocol.output_report import OutputReport, OutputReportParser
+from swbt.protocol.profiles.pro_controller import ProControllerProfile
+from swbt.protocol.session import (
+    SwitchHidSession,
+    SwitchHidSessionState,
+    apply_imu_mode_request,
+)
+from swbt.protocol.subcommand import SubcommandResponder
+
+NEUTRAL_RUMBLE = bytes.fromhex("00 01 40 40 00 01 40 40")
 
 
 def test_repeated_accepted_imu_mode_request_starts_a_new_encoding_epoch() -> None:
@@ -89,3 +99,56 @@ def test_unsupported_imu_mode_request_leaves_session_state_unchanged() -> None:
     assert original.imu_encoding_state.previous_report_ns == 123
     assert original.report_mode == 0x30
     assert original.vibration_enabled is True
+
+
+def _subcommand_report(subcommand_id: int, payload: bytes) -> OutputReport:
+    return OutputReportParser().parse(
+        bytes((0x01, 0x0A)) + NEUTRAL_RUMBLE + bytes((subcommand_id,)) + payload
+    )
+
+
+def test_zero_player_lights_is_recorded_without_protocol_readiness() -> None:
+    profile = ProControllerProfile()
+    session = SwitchHidSession(profile)
+    report = _subcommand_report(0x30, b"\x00")
+
+    reply = SubcommandResponder(profile=profile).respond(
+        report,
+        state=InputState.neutral(),
+        session=session,
+    )
+
+    assert reply[13] == 0x80
+    assert reply[14] == 0x30
+    assert session.state.player_lights == 0x00
+    assert session.state.protocol_ready is False
+
+
+@pytest.mark.parametrize(
+    "requests",
+    [
+        ((0x03, b"\x30"), (0x30, b"\x01")),
+        ((0x30, b"\x10"), (0x03, b"\x30")),
+    ],
+)
+def test_supported_report_mode_and_nonzero_player_lights_are_protocol_ready(
+    requests: tuple[tuple[int, bytes], tuple[int, bytes]],
+) -> None:
+    profile = ProControllerProfile()
+    session = SwitchHidSession(profile)
+    responder = SubcommandResponder(profile=profile)
+
+    first, second = requests
+    responder.respond(
+        _subcommand_report(*first),
+        state=InputState.neutral(),
+        session=session,
+    )
+    assert session.state.protocol_ready is False
+
+    responder.respond(
+        _subcommand_report(*second),
+        state=InputState.neutral(),
+        session=session,
+    )
+    assert session.state.protocol_ready is True

@@ -183,7 +183,6 @@ async def main() -> None:
         profile_path="profiles/switch-left-joycon.json",
     ) as left:
         await left.connect(timeout=30.0, allow_pairing=True)
-        await left.tap(Button.SR, Button.SL)
         await left.tap(Button.L)
         await left.lstick(Stick.left())
         await left.neutral()
@@ -192,7 +191,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-「持ちかた/順番を変える」画面で Joy-Con として登録する場合は、接続後に `await left.tap(Button.SR, Button.SL)` のように SR+SL を送信します。
+接続初期化中は、ライブラリが `0x04` 応答に SL / SR の保持時間を返し、0 以外のプレイヤーライトが設定されるまで `connect()` を完了しません。追加の SR+SL 入力レポートは自動送信しません。この応答だけで Joy-Con L/R の登録が完了するかは実機未検証です。
 
 ### Joy-Con R
 
