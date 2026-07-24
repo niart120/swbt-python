@@ -63,7 +63,7 @@ def test_controller_profiles_own_default_virtual_accelerometer_calibration(
 
 def test_controller_kind_branching_stays_localized() -> None:
     allowed_paths = {
-        "src/swbt/gamepad/core.py",
+        "src/swbt/gamepad/controllers.py",
         "src/swbt/protocol/profiles/base.py",
         "src/swbt/protocol/profiles/joycon.py",
         "src/swbt/protocol/profiles/pro_controller.py",
