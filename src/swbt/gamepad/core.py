@@ -3,8 +3,7 @@
 from typing import ClassVar, Literal, Self
 
 from swbt.diagnostics import DiagnosticsConfig, GamepadStatus
-from swbt.errors import InvalidInputError
-from swbt.gamepad._config import _ControllerSpec, _SwitchGamepadConfig
+from swbt.gamepad._config import _GamepadConfig
 from swbt.gamepad.connection import ConnectionResult
 from swbt.gamepad.interface import (
     DirectSwitchGamepad,
@@ -13,7 +12,7 @@ from swbt.gamepad.interface import (
 from swbt.gamepad.output import OutputReportDispatcher
 from swbt.gamepad.runtime import ControllerRuntime
 from swbt.input import Button, IMUFrame, InputState, Stick
-from swbt.protocol.profiles.base import ControllerColors
+from swbt.protocol.profiles.base import ControllerColors, ControllerProfile
 from swbt.protocol.profiles.joycon import JoyConLeftProfile, JoyConRightProfile
 from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.state_store import InputStateStore
@@ -21,7 +20,6 @@ from swbt.transport._pairing_profile import (
     LocalAddress,
     PairingProfile,
 )
-from swbt.transport.base import HidDeviceTransport
 
 
 class _RuntimeBackedGamepad:
@@ -31,82 +29,30 @@ class _RuntimeBackedGamepad:
     controller work to an internal runtime.
     """
 
-    _controller_spec = _ControllerSpec(profile=default_controller_profile())
+    _profile: ClassVar[ControllerProfile] = default_controller_profile()
     _reporting_mode: ClassVar[Literal["periodic", "direct"]] = "periodic"
 
-    def __init__(
+    def _initialize_runtime(
         self,
         *,
-        adapter: str | None = None,
-        report_period_us: int | None = None,
-        controller_colors: ControllerColors | None = None,
-        diagnostics: DiagnosticsConfig | None = None,
+        adapter: str | None,
+        profile_path: str | None,
+        report_period_us: int | None,
+        controller_colors: ControllerColors | None,
+        diagnostics: DiagnosticsConfig | None,
     ) -> None:
-        """Create a gamepad object.
-
-        Args:
-            adapter: Bumble adapter moniker used for the Bluetooth backend.
-            report_period_us: Optional periodic input report interval in microseconds.
-            controller_colors: Optional fixed controller body, button, and grip colors.
-            diagnostics: Optional diagnostics configuration for trace output.
-
-        Raises:
-            InvalidInputError: ``adapter`` is omitted or ``report_period_us`` is not positive.
-        """
-        config = self._controller_spec.build_config(
+        config = _GamepadConfig(
             adapter=adapter,
+            profile_path=profile_path,
+            profile=self._profile,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
         )
-        self._init_from_config(config, diagnostics=diagnostics, transport=None)
-
-    def _init_from_config(
-        self,
-        config: _SwitchGamepadConfig,
-        *,
-        diagnostics: DiagnosticsConfig | None,
-        transport: HidDeviceTransport | None,
-    ) -> None:
-        self._runtime = ControllerRuntime.from_config(
+        self._runtime = ControllerRuntime(
             config,
             diagnostics=diagnostics,
             reporting_mode=self._reporting_mode,
-            transport=transport,
         )
-
-    @classmethod
-    def _from_config(
-        cls,
-        config: _SwitchGamepadConfig,
-        *,
-        diagnostics: DiagnosticsConfig | None = None,
-        transport: HidDeviceTransport | None = None,
-    ) -> Self:
-        """Create a concrete gamepad from an explicit resource configuration.
-
-        Args:
-            config: Resource configuration for the gamepad.
-            diagnostics: Optional diagnostics configuration for trace output.
-            transport: Optional HID transport instance.
-
-        Returns:
-            SwitchGamepad: A concrete gamepad configured from ``config``.
-
-        Raises:
-            InvalidInputError: ``config`` is invalid or omits ``adapter`` while no
-                custom ``transport`` is supplied.
-        """
-        expected_kind = cls._controller_spec.profile.kind
-        if config.profile.kind is not expected_kind:
-            msg = f"{cls.__name__}._from_config requires a {expected_kind.value} profile"
-            raise InvalidInputError(msg)
-        gamepad = cls.__new__(cls)
-        gamepad._init_from_config(
-            config,
-            diagnostics=diagnostics,
-            transport=transport,
-        )
-        return gamepad
 
     @property
     def _state_store(self) -> InputStateStore:
@@ -368,14 +314,14 @@ class _PeriodicRuntimeBackedGamepad(_RuntimeBackedGamepad, PeriodicSwitchGamepad
         PairingProfile.create_new(
             profile_path,
             target,
-            controller_kind=cls._controller_spec.profile.kind,
+            controller_kind=cls._profile.kind,
         )
         gamepad = cls(
-            adapter=adapter,
+            adapter=adapter,  # ty: ignore[unknown-argument]
             profile_path=profile_path,  # ty: ignore[unknown-argument]
-            report_period_us=report_period_us,
-            controller_colors=controller_colors,
-            diagnostics=diagnostics,
+            report_period_us=report_period_us,  # ty: ignore[unknown-argument]
+            controller_colors=controller_colors,  # ty: ignore[unknown-argument]
+            diagnostics=diagnostics,  # ty: ignore[unknown-argument]
         )
         try:
             await gamepad.pair(timeout=pair_timeout)
@@ -409,13 +355,13 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
         Raises:
             InvalidInputError: ``adapter`` is omitted.
         """
-        config = self._controller_spec.build_config(
+        self._initialize_runtime(
             adapter=adapter,
             profile_path=profile_path,
             report_period_us=None,
             controller_colors=controller_colors,
+            diagnostics=diagnostics,
         )
-        self._init_from_config(config, diagnostics=diagnostics, transport=None)
 
     @classmethod
     async def create_profile(
@@ -453,7 +399,7 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
         PairingProfile.create_new(
             profile_path,
             target,
-            controller_kind=cls._controller_spec.profile.kind,
+            controller_kind=cls._profile.kind,
         )
         gamepad = cls(
             adapter=adapter,
@@ -480,7 +426,7 @@ class _DirectRuntimeBackedGamepad(_RuntimeBackedGamepad, DirectSwitchGamepad):
 class ProController(_PeriodicRuntimeBackedGamepad):
     """Runtime-backed Pro Controller-compatible gamepad."""
 
-    _controller_spec = _ControllerSpec(profile=default_controller_profile())
+    _profile = default_controller_profile()
 
     def __init__(
         self,
@@ -503,13 +449,13 @@ class ProController(_PeriodicRuntimeBackedGamepad):
         Raises:
             InvalidInputError: adapter is omitted or report_period_us is not positive.
         """
-        config = self._controller_spec.build_config(
+        self._initialize_runtime(
             adapter=adapter,
             profile_path=profile_path,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
+            diagnostics=diagnostics,
         )
-        self._init_from_config(config, diagnostics=diagnostics, transport=None)
 
     @classmethod
     async def create_profile(
@@ -559,7 +505,7 @@ class ProController(_PeriodicRuntimeBackedGamepad):
 class JoyConL(_PeriodicRuntimeBackedGamepad):
     """Runtime-backed Joy-Con L-compatible gamepad."""
 
-    _controller_spec = _ControllerSpec(profile=JoyConLeftProfile())
+    _profile = JoyConLeftProfile()
 
     def __init__(
         self,
@@ -582,13 +528,13 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
         Raises:
             InvalidInputError: ``adapter`` is omitted or ``report_period_us`` is not positive.
         """
-        config = self._controller_spec.build_config(
+        self._initialize_runtime(
             adapter=adapter,
             profile_path=profile_path,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
+            diagnostics=diagnostics,
         )
-        self._init_from_config(config, diagnostics=diagnostics, transport=None)
 
     @classmethod
     async def create_profile(
@@ -638,7 +584,7 @@ class JoyConL(_PeriodicRuntimeBackedGamepad):
 class JoyConR(_PeriodicRuntimeBackedGamepad):
     """Runtime-backed Joy-Con R-compatible gamepad."""
 
-    _controller_spec = _ControllerSpec(profile=JoyConRightProfile())
+    _profile = JoyConRightProfile()
 
     def __init__(
         self,
@@ -661,13 +607,13 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
         Raises:
             InvalidInputError: ``adapter`` is omitted or ``report_period_us`` is not positive.
         """
-        config = self._controller_spec.build_config(
+        self._initialize_runtime(
             adapter=adapter,
             profile_path=profile_path,
             report_period_us=report_period_us,
             controller_colors=controller_colors,
+            diagnostics=diagnostics,
         )
-        self._init_from_config(config, diagnostics=diagnostics, transport=None)
 
     @classmethod
     async def create_profile(
@@ -717,16 +663,16 @@ class JoyConR(_PeriodicRuntimeBackedGamepad):
 class DirectProController(_DirectRuntimeBackedGamepad):
     """Direct-reporting Pro Controller-compatible gamepad."""
 
-    _controller_spec = _ControllerSpec(profile=default_controller_profile())
+    _profile = default_controller_profile()
 
 
 class DirectJoyConL(_DirectRuntimeBackedGamepad):
     """Direct-reporting Joy-Con L-compatible gamepad."""
 
-    _controller_spec = _ControllerSpec(profile=JoyConLeftProfile())
+    _profile = JoyConLeftProfile()
 
 
 class DirectJoyConR(_DirectRuntimeBackedGamepad):
     """Direct-reporting Joy-Con R-compatible gamepad."""
 
-    _controller_spec = _ControllerSpec(profile=JoyConRightProfile())
+    _profile = JoyConRightProfile()

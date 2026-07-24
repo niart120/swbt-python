@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from swbt import Button, InputState, SwitchGamepad
-from swbt._testing.gamepad import make_pro_controller
 from swbt.transport.fake import FakeHidTransport
+from tests.gamepad_factory import make_pro_controller  # ty: ignore[unresolved-import]
 
 EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"
 
