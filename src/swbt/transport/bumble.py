@@ -132,9 +132,6 @@ class _BumbleHidRuntime(Protocol):
     def send_data(self, data: bytes) -> None:
         """Send an interrupt-channel HID data message."""
 
-    def send_control_data(self, report_type: int, data: bytes) -> None:
-        """Send a control-channel HID data message."""
-
     async def connect_control_channel(self) -> None:
         """Request control-channel L2CAP connection."""
 
@@ -426,14 +423,6 @@ class BumbleHidTransport:
             msg = "Bumble interrupt channel is not connected"
             raise ClosedError(msg)
         self._runtime.hid_device.send_data(payload)
-
-    async def send_control(self, payload: bytes) -> None:
-        """Send one control report."""
-        self._require_open()
-        if self._runtime is None or self._runtime.hid_device.l2cap_ctrl_channel is None:
-            msg = "Bumble control channel is not connected"
-            raise ClosedError(msg)
-        self._runtime.hid_device.send_control_data(HID_OUTPUT_REPORT_TYPE, payload)
 
     def on_interrupt_data(self, callback: InterruptDataCallback) -> None:
         """Register an interrupt data callback."""

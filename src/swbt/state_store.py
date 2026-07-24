@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import Callable
 
-from swbt.input import Button, IMUFrame, InputState, Stick
+from swbt.input import InputState
 
 
 class InputStateStore:
@@ -42,34 +42,4 @@ class InputStateStore:
             if validate is not None:
                 validate(next_state)
             self._state = next_state
-            return self._state
-
-    async def sticks(self, *, left: Stick | None = None, right: Stick | None = None) -> InputState:
-        """Replace one or both stick positions."""
-        async with self._lock:
-            self._state = self._state.with_sticks(left_stick=left, right_stick=right)
-            return self._state
-
-    async def imu(self, *frames: IMUFrame) -> InputState:
-        """Replace IMU frames."""
-        async with self._lock:
-            self._state = self._state.with_imu(*frames)
-            return self._state
-
-    async def press(self, *buttons: Button) -> InputState:
-        """Add buttons to the current input state."""
-        async with self._lock:
-            self._state = self._state.with_buttons((*self._state.buttons, *buttons))
-            return self._state
-
-    async def release(self, *buttons: Button) -> InputState:
-        """Remove buttons from the current input state."""
-        async with self._lock:
-            self._state = self._state.with_buttons(self._state.buttons.difference(buttons))
-            return self._state
-
-    async def neutral(self) -> InputState:
-        """Replace the current input state with neutral input."""
-        async with self._lock:
-            self._state = InputState.neutral()
             return self._state

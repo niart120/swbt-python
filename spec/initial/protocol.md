@@ -143,8 +143,8 @@ Switch から `0x01` output report を受け取った場合、次の処理を行
 2. raw rumble bytes を抽出する
 3. subcommand id を読む
 4. subcommand payload を抽出する
-5. `SubcommandResponder` へ渡す
-6. `0x21` reply を reply queue へ投入する
+5. input report と共有する sender lock を取得する
+6. lock 内で `SubcommandResponder` から `0x21` reply を生成し、interrupt channel へ送信する
 
 `OutputReportParser` は parse 結果を値オブジェクトで返す。
 
@@ -170,29 +170,27 @@ class OutputReport:
 
 Switch からの subcommand に対しては、`0x21` subcommand reply を生成する。
 
-`0x21` reply は、periodic `0x30` input report より優先して送る。優先制御は `ReportLoop` が担当し、reply payload の生成は `SubcommandResponder` が担当する。
+`0x21` reply と periodic `0x30` input report は、`ReportSender` の同じ lock と timer を使う。output report callback は `send_subcommand_reply()` を直接呼び、reply 完了後に `ReportLoop` が periodic 送信の holdoff を設定する。reply payload の生成は `SubcommandResponder` が担当する。
 
-### 5.2 reply queue
+### 5.2 共有 sender
 
-`SubcommandResponder` は送信を行わず、reply bytes を返す。送信順序は `ReportLoop` が管理する。
+`SubcommandResponder` は送信を行わず、reply bytes を返す。reply の生成と送信は input report と共通の sender lock 内で行う。これにより session state の変更、ACK、後続 input report の順序を直列化する。
 
 ```text
 output report received
   ↓
 OutputReportParser
   ↓
+ReportSender.send_subcommand_reply()
+  ↓
 SubcommandResponder
-  ↓
-reply queue
-  ↓
-ReportLoop
   ↓
 HidDeviceTransport.send_interrupt()
 ```
 
-### 5.3 reply 優先の理由
+### 5.3 reply 後 holdoff の理由
 
-Switch の初期化 sequence では、subcommand reply が遅れると接続処理が進まない可能性がある。periodic input report を継続しながら、reply queue に積まれた `0x21` を次 tick で優先送信する。
+`0x21` を callback 内で送信した後、`ReportLoop` は一定時間 periodic `0x30` を holdoff する。これにより、送信済み reply の直後に次の periodic input を続けない。すでに送信 lock を取得している input report は中断せず、reply はその完了後に同じ timer sequence で送る。
 
 ## 6. 初期対応 subcommand
 
@@ -278,7 +276,7 @@ protocol 層は Bumble なしで test できるようにする。
 - `0x10` output report が rumble only として処理される
 - `0x02` device info reply を生成できる
 - `0x10` SPI flash read reply を生成できる
-- reply queue に積まれた `0x21` が periodic `0x30` より先に送られる
+- `0x21` reply と periodic `0x30` が同じ sender lock / timer を使い、reply 後 holdoff が働く
 
 ## 10. 参考資料
 

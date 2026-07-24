@@ -2000,7 +2000,7 @@ def test_control_output_report_injection_sends_subcommand_reply() -> None:
     asyncio.run(run())
 
 
-def test_subcommand_reply_queue_takes_priority_over_periodic_input() -> None:
+def test_subcommand_reply_precedes_the_next_periodic_input() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
         request_device_info = bytes.fromhex("01 00 00 00 00 00 00 00 00 00 02")
