@@ -95,14 +95,22 @@ transport から connected callback を受けたら、次を行う。
 1. 状態を `initializing` にする
 2. link 接続と接続 route を diagnostics に記録する
 3. host output report を受信し、subcommand reply を送れる状態にする
-4. supported `0x03 30` と 0 以外の `0x30` player lights が同じ session で揃うまで待つ
-5. predicate を成立させた reply の transport 送信後に状態を `connected` にする
-6. Periodic は `ReportLoop` を開始する。Direct は周期送信を開始しない
+4. reporting type に関係なく neutral `0x30` の起動 report を送る
+5. Switch から subcommand が来ない間だけ、起動 report を1秒間隔で再送する
+6. 最初の有効な subcommand を parse した時点で起動 report の再送を停止する
+7. 以後は Switch から届いた subcommand ごとに reply を返す
+8. supported `0x03 30` の reply 送信後、neutral `0x30` の requested report mode を開始する
+9. 0 以外の `0x30` player lights が同じ session で揃うまで待つ
+10. predicate を成立させた reply の transport 送信後に状態を `connected` にする
+11. Periodic は利用者 state の通常送信へ切り替える。Direct は requested report mode task を終了する
 
 HID control / interrupt channel の両方が利用可能になった時点は link connected であり、
 public な接続完了ではない。`0x30 00` は初期化途中として記録し、成功条件にしない。
-初期化中の Periodic 入力レポートは開始せず、subcommand reply の入力 prefix は neutral
-state を使う。
+起動 report と初期化中の subcommand reply の入力 prefix は neutral state を使う。
+接続前に準備した利用者入力は `connected` になるまで wire へ出さない。起動 report の
+再送は通常 `ReportLoop` ではなく、最初の subcommand までに限定した内部 task が担当する。
+`0x03 30` 後の `0x30` は起動再送ではなく、Switch が要求した report mode として
+`ReportLoop` が送る。Direct では protocol ready 後の自動 `0x30` を継続しない。
 
 接続待ちの timeout は、`pair()` / `connect()` / `reconnect()` の呼び出し単位で 1 個の
 deadline として扱い、advertising または active reconnect から protocol ready までを

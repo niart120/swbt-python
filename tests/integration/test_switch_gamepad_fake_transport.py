@@ -10,6 +10,7 @@ from typing import Literal, cast
 import pytest
 
 import swbt.gamepad as gamepad_module
+import swbt.gamepad.runtime as gamepad_runtime_module
 from swbt import (
     Button,
     ControllerColors,
@@ -302,7 +303,7 @@ def test_all_concrete_controllers_share_protocol_ready_connection_boundary(
     asyncio.run(run())
 
 
-def test_periodic_prepared_input_is_not_sent_before_protocol_ready() -> None:
+def test_periodic_bootstrap_stops_after_first_subcommand_then_starts_when_ready() -> None:
     async def run() -> None:
         transport = FakeHidTransport()
         pad = make_pro_controller(transport=transport, report_period_us=1000)
@@ -310,13 +311,27 @@ def test_periodic_prepared_input_is_not_sent_before_protocol_ready() -> None:
         await pad.press(Button.A)
         await transport.connect()
 
-        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("03 30"))
-        await asyncio.sleep(0.01)
+        bootstrap_report = await transport.wait_for_interrupt_report_id(0x30)
+
+        assert pad.status().connection_state == "initializing"
+        assert bootstrap_report[3:6] == bytes.fromhex("00 00 00")
+
+        transport.clear_sent_interrupt_reports()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("02"))
+        await asyncio.sleep(0.02)
 
         assert [report[0] for report in transport.sent_interrupt_reports] == [0x21]
         assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("00 00 00")
 
+        transport.clear_sent_interrupt_reports()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("03 30"))
+        initializing_report = await transport.wait_for_interrupt_report_id(0x30)
+
+        assert pad.status().connection_state == "initializing"
+        assert initializing_report[3:6] == bytes.fromhex("00 00 00")
+
         await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("30 01"))
+        transport.clear_sent_interrupt_reports()
         await transport.wait_for_interrupt_report_id(0x30)
 
         input_report = next(
@@ -324,6 +339,33 @@ def test_periodic_prepared_input_is_not_sent_before_protocol_ready() -> None:
         )
         assert input_report[3:6] == bytes.fromhex("08 00 00")
 
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_handshake_bootstrap_retries_until_first_subcommand(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        monkeypatch.setattr(
+            gamepad_runtime_module,
+            "HANDSHAKE_BOOTSTRAP_RETRY_SECONDS",
+            0.001,
+        )
+        transport = FakeHidTransport()
+        pad = make_pro_controller(transport=transport)
+        await pad.open()
+        await transport.connect()
+
+        await transport.wait_for_interrupt_report_count(2)
+        assert [report[0] for report in transport.sent_interrupt_reports] == [0x30, 0x30]
+
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("02"))
+        reports_after_reply = len(transport.sent_interrupt_reports)
+        await asyncio.sleep(0.01)
+
+        assert len(transport.sent_interrupt_reports) == reports_after_reply
         await pad.close(neutral=False)
 
     asyncio.run(run())
@@ -344,6 +386,41 @@ def test_direct_input_is_rejected_until_protocol_ready() -> None:
         await pad.press(Button.A)
 
         assert transport.sent_interrupt_reports[-1][3:6] == bytes.fromhex("08 00 00")
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_direct_bootstrap_stops_after_first_subcommand_and_remains_nonperiodic() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+        pad = make_direct_pro_controller(transport=transport)
+        await pad.open()
+        await transport.connect()
+
+        bootstrap_report = await transport.wait_for_interrupt_report_id(0x30)
+
+        assert pad.status().connection_state == "initializing"
+        assert bootstrap_report[3:6] == bytes.fromhex("00 00 00")
+
+        transport.clear_sent_interrupt_reports()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("02"))
+        await asyncio.sleep(0.02)
+
+        assert [report[0] for report in transport.sent_interrupt_reports] == [0x21]
+        transport.clear_sent_interrupt_reports()
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("03 30"))
+        initializing_report = await transport.wait_for_interrupt_report_id(0x30)
+
+        assert pad.status().connection_state == "initializing"
+        assert initializing_report[3:6] == bytes.fromhex("00 00 00")
+
+        await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("30 01"))
+        transport.clear_sent_interrupt_reports()
+        await asyncio.sleep(0.03)
+
+        assert pad.status().connection_state == "connected"
+        assert transport.sent_interrupt_reports == ()
         await pad.close(neutral=False)
 
     asyncio.run(run())

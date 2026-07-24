@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import replace
 from types import TracebackType
 from typing import Literal
@@ -35,6 +36,8 @@ from swbt.state_store import InputStateStore
 from swbt.transport._adapter_identity import prepare_adapter_identity
 from swbt.transport._pairing_profile import PairingProfile
 from swbt.transport.base import DisconnectRequestResult, HidDeviceTransport
+
+HANDSHAKE_BOOTSTRAP_RETRY_SECONDS = 1.0
 
 
 class ControllerRuntime:
@@ -119,12 +122,16 @@ class ControllerRuntime:
             session=self._protocol_session,
             state_store=self._state_store,
             protocol_state_updated=self._handle_protocol_state_updated,
+            subcommand_received=self._handle_subcommand_received,
             subcommand_responder=SubcommandResponder(
                 profile=self._controller_profile,
             ),
         )
         self._report_loop: ReportLoop | None = None
         self._report_sender: ReportSender | None = None
+        self._handshake_bootstrap_event = asyncio.Event()
+        self._handshake_bootstrap_task: asyncio.Task[None] | None = None
+        self._handshake_bootstrap_attempts = 0
         self._input_operation_lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
@@ -238,20 +245,19 @@ class ControllerRuntime:
                     diagnostics=self._diagnostics,
                 )
                 self._report_sender = report_sender
-                if self._reporting_mode == "periodic":
-                    self._report_loop = ReportLoop(
-                        transport=transport,
-                        state_store=self._state_store,
-                        report_period_us=self._config.report_period_us,
-                        input_report_builder=InputReportBuilder(
-                            self._controller_profile,
-                        ),
-                        session=self._protocol_session,
-                        diagnostics=self._diagnostics,
-                        sender=report_sender,
-                    )
-                else:
-                    self._report_loop = None
+                self._report_loop = ReportLoop(
+                    transport=transport,
+                    state_store=self._state_store,
+                    report_period_us=self._config.report_period_us,
+                    input_report_builder=InputReportBuilder(
+                        self._controller_profile,
+                    ),
+                    session=self._protocol_session,
+                    diagnostics=self._diagnostics,
+                    sender=report_sender,
+                    is_user_input_enabled=self._connected_event.is_set,
+                    stop_when_user_input_enabled=self._reporting_mode == "direct",
+                )
                 self._connection_state = "opened"
                 self._is_open = True
             except Exception:
@@ -417,6 +423,7 @@ class ControllerRuntime:
                         await self._send_trailing_neutral_if_connected()
                     except Exception as error:  # noqa: BLE001
                         self._diagnostics.record_error(error, recoverable=True)
+                await self._stop_handshake_bootstrap()
                 if self._report_loop is not None:
                     await self._report_loop.stop()
                 self._disconnect_event.clear()
@@ -888,15 +895,73 @@ class ControllerRuntime:
             profile_kind=self._controller_profile.kind.value,
             route=self._connection_route,
         )
+        self._start_handshake_bootstrap()
+
+    def _start_handshake_bootstrap(self) -> None:
+        task = self._handshake_bootstrap_task
+        if task is not None and not task.done():
+            return
+        self._handshake_bootstrap_event.clear()
+        self._handshake_bootstrap_attempts = 0
+        self._handshake_bootstrap_task = asyncio.create_task(
+            self._run_handshake_bootstrap(),
+            name="swbt-handshake-bootstrap",
+        )
+        self._diagnostics.record_event(
+            "handshake_bootstrap_started",
+            retry_seconds=HANDSHAKE_BOOTSTRAP_RETRY_SECONDS,
+        )
+
+    async def _run_handshake_bootstrap(self) -> None:
+        try:
+            while not self._handshake_bootstrap_event.is_set():
+                self._handshake_bootstrap_attempts += 1
+                await self._require_report_sender().send_input(
+                    InputState.neutral(),
+                    reason="handshake_bootstrap",
+                )
+                if self._handshake_bootstrap_event.is_set():
+                    return
+                try:
+                    async with asyncio.timeout(HANDSHAKE_BOOTSTRAP_RETRY_SECONDS):
+                        await self._handshake_bootstrap_event.wait()
+                except TimeoutError:
+                    pass
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:  # noqa: BLE001
+            if not self._close_in_progress:
+                self._fail_protocol_initialization(error)
+
+    def _handle_subcommand_received(self, subcommand_id: int) -> None:
+        if self._handshake_bootstrap_event.is_set():
+            return
+        self._handshake_bootstrap_event.set()
+        self._diagnostics.record_event(
+            "handshake_bootstrap_stopped",
+            attempts=self._handshake_bootstrap_attempts,
+            reason="subcommand_received",
+            subcommand_id=f"0x{subcommand_id:02x}",
+        )
+
+    async def _stop_handshake_bootstrap(self) -> None:
+        self._handshake_bootstrap_event.set()
+        task = self._handshake_bootstrap_task
+        self._handshake_bootstrap_task = None
+        if task is None:
+            return
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
     def _handle_protocol_state_updated(self) -> None:
+        if self._report_loop is not None and self._protocol_session.state.report_mode_supported:
+            self._report_loop.start()
         if self._connected_event.is_set() or not self._protocol_session.state.protocol_ready:
             return
         self._connection_state = "connected"
         self._connected_event.set()
         self._connection_attempt_event.set()
-        if self._report_loop is not None:
-            self._report_loop.start()
         session_state = self._protocol_session.state
         self._diagnostics.record_event(
             "protocol_ready",
@@ -938,6 +1003,7 @@ class ControllerRuntime:
         self._connected_event.clear()
         try:
             await self._state_store.neutral()
+            await self._stop_handshake_bootstrap()
             if self._report_loop is not None:
                 await self._report_loop.stop()
                 self._report_loop = None

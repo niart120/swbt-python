@@ -200,6 +200,7 @@ def test_switch_adapter_default_profile_fresh_pairing_and_close(
 
     payload = json.loads(profile_path.read_text(encoding="utf-8"))
     events = _read_jsonl(trace_path)
+    _assert_protocol_ready_handshake(events, profile_kind="pro_controller")
     namespaces = payload["key_store"]["namespaces"]
     assert payload["format"] == "swbt.profile"
     assert payload["schema_version"] == 1
@@ -264,6 +265,7 @@ def test_switch_adapter_default_profile_reuses_address_after_normal_close(
     asyncio.run(run())
 
     events = _read_jsonl(trace_path)
+    _assert_protocol_ready_handshake(events, profile_kind="pro_controller")
     assert profile_path.read_bytes() == original_profile
     assert not _contains_event(events, "adapter_identity_prepared")
     assert _contains_event(events, "bumble_device_initialized")
@@ -714,3 +716,48 @@ def _contains_event(
         and all(event.get(key) == value for key, value in expected.items())
         for event in events
     )
+
+
+def _assert_protocol_ready_handshake(
+    events: list[dict[str, Any]],
+    *,
+    profile_kind: str,
+) -> None:
+    bootstrap_reports = [
+        event
+        for event in events
+        if event.get("event") == "report_tx" and event.get("reason") == "handshake_bootstrap"
+    ]
+    bootstrap_stops = [
+        event for event in events if event.get("event") == "handshake_bootstrap_stopped"
+    ]
+    received = [
+        (event.get("packet_id"), event.get("subcommand_id"))
+        for event in events
+        if event.get("event") == "subcommand_rx"
+    ]
+    replied = [
+        (event.get("packet_id"), event.get("subcommand_id"))
+        for event in events
+        if event.get("event") == "subcommand_reply_tx"
+    ]
+    ready_indexes = [
+        index for index, event in enumerate(events) if event.get("event") == "protocol_ready"
+    ]
+
+    assert bootstrap_reports
+    assert len(bootstrap_stops) == 1
+    assert bootstrap_stops[0].get("reason") == "subcommand_received"
+    assert received
+    assert bootstrap_stops[0].get("subcommand_id") == received[0][1]
+    assert replied == received
+    assert len(ready_indexes) == 1
+
+    ready_index = ready_indexes[0]
+    ready = events[ready_index]
+    assert ready.get("profile_kind") == profile_kind
+    assert ready.get("report_mode") == "0x30"
+    assert ready.get("player_lights") not in (None, "0x00")
+    assert {"0x03", "0x30"} <= set(ready.get("observed_subcommands", []))
+    assert ready_index > 0
+    assert events[ready_index - 1].get("event") == "subcommand_reply_tx"

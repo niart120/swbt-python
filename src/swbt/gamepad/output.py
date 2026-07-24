@@ -18,9 +18,14 @@ ReplyBuilder = Callable[[], bytes | Awaitable[bytes]]
 ReplySender = Callable[[ReplyBuilder], Awaitable[bytes]]
 ReplySenderRequirement = Callable[[], None]
 ProtocolStateUpdated = Callable[[], None]
+SubcommandReceived = Callable[[int], None]
 
 
 def _ignore_protocol_state_update() -> None:
+    pass
+
+
+def _ignore_subcommand_received(_subcommand_id: int) -> None:
     pass
 
 
@@ -34,6 +39,7 @@ class OutputReportDispatcher:
     session: SwitchHidSession
     state_store: InputStateStore
     protocol_state_updated: ProtocolStateUpdated = _ignore_protocol_state_update
+    subcommand_received: SubcommandReceived = _ignore_subcommand_received
     output_report_parser: OutputReportParser = field(default_factory=OutputReportParser)
     subcommand_responder: SubcommandResponder = field(default_factory=SubcommandResponder)
 
@@ -52,6 +58,7 @@ class OutputReportDispatcher:
         )
         if output_report.subcommand_id is None:
             return
+        self.subcommand_received(output_report.subcommand_id)
         self.diagnostics.record_subcommand_rx(
             packet_id=output_report.packet_id,
             subcommand_id=output_report.subcommand_id,

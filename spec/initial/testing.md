@@ -157,7 +157,12 @@ Fake transport integration tests は `tests/integration/` に置く。
 - close後の再openで前回接続のhost要求状態とquaternion状態を引き継がない
 - link 接続だけでは接続 API が戻らず、reply 送信完了後の protocol ready で戻る
 - Pro Controller / Joy-Con L/R と Periodic / Direct が同じ ready 境界を共有する
-- ready 前の Periodic state は wire へ出ず、subcommand reply prefix は neutral になる
+- Periodic / Direct は link 接続後に neutral `0x30` の起動 report を送り、subcommand
+  未受信中だけ1秒間隔で再送する
+- 最初の有効な subcommand を parse した後は起動 report を再送しない
+- supported `0x03 30` reply 後は neutral `0x30` の requested report mode を開始する
+- ready 前の利用者 state は wire へ出ず、subcommand reply prefix も neutral になる
+- ready 後は Periodic が利用者 state の送信を継続し、Direct は自動 `0x30` を停止する
 - reply 送信失敗または ready 前 disconnect は timeout を待たず接続失敗になる
 
 ### 3.4 neutral fail-safe
