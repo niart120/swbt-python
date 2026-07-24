@@ -5,7 +5,7 @@ from swbt.input import Button, IMUFrame, InputState
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.profiles.pro_controller import default_controller_profile
 from swbt.protocol.session import SwitchHidSession
-from swbt.report_loop import ReportLoop
+from swbt.report_loop import ReportLoop, ReportSender
 from swbt.state_store import InputStateStore
 from swbt.transport.fake import FakeHidTransport
 
@@ -25,6 +25,9 @@ class _FakeMonotonicClock:
 
     def advance_ns(self, duration_ns: int) -> None:
         self.now_ns += duration_ns
+
+    def time(self) -> float:
+        return self.now_ns / 1_000_000_000
 
 
 def test_report_loop_requires_injected_input_report_builder() -> None:
@@ -80,6 +83,71 @@ def test_subcommand_reply_holds_off_following_periodic_report() -> None:
         await report_loop.send_next_report()
 
         assert len(transport.sent_interrupt_reports) == report_count_after_reply
+
+    asyncio.run(run())
+
+
+def test_fake_transport_records_reply_and_automatic_input_holdoff_timing() -> None:
+    class TimestampedFakeHidTransport(FakeHidTransport):
+        def __init__(self, clock: _FakeMonotonicClock) -> None:
+            super().__init__()
+            self._clock = clock
+            self.sent_at: list[tuple[float, int]] = []
+
+        async def send_interrupt(self, payload: bytes) -> None:
+            self.sent_at.append((self._clock.time(), payload[0]))
+            await super().send_interrupt(payload)
+
+    async def run() -> None:
+        clock = _FakeMonotonicClock()
+        transport = TimestampedFakeHidTransport(clock)
+        await transport.open()
+        profile = default_controller_profile()
+        sender = ReportSender(
+            transport=transport,
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
+            clock_ns=clock,
+            monotonic_time=clock.time,
+        )
+        report_loop = ReportLoop(
+            transport=transport,
+            state_store=InputStateStore(),
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
+            sender=sender,
+        )
+
+        await report_loop.send_subcommand_reply(lambda: bytes([0x21, *([0] * 49)]))
+        await report_loop.send_next_report()
+        clock.advance_ns(299_000_000)
+        await report_loop.send_next_report()
+        clock.advance_ns(1_000_000)
+        await report_loop.send_next_report()
+
+        assert transport.sent_at == [(0.0, 0x21), (0.3, 0x30)]
+
+    asyncio.run(run())
+
+
+def test_reply_holdoff_does_not_block_explicit_input() -> None:
+    async def run() -> None:
+        clock = _FakeMonotonicClock()
+        transport = FakeHidTransport()
+        await transport.open()
+        profile = default_controller_profile()
+        sender = ReportSender(
+            transport=transport,
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
+            clock_ns=clock,
+            monotonic_time=clock.time,
+        )
+
+        await sender.send_subcommand_reply(lambda: bytes([0x21, *([0] * 49)]))
+        await sender.send_input(InputState.neutral(), reason="direct")
+
+        assert [report[0] for report in transport.sent_interrupt_reports] == [0x21, 0x30]
 
     asyncio.run(run())
 
