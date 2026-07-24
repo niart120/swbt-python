@@ -42,6 +42,7 @@ class ReportSender:
         self._clock_ns = clock_ns
         self._timer = 0
         self._send_lock = asyncio.Lock()
+        self._automatic_input_holdoff_until = 0.0
 
     async def send_input(
         self,
@@ -69,6 +70,14 @@ class ReportSender:
             state = await state_store.snapshot()
             await self._send_input_locked(state, reason=reason)
 
+    async def send_automatic_input(self, state: InputState, *, reason: str) -> bool:
+        """Send one automatic input unless a recent reply still holds it off."""
+        async with self._send_lock:
+            if self._is_automatic_input_held_off():
+                return False
+            await self._send_input_locked(state, reason=reason)
+            return True
+
     async def send_subcommand_reply(self, build_report: ReplyBuilder) -> bytes:
         """Build and send a subcommand reply under the shared send lock."""
         async with self._send_lock:
@@ -78,6 +87,7 @@ class ReportSender:
             else:
                 report = built
             await self._send_subcommand_report_locked(report)
+            self._hold_off_automatic_input_after_reply()
             return report
 
     async def _send_subcommand_report_locked(self, report: bytes) -> None:
@@ -114,6 +124,14 @@ class ReportSender:
     def _advance_timer(self) -> None:
         self._timer = (self._timer + 1) & 0xFF
 
+    def _hold_off_automatic_input_after_reply(self) -> None:
+        self._automatic_input_holdoff_until = (
+            asyncio.get_running_loop().time() + REPLY_PERIODIC_HOLDOFF_SECONDS
+        )
+
+    def _is_automatic_input_held_off(self) -> bool:
+        return asyncio.get_running_loop().time() < self._automatic_input_holdoff_until
+
 
 class ReportLoop:
     """Send input reports from the current input state."""
@@ -130,13 +148,9 @@ class ReportLoop:
         clock_ns: Callable[[], int] = monotonic_ns,
         _sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         sender: ReportSender | None = None,
-        is_user_input_enabled: Callable[[], bool] = _user_input_enabled_by_default,
-        stop_when_user_input_enabled: bool = False,
     ) -> None:
         """Create a report loop helper."""
         self._state_store = state_store
-        self._is_user_input_enabled = is_user_input_enabled
-        self._stop_when_user_input_enabled = stop_when_user_input_enabled
         self._report_period_ns = report_period_us * 1_000
         self._clock_ns = clock_ns
         self._sleep = _sleep
@@ -147,7 +161,6 @@ class ReportLoop:
             diagnostics=diagnostics,
             clock_ns=clock_ns,
         )
-        self._periodic_holdoff_until = 0.0
         self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
@@ -168,30 +181,22 @@ class ReportLoop:
 
     async def send_current_input(self, *, reason: str = "input") -> None:
         """Send one 0x30 input report for the current state."""
-        if not self._is_user_input_enabled():
-            await self._sender.send_input(InputState.neutral(), reason=reason)
-            return
         await self._sender.send_current_input(self._state_store, reason=reason)
 
     async def send_subcommand_reply(self, build_report: ReplyBuilder) -> bytes:
         """Apply a subcommand transition and send its reply under the send lock."""
-        report = await self._sender.send_subcommand_reply(build_report)
-        self._holdoff_periodic_after_reply()
-        return report
+        return await self._sender.send_subcommand_reply(build_report)
 
     async def send_next_report(self) -> None:
         """Send current periodic input unless a recent reply holds it off."""
-        if self._is_periodic_held_off():
-            return
-        await self.send_current_input(reason="periodic")
+        state = await self._state_store.snapshot()
+        await self._sender.send_automatic_input(state, reason="periodic")
 
     async def _run(self) -> None:
         next_deadline_ns = self._clock_ns() + self._report_period_ns
         while True:
             while (remaining_ns := next_deadline_ns - self._clock_ns()) > 0:
                 await self._sleep(remaining_ns / 1_000_000_000)
-            if self._stop_when_user_input_enabled and self._is_user_input_enabled():
-                return
             await self.send_next_report()
             next_deadline_ns += self._report_period_ns
             now_ns = self._clock_ns()
@@ -200,11 +205,3 @@ class ReportLoop:
                     now_ns - next_deadline_ns + self._report_period_ns - 1
                 ) // self._report_period_ns
                 next_deadline_ns += elapsed_periods * self._report_period_ns
-
-    def _holdoff_periodic_after_reply(self) -> None:
-        self._periodic_holdoff_until = (
-            asyncio.get_running_loop().time() + REPLY_PERIODIC_HOLDOFF_SECONDS
-        )
-
-    def _is_periodic_held_off(self) -> bool:
-        return asyncio.get_running_loop().time() < self._periodic_holdoff_until

@@ -106,7 +106,7 @@ Periodic controller だけが所有する固定 deadline scheduler に限定す�
 | Switch HID / report bytes | required | done | unit_006、unit_049、unit_069の監査済みbuilder、parser、session遷移を変更せず、既存fixtureとbyte assertionを維持する |
 | report timing | required | done | bootstrap 1秒、設定済みreport period、reply後300 ms holdoffを既存値のままcharacterizationする。300 msの必要性判断は本作業に含めない |
 | Bumble / transport | required | done | transport callbackと`send_interrupt()`の契約を変更せず、初期化中とready後の委譲先だけを切り替える |
-| OS / driver / adapter | required | todo | task ownershipとcallback handoff変更後の完了gateとして、明示承認付き実機runで既存条件を再確認する |
+| OS / driver / adapter | required | done | `usb:0` / CSR8510 A10 / WinUSBで実機gateを実行。条件付き観測はhardware logに記録 |
 
 ### 5.1 監査結果
 
@@ -153,26 +153,26 @@ Periodic controller だけが所有する固定 deadline scheduler に限定す�
 
 | status | item | type | layer | hardware | notes |
 |---|---|---|---|---|---|
-| todo | link接続直後にPeriodic / Directの両方がbootstrap neutralを1件送る | regression | integration | no | 6具象controllerをparameterizeする |
-| todo | 有効なsubcommand未受信中だけbootstrap neutralを1秒間隔で再送する | regression | unit / integration | no | fake clockまたは明示wakeで壁時計flakeを避ける |
-| todo | 最初の有効なsubcommandをparseするとbootstrap再送を停止し、同じdispatcherがreplyを返す | regression | unit / integration | no | dispatcherとsenderのidentityを切り替えない |
-| todo | supported report mode未設定のsubcommand間では自動neutralを送らない | regression | integration | no | bootstrapとrequested-report-mode phaseを区別する |
-| todo | supported `0x03 30` reply受理後、readyまではneutralを設定周期で送る | regression | integration | no | ready前の利用者stateをwireへ出さない |
-| todo | readyを成立させるreply受理後、自動送信taskを回収してからready outcomeを返す | new | unit / integration | no | task完了と`protocol_ready` traceの順序を観測する |
-| todo | ready handoff中に到着したoutput reportを欠落・重複させず1回だけ処理する | edge | unit / integration | no | 初期化中委譲から直接dispatcher委譲への切替を検証する |
-| todo | ready後のoutput reportにも同じdispatcher、protocol state、senderがreplyとstate更新を継続する | regression | integration | no | handshakeだけを破棄する |
-| todo | Periodicはready後の最初の通常reportからcurrent user stateを送る | regression | integration | no | ready前に準備したstateを保持する |
-| todo | Directはopen、initializing、readyの全段階で`ReportLoop`を所有せず、ready後の自動`0x30`が0件になる | regression | unit / integration | no | 3 Direct具象controllerをparameterizeする |
-| todo | `0x21` replyとhandshake / Periodic `0x30`が共有lockとtimerを使い、既存holdoffを維持する | characterization | unit / integration | no | 値の要否ではなく現行挙動を固定する |
-| todo | 自動送信失敗はfailed outcomeを返し、自動送信taskを残さない | edge | unit / integration | no | close中のrecoverable errorと区別する |
-| todo | ready前disconnectはtimeoutを待たず接続失敗となり、handshakeを残さない | edge | integration | no | pairing / active reconnect routeを確認する |
-| todo | closeとcaller cancellationはinitializing中のtaskを回収する | edge | unit / integration | no | asyncio task leak warningを出さない |
-| todo | reopenではfresh protocol state、fresh handshake、fresh sender timer / holdoff状態を使う | regression | integration | no | 前回outcomeとwake通知を再利用しない |
-| todo | `pair()` / `connect()` / `reconnect()` / `try_*()` / `create_profile()`が従来のprotocol-ready境界を維持する | regression | integration | no | 公開APIの成功・timeout・failureを確認する |
-| todo | fixed-deadline schedulerが最新state、overrun skip、no burst catch-upを維持する | regression | unit | no | unit_065の決定的testを維持する |
-| todo | Periodic Pro Controllerのactive reconnectがready後の通常送信とclean closeまで完了する | characterization | hardware | yes | adapter、command、cleanupの明示承認後に実行する |
-| todo | Direct Pro Controllerのactive reconnectがready後1秒以上、自動`0x30`なしでclean closeする | characterization | hardware | yes | 既存hardware testを再利用する |
-| todo | Joy-Con L/Rのfresh pairingまたはactive reconnectが追加の利用者入力なしでreadyへ到達する | characterization | hardware | yes | profile非依存性をfake差分review後、実行範囲を決める |
+| green | link接続直後にPeriodic / Directの両方がbootstrap neutralを1件送る | regression | integration | no | `test_switch_gamepad_fake_transport.py`のPeriodic / Direct / profile回帰で確認 |
+| green | 有効なsubcommand未受信中だけbootstrap neutralを1秒間隔で再送する | regression | unit / integration | no | retry間隔を注入する既存fake transport回帰で確認 |
+| green | 最初の有効なsubcommandをparseするとbootstrap再送を停止し、同じdispatcherがreplyを返す | regression | unit / integration | no | dispatcherとsenderをRuntimeが継続利用する実装とfake回帰で確認 |
+| green | supported report mode未設定のsubcommand間では自動neutralを送らない | regression | integration | no | bootstrapとrequested-report-mode phaseを既存fake回帰で確認 |
+| green | supported `0x03 30` reply受理後、readyまではneutralを設定周期で送る | regression | integration | no | ready前の利用者stateをwireへ出さない既存fake回帰で確認 |
+| green | readyを成立させるreply受理後、自動送信taskを回収してからready outcomeを返す | new | unit / integration | no | output callbackがhandshake stopをawaitしてからconnectedへ遷移する |
+| green | ready handoff中に到着したoutput reportを欠落・重複させず1回だけ処理する | edge | unit / integration | no | callbackはdispatcherを1回だけ呼び、ready後も同じinstanceを継続利用する |
+| green | ready後のoutput reportにも同じdispatcher、protocol state、senderがreplyとstate更新を継続する | regression | integration | no | integration全体のready後subcommand / IMU回帰で確認 |
+| green | Periodicはready後の最初の通常reportからcurrent user stateを送る | regression | integration | no | `test_periodic_bootstrap_stops_after_first_subcommand_then_starts_when_ready`で確認 |
+| green | Directはopen、initializing、readyの全段階で`ReportLoop`を所有せず、ready後の自動`0x30`が0件になる | regression | unit / integration | no | Direct回帰にinternal ownership assertionを追加 |
+| green | `0x21` replyとhandshake / Periodic `0x30`が共有lockとtimerを使い、既存holdoffを維持する | characterization | unit / integration | no | `ReportSender`へ自動input holdoffを移し、既存sender / scheduler回帰で確認 |
+| green | 自動送信失敗はfailed outcomeを返し、自動送信taskを残さない | edge | unit / integration | no | callback例外とclose cleanupのfake transport回帰で確認 |
+| green | ready前disconnectはtimeoutを待たず接続失敗となり、handshakeを残さない | edge | integration | no | existing disconnect / failure回帰で確認 |
+| green | closeとcaller cancellationはinitializing中のtaskを回収する | edge | unit / integration | no | close cleanup回帰で確認 |
+| green | reopenではfresh protocol state、fresh handshake、fresh sender timer / holdoff状態を使う | regression | integration | no | reopened connection回帰で確認 |
+| green | `pair()` / `connect()` / `reconnect()` / `try_*()` / `create_profile()`が従来のprotocol-ready境界を維持する | regression | integration | no | 154 integration testsで確認 |
+| green | fixed-deadline schedulerが最新state、overrun skip、no burst catch-upを維持する | regression | unit | no | `tests/unit/test_report_loop.py`で確認 |
+| green | Periodic Pro Controllerのactive reconnectがready後の通常送信とclean closeまで完了する | characterization | hardware | yes | `usb:0`でpass。artifactはhardware log参照 |
+| green | Direct Pro Controllerのactive reconnectがready後1秒以上、自動`0x30`なしでclean closeする | characterization | hardware | yes | fresh pairingでprofileを作り直した後、`usb:0`でpass。artifactはhardware log参照 |
+| green | Joy-Con L/Rのfresh pairingまたはactive reconnectが追加の利用者入力なしでreadyへ到達する | characterization | hardware | yes | `usb:0`でL/R fresh pairingがpass。artifactはhardware log参照 |
 
 ## 8. 文書検証計画
 
@@ -181,10 +181,10 @@ Periodic controller だけが所有する固定 deadline scheduler に限定す�
 
 | document | audience / task | source of truth | mechanical check | review result | unresolved |
 |---|---|---|---|---|---|
-| `spec/initial/architecture.md` | maintainerがRuntime、期限付きhandshake、sender、ReportLoopの所有関係を把握する | 本仕様 §2 / §9 | `uv run --group docs mkdocs build --strict` | todo | 借用dependencyとownershipを区別する |
-| `spec/initial/lifecycle.md` | maintainerがlink、handshake、ready handoff、closeの順序を追う | 本仕様 §6 / §9 | `uv run --group docs mkdocs build --strict` | todo | ready後にhandshakeが残らないことを明記する |
-| `spec/initial/protocol.md` | maintainerがreplyと自動inputの共有sender境界を確認する | 本仕様 §5 / §9 | `uv run --group docs mkdocs build --strict` | todo | 300 msの必要性を確定事項として拡張しない |
-| `spec/initial/testing.md` | maintainerがfake / hardware gateを選ぶ | 本仕様 §7 / §12 | `uv run --group docs mkdocs build --strict` | todo | handoff競合、task cleanup、6具象controllerを反映する |
+| `spec/initial/architecture.md` | maintainerがRuntime、期限付きhandshake、sender、ReportLoopの所有関係を把握する | 本仕様 §2 / §9 | `uv run --group docs mkdocs build --strict` | pass | borrowed dependencyとownershipを区別した |
+| `spec/initial/lifecycle.md` | maintainerがlink、handshake、ready handoff、closeの順序を追う | 本仕様 §6 / §9 | `uv run --group docs mkdocs build --strict` | pass | ready後にhandshakeが残らない順序を明記した |
+| `spec/initial/protocol.md` | maintainerがreplyと自動inputの共有sender境界を確認する | 本仕様 §5 / §9 | `uv run --group docs mkdocs build --strict` | pass | 300 msの必要性を未検証として維持した |
+| `spec/initial/testing.md` | maintainerがfake / hardware gateを選ぶ | 本仕様 §7 / §12 | `uv run --group docs mkdocs build --strict` | pass | handoff、task cleanup、6具象controllerを反映した |
 
 ## 9. 設計メモ
 
@@ -238,23 +238,23 @@ Periodic / Directのready後処理は所有しない。
 
 ### 9.4 output reportの委譲とhandoff
 
-transport callbackの入口はRuntimeに残す。initializing中だけhandshakeへ委譲し、
-handshakeが借用中dispatcherを呼ぶ。ready handoff後はRuntimeがdispatcherを直接呼ぶ。
+transport callbackの入口と`OutputReportDispatcher`の呼び出しはRuntimeに残す。initializing中は
+dispatcherの`subcommand_received` / `protocol_state_updated`通知をhandshakeへ渡す。ready handoff後は
+通知先のhandshakeを破棄し、同じdispatcherが通常どおり処理を継続する。
 
 ```text
 initializing:
   transport callback
-    → ProtocolHandshake
-      → shared OutputReportDispatcher
+    → shared OutputReportDispatcher
+      → ProtocolHandshakeへ状態通知
 
 ready:
   transport callback
     → shared OutputReportDispatcher
 ```
 
-Runtimeはactiveなhandshakeをlocal参照として取得してからdispatchする。ready handoffは
-そのdispatch完了後に行い、1件のpayloadを初期化経路とready後経路の両方へ渡さない。
-並行payloadがあり得る場合も、既存dispatcherの直列化条件を維持しながら欠落・重複を防ぐ。
+ready handoffはreadyを成立させるpayloadのdispatch完了後に行う。1件のpayloadを初期化経路と
+ready後経路の両方へ渡さず、dispatcher、session、senderを再生成しない。
 
 ### 9.5 ready遷移
 
@@ -299,15 +299,12 @@ handshakeとready後Periodicの自動inputが既存holdoffを共有できるよ�
 
 | path | change | 内容 |
 |---|---|---|
-| `src/swbt/gamepad/protocol_handshake.py` | new | 期限付きoutcome、自動送信task、dispatcher委譲、stopを所有 |
-| `src/swbt/gamepad/runtime.py` | modify | bootstrap fieldsを削除し、handshake lifecycle、ready handoff、ready後dispatcher委譲を調停 |
+| `src/swbt/gamepad/protocol_handshake.py` | new | 期限付きoutcome、自動送信task、状態通知、stopを所有 |
+| `src/swbt/gamepad/runtime.py` | modify | bootstrap fieldsを削除し、handshake lifecycle、ready handoff、dispatcher通知を調停 |
 | `src/swbt/report_loop.py` | modify | ready後Periodic専用にし、handshake分岐とDirect停止条件を削除。共有自動送信holdoffの所有場所を整理 |
 | `src/swbt/gamepad/output.py` | modify | handshakeから借用できる通知境界とready後直接利用を維持 |
 | `tests/unit/test_protocol_handshake.py` | new | phase、outcome順序、handoff、failure、stopを決定的に検証 |
-| `tests/unit/test_report_loop.py` | modify | ready後Periodic scheduler、共有sender、既存holdoffのcharacterizationへ限定 |
-| `tests/unit/test_gamepad_output_dispatcher.py` | modify | 初期化中とready後で同じdispatcherが機能することを検証 |
 | `tests/integration/test_switch_gamepad_fake_transport.py` | modify | 6具象controller、公開接続API、handoff、Direct / Periodic、cleanupを検証 |
-| `tests/gamepad_factory.py` | modify | handshake導入後の内部fixture参照へ更新 |
 | `spec/initial/architecture.md` | modify | Runtime、期限付きhandshake、borrowed dependency、ReportLoopの関係を更新 |
 | `spec/initial/lifecycle.md` | modify | linkからready handoff、ready後、closeまでのlifecycleを更新 |
 | `spec/initial/protocol.md` | modify | handshake自動送信とready後Periodicの所有者を更新 |
@@ -321,17 +318,18 @@ handshakeとready後Periodicの自動inputが既存holdoffを共有できるよ�
 
 | command | result | notes |
 |---|---|---|
-| `uv run pytest tests/unit/test_protocol_handshake.py` | not run | spec作成時点ではtest未作成 |
-| `uv run pytest tests/unit/test_report_loop.py tests/unit/test_gamepad_output_dispatcher.py` | not run | sender、scheduler、dispatcher回帰 |
-| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py` | not run | 6具象controllerと公開接続API |
-| `uv sync --dev` | not run | 実装完了gate |
-| `uv run ruff format --check .` | not run | 実装完了gate |
-| `uv run ruff check .` | not run | 実装完了gate |
-| `uv run ty check --no-progress` | not run | 実装完了gate |
-| `uv run pytest tests/unit` | not run | 実装完了gate |
-| `uv run pytest tests/integration` | not run | 対象treeあり |
-| `uv run --group docs mkdocs build --strict` | pass | spec作成時点の文書構造・リンク検証 |
-| `git diff --no-index --check -- NUL spec/wip/unit_081/PROTOCOL_HANDSHAKE.md` | pass | untracked新規仕様書のwhitespace確認。差分ありを表すexit 1は成功として扱った |
+| `uv run pytest tests/unit/test_protocol_handshake.py` | pass | 4 passed |
+| `uv run pytest tests/unit/test_report_loop.py tests/unit/test_gamepad_output_dispatcher.py` | pass | 対象を含むunit suiteで444 passed |
+| `uv run pytest tests/integration/test_switch_gamepad_fake_transport.py` | pass | 139 passed |
+| `uv sync --dev` | pass | 53 packages resolved |
+| `uv run ruff format --check .` | pass | 105 files already formatted |
+| `uv run ruff check .` | pass | all checks passed |
+| `uv run ty check --no-progress` | pass | all checks passed |
+| `uv run pytest tests/unit` | pass | 444 passed |
+| `uv run pytest tests/integration` | pass | 154 passed |
+| `uv run --group docs mkdocs build --strict` | pass | documentation built successfully |
+| `uv run pytest tests/hardware/test_pairing_profile.py::… -m hardware --swbt-bumble-adapter usb:0 …` | pass | Pro fresh / reconnect、Direct Pro fresh-profile reconnect、Joy-Con L/R freshがpass。詳細は`spec/hardware-test-log.md` |
+| `git diff --check` | pass | 実装・文書・完了移動後の差分にwhitespace errorなし |
 
 ## 12. 実機実行条件
 
@@ -351,7 +349,7 @@ fake transportと差分reviewでprofile非依存性を確認した後、Direct J
 ## 13. 先送り事項
 
 - reply後300 ms holdoffの必要性、値、handshake中とready後Periodicでの適用範囲。
-  source auditと実機A/Bを別作業単位で行う。
+  source auditと実機A/Bを [Issue #139](https://github.com/niart120/swbt-python/issues/139) で行う。
 - connection単位の長寿命protocol componentや汎用session framework。
   Runtimeとの責務分割を伴うため、本作業へ含めない。
 
@@ -364,8 +362,8 @@ fake transportと差分reviewでprofile非依存性を確認した後、Direct J
 - [x] TDD Test Listを作成した
 - [x] 既存protocol値とtimingの根拠監査状態を記録した
 - [x] 実機実行条件を記録した
-- [ ] red / green / refactorを完了した
-- [ ] 初期設計文書を更新した
-- [ ] local gateを完了した
-- [ ] 明示承認付き実機gateを完了した
+- [x] red / green / refactorを完了した（分離途中の通知取りこぼしをfake transport回帰で検出し、state確認とtask停止順へ修正）
+- [x] 初期設計文書を更新した
+- [x] local gateを完了した
+- [x] 明示承認付き実機gateを完了した
 - [x] spec作成時点の文書検証結果と実装gateの未実行理由を記録した

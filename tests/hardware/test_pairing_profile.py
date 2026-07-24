@@ -968,8 +968,12 @@ def _assert_direct_stops_automatic_reports_after_ready(
     automatic_report_indexes = [
         index
         for index, event in enumerate(events)
-        if event.get("event") == "report_tx" and event.get("reason") == "periodic"
+        if event.get("event") == "report_tx"
+        and event.get("reason") in {"handshake_bootstrap", "handshake_report_mode", "periodic"}
     ]
 
     assert automatic_report_indexes
+    assert any(
+        events[index].get("reason") == "handshake_report_mode" for index in automatic_report_indexes
+    )
     assert automatic_report_indexes[-1] < ready_index

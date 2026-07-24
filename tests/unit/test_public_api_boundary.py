@@ -329,8 +329,6 @@ def test_public_constructor_uses_profile_default_report_period(
             session: object | None = None,
             diagnostics: object | None = None,
             sender: object | None = None,
-            is_user_input_enabled: object | None = None,
-            stop_when_user_input_enabled: bool = False,
         ) -> None:
             _ = (
                 transport,
@@ -339,10 +337,11 @@ def test_public_constructor_uses_profile_default_report_period(
                 session,
                 diagnostics,
                 sender,
-                is_user_input_enabled,
-                stop_when_user_input_enabled,
             )
             captured_periods.append(report_period_us)
+
+        def start(self) -> None:
+            return None
 
         async def stop(self) -> None:
             return None
@@ -352,6 +351,7 @@ def test_public_constructor_uses_profile_default_report_period(
     async def run() -> int:
         pad = make_pro_controller(transport=FakeHidTransport())
         await pad.open()
+        pad._runtime._start_periodic_report_loop()
         await pad.close(neutral=False)
         return captured_periods[-1]
 

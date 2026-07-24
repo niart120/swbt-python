@@ -2,7 +2,6 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from dataclasses import replace
 from typing import Literal
 
@@ -18,6 +17,10 @@ from swbt.errors import (
 from swbt.gamepad._config import _GamepadConfig
 from swbt.gamepad.connection import ConnectionResult
 from swbt.gamepad.output import OutputReportDispatcher
+from swbt.gamepad.protocol_handshake import (
+    HandshakeOutcome,
+    ProtocolHandshake,
+)
 from swbt.input import Button, IMUFrame, InputState, Stick
 from swbt.protocol.input_report import InputReportBuilder
 from swbt.protocol.session import SwitchHidSession
@@ -90,9 +93,7 @@ class ControllerRuntime:
         )
         self._report_loop: ReportLoop | None = None
         self._report_sender: ReportSender | None = None
-        self._handshake_bootstrap_event = asyncio.Event()
-        self._handshake_bootstrap_task: asyncio.Task[None] | None = None
-        self._handshake_bootstrap_attempts = 0
+        self._protocol_handshake: ProtocolHandshake | None = None
         self._input_operation_lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
@@ -140,19 +141,6 @@ class ControllerRuntime:
                     diagnostics=self._diagnostics,
                 )
                 self._report_sender = report_sender
-                self._report_loop = ReportLoop(
-                    transport=transport,
-                    state_store=self._state_store,
-                    report_period_us=self._config.report_period_us,
-                    input_report_builder=InputReportBuilder(
-                        self._controller_profile,
-                    ),
-                    session=self._protocol_session,
-                    diagnostics=self._diagnostics,
-                    sender=report_sender,
-                    is_user_input_enabled=self._connected_event.is_set,
-                    stop_when_user_input_enabled=self._reporting_mode == "direct",
-                )
                 self._connection_state = "opened"
                 self._is_open = True
             except Exception:
@@ -417,7 +405,7 @@ class ControllerRuntime:
                         await self._send_trailing_neutral_if_connected()
                     except Exception as error:  # noqa: BLE001
                         self._diagnostics.record_error(error, recoverable=True)
-                await self._stop_handshake_bootstrap()
+                await self._stop_protocol_handshake()
                 if self._report_loop is not None:
                     await self._report_loop.stop()
                 self._disconnect_event.clear()
@@ -684,8 +672,6 @@ class ControllerRuntime:
         self,
         build_reply: Callable[[], bytes | Awaitable[bytes]],
     ) -> bytes:
-        if self._report_loop is not None:
-            return await self._report_loop.send_subcommand_reply(build_reply)
         return await self._require_report_sender().send_subcommand_reply(build_reply)
 
     def _require_report_sender(self) -> ReportSender:
@@ -883,7 +869,7 @@ class ControllerRuntime:
         try:
             await self._output_report_dispatcher.dispatch(payload)
         except Exception as error:  # noqa: BLE001
-            self._fail_protocol_initialization(error)
+            await self._fail_protocol_initialization(error)
 
     async def _handle_connected(self) -> None:
         previous_state = self._connection_state
@@ -904,73 +890,72 @@ class ControllerRuntime:
             profile_kind=self._controller_profile.kind.value,
             route=self._connection_route,
         )
-        self._start_handshake_bootstrap()
+        self._start_protocol_handshake()
 
-    def _start_handshake_bootstrap(self) -> None:
-        task = self._handshake_bootstrap_task
-        if task is not None and not task.done():
+    def _start_protocol_handshake(self) -> None:
+        handshake = self._protocol_handshake
+        if handshake is not None:
             return
-        self._handshake_bootstrap_event.clear()
-        self._handshake_bootstrap_attempts = 0
-        self._handshake_bootstrap_task = asyncio.create_task(
-            self._run_handshake_bootstrap(),
-            name="swbt-handshake-bootstrap",
+        handshake = ProtocolHandshake(
+            sender=self._require_report_sender(),
+            session=self._protocol_session,
+            report_period_us=self._config.report_period_us,
+            on_outcome=self._handle_handshake_outcome,
+            diagnostics=self._diagnostics,
+            bootstrap_retry_seconds=HANDSHAKE_BOOTSTRAP_RETRY_SECONDS,
         )
-        self._diagnostics.record_event(
-            "handshake_bootstrap_started",
-            retry_seconds=HANDSHAKE_BOOTSTRAP_RETRY_SECONDS,
-        )
-
-    async def _run_handshake_bootstrap(self) -> None:
-        try:
-            while not self._handshake_bootstrap_event.is_set():
-                self._handshake_bootstrap_attempts += 1
-                await self._require_report_sender().send_input(
-                    InputState.neutral(),
-                    reason="handshake_bootstrap",
-                )
-                if self._handshake_bootstrap_event.is_set():
-                    return
-                try:
-                    async with asyncio.timeout(HANDSHAKE_BOOTSTRAP_RETRY_SECONDS):
-                        await self._handshake_bootstrap_event.wait()
-                except TimeoutError:
-                    pass
-        except asyncio.CancelledError:
-            raise
-        except Exception as error:  # noqa: BLE001
-            if not self._close_in_progress:
-                self._fail_protocol_initialization(error)
+        self._protocol_handshake = handshake
+        handshake.start()
 
     def _handle_subcommand_received(self, subcommand_id: int) -> None:
-        if self._handshake_bootstrap_event.is_set():
+        if self._protocol_handshake is not None:
+            self._protocol_handshake.subcommand_received(subcommand_id)
+
+    async def _stop_protocol_handshake(self) -> None:
+        handshake = self._protocol_handshake
+        self._protocol_handshake = None
+        if handshake is not None:
+            await handshake.stop()
+
+    def _start_periodic_report_loop(self) -> None:
+        if self._transport is None or self._report_loop is not None:
             return
-        self._handshake_bootstrap_event.set()
-        self._diagnostics.record_event(
-            "handshake_bootstrap_stopped",
-            attempts=self._handshake_bootstrap_attempts,
-            reason="subcommand_received",
-            subcommand_id=f"0x{subcommand_id:02x}",
+        self._report_loop = ReportLoop(
+            transport=self._transport,
+            state_store=self._state_store,
+            report_period_us=self._config.report_period_us,
+            input_report_builder=InputReportBuilder(self._controller_profile),
+            session=self._protocol_session,
+            diagnostics=self._diagnostics,
+            sender=self._require_report_sender(),
         )
+        self._report_loop.start()
 
-    async def _stop_handshake_bootstrap(self) -> None:
-        self._handshake_bootstrap_event.set()
-        task = self._handshake_bootstrap_task
-        self._handshake_bootstrap_task = None
-        if task is None:
+    async def _handle_protocol_state_updated(self) -> None:
+        handshake = self._protocol_handshake
+        if handshake is None:
             return
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+        if not self._protocol_session.state.protocol_ready:
+            handshake.protocol_state_updated()
+            return
+        await handshake.complete_ready()
+        if self._protocol_handshake is handshake:
+            self._protocol_handshake = None
 
-    def _handle_protocol_state_updated(self) -> None:
-        if self._report_loop is not None and self._protocol_session.state.report_mode_supported:
-            self._report_loop.start()
-        if self._connected_event.is_set() or not self._protocol_session.state.protocol_ready:
+    def _handle_handshake_outcome(self, outcome: HandshakeOutcome) -> None:
+        if outcome.state == "failed":
+            self._protocol_handshake = None
+            if outcome.error is not None and not self._close_in_progress:
+                self._record_protocol_initialization_failure(outcome.error)
+            return
+        if self._connected_event.is_set():
             return
         self._connection_state = "connected"
         self._connected_event.set()
         self._connection_attempt_event.set()
+        self._protocol_handshake = None
+        if self._reporting_mode == "periodic":
+            self._start_periodic_report_loop()
         session_state = self._protocol_session.state
         self._diagnostics.record_event(
             "protocol_ready",
@@ -981,7 +966,13 @@ class ControllerRuntime:
             observed_subcommands=_format_subcommands(session_state.observed_subcommands),
         )
 
-    def _fail_protocol_initialization(self, error: Exception) -> None:
+    async def _fail_protocol_initialization(self, error: Exception) -> None:
+        if self._protocol_handshake is not None:
+            await self._protocol_handshake.complete_failure(error)
+            return
+        self._record_protocol_initialization_failure(error)
+
+    def _record_protocol_initialization_failure(self, error: Exception) -> None:
         self._connection_state = "failed"
         self._connection_attempt_error = error
         self._connection_attempt_event.set()
@@ -1002,17 +993,27 @@ class ControllerRuntime:
 
     async def _handle_disconnected(self, reason: int | None) -> None:
         self._diagnostics.record_event("disconnected", reason=reason)
+        handshake_failure: ConnectionFailedError | None = None
         if (
             not self._connected_event.is_set()
             and not self._connection_attempt_event.is_set()
             and not self._close_in_progress
         ):
             msg = "disconnected before protocol initialization completed"
-            self._fail_protocol_initialization(ConnectionFailedError(msg))
+            handshake_failure = ConnectionFailedError(msg)
+            if self._protocol_handshake is not None:
+                self._protocol_handshake.fail(handshake_failure)
+            else:
+                self._record_protocol_initialization_failure(handshake_failure)
         self._connected_event.clear()
         try:
             await self._state_store.apply(InputState.neutral())
-            await self._stop_handshake_bootstrap()
+            if handshake_failure is not None and self._protocol_handshake is not None:
+                handshake = self._protocol_handshake
+                await handshake.wait()
+                self._protocol_handshake = None
+            else:
+                await self._stop_protocol_handshake()
             if self._report_loop is not None:
                 await self._report_loop.stop()
                 self._report_loop = None

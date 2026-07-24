@@ -334,6 +334,7 @@ def test_periodic_bootstrap_stops_after_first_subcommand_then_starts_when_ready(
         bootstrap_report = await transport.wait_for_interrupt_report_id(0x30)
 
         assert pad.status().connection_state == "initializing"
+        assert pad._runtime._report_loop is None
         assert bootstrap_report[3:6] == bytes.fromhex("00 00 00")
 
         transport.clear_sent_interrupt_reports()
@@ -358,6 +359,7 @@ def test_periodic_bootstrap_stops_after_first_subcommand_then_starts_when_ready(
             report for report in transport.sent_interrupt_reports if report[0] == 0x30
         )
         assert input_report[3:6] == bytes.fromhex("08 00 00")
+        assert pad._runtime._report_loop is not None
 
         await pad.close(neutral=False)
 
@@ -376,6 +378,7 @@ def test_handshake_bootstrap_retries_until_first_subcommand(
         transport = FakeHidTransport()
         pad = make_pro_controller(transport=transport)
         await pad.open()
+        assert pad._runtime._report_loop is None
         await transport.connect()
 
         await transport.wait_for_interrupt_report_count(2)
@@ -421,6 +424,7 @@ def test_direct_bootstrap_stops_after_first_subcommand_and_remains_nonperiodic()
         bootstrap_report = await transport.wait_for_interrupt_report_id(0x30)
 
         assert pad.status().connection_state == "initializing"
+        assert pad._runtime._report_loop is None
         assert bootstrap_report[3:6] == bytes.fromhex("00 00 00")
 
         transport.clear_sent_interrupt_reports()
@@ -441,6 +445,7 @@ def test_direct_bootstrap_stops_after_first_subcommand_and_remains_nonperiodic()
 
         assert pad.status().connection_state == "connected"
         assert transport.sent_interrupt_reports == ()
+        assert pad._runtime._report_loop is None
         await pad.close(neutral=False)
 
     asyncio.run(run())

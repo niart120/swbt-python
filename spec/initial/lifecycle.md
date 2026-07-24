@@ -64,7 +64,7 @@ closed
 6. transport を open し、power-on 後の local address guard を通す
 7. host要求状態とIMU encoding stateが初期値の`SwitchHidSession`、protocol、共通 sender を初期化する
 8. `opened` 状態に入る
-9. Periodic だけ `ReportLoop` task を起動可能な状態にする。Direct は周期 task を作らない
+9. `ReportSender`を作る。`ReportLoop`はこの時点では作らない
 
 profile の validation、raw read、volatile write、warm reset、再列挙、read-back は HID advertising より前に完了する。current address が target と一致する場合は write と reset を省略する。write 開始後の状態を確定できない場合は `AdapterIdentityRecoveryRequired` を送出し、transport 構築と pairing へ進まない。
 
@@ -95,7 +95,7 @@ transport から connected callback を受けたら、次を行う。
 1. 状態を `initializing` にする
 2. link 接続と接続 route を diagnostics に記録する
 3. host output report を受信し、subcommand reply を送れる状態にする
-4. reporting type に関係なく neutral `0x30` の起動 report を送る
+4. reporting type に関係なく`ProtocolHandshake`を開始し、neutral `0x30` の起動 report を送る
 5. Switch から subcommand が来ない間だけ、起動 report を1秒間隔で再送する
 6. 最初の有効な subcommand を parse した時点で起動 report の再送を停止する
 7. 以後は Switch から届いた subcommand ごとに reply を返す
@@ -108,9 +108,8 @@ HID control / interrupt channel の両方が利用可能になった時点は li
 public な接続完了ではない。`0x30 00` は初期化途中として記録し、成功条件にしない。
 起動 report と初期化中の subcommand reply の入力 prefix は neutral state を使う。
 接続前に準備した利用者入力は `connected` になるまで wire へ出さない。起動 report の
-再送は通常 `ReportLoop` ではなく、最初の subcommand までに限定した内部 task が担当する。
-`0x03 30` 後の `0x30` は起動再送ではなく、Switch が要求した report mode として
-`ReportLoop` が送る。Direct では protocol ready 後の自動 `0x30` を継続しない。
+再送は`ReportLoop`ではなく、最初のsubcommandまでに限定した`ProtocolHandshake`のtaskが担当する。
+`0x03 30`後の`0x30`は起動再送ではなく、Switchが要求したreport modeとして同じhandshakeがreadyまで送る。readyを成立させるreplyの受理後、handshake taskを停止・回収してから`connected`にする。Periodicはその後に`ReportLoop`を生成・開始し、Directは自動`0x30`を継続しない。
 
 接続待ちの timeout は、`pair()` / `connect()` / `reconnect()` の呼び出し単位で 1 個の
 deadline として扱い、advertising または active reconnect から protocol ready までを
@@ -157,7 +156,7 @@ await pad.close(neutral=True)
 
 1. 状態を `disconnecting` にする
 2. `neutral=True` かつ接続中であれば neutral report を送る
-3. Periodic の場合は `ReportLoop` を停止する
+3. activeな`ProtocolHandshake`を停止・回収し、Periodicの`ReportLoop`を停止する
 4. transport に切断を要求する。Bumble transport は保留中の interrupt ACL queue を drain してから L2CAP channel を切断する
 5. transport を close する
 6. callback を解除する
@@ -187,7 +186,7 @@ Switch 側から切断された場合、transport は disconnected callback を�
 処理は次の通り。
 
 1. disconnect reason を diagnostics に記録する
-2. Periodic の場合は `ReportLoop` を停止する
+2. activeな`ProtocolHandshake`とPeriodicの`ReportLoop`を停止する
 3. `InputStateStore` を neutral に戻す
 4. bond reuse reconnect の対象であれば、M6 の作業仕様に従い active / incoming のどちらで扱うかを判定する
 5. reconnect が無効、または reconnect 失敗時は clean close し、`closed` または `failed` へ遷移する
@@ -220,7 +219,7 @@ M6 では次を追加する。
 
 内部 task の cancel は次の順序で扱う。
 
-1. Periodic の場合は `ReportLoop` に停止要求を出す
+1. activeな`ProtocolHandshake`と、Periodicの場合の`ReportLoop`に停止要求を出す
 2. 一定時間待つ
 3. 残っていれば task を cancel する
 4. cancel 結果を diagnostics に記録する
