@@ -644,10 +644,7 @@ class ControllerRuntime:
         self._transport.on_disconnected(self._handle_disconnected)
 
     def _configure_device_info_bluetooth_address(self, transport: HidDeviceTransport) -> None:
-        get_address = getattr(transport, "local_bluetooth_address", None)
-        if not callable(get_address):
-            return
-        address = get_address()
+        address = transport.local_bluetooth_address()
         if address is None:
             return
         if len(address) != 6:
@@ -1070,22 +1067,14 @@ class ControllerRuntime:
                 and self._pairing_profile.local_address is not None
                 else None
             )
-            if profile_path is None and expected_local_bluetooth_address is None:
-                self._transport = transport_factory_module.create_default_transport(
-                    adapter=adapter,
-                    device_name=self._config.device_name,
-                    profile=self._controller_profile,
-                    diagnostics=self._diagnostics,
-                )
-            else:
-                self._transport = transport_factory_module.create_default_transport(
-                    adapter=adapter,
-                    device_name=self._config.device_name,
-                    profile=self._controller_profile,
-                    diagnostics=self._diagnostics,
-                    profile_path=profile_path,
-                    expected_local_bluetooth_address=expected_local_bluetooth_address,
-                )
+            self._transport = transport_factory_module.create_default_transport(
+                adapter=adapter,
+                device_name=self._config.device_name,
+                profile=self._controller_profile,
+                diagnostics=self._diagnostics,
+                profile_path=profile_path,
+                expected_local_bluetooth_address=expected_local_bluetooth_address,
+            )
         return self._transport
 
 
