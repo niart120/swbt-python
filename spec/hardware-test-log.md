@@ -2372,3 +2372,121 @@ Bumble adapter と対象機器に依存する観測を記録する正本であ�
 - `artifact` には、diagnostics trace、pytest log、手元記録など、後から結果を辿れる場所を書く。
 - `cleanup` には、neutral、report loop stop、transport close、adapter release など実施した後始末と結果を書く。
 - link key、secret、個人環境に固有の token は記録しない。
+
+## 2026-07-25: VID:PID 33FA:0010 Bumble adapter open-only
+
+- OS: Windows-11-10.0.26200-SP0
+- environment: swbt-python 0.5.3, Bumble 0.0.233, Python 3.13.5
+- adapter: `usb:0` (`USB2.0-BT`, VID:PID `33FA:0010`, bus 5 / address 20)
+- dongle: 専用 USB Bluetooth dongle として利用者が接続
+- driver: WinUSB, libwdi 6.1.7600.16385, `oem93.inf`
+- command / test: `uv run pytest tests/hardware/test_context_manager_resource_scope.py -m bumble --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir tmp/hardware/dongle-open-check-20260725 -q -s`
+- approval: 利用者承認下で Bumble adapter open、Bluetooth Classic / HID Device 初期化、close / adapter release のみ。advertising、pairing、HID channel、report loop、Switch-facing message は実行しない。
+- result: `1 passed in 0.35s`。`transport_open_complete` と `transport_close_complete` を記録し、adapter open は成功。
+- artifact: `tmp/hardware/dongle-open-check-20260725/resource-open-only.jsonl`
+- cleanup: `disconnect_request(status=unavailable, reason=channels_not_connected)` の後に `transport_close_complete`。HID channel 未接続のため neutral report は未送信。
+- notes: 別アプリで観測した不正な HCI event length の原因は、この検査だけでは確定しない。
+
+## 2026-07-25: VID:PID 33FA:0010 Bumble advertising smoke timeout
+
+- OS: Windows-11-10.0.26200-SP0
+- environment: swbt-python 0.5.3, Bumble 0.0.233, Python 3.13.5
+- adapter: `usb:0` (`USB2.0-BT`, VID:PID `33FA:0010`)
+- dongle: 専用 USB Bluetooth dongle として利用者が接続
+- driver: WinUSB, libwdi 6.1.7600.16385, `oem93.inf`
+- command / test: `uv run pytest tests/hardware/test_bumble_transport.py -m bumble --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir tmp/hardware/dongle-advertising-smoke-20260725 -q -s`
+- approval: 利用者承認下で Bumble adapter open、Bluetooth Classic / HID Device 初期化、HID advertising、close / adapter release。pairing、HID channel、report loop、Switch-facing message は実行しない。
+- result: 64.2 秒で command timeout。`transport_open_complete` までは記録したが `advertising_start` は記録されず、`start_advertising()` が完了しなかった。
+- artifact: `tmp/hardware/dongle-advertising-smoke-20260725/bumble-hid-advertising-smoke.jsonl`
+- cleanup: timeout 後に今回の pytest process PID 3852 / 4216 を終了。続く `tests/hardware/test_context_manager_resource_scope.py -m bumble --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir tmp/hardware/dongle-post-timeout-open-check-20260725 -q -s` は `1 passed in 0.33s` で、adapter open / close の回復を確認した。
+- notes: Bumble の HID advertising 開始とこの adapter / controller の組合せに問題がある。Switch pairing には進まない。
+
+## 2026-07-25: VID:PID 33FA:0010 Bumble power-on HCI response failure
+
+- OS: Windows-11-10.0.26200-SP0
+- environment: swbt-python 0.5.3, Bumble 0.0.233, Python 3.13.5
+- adapter: `usb:0` (`USB2.0-BT`, VID:PID `33FA:0010`)
+- dongle: 専用 USB Bluetooth dongle として利用者が接続
+- driver: WinUSB, libwdi 6.1.7600.16385, `oem93.inf`
+- command / test: temporary power-on probe。`BumbleHidTransport.open()` 後、advertising を有効化せず `runtime.device.power_on()` を10秒で制限して実行。
+- approval: 利用者承認下で Bumble adapter open、Bluetooth Classic / HID Device 初期化、power-on、close / adapter release。advertising、pairing、HID channel、report loop、Switch-facing message は実行しない。
+- result: `power_on()` が timeout。stderr に `--- Ignoring event [0x00]: 0e01041000010200000000000000` が出力され、Bumble の `Device.power_on()` → `Host.reset()` → HCI synchronous command response 待機で停止した。
+- artifact: `tmp/hardware/dongle-power-on-probe-20260725/power-on.jsonl`
+- cleanup: `transport_close_complete` を記録し、残存する workspace Python process はなかった。
+- notes: event 列は今回の Bumble 実行でも再現した。HID advertising や Switch pairing の問題ではなく、adapter が HCI 初期化中に返す event framing が Bumble と互換でない。
+
+## 2026-07-25: VID:PID 33FA:0010 extended-features workaround advertising smoke
+
+- OS: Windows-11-10.0.26200-SP0
+- environment: swbt-python 0.5.3, Bumble 0.0.233, Python 3.13.5
+- adapter: `usb:0` (`USB2.0-BT`, VID:PID `33FA:0010`)
+- dongle: 専用 USB Bluetooth dongle として利用者が接続
+- driver: WinUSB, libwdi 6.1.7600.16385, `oem93.inf`
+- command / test: `uv run pytest tests/hardware/test_bumble_transport.py -m bumble --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir tmp/hardware/dongle-extended-features-workaround-20260725 -q -s`
+- approval: 利用者承認下で Bumble adapter open、Bluetooth Classic / HID Device 初期化、HID advertising、close / adapter release。pairing、HID channel、report loop、Switch-facing message は実行しない。
+- result: `1 passed in 0.58s`。`hci_workaround_enabled(suppressed_command=0x1004)`、`local_bluetooth_address_configured`、`classic_link_policy_configured(settings=0x0005)`、`advertising_start`、`transport_close_complete` を記録した。
+- artifact: `tmp/hardware/dongle-extended-features-workaround-20260725/bumble-hid-advertising-smoke.jsonl`
+- cleanup: `transport_close_complete`。pairing、HID channel、report loop、input report は未実行。
+- notes: この結果は VID:PID `33FA:0010`、WinUSB / libwdi、Bumble 0.0.233 の組合せに限定する。pairing、reconnect、Switch UI 入力反映は未検証。
+
+## 2026-07-25: VID:PID 33FA:0010 extended-features workaround fresh pairing
+
+- OS: Windows-11-10.0.26200-SP0
+- environment: swbt-python 0.5.3, Bumble 0.0.233, Python 3.13.5
+- adapter: `usb:0` (`USB2.0-BT`, VID:PID `33FA:0010`)
+- dongle: 専用 USB Bluetooth dongle として利用者が接続
+- driver: WinUSB, libwdi 6.1.7600.16385, `oem93.inf`
+- command / test: `uv run pytest tests/hardware/test_pairing_profile.py::test_switch_adapter_default_profile_fresh_pairing_and_close -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir tmp/hardware/dongle-33fa-pairing-20260725 -q -s`
+- approval: 利用者承認下で Bumble adapter open、advertising、fresh pairing、HID control / interrupt channel、neutral-only report、close / adapter release。non-neutral input、BD_ADDR 書換え、active reconnect は実行しない。
+- result: `1 passed in 4.31s`。`hci_workaround_enabled(suppressed_command=0x1004)`、Classic pairing、link key 保存、control / interrupt L2CAP open、`protocol_ready`、neutral input report、channel close、disconnect terminal `closed`、`transport_close_complete` を記録した。利用者が pairing 成功を確認した。
+- artifact: `tmp/hardware/dongle-33fa-pairing-20260725/pairing-profile-adapter-default-fresh-pairing.jsonl` と adapter-default profile
+- cleanup: interrupt、control channel を閉じ、disconnect terminal `closed` と `transport_close_complete` を確認。profile の link key は artifact 内に保持し、内容はログに転載しない。
+- notes: この結果は VID:PID `33FA:0010`、WinUSB / libwdi、Bumble 0.0.233 の組合せに限定する。active reconnect と Switch UI 入力反映は未検証。
+
+## 2026-07-26: VID:PID 33FA:0010 extended-features workaround active reconnect failure
+
+- OS: Windows-11-10.0.26200-SP0
+- environment: swbt-python 0.5.3, Bumble 0.0.233, Python 3.13.5
+- adapter: `usb:0` (`USB2.0-BT`, VID:PID `33FA:0010`)
+- dongle: 専用 USB Bluetooth dongle として利用者が接続
+- driver: WinUSB, libwdi 6.1.7600.16385, `oem93.inf`
+- command / test: `uv run pytest tests/hardware/test_pairing_profile.py::test_switch_adapter_default_profile_reuses_address_after_normal_close -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir tmp/hardware/dongle-33fa-pairing-20260725 -q -s`
+- approval: 利用者承認下で Bumble adapter open、active reconnect、HID control / interrupt channel、neutral close / adapter release。re-pairing、non-neutral input、BD_ADDR 書換えは実行しない。
+- result: fail。`hci_workaround_enabled(suppressed_command=0x1004)` 後に保存済み peer へ active reconnect を開始し、`host_connection` まで到達したが、L2CAP channel open と protocol ready の前に Switch 側 reason `19` で切断された。`active_reconnect_result(status=failed, failure_reason=transport_error)` を記録した。
+- artifact: `tmp/hardware/dongle-33fa-pairing-20260725/pairing-profile-adapter-default-reconnect.jsonl`
+- cleanup: `disconnect_request(status=unavailable, reason=transport_closed)` と `transport_close_complete`。残存 workspace Python process はない。
+- notes: active reconnect 接続失敗のため Button A を送信しなかった。reason `19` の原因はこの一回の観測では未確定であり、adapter workaround の成功・失敗と同一視しない。
+
+## 2026-07-26: VID:PID 33FA:0010 extended-features workaround fresh pairing and Button A
+
+- OS: Windows-11-10.0.26200-SP0
+- environment: swbt-python 0.5.3, Bumble 0.0.233, Python 3.13.5
+- adapter: `usb:0` (`USB2.0-BT`, VID:PID `33FA:0010`)
+- dongle: 専用 USB Bluetooth dongle として利用者が接続
+- driver: WinUSB, libwdi 6.1.7600.16385, `oem93.inf`
+- command / test: `uv run pytest tests/hardware/test_close_disconnect.py::test_switch_close_after_full_handshake_and_a_exit_for_manual_ui_confirmation -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir tmp/hardware/dongle-33fa-input-20260726 -q -s -W error`
+- approval: 利用者承認下で Bumble adapter open、fresh pairing、HID control / interrupt channel、full handshake、Button A を0.35秒、neutral report、close / adapter release。BD_ADDR 書換えと他入力は実行しない。
+- result: `1 passed in 7.61s`。`hci_workaround_enabled(suppressed_command=0x1004)`、full handshake、Button A 後の periodic `0x30` report、neutral、disconnect terminal `closed`、`transport_close_complete` を記録した。利用者が Switch 画面上の Button A 反応を確認した。
+- artifact: `tmp/hardware/dongle-33fa-input-20260726/post-handshake-a-close.jsonl`
+- cleanup: Button A 後に neutral state を確認し、trailing neutral `0x30`、interrupt / control channel close、disconnect terminal `closed`、adapter release を完了。
+- notes: 画面反応はこの Windows / WinUSB / libwdi / Bumble / `33FA:0010` の構成における hardware observation。active reconnect は別 run で reason `19` により未解決。
+
+## 2026-07-26: VID:PID 33FA:0010 extended-features workaround active reconnect retry
+
+- OS: Windows-11-10.0.26200-SP0
+- environment: swbt-python 0.5.3, Bumble 0.0.233, Python 3.13.5
+- adapter: `usb:0` (`USB2.0-BT`, VID:PID `33FA:0010`)
+- dongle: 専用 USB Bluetooth dongle として利用者が接続
+- driver: WinUSB, libwdi 6.1.7600.16385, `oem93.inf`
+- command / test: `uv run pytest tests/hardware/test_pairing_profile.py::test_switch_adapter_default_profile_reuses_address_after_normal_close -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir tmp/hardware/dongle-33fa-pairing-20260725 -q -s`
+- approval: 利用者承認下で Bumble adapter open、active reconnect、HID control / interrupt channel、neutral close / adapter release。re-pairing、input、BD_ADDR 書換えは実行しない。
+- result: fail（`1 failed in 2.58s`）。初回と同じく `hci_workaround_enabled`、selected bonded peer、`host_connection` の後、L2CAP channel open と protocol ready の前に Switch 側 reason `19` で切断された。`active_reconnect_result(status=failed, failure_reason=transport_error)` を記録した。
+- artifact: `tmp/hardware/dongle-33fa-pairing-20260725/pairing-profile-adapter-default-reconnect.jsonl`
+- cleanup: `disconnect_request(status=unavailable, reason=transport_closed)` と `transport_close_complete`。残存 workspace Python process はない。
+- notes: 同条件の active reconnect failure を2回観測した。fresh pairing と Button A UI 反映は成功しているため、HCI `0x1004` workaround の検証とは別の reconnect 問題として扱う。
+
+## 2026-07-26: VID:PID 33FA:0010 experiment disposition
+
+- result: temporary `0x1004` suppression proved that fresh pairing と Button A UI 反映は可能だったが、正式な workaround 実装は main に取り込まない。
+- artifact: prior entries の `tmp/hardware/dongle-extended-features-workaround-20260725/`、`tmp/hardware/dongle-33fa-pairing-20260725/`、`tmp/hardware/dongle-33fa-input-20260726/`
+- notes: ここまでの結果は hardware observation であり、adapter 互換性または Bumble の一般契約を表さない。再検討条件は `spec/dev-journal.md` に記録する。
