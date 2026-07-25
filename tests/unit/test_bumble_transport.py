@@ -57,6 +57,34 @@ class FakeBumbleConnection:
         self.operations.append(f"encrypt:{enable}")
 
 
+class FakeBumbleHost:
+    """Fake Bumble host for command-support checks."""
+
+    def __init__(self) -> None:
+        """Create a fake host that records command and event activity."""
+        self.supported_commands: list[int] = []
+        self.async_commands: list[object] = []
+        self.handlers: dict[str, list[Callable[..., None]]] = {}
+
+    def supports_command(self, command: int) -> bool:
+        """Record one supported-command probe."""
+        self.supported_commands.append(command)
+        return True
+
+    def on(self, event: str, callback: Callable[..., None]) -> None:
+        """Register one fake host event callback."""
+        self.handlers.setdefault(event, []).append(callback)
+
+    def remove_listener(self, event: str, callback: Callable[..., None]) -> None:
+        """Remove one fake host event callback."""
+        self.handlers[event].remove(callback)
+
+    async def send_async_command(self, command: object) -> object:
+        """Record one async command send."""
+        self.async_commands.append(command)
+        return object()
+
+
 class FakeBumbleDevice:
     """Fake Bumble device runtime."""
 
@@ -64,7 +92,7 @@ class FakeBumbleDevice:
     EVENT_CONNECTION_FAILURE = "connection_failure"
 
     def __init__(self, *, operations: list[str] | None = None) -> None:
-        """Create a fake device with power state."""
+        """Create a fake device with Bumble 0.0.233 members."""
         self.operations = operations if operations is not None else []
         self.powered_on = False
         self.power_on_count = 0
@@ -75,6 +103,7 @@ class FakeBumbleDevice:
         self.connection_requests: list[tuple[object, int, int]] = []
         self.connect_calls: list[tuple[str, object, float | None]] = []
         self.connection = FakeBumbleConnection(self.operations)
+        self.host = FakeBumbleHost()
         self.keystore: object | None = None
         self.public_address: object | None = None
 
@@ -127,19 +156,6 @@ class FakeBumbleDevice:
         self.connection_requests.append((bd_addr, class_of_device, link_type))
 
 
-class FakeBumbleHost:
-    """Fake Bumble host for command-support checks."""
-
-    def __init__(self) -> None:
-        """Create a fake host that records command support probes."""
-        self.supported_commands: list[int] = []
-
-    def supports_command(self, command: int) -> bool:
-        """Record one supported-command probe."""
-        self.supported_commands.append(command)
-        return True
-
-
 class FakeDeprecatedConnectionRequestHost:
     """Fake Bumble host whose sync command helper is deprecated."""
 
@@ -168,7 +184,7 @@ class FakeDeprecatedConnectionRequestHost:
         return object()
 
     def send_command_sync(self, command: object) -> None:
-        """Simulate Bumble 0.0.230's deprecated helper."""
+        """Simulate Bumble 0.0.233's deprecated helper."""
         self.sync_commands.append(command)
         warnings.warn(
             "Use utils.AsyncRunner.spawn() instead.",
@@ -194,7 +210,9 @@ class FakeBumbleDeviceWithDeprecatedConnectionAccept(FakeBumbleDevice):
     ) -> None:
         """Record and accept one fake incoming connection request."""
         self.connection_requests.append((bd_addr, class_of_device, link_type))
-        self.host.send_command_sync("accept_connection")
+        cast("FakeDeprecatedConnectionRequestHost", self.host).send_command_sync(
+            "accept_connection"
+        )
 
 
 class FakeBumbleDeviceWithLinkPolicy(FakeBumbleDevice):
@@ -374,12 +392,12 @@ class FakeDeviceWithAclPacketQueueHost:
 
 
 class FakeL2capConnection:
-    """Fake L2CAP connection with an ACL packet queue."""
+    """Fake Bumble 0.0.233 L2CAP connection with a host-backed ACL queue."""
 
-    def __init__(self, *, handle: int, acl_packet_queue: object) -> None:
+    def __init__(self, *, handle: int, acl_packet_queue: FakeAclPacketQueue) -> None:
         """Create a fake connection."""
         self.handle = handle
-        self.acl_packet_queue = acl_packet_queue
+        self.device = FakeDeviceWithAclPacketQueueHost(FakeAclPacketQueueHost(acl_packet_queue))
 
 
 class FakeL2capConnectionWithHostQueue:
@@ -1697,6 +1715,10 @@ def test_bumble_request_disconnect_calls_interrupt_then_control_helpers() -> Non
 def test_bumble_request_disconnect_handles_single_connected_channel() -> None:
     async def run() -> None:
         hid_device = FakeHidDevice()
+        connection = FakeL2capConnection(
+            handle=0x0048,
+            acl_packet_queue=FakeAclPacketQueue(),
+        )
 
         async def open_transport(adapter: str) -> FakeBumbleHandle:
             _ = adapter
@@ -1713,7 +1735,7 @@ def test_bumble_request_disconnect_handles_single_connected_channel() -> None:
         )
 
         await transport.open()
-        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013))
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013, connection=connection))
 
         result = await transport.request_disconnect()
 
@@ -1730,6 +1752,10 @@ def test_bumble_request_disconnect_reports_helper_failure() -> None:
     async def run() -> None:
         hid_device = FakeHidDevice()
         hid_device.disconnect_error = RuntimeError("helper failed")
+        connection = FakeL2capConnection(
+            handle=0x0048,
+            acl_packet_queue=FakeAclPacketQueue(),
+        )
 
         async def open_transport(adapter: str) -> FakeBumbleHandle:
             _ = adapter
@@ -1746,7 +1772,7 @@ def test_bumble_request_disconnect_reports_helper_failure() -> None:
         )
 
         await transport.open()
-        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013))
+        hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0013, connection=connection))
         hid_device.on_l2cap_channel_open(FakeL2capChannel(0x0011))
 
         result = await transport.request_disconnect()

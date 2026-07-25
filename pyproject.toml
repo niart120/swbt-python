@@ -34,7 +34,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "bumble>=0.0.230,<0.0.231",
+    "bumble==0.0.233",
 ]
 
 [project.scripts]

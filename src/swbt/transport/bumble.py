@@ -132,6 +132,12 @@ class _BumbleHidRuntime(Protocol):
     def send_data(self, data: bytes) -> None:
         """Send an interrupt-channel HID data message."""
 
+    def register_set_report_cb(
+        self,
+        callback: Callable[[int, int, int, bytes], _BumbleGetSetStatus],
+    ) -> None:
+        """Register a HID SET_REPORT callback."""
+
     async def connect_control_channel(self) -> None:
         """Request control-channel L2CAP connection."""
 
@@ -455,10 +461,6 @@ class BumbleHidTransport:
         self._register_set_report_callback(hid_device)
 
     def _register_set_report_callback(self, hid_device: _BumbleHidRuntime) -> None:
-        register_set_report = getattr(hid_device, "register_set_report_cb", None)
-        if not callable(register_set_report):
-            return
-
         def on_set_report(
             report_id: int,
             report_type: int,
@@ -475,7 +477,7 @@ class BumbleHidTransport:
                 return _BumbleGetSetStatus(status=HID_GET_SET_UNSUPPORTED_REQUEST)
             return _BumbleGetSetStatus(status=HID_GET_SET_SUCCESS)
 
-        register_set_report(on_set_report)
+        hid_device.register_set_report_cb(on_set_report)
 
     def _register_device_callbacks(self, device: _BumbleDeviceRuntime) -> None:
         device.on(device.EVENT_CONNECTION, self._handle_device_connection)
@@ -840,8 +842,7 @@ def _device_info_bluetooth_address_from_bumble_address(address: object) -> bytes
     """Return Device Info address bytes from a Bumble address object."""
     if address is None:
         return None
-    to_string = getattr(address, "to_string", None)
-    address_text = str(to_string(False)) if callable(to_string) else str(address)
+    address_text = str(cast("Any", address).to_string(False))
     address_text = address_text.split("/", 1)[0]
     parts = address_text.split(":")
     if len(parts) != 6 or any(len(part) != 2 for part in parts):

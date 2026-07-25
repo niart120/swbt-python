@@ -1,0 +1,40 @@
+name: Bumble canary
+
+"on":
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-bumble:
+    name: Latest Bumble on Ubuntu
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          version: "0.11.26"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Sync pinned project dependencies
+        run: uv sync --locked --dev
+
+      - name: Upgrade Bumble for canary only
+        run: uv pip install --python .venv --upgrade bumble
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit
+
+      - name: Run fake transport integration tests
+        run: uv run pytest tests/integration
