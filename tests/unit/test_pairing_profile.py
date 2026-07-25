@@ -50,7 +50,7 @@ def test_pairing_profile_loads_supported_pro_controller_envelope(
         json.dumps(
             {
                 "format": "swbt.profile",
-                "schema_version": 1,
+                "schema_version": 2,
                 "controller_kind": "pro",
                 "identity": {
                     "kind": "exp-local-address",
@@ -75,8 +75,58 @@ def test_pairing_profile_loads_supported_pro_controller_envelope(
         {"02:12:34:56:78:9A": {}},
         {
             "format": "unknown",
-            "schema_version": 1,
+            "schema_version": 2,
             "controller_kind": "pro",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 3,
+            "controller_kind": "pro",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 2,
+            "controller_kind": "unsupported_controller",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 2,
+            "controller_kind": "direct_pro",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 2,
+            "controller_kind": "direct_joycon_l",
+            "identity": {
+                "kind": "exp-local-address",
+                "address": "02:12:34:56:78:9A",
+            },
+            "key_store": {"namespaces": {}},
+        },
+        {
+            "format": "swbt.profile",
+            "schema_version": 2,
+            "controller_kind": "direct_joycon_r",
             "identity": {
                 "kind": "exp-local-address",
                 "address": "02:12:34:56:78:9A",
@@ -88,56 +138,6 @@ def test_pairing_profile_loads_supported_pro_controller_envelope(
             "schema_version": 2,
             "controller_kind": "pro",
             "identity": {
-                "kind": "exp-local-address",
-                "address": "02:12:34:56:78:9A",
-            },
-            "key_store": {"namespaces": {}},
-        },
-        {
-            "format": "swbt.profile",
-            "schema_version": 1,
-            "controller_kind": "unsupported_controller",
-            "identity": {
-                "kind": "exp-local-address",
-                "address": "02:12:34:56:78:9A",
-            },
-            "key_store": {"namespaces": {}},
-        },
-        {
-            "format": "swbt.profile",
-            "schema_version": 1,
-            "controller_kind": "direct_pro",
-            "identity": {
-                "kind": "exp-local-address",
-                "address": "02:12:34:56:78:9A",
-            },
-            "key_store": {"namespaces": {}},
-        },
-        {
-            "format": "swbt.profile",
-            "schema_version": 1,
-            "controller_kind": "direct_joycon_l",
-            "identity": {
-                "kind": "exp-local-address",
-                "address": "02:12:34:56:78:9A",
-            },
-            "key_store": {"namespaces": {}},
-        },
-        {
-            "format": "swbt.profile",
-            "schema_version": 1,
-            "controller_kind": "direct_joycon_r",
-            "identity": {
-                "kind": "exp-local-address",
-                "address": "02:12:34:56:78:9A",
-            },
-            "key_store": {"namespaces": {}},
-        },
-        {
-            "format": "swbt.profile",
-            "schema_version": 1,
-            "controller_kind": "pro",
-            "identity": {
                 "kind": "factory-address",
                 "address": "02:12:34:56:78:9A",
             },
@@ -145,7 +145,7 @@ def test_pairing_profile_loads_supported_pro_controller_envelope(
         },
         {
             "format": "swbt.profile",
-            "schema_version": 1,
+            "schema_version": 2,
             "controller_kind": "pro",
             "identity": {
                 "kind": "adapter-default",
@@ -155,7 +155,7 @@ def test_pairing_profile_loads_supported_pro_controller_envelope(
         },
         {
             "format": "swbt.profile",
-            "schema_version": 1,
+            "schema_version": 2,
             "controller_kind": "pro",
             "identity": {
                 "kind": "exp-local-address",
@@ -186,7 +186,28 @@ def test_pairing_profile_rejects_malformed_json_before_adapter_open(
         PairingProfile.load(profile_path)
 
 
-def test_pairing_profile_create_new_atomically_saves_empty_pro_envelope(
+def test_pairing_profile_rejects_schema_v1_before_adapter_open_with_repair_guidance(
+    tmp_path: Path,
+) -> None:
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "format": "swbt.profile",
+                "schema_version": 1,
+                "controller_kind": "pro",
+                "identity": {"kind": "adapter-default"},
+                "key_store": {"namespaces": {}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(InvalidProfileError, match="schema v2 profile and pair again"):
+        PairingProfile.load(profile_path)
+
+
+def test_pairing_profile_create_new_atomically_saves_schema_v2_current_only_pro_envelope(
     tmp_path: Path,
 ) -> None:
     profile_path = tmp_path / "profiles" / "pro.json"
@@ -199,7 +220,7 @@ def test_pairing_profile_create_new_atomically_saves_empty_pro_envelope(
     assert profile == PairingProfile.load(profile_path)
     assert json.loads(profile_path.read_text(encoding="utf-8")) == {
         "format": "swbt.profile",
-        "schema_version": 1,
+        "schema_version": 2,
         "identity": {
             "kind": "exp-local-address",
             "address": "02:12:34:56:78:9A",
@@ -208,7 +229,6 @@ def test_pairing_profile_create_new_atomically_saves_empty_pro_envelope(
         "key_store": {
             "namespaces": {
                 "02:12:34:56:78:9A": {},
-                "swbt.previous::02:12:34:56:78:9A": {},
             }
         },
     }
@@ -226,7 +246,7 @@ def test_pairing_profile_create_new_saves_adapter_default_identity(
     assert profile == PairingProfile.load(profile_path)
     assert json.loads(profile_path.read_text(encoding="utf-8")) == {
         "format": "swbt.profile",
-        "schema_version": 1,
+        "schema_version": 2,
         "identity": {
             "kind": "adapter-default",
         },

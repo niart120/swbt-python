@@ -9,11 +9,9 @@ from swbt.diagnostics import DiagnosticsRecorder
 from swbt.errors import InvalidKeyStoreError
 from swbt.transport._pairing_profile import KeyStoreNamespaces, PairingProfile
 
-PREVIOUS_NAMESPACE_PREFIX = "swbt.previous::"
-
 
 class _PairingProfileKeyStore:
-    """Bumble-compatible profile key store with one previous generation."""
+    """Bumble-compatible profile key store for the current namespace."""
 
     def __init__(
         self,
@@ -24,7 +22,6 @@ class _PairingProfileKeyStore:
         self._profile_path = Path(profile_path)
         self._namespace = namespace if isinstance(namespace, str) else None
         self._namespace_resolver = None if isinstance(namespace, str) else namespace
-        self.last_update_previous_saved = False
 
     def _resolve_namespace(self) -> str:
         namespace = (
@@ -36,16 +33,9 @@ class _PairingProfileKeyStore:
         return namespace
 
     async def update(self, name: str, keys: object) -> None:
-        """Write current keys and keep the overwritten current value as previous."""
+        """Replace the current namespace with one peer's keys."""
         current_store = self._current_store()
         db, current_key_map = await current_store.load()
-        previous_namespace = self._previous_namespace(current_store)
-        previous_key_map = copy.deepcopy(current_key_map)
-        self.last_update_previous_saved = bool(previous_key_map)
-        if previous_key_map:
-            db[previous_namespace] = previous_key_map
-        else:
-            db.pop(previous_namespace, None)
         current_key_map.clear()
         current_key_map[name] = cast("Any", keys).to_dict()
         await current_store.save(db)
@@ -83,10 +73,6 @@ class _PairingProfileKeyStore:
             namespace=self._resolve_namespace(),
             adapter_default=self._namespace_resolver is not None,
         )
-
-    @staticmethod
-    def _previous_namespace(current_store: "_PairingProfileNamespaceStore") -> str:
-        return f"{PREVIOUS_NAMESPACE_PREFIX}{current_store.namespace}"
 
 
 class _PairingProfileNamespaceStore:
@@ -169,20 +155,16 @@ class _DiagnosticKeyStore:
         try:
             await cast("Any", self._key_store).update(name, keys)
         except Exception as error:
-            fields = self._generation_fields()
             self._diagnostics.record_event(
                 "key_store_update",
-                **fields,
                 error_type=type(error).__name__,
                 message=str(error),
                 peer_address=name,
                 status="failed",
             )
             raise
-        fields = self._generation_fields()
         self._diagnostics.record_event(
             "key_store_update",
-            **fields,
             peer_address=name,
             status="succeeded",
         )
@@ -209,11 +191,3 @@ class _DiagnosticKeyStore:
 
     def __getattr__(self, name: str) -> object:
         return getattr(self._key_store, name)
-
-    def _generation_fields(self) -> dict[str, object]:
-        if not isinstance(self._key_store, _PairingProfileKeyStore):
-            return {}
-        return {
-            "generation": "current",
-            "previous_saved": self._key_store.last_update_previous_saved,
-        }

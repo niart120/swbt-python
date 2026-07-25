@@ -82,7 +82,7 @@ def test_switch_pairing_profile_fresh_pairing_and_close(
     events = _read_jsonl(trace_path)
     target = swbt_local_address.upper()
     assert payload["format"] == "swbt.profile"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["controller_kind"] == "pro"
     assert payload["identity"] == {
         "kind": "exp-local-address",
@@ -203,7 +203,7 @@ def test_switch_adapter_default_profile_fresh_pairing_and_close(
     _assert_protocol_ready_handshake(events, profile_kind="pro_controller")
     namespaces = payload["key_store"]["namespaces"]
     assert payload["format"] == "swbt.profile"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["controller_kind"] == "pro"
     assert payload["identity"] == {"kind": "adapter-default"}
     assert len(namespaces) == 1
@@ -386,7 +386,7 @@ def test_switch_joycon_adapter_default_profile_fresh_pairing_and_close(
     _assert_protocol_ready_handshake(events, profile_kind=f"joycon_{side}")
     namespaces = payload["key_store"]["namespaces"]
     assert payload["format"] == "swbt.profile"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["controller_kind"] == controller_kind
     assert payload["identity"] == {"kind": "adapter-default"}
     assert len(namespaces) == 1
@@ -498,7 +498,7 @@ def test_switch_joycon_pairing_profile_fresh_pairing_and_close(
     _assert_protocol_ready_handshake(events, profile_kind=f"joycon_{side}")
     target = swbt_local_address.upper()
     assert payload["format"] == "swbt.profile"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["controller_kind"] == controller_kind
     assert payload["identity"] == {
         "kind": "exp-local-address",
