@@ -17,6 +17,7 @@ from swbt.errors import ClosedError, InvalidKeyStoreError, TransportOpenError
 from swbt.protocol.profiles.joycon import JoyConLeftProfile
 from swbt.protocol.profiles.pro_controller import ProControllerProfile
 from swbt.transport import bumble as bumble_module
+from swbt.transport._bumble_key_store import _DiagnosticKeyStore, _PairingProfileKeyStore
 from swbt.transport._bumble_sdp import build_hid_service_records
 from swbt.transport._pairing_profile import LocalAddress, PairingProfile
 from swbt.transport.bumble import BumbleHidTransport
@@ -751,9 +752,36 @@ def test_bumble_key_store_update_failure_is_recorded_without_key_material() -> N
             "peer_address": peer_address,
             "status": "failed",
         } in events
+        assert all("generation" not in event for event in events)
+        assert all("previous_saved" not in event for event in events)
         assert "link_key" not in trace.getvalue()
 
         await transport.close()
+
+    asyncio.run(run())
+
+
+def test_profile_key_store_update_diagnostics_omit_generation_fields(
+    tmp_path: Path,
+) -> None:
+    async def run() -> None:
+        trace = StringIO()
+        target = LocalAddress.parse("02:12:34:56:78:9A")
+        profile_path = tmp_path / "profile.json"
+        PairingProfile.create_new(profile_path, target)
+        key_store = _DiagnosticKeyStore(
+            _PairingProfileKeyStore(profile_path=profile_path, namespace=str(target)),
+            DiagnosticsRecorder(trace_writer=trace),
+        )
+
+        await key_store.update("01:02:03:04:05:06", _fake_pairing_keys(1))
+
+        event = json.loads(trace.getvalue())
+        assert event == {
+            "event": "key_store_update",
+            "peer_address": "01:02:03:04:05:06",
+            "status": "succeeded",
+        }
 
     asyncio.run(run())
 

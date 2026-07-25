@@ -91,6 +91,21 @@ await left.close()
 
 どちらの経路も既存のパスを上書きしません。ペアリングが失敗してもプロファイルは残るため、作成時と同じコントローラー形状の `profile_path` から再試行します。別のコントローラー形状のプロファイルを渡した場合は `ProfileControllerMismatchError` がアダプタを開く前に送出されます。直接送信型と周期送信型の間で同じコントローラー形状のプロファイルを使う実機確認は未実施です。
 
+### schema v1 プロファイルの作り直し
+
+`schema_version` が `1` の既存プロファイルは読み込めません。v1 から v2 への自動移行、互換読込、`swbt-probe` の移行コマンドはありません。以前のファイルを上書きせず、新しい `profile_path` を指定して `create_profile()` を実行し、対象機器側で再ペアリングします。
+
+```python
+pad = await ProController.create_profile(
+    adapter="usb:0",
+    profile_path="profiles/switch-pro-v2.json",
+    pair_timeout=60.0,
+)
+await pad.close()
+```
+
+作成済みの v2 プロファイルには、選択中の Bluetooth アドレスと現在のペアリングキーだけが保存されます。
+
 ### 接続時の再接続・ペアリング選択
 
 ```python

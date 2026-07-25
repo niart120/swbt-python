@@ -1,5 +1,13 @@
 # リリースノート
 
+## 次回リリース
+
+### 破壊的変更
+
+- ペアリングプロファイルの schema version を 2 に上げました。新規プロファイルには選択中の Bluetooth アドレスの現在のペアリングキーだけを保存し、`swbt.previous::...` の旧世代のキーは保存しません。
+- schema v1 のプロファイルは実行時に読み込めません。既存の v1 ファイルを上書きせず、新しい `profile_path` で `create_profile()` を実行してから、対象機器側で再ペアリングしてください。v1 互換読込、自動移行、移行 CLI は提供しません。
+- `key_store_update` diagnostics から `generation` と `previous_saved` を削除しました。成功時は `status` と `peer_address`、失敗時は加えて `error_type` と `message` を記録します。ペアリングキーそのものは記録しません。
+
 ## 0.5.2
 
 ### 内部構造の整理

@@ -82,12 +82,23 @@ def test_recovery_required_stops_before_bumble_transport_creation(
     assert events == ["prepare:usb:0:02:12:34:56:78:9A"]
 
 
-def test_invalid_profile_stops_before_preparation_and_transport_creation(
+def test_schema_v1_profile_stops_before_preparation_and_transport_creation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    profile_path = tmp_path / "invalid.json"
-    profile_path.write_text('{"format": "unknown"}', encoding="utf-8")
+    profile_path = tmp_path / "schema-v1.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "format": "swbt.profile",
+                "schema_version": 1,
+                "controller_kind": "pro",
+                "identity": {"kind": "adapter-default"},
+                "key_store": {"namespaces": {}},
+            }
+        ),
+        encoding="utf-8",
+    )
     events: list[str] = []
 
     async def fail_preparation(**_kwargs: object) -> object:
@@ -110,7 +121,7 @@ def test_invalid_profile_stops_before_preparation_and_transport_creation(
     )
     pad = ProController(adapter="usb:0", profile_path=str(profile_path))
 
-    with pytest.raises(InvalidProfileError):
+    with pytest.raises(InvalidProfileError, match="schema v2 profile and pair again"):
         asyncio.run(pad.open())
 
     assert events == []

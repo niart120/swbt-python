@@ -16,7 +16,7 @@ _ADDRESS_PATTERN = re.compile(r"(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
 _RESERVED_INQUIRY_LAP_MIN = 0x9E8B00
 _RESERVED_INQUIRY_LAP_MAX = 0x9E8B3F
 _PROFILE_FORMAT = "swbt.profile"
-_PROFILE_SCHEMA_VERSION = 1
+_PROFILE_SCHEMA_VERSION = 2
 _PROFILE_LOCAL_ADDRESS_IDENTITY_KIND = "exp-local-address"
 _PROFILE_ADAPTER_DEFAULT_IDENTITY_KIND = "adapter-default"
 _CONTROLLER_KINDS_BY_PROFILE_VALUE: dict[str, ControllerKind] = {
@@ -79,7 +79,7 @@ class LocalAddress:
 
 @dataclass(frozen=True)
 class PairingProfile:
-    """Validated version 1 envelope for one controller shape and its pairing data."""
+    """Validated version 2 envelope for one controller shape and its pairing data."""
 
     local_address: LocalAddress | None
     key_store_namespaces: KeyStoreNamespaces
@@ -97,14 +97,7 @@ class PairingProfile:
         address = None if local_address is None else str(local_address)
         profile = cls(
             local_address=local_address,
-            key_store_namespaces=(
-                {}
-                if address is None
-                else {
-                    address: {},
-                    f"swbt.previous::{address}": {},
-                }
-            ),
+            key_store_namespaces=({} if address is None else {address: {}}),
             controller_kind=controller_kind,
         )
         target = Path(path)
@@ -200,7 +193,10 @@ class PairingProfile:
         if payload.get("format") != _PROFILE_FORMAT:
             _invalid_profile("profile format is unsupported")
         if payload.get("schema_version") != _PROFILE_SCHEMA_VERSION:
-            _invalid_profile("profile schema_version is unsupported")
+            _invalid_profile(
+                "profile schema_version is unsupported; create a new schema v2 profile "
+                "and pair again"
+            )
         controller_kind_value = payload.get("controller_kind")
         if not isinstance(controller_kind_value, str):
             _invalid_profile("profile controller_kind is unsupported")

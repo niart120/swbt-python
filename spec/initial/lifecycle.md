@@ -202,9 +202,9 @@ reconnect は M6 で扱う。初期実装では次だけを考慮する。
 - injected transport では、`SwitchGamepad.profile_path is None` だけを根拠に reconnect 用 storage の有無を判断しない
 - pairing 情報の保存有無を diagnostics に記録する
 - current peer は自動 reconnect 対象の 1 件だけに正規化する
-- pair 成功時、その peer を current にし、旧 current peer は previous generation へ退避する
-- previous peer は自動 reconnect 対象にしない
-- 複数 current peer を含む key store は自動移行せず、再作成と再 pairing を要求する
+- pair 成功時、その peer を current にする。current namespace の既存 key は保持しない。
+- pairing profile schema v2 は current key だけを保存する。previous generation、復元経路、schema v1 の互換読込は提供しない。
+- schema v1 profile と複数 current peer を含む key store は自動移行せず、新しい profile path での再作成と再 pairing を要求する。
 
 M6 では次を追加する。
 

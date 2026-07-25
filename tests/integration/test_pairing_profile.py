@@ -26,7 +26,7 @@ def _pairing_keys(marker: int) -> PairingKeys:
     )
 
 
-def test_profile_key_store_update_preserves_identity_and_namespace_generations(
+def test_profile_key_store_update_replaces_current_key_without_previous_namespace(
     tmp_path: Path,
 ) -> None:
     profile_path = tmp_path / "pro.json"
@@ -47,7 +47,7 @@ def test_profile_key_store_update_preserves_identity_and_namespace_generations(
 
     payload = json.loads(profile_path.read_text(encoding="utf-8"))
     assert payload["format"] == "swbt.profile"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["controller_kind"] == "pro"
     assert payload["identity"] == {
         "kind": "exp-local-address",
@@ -55,8 +55,7 @@ def test_profile_key_store_update_preserves_identity_and_namespace_generations(
     }
     namespaces = payload["key_store"]["namespaces"]
     assert namespaces[str(target)][second_peer]["link_key"]["value"] == "02" * 16
-    previous_namespace = f"swbt.previous::{target}"
-    assert namespaces[previous_namespace][first_peer]["link_key"]["value"] == "01" * 16
+    assert namespaces == {str(target): namespaces[str(target)]}
     assert asyncio.run(key_store.get_all()) == [
         (second_peer, _pairing_keys(2)),
     ]
