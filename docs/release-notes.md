@@ -1,12 +1,22 @@
 # リリースノート
 
-## 次回リリース
+## 0.5.3
 
 ### 破壊的変更
 
 - ペアリングプロファイルの schema version を 2 に上げました。新規プロファイルには選択中の Bluetooth アドレスの現在のペアリングキーだけを保存し、`swbt.previous::...` の旧世代のキーは保存しません。
 - schema v1 のプロファイルは実行時に読み込めません。既存の v1 ファイルを上書きせず、新しい `profile_path` で `create_profile()` を実行してから、対象機器側で再ペアリングしてください。v1 互換読込、自動移行、移行 CLI は提供しません。
 - `key_store_update` diagnostics から `generation` と `previous_saved` を削除しました。成功時は `status` と `peer_address`、失敗時は加えて `error_type` と `message` を記録します。ペアリングキーそのものは記録しません。
+
+### 依存関係と通信層
+
+- Bumble を `0.0.233` に固定しました。Bumble 0.0.230 以前を利用していた環境は、`swbt-python==0.5.3` のインストール時に 0.0.233 へ更新されます。複数の Bumble 版を同時に対応する実行時分岐は提供しません。
+- Bumble 0.0.233 の API に合わせて transport 内の旧版互換分岐を削除しました。`swbt` の import 時に Bumble を読み込まない境界は維持しています。
+
+### 実機確認範囲
+
+- Windows 11、CSR8510 A10、WinUSB、専用 USB Bluetooth ドングル、Bumble 0.0.233 の組み合わせで、Bumble adapter の open/close と Switch 2 への Pro Controller 初回ペアリング、Button A 入力、ニュートラル入力による終了を確認しました。Switch 2 側への Button A の反映は利用者が目視確認しました。
+- Bumble 0.0.233 での active reconnect と通常終了の実機確認は未実行です。別の OS、専用 USB Bluetooth ドングル、対象機器、ファームウェアでの互換性は確認していません。確認済み構成と未確認範囲の全体は、[実機準備手順](hardware.md)を参照してください。
 
 ## 0.5.2
 
