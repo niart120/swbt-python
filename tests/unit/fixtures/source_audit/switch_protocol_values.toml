@@ -417,7 +417,7 @@ handoff = ["unit_003"]
 
 [[entry]]
 id = "bumble_hid_device_api"
-fixture_name = "bumble_0_0_230_hid_device_api"
+fixture_name = "bumble_0_0_233_hid_device_api"
 area = "transport"
 value = "bumble.hid.Device registers Classic HID control and interrupt servers; callbacks exist for get/set report and get/set protocol"
 classification = "source fact"
@@ -447,18 +447,18 @@ handoff = ["unit_003"]
 
 [[entry]]
 id = "bumble_l2cap_connection_events"
-fixture_name = "bumble_0_0_230_l2cap_connection_events"
+fixture_name = "bumble_0_0_233_l2cap_connection_events"
 area = "transport"
 value = "bumble.hid.HID registers Classic HID control PSM 0x0011 and interrupt PSM 0x0013; on_l2cap_channel_open sets l2cap_ctrl_channel/l2cap_intr_channel; Device.on_connection_request observes incoming BR/EDR connection requests before connection complete; Device emits connection/connection_failure; Connection emits disconnection, classic_pairing, pairing_start, pairing, and pairing_failure"
 classification = "source fact"
 source = [
     '.venv\Lib\site-packages\bumble\hid.py:43-44',
-    '.venv\Lib\site-packages\bumble\hid.py:221-224',
+    '.venv\Lib\site-packages\bumble\hid.py:221-227',
     '.venv\Lib\site-packages\bumble\hid.py:274-299',
     '.venv\Lib\site-packages\bumble\device.py:41-42',
-    '.venv\Lib\site-packages\bumble\device.py:1719-1753',
-    '.venv\Lib\site-packages\bumble\device.py:4622-4651',
-    '.venv\Lib\site-packages\bumble\device.py:6051-6110',
+    '.venv\Lib\site-packages\bumble\device.py:1729-1760',
+    '.venv\Lib\site-packages\bumble\device.py:2374-2375',
+    '.venv\Lib\site-packages\bumble\device.py:6069-6125',
     'uv.lock:142-165',
 ]
 status = "version-pinned"
@@ -484,22 +484,20 @@ handoff = ["unit_005"]
 id = "bumble_acl_packet_queue_drain_boundary"
 fixture_name = "bumble_acl_packet_queue_drain_boundary"
 area = "transport"
-value = "Bumble 0.0.230 hid.HID.send_data writes the HID interrupt PDU to the L2CAP interrupt channel; L2CAP send ultimately enqueues ACL packets through Host.send_acl_sdu; DataPacketQueue exposes pending and async drain(connection_handle). swbt-python treats send_interrupt as complete when hid.HID.send_data returns after accepting the payload and does not inspect or drain the ACL queue per report. Before an explicit disconnect, request_disconnect drains the matching queue using connection.acl_packet_queue when present and falling back to connection.device.host.get_data_packet_queue(handle), then disconnects the interrupt and control channels."
+value = "Bumble 0.0.233 hid.HID.send_data writes the HID interrupt PDU to the L2CAP interrupt channel; L2CAP send ultimately enqueues ACL packets through Host.send_acl_sdu; DataPacketQueue exposes pending and async drain(connection_handle). swbt-python treats send_interrupt as complete when hid.HID.send_data returns after accepting the payload and does not inspect or drain the ACL queue per report. Before an explicit disconnect, request_disconnect drains through connection.device.host.get_data_packet_queue(handle), then disconnects the interrupt and control channels."
 classification = "implementation fact"
 source = [
     '.venv\Lib\site-packages\bumble\hid.py:321-330',
     '.venv\Lib\site-packages\bumble\l2cap.py:1214-1222',
     '.venv\Lib\site-packages\bumble\host.py:48-187',
-    '.venv\Lib\site-packages\bumble\host.py:839-884',
-    '.venv\Lib\site-packages\bumble\device.py:1533-1541',
-    '.venv\Lib\site-packages\bumble\device.py:2076-2082',
+    '.venv\Lib\site-packages\bumble\host.py:839-885',
 ]
 status = "implementation-policy"
 handoff = ["unit_005", "unit_064"]
 
 [[entry]]
 id = "bumble_hidp_output_report_boundary"
-fixture_name = "bumble_0_0_230_hidp_output_report_boundary"
+fixture_name = "bumble_0_0_233_hidp_output_report_boundary"
 area = "transport"
 value = "bumble.hid DATA messages include one HIDP header byte before report data; Device EVENT_INTERRUPT_DATA and EVENT_CONTROL_DATA emit the PDU including that header; SET_REPORT callback receives report_id separated from report_data and callback status controls the HID handshake"
 classification = "source fact"

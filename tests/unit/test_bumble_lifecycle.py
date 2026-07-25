@@ -4,13 +4,20 @@ from swbt.transport._bumble_lifecycle import ConnectionDiagnostics
 
 
 class _FakeConnection:
+    EVENT_CLASSIC_PAIRING = "classic_pairing"
+    EVENT_CLASSIC_PAIRING_FAILURE = "classic_pairing_failure"
     EVENT_DISCONNECTION = "disconnection"
+    EVENT_CONNECTION_AUTHENTICATION_FAILURE = "connection_authentication_failure"
+    EVENT_CONNECTION_ENCRYPTION_FAILURE = "connection_encryption_failure"
     EVENT_PAIRING = "pairing"
+    EVENT_PAIRING_FAILURE = "pairing_failure"
+    EVENT_PAIRING_START = "pairing_start"
     EVENT_CONNECTION_AUTHENTICATION = "connection_authentication"
     EVENT_CONNECTION_ENCRYPTION_CHANGE = "connection_encryption_change"
     EVENT_CONNECTION_ENCRYPTION_KEY_REFRESH = "connection_encryption_key_refresh"
     EVENT_LINK_KEY = "link_key"
     EVENT_MODE_CHANGE = "mode_change"
+    EVENT_MODE_CHANGE_FAILURE = "mode_change_failure"
 
     def __init__(self) -> None:
         self.authenticated = False

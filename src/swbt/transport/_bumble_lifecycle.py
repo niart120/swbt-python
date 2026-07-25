@@ -25,20 +25,19 @@ class ConnectionDiagnostics:
         self._record_event = record_event
 
     def register(self, connection: object) -> None:
-        """Register all connection diagnostics callbacks supported by the connection."""
-        on_event = getattr(connection, "on", None)
-        if not callable(on_event):
-            return
+        """Register all diagnostics callbacks provided by Bumble 0.0.233."""
+        connection_with_attrs = cast("Any", connection)
+        on_event = connection_with_attrs.on
         on_event(
-            getattr(connection, "EVENT_DISCONNECTION", "disconnection"),
+            connection_with_attrs.EVENT_DISCONNECTION,
             self._handle_disconnection,
         )
         on_event(
-            getattr(connection, "EVENT_CLASSIC_PAIRING", "classic_pairing"),
+            connection_with_attrs.EVENT_CLASSIC_PAIRING,
             lambda *_args: self._record_event("classic_pairing", adapter=self._adapter),
         )
         on_event(
-            getattr(connection, "EVENT_CLASSIC_PAIRING_FAILURE", "classic_pairing_failure"),
+            connection_with_attrs.EVENT_CLASSIC_PAIRING_FAILURE,
             lambda reason=None, *_args: self._record_event(
                 "classic_pairing_failure",
                 adapter=self._adapter,
@@ -46,15 +45,15 @@ class ConnectionDiagnostics:
             ),
         )
         on_event(
-            getattr(connection, "EVENT_PAIRING_START", "pairing_start"),
+            connection_with_attrs.EVENT_PAIRING_START,
             lambda *_args: self._record_event("pairing_start", adapter=self._adapter),
         )
         on_event(
-            getattr(connection, "EVENT_PAIRING", "pairing"),
+            connection_with_attrs.EVENT_PAIRING,
             lambda keys=None, *_args: self._record_pairing_complete(connection, keys),
         )
         on_event(
-            getattr(connection, "EVENT_PAIRING_FAILURE", "pairing_failure"),
+            connection_with_attrs.EVENT_PAIRING_FAILURE,
             lambda reason=None, *_args: self._record_event(
                 "pairing_failure",
                 adapter=self._adapter,
@@ -62,15 +61,11 @@ class ConnectionDiagnostics:
             ),
         )
         on_event(
-            getattr(connection, "EVENT_CONNECTION_AUTHENTICATION", "connection_authentication"),
+            connection_with_attrs.EVENT_CONNECTION_AUTHENTICATION,
             lambda *_args: self._record_connection_authentication(connection),
         )
         on_event(
-            getattr(
-                connection,
-                "EVENT_CONNECTION_AUTHENTICATION_FAILURE",
-                "connection_authentication_failure",
-            ),
+            connection_with_attrs.EVENT_CONNECTION_AUTHENTICATION_FAILURE,
             lambda error=None, *_args: self._record_event(
                 "connection_authentication_failure",
                 adapter=self._adapter,
@@ -78,19 +73,11 @@ class ConnectionDiagnostics:
             ),
         )
         on_event(
-            getattr(
-                connection,
-                "EVENT_CONNECTION_ENCRYPTION_CHANGE",
-                "connection_encryption_change",
-            ),
+            connection_with_attrs.EVENT_CONNECTION_ENCRYPTION_CHANGE,
             lambda *_args: self._record_connection_encryption_change(connection),
         )
         on_event(
-            getattr(
-                connection,
-                "EVENT_CONNECTION_ENCRYPTION_FAILURE",
-                "connection_encryption_failure",
-            ),
+            connection_with_attrs.EVENT_CONNECTION_ENCRYPTION_FAILURE,
             lambda error=None, *_args: self._record_event(
                 "connection_encryption_failure",
                 adapter=self._adapter,
@@ -98,23 +85,19 @@ class ConnectionDiagnostics:
             ),
         )
         on_event(
-            getattr(
-                connection,
-                "EVENT_CONNECTION_ENCRYPTION_KEY_REFRESH",
-                "connection_encryption_key_refresh",
-            ),
+            connection_with_attrs.EVENT_CONNECTION_ENCRYPTION_KEY_REFRESH,
             lambda *_args: self._record_connection_encryption_refresh(connection),
         )
         on_event(
-            getattr(connection, "EVENT_LINK_KEY", "link_key"),
+            connection_with_attrs.EVENT_LINK_KEY,
             lambda *_args: self._record_event("link_key_available", adapter=self._adapter),
         )
         on_event(
-            getattr(connection, "EVENT_MODE_CHANGE", "mode_change"),
+            connection_with_attrs.EVENT_MODE_CHANGE,
             lambda *_args: self._record_classic_mode_change(connection),
         )
         on_event(
-            getattr(connection, "EVENT_MODE_CHANGE_FAILURE", "mode_change_failure"),
+            connection_with_attrs.EVENT_MODE_CHANGE_FAILURE,
             lambda status=None, *_args: self._record_event(
                 "classic_mode_change_failure",
                 adapter=self._adapter,
@@ -179,7 +162,8 @@ def register_connection_request_bridge(
     record_event: EventRecorder,
 ) -> None:
     """Wrap Bumble's connection request callback while avoiding deprecated sync APIs."""
-    original_connection_request = cast("Any", device).on_connection_request
+    device_with_attrs = cast("Any", device)
+    original_connection_request = device_with_attrs.on_connection_request
 
     def on_connection_request(
         bd_addr: object,
@@ -201,7 +185,6 @@ def register_connection_request_bridge(
             link_type,
         )
 
-    device_with_attrs = cast("Any", device)
     device_with_attrs.on_connection_request = on_connection_request
     replace_host_connection_request_listener(
         device,
@@ -267,24 +250,18 @@ def call_connection_request_without_deprecated_sync_command(
     link_type: int,
 ) -> None:
     """Run Bumble's connection request handler without its deprecated sync helper."""
-    host = getattr(device, "host", None)
-    send_async_command = getattr(host, "send_async_command", None)
-    if host is None or not callable(send_async_command):
-        connection_request(bd_addr, class_of_device, link_type)
-        return
+    device_with_attrs = cast("Any", device)
+    host = device_with_attrs.host
 
     from bumble import utils  # noqa: PLC0415
 
     missing = object()
-    host_dict = getattr(host, "__dict__", None)
-    previous_instance_attr = (
-        host_dict.get("send_command_sync", missing) if isinstance(host_dict, dict) else missing
-    )
+    previous_instance_attr = host.__dict__.get("send_command_sync", missing)
 
     def send_command_sync(command: object) -> None:
-        utils.AsyncRunner.spawn(send_async_command(command))
+        utils.AsyncRunner.spawn(host.send_async_command(command))
 
-    host_with_attrs = cast("Any", host)
+    host_with_attrs = host
     host_with_attrs.send_command_sync = send_command_sync
     try:
         connection_request(bd_addr, class_of_device, link_type)
@@ -300,12 +277,9 @@ def replace_host_connection_request_listener(
     original_connection_request: Callable[[object, int, int], None],
     replacement_connection_request: Callable[[object, int, int], None],
 ) -> None:
-    host = getattr(device, "host", None)
-    remove_listener = getattr(host, "remove_listener", None)
-    on = getattr(host, "on", None)
-    if not callable(remove_listener) or not callable(on):
-        return
+    device_with_attrs = cast("Any", device)
+    host = device_with_attrs.host
 
     with suppress(KeyError, ValueError):
-        remove_listener("connection_request", original_connection_request)
-    on("connection_request", replacement_connection_request)
+        host.remove_listener("connection_request", original_connection_request)
+    host.on("connection_request", replacement_connection_request)

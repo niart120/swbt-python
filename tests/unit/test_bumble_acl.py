@@ -18,7 +18,7 @@ class FakeAclPacketQueue:
 
 
 class FakeHost:
-    """Fake Bumble host exposing ACL queue lookup."""
+    """Fake Bumble 0.0.233 host exposing ACL queue lookup."""
 
     def __init__(self, acl_packet_queue: FakeAclPacketQueue) -> None:
         """Create a host backed by one fake queue."""
@@ -30,7 +30,7 @@ class FakeHost:
         return self._acl_packet_queue
 
 
-def test_drain_bumble_acl_queue_uses_host_fallback_queue() -> None:
+def test_drain_bumble_acl_queue_uses_bumble_connection_queue() -> None:
     async def run() -> None:
         acl_packet_queue = FakeAclPacketQueue()
         l2cap_channel = type(
@@ -41,7 +41,6 @@ def test_drain_bumble_acl_queue_uses_host_fallback_queue() -> None:
                     "FakeConnection",
                     (),
                     {
-                        "acl_packet_queue": None,
                         "device": type("FakeDevice", (), {"host": FakeHost(acl_packet_queue)})(),
                         "handle": 64,
                     },
