@@ -1,6 +1,6 @@
 [project]
 name = "swbt-python"
-version = "0.5.4"
+version = "0.6.0"
 description = "Python library for presenting an NX-compatible virtual Bluetooth HID input device."
 readme = "README.md"
 authors = [
@@ -9,7 +9,7 @@ authors = [
 maintainers = [
     { name = "niart120", email = "38847256+niart120@users.noreply.github.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 keywords = [
@@ -28,8 +28,8 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries",
     "Typing :: Typed",
 ]
@@ -75,7 +75,7 @@ source-exclude = [
 line-length = 100
 required-version = ">=0.15.16"
 src = ["src", "tests"]
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -130,7 +130,7 @@ strict = true
 known-first-party = ["swbt"]
 
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.13"
 root = ["./src"]
 
 [tool.ty.src]

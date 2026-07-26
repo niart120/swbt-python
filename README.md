@@ -6,7 +6,7 @@ NX 向けの仮想 Bluetooth HID 入力デバイスを Python から扱うため
 
 ## 必要なもの
 
-- Python 3.12 以降
+- Python 3.13 以降
 - uv
 - Bumble が利用可能な専用 USB Bluetooth ドングル
 
