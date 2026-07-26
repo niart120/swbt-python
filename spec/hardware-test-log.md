@@ -2490,3 +2490,21 @@ Bumble adapter と対象機器に依存する観測を記録する正本であ�
 - result: temporary `0x1004` suppression proved that fresh pairing と Button A UI 反映は可能だったが、正式な workaround 実装は main に取り込まない。
 - artifact: prior entries の `tmp/hardware/dongle-extended-features-workaround-20260725/`、`tmp/hardware/dongle-33fa-pairing-20260725/`、`tmp/hardware/dongle-33fa-input-20260726/`
 - notes: ここまでの結果は hardware observation であり、adapter 互換性または Bumble の一般契約を表さない。再検討条件は `spec/dev-journal.md` に記録する。
+
+## 2026-07-26: unit_086 fresh pairing直後の50 ms Button A
+
+- OS: Windows 11 `Windows-11-10.0.26200-SP0`
+- environment: `spec/issue-149-normal-input-readiness` branch、commit `730e5bc` と未コミットのunit_086実装。Python 3.13.5 / Bumble 0.0.233 / swbt-python 0.5.3
+- adapter: dedicated `usb:0`。no-open列挙でCSR8510 A10、VID:PID `0A12:0001`、bus 5 / device 22 / port 9.1を確認
+- dongle: CSR8510 A10。過去の`33FA:0010`個体ではなく、実行直前に列挙した専用個体
+- driver: WinUSB / libwdi 6.1.7600.16385、`oem75.inf`
+- Switch model: 今回は再確認していない
+- Switch firmware: 今回は再確認していない
+- report period: 既定 8000 us
+- command / test: `uv run pytest tests/hardware/test_reply_holdoff.py::test_switch_periodic_fresh_pairing_allows_immediate_50ms_a_input -m hardware --swbt-bumble-adapter usb:0 --swbt-hardware-artifact-dir tmp/hardware/unit_086/normal-input-readiness-fresh-20260726-213142 --log-file tmp/hardware/unit_086/normal-input-readiness-fresh-20260726-213142/pytest-debug.log --log-file-level=DEBUG -q -s -p no:cacheprovider --basetemp tmp/hardware/unit_086/normal-input-readiness-fresh-20260726-213142/pytest-tmp`
+- approval: 利用者がSwitch側の既存登録を削除して「持ちかた／順番を変える」画面を準備し、専用`usb:0`のadapter open、HID advertising、fresh pairing、subcommand handling、周期送信、接続完了直後の50 ms Button A、neutral close、adapter releaseを明示承認
+- command result: `1 failed in 5.58s`。hardware testが周期送信のdiagnostics reasonを`input`として数えたため、実際には送信済みの`reason=periodic`を0件と誤判定した。テストは`periodic`を数えるよう修正した
+- hardware result: observed-pass。`classic_pairing`、key store update、`protocol_ready` index 100、`input_ready(reporting_mode=periodic, route=pairing)` index 101を記録。50 ms入力窓にButton A bitを持つ周期`0x30`をtimer `0x15`から`0x1B`まで7件記録し、その後にneutral `0x30`を記録した。利用者が対象機器側のButton A反映を目視確認した
+- artifact: `tmp/hardware/unit_086/normal-input-readiness-fresh-20260726-213142/normal-input-readiness-pro.jsonl`、`pytest-debug.log`、pairing profile。profile SHA-256は`01B892090639D180DC39521997415C13E43D8E2307E266DA817F2FCD11EDC6CE`。link keyは転記しない
+- cleanup: assertion failure後も`finally`で`close(neutral=True)`を実行。neutral `0x30`、interrupt / control channel close、disconnect terminal `closed`、`transport_close_complete` index 119を確認し、adapterを解放した
+- notes: hardware behaviorはtraceと利用者のUI観測で成立したが、修正後のpytest commandはfresh pairingを再実行していない。fake transport integrationはA付きreport byteを検査済み。今回の結果を任意の短時間入力、別adapter、別OS、別firmwareへ一般化しない

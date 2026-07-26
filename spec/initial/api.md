@@ -186,7 +186,8 @@ class DirectProController(DirectSwitchGamepad):
 
 `create_profile()` は HID control / interrupt channel の接続だけではコントローラーオブジェクト
 を返さない。同じ接続 session で `0x03 30` と 0 以外の `0x30` player lights を受信し、
-各 reply の transport 送信が完了した protocol ready 後に返す。この完了条件は
+各 reply の transport 送信が完了した protocol ready へ進む。その後、通常入力経路が
+初期化中に設定された holdoff に抑止されない状態になってから返す。この公開契約は
 Pro Controller、Joy-Con L/R、Periodic / Direct で共通とする。
 
 | 引数 | 意味 |
@@ -232,7 +233,9 @@ async def try_connect(
 async def close(self, *, neutral: bool = True) -> None: ...
 ```
 
-`open()` は transport、callback、diagnostics、共通 sender を準備する。Periodic だけが report loop を準備し、Direct は周期 task を作らない。`open()` だけでは HID advertising、pairing、reconnect を開始しない。
+`open()` は transport、callback、diagnostics、共通 sender を準備する。Periodic の
+`ReportLoop` は通常入力 readiness の成立時に作成し、Direct は通常入力用の周期 task を
+作らない。`open()` だけでは HID advertising、pairing、reconnect を開始しない。
 
 `pair()` は初回 pairing のための入口である。内部では HID advertising と incoming 接続待ちを開始する。
 
@@ -240,9 +243,15 @@ async def close(self, *, neutral: bool = True) -> None: ...
 
 `connect()` は通常利用向けの入口である。保存済み bond があれば `reconnect()` を優先し、bond がない場合は `allow_pairing=True` のときだけ `pair()` へ進む。
 
+接続 API の正常終了は、選択された reporting type の通常入力経路が利用可能であることを
+意味する。Periodic は protocol ready 後、readiness 公開前に受理された最新 reply の
+automatic input holdoff が終了してから `ReportLoop` を開始する。Direct の明示入力は
+automatic input holdoff の対象外なので、protocol ready で通常入力 readiness を満たす。
+Direct に待機確認用の `0x30` は送らない。
+
 `close()` は Periodic の送信 loop と共通 transport を停止する。`neutral=True` かつ接続中の場合、Direct でも終了処理の例外としてニュートラル入力を1件送信し、成功後に state を確定する。`neutral=False` は終了用入力レポートを追加しない。
 
-`connect()` / `reconnect()` は成功した場合だけ戻る。接続できない場合は `ConnectionFailedError`、timeout は `ConnectionTimeoutError` を投げる。接続失敗の詳細 status が必要な場合は `try_connect()` / `try_reconnect()` を使い、`ConnectionResult` を読む。`pair()` は初回 pairing の明示入口であり、接続戦略の選択結果は返さない。
+`connect()` / `reconnect()` は通常入力 readiness まで成功した場合だけ戻る。接続できない場合は `ConnectionFailedError`、timeout は `ConnectionTimeoutError` を投げる。接続失敗の詳細 status が必要な場合は `try_connect()` / `try_reconnect()` を使い、`ConnectionResult` を読む。`pair()` は初回 pairing の明示入口であり、接続戦略の選択結果は返さない。
 
 `ConnectionResult.status` は `"connected"`、`"no_bond"`、`"timeout"`、`"failed"` のいずれかである。current peer が複数ある key store は旧形式または不正形式として扱い、`InvalidKeyStoreError` を投げる。これは接続失敗ではなく永続状態の形式不一致であるため、`try_reconnect()` でも `ConnectionResult` へ畳み込まない。
 

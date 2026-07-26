@@ -154,7 +154,7 @@ async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json
 
 `async with` は、`open()` から `close(neutral=True)` までのリソースを管理します。`__aenter__()` は、HID 接続待ち受け、ペアリング、ペアリング情報を用いた再接続を開始しません。
 
-`open()` は、transport、下位レイヤーのコールバック、トレース出力、送信処理を準備します。周期送信型では通常のレポートループも準備します。直接送信型は、利用者の入力を周期送信するタスクを `open()` では作りません。HID 接続待ち受けは開始しません。transport を開く処理に失敗した場合は、`TransportOpenError` または下位レイヤーの例外が送出されます。
+`open()` は、transport、下位レイヤーのコールバック、トレース出力、送信処理を準備します。この時点では周期送信型のレポートループを作りません。周期送信型は通常入力の準備が整うとレポートループを作成し、直接送信型は利用者入力を周期送信するタスクを全接続期間で作りません。HID 接続待ち受けは開始しません。transport を開く処理に失敗した場合は、`TransportOpenError` または下位レイヤーの例外が送出されます。
 
 `close(neutral=True)` は、接続中ならニュートラル入力を試み、周期送信型のレポートループを停止し、接続先に対する切断要求を試み、最後に transport を閉じます。直接送信型でも、`close(neutral=True)` に限ってニュートラル入力を 1 件送信し、成功後に入力状態を確定します。`close(neutral=False)` は、終了処理用の入力レポートを追加しません。
 
@@ -162,15 +162,17 @@ async with ProController(adapter="usb:0", profile_path="profiles/switch-pro.json
 
 | メソッド | 契約 |
 |---|---|
-| `pair(timeout=None)` | 初回ペアリング用 API。HID 接続待ち受けを開始し、リンク接続後の初期サブコマンド応答とプレイヤー割り当てまで待つ。 |
-| `reconnect(timeout=None)` | 保存済みペアリング情報が 1 件ある場合だけ再接続を試み、初期サブコマンド応答とプレイヤー割り当てまで待つ。 |
+| `pair(timeout=None)` | 初回ペアリング用 API。HID 接続待ち受けを開始し、リンク接続後の初期サブコマンド応答、プレイヤー割り当て、通常入力の準備完了まで待つ。 |
+| `reconnect(timeout=None)` | 保存済みペアリング情報が 1 件ある場合だけ再接続を試み、初期サブコマンド応答、プレイヤー割り当て、通常入力の準備完了まで待つ。 |
 | `try_reconnect(timeout=None)` | 再接続を試みた結果を `ConnectionResult` として返す。 |
 | `connect(timeout=None, allow_pairing=False)` | 保存済みペアリング情報があれば再接続を優先し、ない場合は `allow_pairing=True` のときだけペアリングを試みる。 |
 | `try_connect(timeout=None, allow_pairing=False)` | `connect()` と同じ戦略で接続を試み、接続結果を `ConnectionResult` として返す。 |
 
-`pair()` / `connect()` / `reconnect()` は、HID リンクがつながっただけでは戻りません。対象機器から通常入力レポート `0x30` が選択され、0 以外のプレイヤーライトが設定され、その応答送信が完了すると成功します。`create_profile()` も同じ条件を満たしたコントローラーオブジェクトだけを返します。接続初期化中の `status().connection_state` は `"initializing"`、利用可能になると `"connected"` です。
+`pair()` / `connect()` / `reconnect()` は、HID リンクがつながっただけでは戻りません。対象機器から通常入力レポート `0x30` が選択され、0 以外のプレイヤーライトが設定され、その応答送信が完了すると protocol ready になります。その後、通常入力経路が接続初期化中の抑止を受けない状態になってから成功します。`create_profile()` も同じ条件を満たしたコントローラーオブジェクトだけを返します。接続処理中の `status().connection_state` は `"initializing"`、通常入力を開始できる状態になると `"connected"` です。
 
-接続できない場合や初期サブコマンドへの応答に失敗した場合は `ConnectionFailedError`、リンク接続から初期化完了までの期限を超えた場合は `ConnectionTimeoutError` が送出されます。現在の接続先が複数記録されたプロファイルまたはペアリング情報の保存ファイルを指定した場合は、`InvalidKeyStoreError` が送出されます。
+周期送信型は、初期サブコマンド応答後の自動入力抑止が終わってからレポートループを開始します。直接送信型の明示入力はこの抑止の対象外なので、protocol ready で利用可能になります。直接送信型へ接続確認用の入力レポートを追加送信することはありません。
+
+接続できない場合や初期サブコマンドへの応答に失敗した場合は `ConnectionFailedError`、リンク接続から通常入力の準備完了までの期限を超えた場合は `ConnectionTimeoutError` が送出されます。現在の接続先が複数記録されたプロファイルまたはペアリング情報の保存ファイルを指定した場合は、`InvalidKeyStoreError` が送出されます。
 
 `ConnectionResult` は、`route`、`status`、`peer_address`、`peer_count` を持ちます。`status` は `"connected"`（接続済み）、`"no_bond"`（接続先なし）、`"timeout"`（タイムアウト）、`"failed"`（接続失敗）のいずれかです。
 

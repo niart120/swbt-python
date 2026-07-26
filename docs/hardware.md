@@ -177,6 +177,8 @@ await pad.reconnect(timeout=60.0)
 
 ## 確認済みの動作
 
+2026-07-26 に Windows 11、CSR8510 A10、WinUSB、Bumble 0.0.233 の組み合わせで、周期送信型Pro Controller相当の初回ペアリングを実行しました。接続 API 完了直後から50 msだけButton Aを入力し、A付きの周期`0x30`を7件、後続のニュートラル入力、切断、adapter解放までトレースで確認しました。対象機器側のButton A反映は利用者が目視確認しました。この実行では対象機器のmodelとfirmwareを再確認していないため、別環境の保証には使いません。
+
 2026-07-24 に Windows 11、CSR8510 A10、WinUSB の組み合わせで次を確認しました。この実行では対象機器のファームウェアを再確認していないため、別ファームウェアでの動作保証には使いません。
 
 - Pro Controller、Joy-Con L、Joy-Con R の初回ペアリングと、保存済みプロファイルを使う再接続。
@@ -221,7 +223,7 @@ Linux / macOS で必要になる OS 側設定は、Bumble から専用 USB Bluet
 
 - 対象機器がコントローラー接続画面にいるか確認します。
 - `pair()` または `connect(..., allow_pairing=True)` を使っているか確認します。
-- トレースログに `protocol_initialization_started` がなければ、HID リンク接続前に停止しています。イベントがあり `protocol_ready` がなければ、`subcommand_rx`、`subcommand_reply_tx`、`protocol_initialization_failed`、`connection_timeout` を確認します。
+- トレースログに `protocol_initialization_started` がなければ、HID リンク接続前に停止しています。イベントがあり `protocol_ready` がなければ、`subcommand_rx`、`subcommand_reply_tx`、`protocol_initialization_failed`、`connection_timeout` を確認します。`protocol_ready` があり `input_ready` がなければ、`protocol_initialization_failed` または `connection_timeout` の `stage` が `input_readiness` かを確認します。
 
 ### 保存済みペアリング情報がない
 

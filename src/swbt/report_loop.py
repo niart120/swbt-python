@@ -34,6 +34,7 @@ class ReportSender:
         diagnostics: DiagnosticsRecorder | None = None,
         clock_ns: Callable[[], int] = monotonic_ns,
         monotonic_time: Callable[[], float] = monotonic,
+        _sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         """Create a session-scoped serialized report sender."""
         self._transport = transport
@@ -42,6 +43,7 @@ class ReportSender:
         self._diagnostics = diagnostics
         self._clock_ns = clock_ns
         self._monotonic_time = monotonic_time
+        self._sleep = _sleep
         self._timer = 0
         self._send_lock = asyncio.Lock()
         self._automatic_input_holdoff_until = 0.0
@@ -79,6 +81,15 @@ class ReportSender:
                 return False
             await self._send_input_locked(state, reason=reason)
             return True
+
+    async def wait_until_automatic_input_ready(self) -> None:
+        """Wait until automatic input is no longer held off by an accepted reply."""
+        while True:
+            async with self._send_lock:
+                remaining = self._automatic_input_holdoff_until - self._monotonic_time()
+                if remaining <= 0:
+                    return
+            await self._sleep(remaining)
 
     async def send_subcommand_reply(self, build_report: ReplyBuilder) -> bytes:
         """Build and send a subcommand reply under the shared send lock."""

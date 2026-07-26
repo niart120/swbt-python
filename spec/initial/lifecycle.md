@@ -34,7 +34,7 @@ advertising
 pairing
   ↓ HID channels ready
 initializing
-  ↓ protocol ready
+  ↓ protocol ready、通常入力 readiness
 connected
   ↓ close() / disconnect
  disconnecting
@@ -101,20 +101,24 @@ transport から connected callback を受けたら、次を行う。
 7. 以後は Switch から届いた subcommand ごとに reply を返す
 8. supported `0x03 30` の reply 送信後、neutral `0x30` の requested report mode を開始する
 9. 0 以外の `0x30` player lights が同じ session で揃うまで待つ
-10. predicate を成立させた reply の transport 送信後に状態を `connected` にする
-11. Periodic は利用者 state の通常送信へ切り替える。Direct は requested report mode task を終了する
+10. predicate を成立させた reply の transport 送信後に `protocol_ready` を記録する
+11. Direct は通常入力 readiness を直ちに成立させ、requested report mode task を終了する
+12. Periodic は readiness 公開前に受理された最新 reply の automatic input holdoff 終了を待つ
+13. Periodic は `ReportLoop` を開始し、通常入力 readiness を成立させる
+14. 通常入力 readiness の成立後に状態を `connected` にして接続 API を完了する
 
 HID control / interrupt channel の両方が利用可能になった時点は link connected であり、
 public な接続完了ではない。`0x30 00` は初期化途中として記録し、成功条件にしない。
 起動 report と初期化中の subcommand reply の入力 prefix は neutral state を使う。
 接続前に準備した利用者入力は `connected` になるまで wire へ出さない。起動 report の
 再送は`ReportLoop`ではなく、最初のsubcommandまでに限定した`ProtocolHandshake`のtaskが担当する。
-`0x03 30`後の`0x30`は起動再送ではなく、Switchが要求したreport modeとして同じhandshakeがreadyまで送る。readyを成立させるreplyの受理後、handshake taskを停止・回収してから`connected`にする。Periodicはその後に`ReportLoop`を生成・開始し、Directは自動`0x30`を継続しない。
+`0x03 30`後の`0x30`は起動再送ではなく、Switchが要求したreport modeとして同じhandshakeがreadyまで送る。readyを成立させるreplyの受理後、handshake taskを停止・回収する。
+Directは同じ処理内で通常入力 readinessへ進み、自動`0x30`を継続しない。Periodicは最新replyのholdoff終了後に`ReportLoop`を生成・開始してから通常入力 readinessへ進む。接続確認用のneutral reportは追加しない。
 
 接続待ちの timeout は、`pair()` / `connect()` / `reconnect()` の呼び出し単位で 1 個の
-deadline として扱い、advertising または active reconnect から protocol ready までを
+deadline として扱い、advertising または active reconnect から通常入力 readiness までを
 含める。時間内に `connected` へ到達しない場合は `ConnectionTimeoutError`、reply
-送信失敗や ready 前 disconnect は `ConnectionFailedError` とし、half-ready 接続を
+送信失敗や readiness 公開前の disconnect は `ConnectionFailedError` とし、half-ready 接続を
 cleanup する。`try_connect()` / `try_reconnect()` は対応する `timeout` / `failed` を返す。
 
 ## 6. 入力送信中の処理
@@ -156,7 +160,7 @@ await pad.close(neutral=True)
 
 1. 状態を `disconnecting` にする
 2. `neutral=True` かつ接続中であれば neutral report を送る
-3. activeな`ProtocolHandshake`を停止・回収し、Periodicの`ReportLoop`を停止する
+3. activeな`ProtocolHandshake`と通常入力 readiness waiterを停止・回収し、Periodicの`ReportLoop`を停止する
 4. transport に切断を要求する。Bumble transport は保留中の interrupt ACL queue を drain してから L2CAP channel を切断する
 5. transport を close する
 6. callback を解除する
@@ -186,7 +190,7 @@ Switch 側から切断された場合、transport は disconnected callback を�
 処理は次の通り。
 
 1. disconnect reason を diagnostics に記録する
-2. activeな`ProtocolHandshake`とPeriodicの`ReportLoop`を停止する
+2. activeな`ProtocolHandshake`、通常入力 readiness waiter、Periodicの`ReportLoop`を停止する
 3. `InputStateStore` を neutral に戻す
 4. bond reuse reconnect の対象であれば、M6 の作業仕様に従い active / incoming のどちらで扱うかを判定する
 5. reconnect が無効、または reconnect 失敗時は clean close し、`closed` または `failed` へ遷移する
@@ -219,7 +223,7 @@ M6 では次を追加する。
 
 内部 task の cancel は次の順序で扱う。
 
-1. activeな`ProtocolHandshake`と、Periodicの場合の`ReportLoop`に停止要求を出す
+1. activeな`ProtocolHandshake`、通常入力 readiness waiter、Periodicの場合の`ReportLoop`に停止要求を出す
 2. 一定時間待つ
 3. 残っていれば task を cancel する
 4. cancel 結果を diagnostics に記録する

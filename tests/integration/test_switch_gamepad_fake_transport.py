@@ -75,6 +75,8 @@ def _controller_factory(
 async def _complete_protocol_handshake(transport: FakeHidTransport) -> None:
     await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("03 30"))
     await transport.inject_interrupt_data(_OUTPUT_REPORT_PREFIX + bytes.fromhex("30 01"))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
 
 
 async def _connect_protocol_ready(transport: FakeHidTransport) -> None:
@@ -192,6 +194,76 @@ def test_pair_waits_until_ready_subcommand_reply_is_transport_accepted() -> None
     asyncio.run(run())
 
 
+def test_periodic_pair_waits_for_normal_input_readiness_after_protocol_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        readiness_wait_started = asyncio.Event()
+        release_readiness = asyncio.Event()
+
+        async def wait_until_automatic_input_ready(
+            _sender: gamepad_runtime_module.ReportSender,
+        ) -> None:
+            readiness_wait_started.set()
+            await release_readiness.wait()
+
+        monkeypatch.setattr(
+            gamepad_runtime_module.ReportSender,
+            "wait_until_automatic_input_ready",
+            wait_until_automatic_input_ready,
+        )
+        transport = FakeHidTransport()
+
+        async with make_pro_controller(transport=transport) as pad:
+            pairing = asyncio.create_task(pad.pair(timeout=1.0))
+            await _wait_for_transport_event(transport, "start_advertising")
+            await transport.connect()
+            await _complete_protocol_handshake(transport)
+            await asyncio.wait_for(readiness_wait_started.wait(), timeout=0.1)
+
+            assert pairing.done() is False
+            assert pad.status().connection_state == "initializing"
+            assert pad._runtime._report_loop is None
+
+            release_readiness.set()
+            await asyncio.wait_for(pairing, timeout=0.1)
+
+            assert pad.status().connection_state == "connected"
+            assert pad._runtime._report_loop is not None
+
+    asyncio.run(run())
+
+
+def test_periodic_input_after_pair_is_not_blocked_by_initialization_holdoff() -> None:
+    async def run() -> None:
+        transport = FakeHidTransport()
+
+        async with make_pro_controller(
+            transport=transport,
+            report_period_us=8_000,
+        ) as pad:
+            pairing = asyncio.create_task(pad.pair(timeout=1.0))
+            await _wait_for_transport_event(transport, "start_advertising")
+            await transport.connect()
+            await _complete_protocol_handshake(transport)
+            await pairing
+            transport.clear_sent_interrupt_reports()
+
+            await pad.apply(InputState.neutral().with_buttons([Button.A]))
+            await asyncio.sleep(0.05)
+            await pad.apply(InputState.neutral())
+            await asyncio.sleep(0.02)
+
+            periodic_reports = [
+                report for report in transport.sent_interrupt_reports if report[0] == 0x30
+            ]
+
+            assert any(report[3] & 0x08 for report in periodic_reports)
+            assert periodic_reports[-1][3:6] == bytes.fromhex("00 00 00")
+
+    asyncio.run(run())
+
+
 def test_pair_fails_and_cleans_up_when_ready_reply_send_fails() -> None:
     class PlayerLightsReplyError(RuntimeError):
         def __init__(self) -> None:
@@ -275,6 +347,53 @@ def test_try_connect_returns_failed_for_disconnect_before_protocol_ready() -> No
         assert result.route == "pairing"
         assert result.status == "failed"
         assert pad.status().connection_state == "closed"
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("operation", ["connect", "try_connect"])
+def test_connect_entrypoints_use_periodic_normal_input_readiness(
+    operation: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        readiness_wait_started = asyncio.Event()
+        release_readiness = asyncio.Event()
+
+        async def wait_until_automatic_input_ready(
+            _sender: gamepad_runtime_module.ReportSender,
+        ) -> None:
+            readiness_wait_started.set()
+            await release_readiness.wait()
+
+        monkeypatch.setattr(
+            gamepad_runtime_module.ReportSender,
+            "wait_until_automatic_input_ready",
+            wait_until_automatic_input_ready,
+        )
+        transport = FakeHidTransport()
+
+        async with make_pro_controller(transport=transport) as pad:
+            if operation == "connect":
+                connecting = asyncio.create_task(pad.connect(timeout=1.0, allow_pairing=True))
+            else:
+                connecting = asyncio.create_task(pad.try_connect(timeout=1.0, allow_pairing=True))
+            await _wait_for_transport_event(transport, "start_advertising")
+            await transport.connect()
+            await _complete_protocol_handshake(transport)
+            await asyncio.wait_for(readiness_wait_started.wait(), timeout=0.1)
+
+            assert connecting.done() is False
+            assert pad.status().connection_state == "initializing"
+
+            release_readiness.set()
+            result = await asyncio.wait_for(connecting, timeout=0.1)
+
+            if operation == "try_connect":
+                assert result.status == "connected"
+            else:
+                assert result is None
+            assert pad.status().connection_state == "connected"
 
     asyncio.run(run())
 
@@ -2747,6 +2866,166 @@ def test_pair_timeout_budget_includes_start_advertising() -> None:
     asyncio.run(run())
 
 
+def test_pair_timeout_during_input_readiness_cancels_waiter_and_cleans_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        readiness_wait_started = asyncio.Event()
+        readiness_wait_stopped = asyncio.Event()
+        readiness_wait_count = 0
+        trace = StringIO()
+
+        async def wait_forever(
+            _sender: gamepad_runtime_module.ReportSender,
+        ) -> None:
+            nonlocal readiness_wait_count
+            readiness_wait_count += 1
+            if readiness_wait_count > 1:
+                return
+            readiness_wait_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                readiness_wait_stopped.set()
+
+        monkeypatch.setattr(
+            gamepad_runtime_module.ReportSender,
+            "wait_until_automatic_input_ready",
+            wait_forever,
+        )
+        transport = FakeHidTransport()
+        pad = make_pro_controller(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+        pairing = asyncio.create_task(pad.pair(timeout=0.05))
+        await _wait_for_transport_event(transport, "start_advertising")
+        await transport.connect()
+        await _complete_protocol_handshake(transport)
+        await asyncio.wait_for(readiness_wait_started.wait(), timeout=0.1)
+
+        with pytest.raises(ConnectionTimeoutError):
+            await pairing
+
+        assert readiness_wait_stopped.is_set()
+        assert pad._runtime._input_readiness_task is None
+        assert pad.status().connection_state == "closed"
+        assert transport.is_open is False
+        timeout_events = [
+            event
+            for line in trace.getvalue().splitlines()
+            if (event := json.loads(line))["event"] == "connection_timeout"
+        ]
+        assert timeout_events[-1]["stage"] == "input_readiness"
+
+        pairing_again = asyncio.create_task(pad.pair(timeout=1.0))
+        async with asyncio.timeout(0.1):
+            while transport.events.count("start_advertising") < 2:  # noqa: ASYNC110
+                await asyncio.sleep(0)
+        await transport.connect()
+        await _complete_protocol_handshake(transport)
+        await asyncio.wait_for(pairing_again, timeout=0.1)
+
+        assert readiness_wait_count == 2
+        assert pad.status().connection_state == "connected"
+        await pad.close(neutral=False)
+
+    asyncio.run(run())
+
+
+def test_pair_cancellation_during_input_readiness_cancels_waiter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        readiness_wait_started = asyncio.Event()
+        readiness_wait_stopped = asyncio.Event()
+
+        async def wait_forever(
+            _sender: gamepad_runtime_module.ReportSender,
+        ) -> None:
+            readiness_wait_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                readiness_wait_stopped.set()
+
+        monkeypatch.setattr(
+            gamepad_runtime_module.ReportSender,
+            "wait_until_automatic_input_ready",
+            wait_forever,
+        )
+        transport = FakeHidTransport()
+
+        async with make_pro_controller(transport=transport) as pad:
+            pairing = asyncio.create_task(pad.pair(timeout=None))
+            await _wait_for_transport_event(transport, "start_advertising")
+            await transport.connect()
+            await _complete_protocol_handshake(transport)
+            await asyncio.wait_for(readiness_wait_started.wait(), timeout=0.1)
+
+            pairing.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pairing
+
+            assert readiness_wait_stopped.is_set()
+            assert pad._runtime._input_readiness_task is None
+            assert pad.status().connection_state == "initializing"
+
+    asyncio.run(run())
+
+
+def test_disconnect_during_input_readiness_fails_pair_and_cancels_waiter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        readiness_wait_started = asyncio.Event()
+        readiness_wait_stopped = asyncio.Event()
+        trace = StringIO()
+
+        async def wait_forever(
+            _sender: gamepad_runtime_module.ReportSender,
+        ) -> None:
+            readiness_wait_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                readiness_wait_stopped.set()
+
+        monkeypatch.setattr(
+            gamepad_runtime_module.ReportSender,
+            "wait_until_automatic_input_ready",
+            wait_forever,
+        )
+        transport = FakeHidTransport()
+        pad = make_pro_controller(
+            diagnostics=DiagnosticsConfig(trace_writer=trace),
+            transport=transport,
+        )
+        pairing = asyncio.create_task(pad.pair(timeout=1.0))
+        await _wait_for_transport_event(transport, "start_advertising")
+        await transport.connect()
+        await _complete_protocol_handshake(transport)
+        await asyncio.wait_for(readiness_wait_started.wait(), timeout=0.1)
+
+        await transport.disconnect(reason=0x13)
+
+        with pytest.raises(ConnectionFailedError):
+            await asyncio.wait_for(pairing, timeout=0.1)
+
+        assert readiness_wait_stopped.is_set()
+        assert pad._runtime._input_readiness_task is None
+        assert pad.status().connection_state == "closed"
+        assert transport.is_open is False
+        failure_events = [
+            event
+            for line in trace.getvalue().splitlines()
+            if (event := json.loads(line))["event"] == "protocol_initialization_failed"
+        ]
+        assert failure_events[-1]["stage"] == "input_readiness"
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize(
     ("peer_addresses", "status", "selection"),
     [
@@ -2800,6 +3079,101 @@ def test_reconnect_records_bonded_peer_selection_without_advertising(
                 "status": "connected",
             } in events
             assert "active_reconnect" in transport.events
+
+    asyncio.run(run())
+
+
+def test_periodic_active_reconnect_waits_for_normal_input_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        peer_address = "01:02:03:04:05:06"
+        readiness_wait_started = asyncio.Event()
+        release_readiness = asyncio.Event()
+
+        async def wait_until_automatic_input_ready(
+            _sender: gamepad_runtime_module.ReportSender,
+        ) -> None:
+            readiness_wait_started.set()
+            await release_readiness.wait()
+
+        monkeypatch.setattr(
+            gamepad_runtime_module.ReportSender,
+            "wait_until_automatic_input_ready",
+            wait_until_automatic_input_ready,
+        )
+        transport = FakeHidTransport(
+            bonded_peer_addresses=(peer_address,),
+            active_reconnect_auto_connect=False,
+        )
+
+        async with make_pro_controller(transport=transport) as pad:
+            reconnecting = asyncio.create_task(pad.try_reconnect(timeout=1.0))
+            await _wait_for_transport_event(transport, "active_reconnect")
+            await transport.connect()
+            await _complete_protocol_handshake(transport)
+            await asyncio.wait_for(readiness_wait_started.wait(), timeout=0.1)
+
+            assert reconnecting.done() is False
+            assert pad.status().connection_state == "initializing"
+
+            release_readiness.set()
+            result = await asyncio.wait_for(reconnecting, timeout=0.1)
+
+            assert result.status == "connected"
+            assert pad.status().connection_state == "connected"
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("controller_class", "profile"),
+    [
+        (DirectProController, ProControllerProfile()),
+        (DirectJoyConL, JoyConLeftProfile()),
+        (DirectJoyConR, JoyConRightProfile()),
+    ],
+)
+def test_direct_active_reconnect_does_not_wait_for_automatic_input_readiness(
+    controller_class: type[DirectProController | DirectJoyConL | DirectJoyConR],
+    profile: ProControllerProfile | JoyConLeftProfile | JoyConRightProfile,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        peer_address = "01:02:03:04:05:06"
+
+        async def fail_if_waited(
+            _sender: gamepad_runtime_module.ReportSender,
+        ) -> None:
+            raise AssertionError
+
+        monkeypatch.setattr(
+            gamepad_runtime_module.ReportSender,
+            "wait_until_automatic_input_ready",
+            fail_if_waited,
+        )
+        transport = FakeHidTransport(
+            bonded_peer_addresses=(peer_address,),
+            active_reconnect_auto_connect=False,
+        )
+
+        pad = cast(
+            "SwitchGamepad",
+            _controller_factory(controller_class)(
+                transport=transport,
+                profile=profile,
+            ),
+        )
+        async with pad:
+            reconnecting = asyncio.create_task(pad.try_reconnect(timeout=1.0))
+            await _wait_for_transport_event(transport, "active_reconnect")
+            await transport.connect()
+            await _complete_protocol_handshake(transport)
+            result = await asyncio.wait_for(reconnecting, timeout=0.1)
+
+            assert result.status == "connected"
+            assert pad.status().connection_state == "connected"
+            assert pad._runtime._report_loop is None
 
     asyncio.run(run())
 

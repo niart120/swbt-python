@@ -43,6 +43,9 @@ def test_tap_a_example_can_run_with_fake_transport() -> None:
             output_prefix = bytes.fromhex("01 00 00 00 00 00 00 00 00 00")
             await transport.inject_interrupt_data(output_prefix + bytes.fromhex("03 30"))
             await transport.inject_interrupt_data(output_prefix + bytes.fromhex("30 01"))
+            async with asyncio.timeout(0.1):
+                while pad.status().connection_state != "connected":  # noqa: ASYNC110
+                    await asyncio.sleep(0)
             transport.clear_sent_interrupt_reports()
 
             await tap_a_once(pad, duration=0)

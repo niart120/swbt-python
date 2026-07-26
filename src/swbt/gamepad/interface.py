@@ -121,11 +121,11 @@ class SwitchGamepad(ABC):
         await self._runtime.open()
 
     async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
-        """Start pairing advertising and wait until the controller is ready for input.
+        """Start pairing and wait until the controller can accept normal input.
 
         Args:
-            timeout: Maximum seconds for link connection and protocol initialization.
-                ``None`` waits without a deadline.
+            timeout: Maximum seconds for link connection, protocol initialization,
+                and normal-input readiness. ``None`` waits without a deadline.
 
         Raises:
             ConnectionTimeoutError: The timeout elapsed before a connection completed.
@@ -134,15 +134,15 @@ class SwitchGamepad(ABC):
         await self._runtime.pair(timeout=timeout)
 
     async def reconnect(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
-        """Reconnect with exactly one bonded peer and raise on failure.
+        """Reconnect with one bonded peer and wait until normal input can begin.
 
         Args:
-            timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
-                the transport default.
+            timeout: Maximum seconds for the active reconnect attempt and
+                normal-input readiness. ``None`` uses the transport default.
 
         Raises:
             ConnectionFailedError: No single bonded peer was available or reconnect failed.
-            ConnectionTimeoutError: The active reconnect attempt timed out.
+            ConnectionTimeoutError: The reconnect or normal-input readiness timed out.
             InvalidKeyStoreError: The key store cannot identify one current peer.
         """
         await self._runtime.reconnect(timeout=timeout)
@@ -154,11 +154,12 @@ class SwitchGamepad(ABC):
         """Try active reconnect with exactly one bonded peer.
 
         Args:
-            timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
-                the transport default.
+            timeout: Maximum seconds for the active reconnect attempt and
+                normal-input readiness. ``None`` uses the transport default.
 
         Returns:
-            Reconnect route, status, selected peer, and peer count.
+            Reconnect route, status, selected peer, and peer count. ``connected``
+            means that normal input can begin.
 
         Raises:
             InvalidKeyStoreError: The key store cannot identify one current peer.
@@ -171,7 +172,7 @@ class SwitchGamepad(ABC):
         timeout: float | None = None,  # noqa: ASYNC109
         allow_pairing: bool = False,
     ) -> None:
-        """Connect using bonded reconnect first, then optional pairing fallback.
+        """Connect by bonded reconnect or pairing and wait for normal-input readiness.
 
         Args:
             timeout: Maximum seconds for each connection attempt. ``None`` uses the
@@ -199,7 +200,8 @@ class SwitchGamepad(ABC):
             allow_pairing: If ``True``, run pairing when no bonded peer is available.
 
         Returns:
-            Route and status chosen by reconnect or pairing fallback.
+            Route and status chosen by reconnect or pairing fallback. ``connected``
+            means that normal input can begin.
 
         Raises:
             InvalidKeyStoreError: The key store cannot identify one current peer.
@@ -375,7 +377,8 @@ class PeriodicSwitchGamepad(SwitchGamepad):
             diagnostics: Optional diagnostics configuration for trace output.
 
         Returns:
-            The protocol-ready periodic controller. The caller owns its lifetime.
+            A periodic controller ready to accept normal input. The caller owns
+            its lifetime.
 
         Raises:
             ValueError: ``local_address`` is invalid.
@@ -440,7 +443,8 @@ class DirectSwitchGamepad(SwitchGamepad):
             diagnostics: Optional diagnostics configuration for trace output.
 
         Returns:
-            The protocol-ready direct controller. The caller owns its lifetime.
+            A direct controller ready to accept normal input. The caller owns
+            its lifetime.
 
         Raises:
             ValueError: ``local_address`` is invalid.
