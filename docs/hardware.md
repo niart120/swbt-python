@@ -9,7 +9,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| Python | Python 3.12 以降 |
+| Python | Python 3.13 以降 |
 | 専用 USB Bluetooth ドングル | PC の通常 Bluetooth 機能と共有しない専用ドングル |
 | 対象機器 | 「持ちかた/順番を変える」画面へ手動で移動できること |
 

@@ -27,7 +27,7 @@ def test_ci_runs_no_hardware_gate_on_ubuntu_and_macos() -> None:
     commands = _run_commands(python_job)
 
     assert matrix["os"] == ["ubuntu-latest", "macos-latest"]
-    assert matrix["python-version"] == ["3.12", "3.13"]
+    assert matrix["python-version"] == ["3.13", "3.14"]
     assert python_job["runs-on"] == "${{ matrix.os }}"
     assert "uv sync --locked --dev" in commands
     assert "uv run pytest tests/unit" in commands

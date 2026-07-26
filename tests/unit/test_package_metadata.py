@@ -43,3 +43,16 @@ def test_package_metadata_includes_linux_and_macos_os_classifiers() -> None:
     assert "Operating System :: POSIX :: Linux" in classifiers
     assert "Operating System :: MacOS" in classifiers
     assert "Operating System :: MacOS :: MacOS X" not in classifiers
+
+
+def test_package_requires_python_313_and_declares_tested_versions() -> None:
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+
+    project = pyproject["project"]
+
+    assert project["requires-python"] == ">=3.13"
+    assert "Programming Language :: Python :: 3.12" not in project["classifiers"]
+    assert "Programming Language :: Python :: 3.13" in project["classifiers"]
+    assert "Programming Language :: Python :: 3.14" in project["classifiers"]
+    assert pyproject["tool"]["ruff"]["target-version"] == "py313"
+    assert pyproject["tool"]["ty"]["environment"]["python-version"] == "3.13"
