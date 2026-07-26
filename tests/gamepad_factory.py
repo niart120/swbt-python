@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable
 from contextlib import nullcontext
 from functools import partial
+from time import monotonic
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -28,6 +29,19 @@ type _PeriodicController = ProController | JoyConL | JoyConR
 type _DirectController = DirectProController | DirectJoyConL | DirectJoyConR
 
 
+class _AutoAdvanceMonotonicClock:
+    def __init__(self) -> None:
+        self._started_at = monotonic()
+        self._offset = 0.0
+
+    def time(self) -> float:
+        return monotonic() - self._started_at + self._offset
+
+    async def sleep(self, delay: float) -> None:
+        self._offset += delay
+        await asyncio.sleep(0)
+
+
 def state_lock_for(pad: SwitchGamepad) -> asyncio.Lock:
     """Expose the state lock only to deterministic race-test fixtures."""
     runtime = cast("Any", pad)._runtime
@@ -47,7 +61,13 @@ def _construct_with_transport[ControllerT: _PeriodicController | _DirectControll
     profile: ControllerProfile | None,
     constructor: Callable[[], ControllerT],
 ) -> ControllerT:
-    runtime_constructor = partial(ControllerRuntime, transport=transport)
+    readiness_clock = _AutoAdvanceMonotonicClock()
+    runtime_constructor = partial(
+        ControllerRuntime,
+        transport=transport,
+        _report_sender_monotonic_time=readiness_clock.time,
+        _report_sender_sleep=readiness_clock.sleep,
+    )
     profile_patch = (
         nullcontext() if profile is None else patch.object(controller_type, "_profile", profile)
     )

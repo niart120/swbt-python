@@ -30,6 +30,21 @@ class _FakeMonotonicClock:
         return self.now_ns / 1_000_000_000
 
 
+class _ControlledSleep:
+    def __init__(self) -> None:
+        self.delays_ns: list[int] = []
+        self._pending: list[asyncio.Event] = []
+
+    async def __call__(self, delay: float) -> None:
+        self.delays_ns.append(round(delay * 1_000_000_000))
+        released = asyncio.Event()
+        self._pending.append(released)
+        await released.wait()
+
+    def release_next(self) -> None:
+        self._pending.pop(0).set()
+
+
 def test_report_loop_requires_injected_input_report_builder() -> None:
     signature = inspect.signature(ReportLoop)
 
@@ -126,6 +141,69 @@ def test_fake_transport_records_reply_and_automatic_input_holdoff_timing() -> No
         await report_loop.send_next_report()
 
         assert transport.sent_at == [(0.0, 0x21), (0.3, 0x30)]
+
+    asyncio.run(run())
+
+
+def test_automatic_input_readiness_waits_until_reply_holdoff_boundary() -> None:
+    async def run() -> None:
+        clock = _FakeMonotonicClock()
+        transport = FakeHidTransport()
+        await transport.open()
+        profile = default_controller_profile()
+        sender = ReportSender(
+            transport=transport,
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
+            clock_ns=clock,
+            monotonic_time=clock.time,
+            _sleep=clock.sleep,
+        )
+
+        await sender.send_subcommand_reply(lambda: bytes([0x21, *([0] * 49)]))
+        await sender.wait_until_automatic_input_ready()
+
+        assert clock.sleep_delays == [0.3]
+        assert clock.time() == 0.3
+
+    asyncio.run(run())
+
+
+def test_additional_reply_extends_automatic_input_readiness_wait() -> None:
+    async def run() -> None:
+        clock = _FakeMonotonicClock()
+        controlled_sleep = _ControlledSleep()
+        transport = FakeHidTransport()
+        await transport.open()
+        profile = default_controller_profile()
+        sender = ReportSender(
+            transport=transport,
+            input_report_builder=InputReportBuilder(profile),
+            session=SwitchHidSession(profile),
+            clock_ns=clock,
+            monotonic_time=clock.time,
+            _sleep=controlled_sleep,
+        )
+
+        reply = bytes([0x21, *([0] * 49)])
+        await sender.send_subcommand_reply(lambda: reply)
+        readiness = asyncio.create_task(sender.wait_until_automatic_input_ready())
+        await asyncio.sleep(0)
+
+        clock.advance_ns(200_000_000)
+        await sender.send_subcommand_reply(lambda: reply)
+        clock.advance_ns(100_000_000)
+        controlled_sleep.release_next()
+        await asyncio.sleep(0)
+
+        assert readiness.done() is False
+        assert controlled_sleep.delays_ns == [300_000_000, 200_000_000]
+
+        clock.advance_ns(200_000_000)
+        controlled_sleep.release_next()
+        await readiness
+
+        assert clock.time() == 0.5
 
     asyncio.run(run())
 

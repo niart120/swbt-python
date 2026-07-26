@@ -19,6 +19,68 @@ type ControllerKind = Literal["periodic", "direct"]
 
 
 @pytest.mark.hardware
+def test_switch_periodic_fresh_pairing_allows_immediate_50ms_a_input(
+    swbt_bumble_adapter: str,
+    swbt_hardware_artifact_dir: Path,
+) -> None:
+    """Pair, hold A for 50 ms immediately after readiness, and close neutral.
+
+    The operator must prepare the Switch pairing screen and record whether Button A
+    is reflected. The trace assertion proves that at least one periodic input report
+    was accepted during the 50 ms press window; the fake-transport integration test
+    verifies that this report contains the Button A state.
+    """
+    profile_path = swbt_hardware_artifact_dir / "normal-input-readiness-pro.json"
+    trace_path = swbt_hardware_artifact_dir / "normal-input-readiness-pro.jsonl"
+    if profile_path.exists():
+        pytest.fail("fresh pairing profile already exists; use a new artifact directory")
+
+    async def run() -> None:
+        with trace_path.open("w", encoding="utf-8") as trace:
+            pad = await ProController.create_profile(
+                adapter=swbt_bumble_adapter,
+                profile_path=str(profile_path),
+                pair_timeout=_PAIRING_TIMEOUT_SECONDS,
+                report_period_us=8_000,
+                diagnostics=DiagnosticsConfig(trace_writer=trace),
+            )
+            try:
+                trace.flush()
+                input_reports_before_press = _count_events(
+                    _read_jsonl(trace_path),
+                    "report_tx",
+                    reason="periodic",
+                    report_id="0x30",
+                )
+                await pad.press(Button.A)
+                await asyncio.sleep(0.05)
+                trace.flush()
+                input_reports_after_press = _count_events(
+                    _read_jsonl(trace_path),
+                    "report_tx",
+                    reason="periodic",
+                    report_id="0x30",
+                )
+                assert input_reports_after_press > input_reports_before_press
+                await pad.release(Button.A)
+                await asyncio.sleep(_OBSERVATION_SECONDS)
+            finally:
+                await pad.close(neutral=True)
+
+    asyncio.run(run())
+
+    events = _read_jsonl(trace_path)
+    assert _contains_event(events, "classic_pairing")
+    assert _contains_event(events, "protocol_ready")
+    assert _contains_event(events, "input_ready", reporting_mode="periodic")
+    assert _contains_event(
+        events,
+        "transport_close_complete",
+        adapter=swbt_bumble_adapter,
+    )
+
+
+@pytest.mark.hardware
 @pytest.mark.parametrize(
     ("holdoff_seconds", "expect_ready"),
     [(0.3, True), (0.1, True), (0.0, False)],
@@ -193,6 +255,18 @@ def _contains_event(
     **expected: object,
 ) -> bool:
     return any(
+        event.get("event") == event_name
+        and all(event.get(key) == value for key, value in expected.items())
+        for event in events
+    )
+
+
+def _count_events(
+    events: list[dict[str, Any]],
+    event_name: str,
+    **expected: object,
+) -> int:
+    return sum(
         event.get("event") == event_name
         and all(event.get(key) == value for key, value in expected.items())
         for event in events

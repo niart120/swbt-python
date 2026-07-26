@@ -2,7 +2,9 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import replace
+from time import monotonic
 from typing import Literal
 
 import swbt.gamepad as gamepad_module
@@ -48,6 +50,8 @@ class ControllerRuntime:
         diagnostics: DiagnosticsConfig | None = None,
         reporting_mode: Literal["periodic", "direct"] = "periodic",
         transport: HidDeviceTransport | None = None,
+        _report_sender_monotonic_time: Callable[[], float] = monotonic,
+        _report_sender_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         """Create a fully initialized gamepad runtime.
 
@@ -57,6 +61,8 @@ class ControllerRuntime:
             reporting_mode: Owner of normal input report scheduling.
             transport: Optional HID transport instance. When supplied, no Bumble
                 transport is created by the constructor.
+            _report_sender_monotonic_time: Internal holdoff clock override for tests.
+            _report_sender_sleep: Internal holdoff sleep override for tests.
 
         Raises:
             InvalidInputError: ``adapter`` is omitted for the default transport.
@@ -68,6 +74,8 @@ class ControllerRuntime:
         self._reporting_mode = reporting_mode
         self._transport = transport
         self._transport_was_injected = transport is not None
+        self._report_sender_monotonic_time = _report_sender_monotonic_time
+        self._report_sender_sleep = _report_sender_sleep
         self._pairing_profile: PairingProfile | None = None
         self._state_store = InputStateStore()
         self._diagnostics = DiagnosticsRecorder(
@@ -94,6 +102,7 @@ class ControllerRuntime:
         self._report_loop: ReportLoop | None = None
         self._report_sender: ReportSender | None = None
         self._protocol_handshake: ProtocolHandshake | None = None
+        self._input_readiness_task: asyncio.Task[None] | None = None
         self._input_operation_lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
         self._connected_event = asyncio.Event()
@@ -139,6 +148,8 @@ class ControllerRuntime:
                     ),
                     session=self._protocol_session,
                     diagnostics=self._diagnostics,
+                    monotonic_time=self._report_sender_monotonic_time,
+                    _sleep=self._report_sender_sleep,
                 )
                 self._report_sender = report_sender
                 self._connection_state = "opened"
@@ -161,14 +172,14 @@ class ControllerRuntime:
         self._configured_device_info_bluetooth_address = None
 
     async def pair(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
-        """Start pairing advertising and wait until the controller is ready for input.
+        """Start pairing and wait until the controller can accept normal input.
 
         Args:
-            timeout: Maximum seconds for link connection and protocol initialization.
-                ``None`` waits without a deadline.
+            timeout: Maximum seconds for link connection, protocol initialization,
+                and normal-input readiness. ``None`` waits without a deadline.
 
         Raises:
-            ConnectionTimeoutError: The deadline elapsed before protocol readiness.
+            ConnectionTimeoutError: The deadline elapsed before normal-input readiness.
             ConnectionFailedError: Protocol initialization or the link failed.
             ClosedError: The transport was unavailable after opening.
         """
@@ -186,7 +197,7 @@ class ControllerRuntime:
                 raise ClosedError(msg)
             await self._transport.start_advertising()
             self._configure_device_info_bluetooth_address(self._transport)
-            await self._wait_for_protocol_ready(None)
+            await self._wait_for_input_ready(None)
 
         try:
             if timeout is None:
@@ -194,6 +205,9 @@ class ControllerRuntime:
             else:
                 async with asyncio.timeout(timeout):
                     await advertise_and_wait()
+        except asyncio.CancelledError:
+            await self._stop_input_readiness_wait()
+            raise
         except TimeoutError as error:
             msg = "connection timed out"
             connection_error = ConnectionTimeoutError(msg)
@@ -204,7 +218,7 @@ class ControllerRuntime:
                 ),
                 player_lights=_format_optional_byte(self._protocol_session.state.player_lights),
                 report_mode=_format_optional_byte(self._protocol_session.state.report_mode),
-                stage="protocol_initialization",
+                stage=self._connection_readiness_stage(),
                 state=self._connection_state,
                 timeout=timeout,
             )
@@ -216,15 +230,15 @@ class ControllerRuntime:
             raise
 
     async def reconnect(self, timeout: float | None = None) -> None:  # noqa: ASYNC109
-        """Reconnect with exactly one bonded peer and raise on failure.
+        """Reconnect with one bonded peer and wait until normal input can begin.
 
         Args:
-            timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
-                the transport default.
+            timeout: Maximum seconds for the active reconnect attempt and
+                normal-input readiness. ``None`` uses the transport default.
 
         Raises:
             ConnectionFailedError: No single bonded peer was available or reconnect failed.
-            ConnectionTimeoutError: The active reconnect attempt timed out.
+            ConnectionTimeoutError: The reconnect or normal-input readiness timed out.
         """
         result = await self.try_reconnect(timeout=timeout)
         self._raise_if_connection_failed(result)
@@ -236,8 +250,8 @@ class ControllerRuntime:
         """Try active reconnect with exactly one bonded peer.
 
         Args:
-            timeout: Maximum seconds for the active reconnect attempt. ``None`` uses
-                the transport default.
+            timeout: Maximum seconds for the active reconnect attempt and
+                normal-input readiness. ``None`` uses the transport default.
 
         Returns:
             ConnectionResult: Reconnect route, status, selected peer, and peer count.
@@ -308,6 +322,7 @@ class ControllerRuntime:
             )
         except asyncio.CancelledError as error:
             if _current_task_is_cancelling():
+                await self._stop_input_readiness_wait()
                 raise
             return await self._record_active_reconnect_transport_error(
                 error,
@@ -406,6 +421,7 @@ class ControllerRuntime:
                     except Exception as error:  # noqa: BLE001
                         self._diagnostics.record_error(error, recoverable=True)
                 await self._stop_protocol_handshake()
+                await self._stop_input_readiness_wait()
                 if self._report_loop is not None:
                     await self._report_loop.stop()
                 self._disconnect_event.clear()
@@ -820,7 +836,7 @@ class ControllerRuntime:
 
     async def _wait_for_reconnect_connected(self, *, max_wait: float | None) -> None:
         try:
-            await self._wait_for_protocol_ready(max_wait)
+            await self._wait_for_input_ready(max_wait)
         except TimeoutError as error:
             self._diagnostics.record_event(
                 "connection_timeout",
@@ -830,13 +846,13 @@ class ControllerRuntime:
                 player_lights=_format_optional_byte(self._protocol_session.state.player_lights),
                 report_mode=_format_optional_byte(self._protocol_session.state.report_mode),
                 route="active_reconnect",
-                stage="protocol_initialization",
+                stage=self._connection_readiness_stage(),
                 state=self._connection_state,
                 timeout=max_wait,
             )
             raise TimeoutError from error
 
-    async def _wait_for_protocol_ready(self, max_wait: float | None) -> None:
+    async def _wait_for_input_ready(self, max_wait: float | None) -> None:
         if max_wait is None:
             await self._connection_attempt_event.wait()
         else:
@@ -844,8 +860,13 @@ class ControllerRuntime:
                 await self._connection_attempt_event.wait()
         if self._connected_event.is_set():
             return
-        msg = "protocol initialization failed"
+        msg = "connection initialization failed"
         raise ConnectionFailedError(msg) from self._connection_attempt_error
+
+    def _connection_readiness_stage(self) -> str:
+        if self._protocol_session.state.protocol_ready:
+            return "input_readiness"
+        return "protocol_initialization"
 
     def _record_disconnect_request_result(self, result: DisconnectRequestResult) -> None:
         fields: dict[str, object] = {"status": result.status}
@@ -917,6 +938,15 @@ class ControllerRuntime:
         if handshake is not None:
             await handshake.stop()
 
+    async def _stop_input_readiness_wait(self) -> None:
+        task = self._input_readiness_task
+        self._input_readiness_task = None
+        if task is None or task is asyncio.current_task():
+            return
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
     def _start_periodic_report_loop(self) -> None:
         if self._transport is None or self._report_loop is not None:
             return
@@ -950,12 +980,7 @@ class ControllerRuntime:
             return
         if self._connected_event.is_set():
             return
-        self._connection_state = "connected"
-        self._connected_event.set()
-        self._connection_attempt_event.set()
         self._protocol_handshake = None
-        if self._reporting_mode == "periodic":
-            self._start_periodic_report_loop()
         session_state = self._protocol_session.state
         self._diagnostics.record_event(
             "protocol_ready",
@@ -964,6 +989,50 @@ class ControllerRuntime:
             report_mode=_format_optional_byte(session_state.report_mode),
             route=self._connection_route,
             observed_subcommands=_format_subcommands(session_state.observed_subcommands),
+        )
+        if self._reporting_mode == "direct":
+            self._publish_input_ready()
+            return
+        if self._input_readiness_task is not None:
+            return
+        self._input_readiness_task = asyncio.create_task(
+            self._complete_periodic_input_readiness(),
+            name="swbt-input-readiness",
+        )
+
+    async def _complete_periodic_input_readiness(self) -> None:
+        task = asyncio.current_task()
+        sender = self._require_report_sender()
+        try:
+            await sender.wait_until_automatic_input_ready()
+            if (
+                self._close_in_progress
+                or self._connection_attempt_event.is_set()
+                or self._report_sender is not sender
+            ):
+                return
+            self._start_periodic_report_loop()
+            self._publish_input_ready()
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:  # noqa: BLE001
+            if not self._close_in_progress:
+                self._record_protocol_initialization_failure(error)
+        finally:
+            if self._input_readiness_task is task:
+                self._input_readiness_task = None
+
+    def _publish_input_ready(self) -> None:
+        if self._connected_event.is_set() or self._connection_attempt_event.is_set():
+            return
+        self._connection_state = "connected"
+        self._connected_event.set()
+        self._connection_attempt_event.set()
+        self._diagnostics.record_event(
+            "input_ready",
+            profile_kind=self._controller_profile.kind.value,
+            reporting_mode=self._reporting_mode,
+            route=self._connection_route,
         )
 
     async def _fail_protocol_initialization(self, error: Exception) -> None:
@@ -987,7 +1056,7 @@ class ControllerRuntime:
             profile_kind=self._controller_profile.kind.value,
             report_mode=_format_optional_byte(self._protocol_session.state.report_mode),
             route=self._connection_route,
-            stage="protocol_initialization",
+            stage=self._connection_readiness_stage(),
         )
         self._diagnostics.record_error(error, recoverable=False)
 
@@ -999,7 +1068,7 @@ class ControllerRuntime:
             and not self._connection_attempt_event.is_set()
             and not self._close_in_progress
         ):
-            msg = "disconnected before protocol initialization completed"
+            msg = "disconnected before connection initialization completed"
             handshake_failure = ConnectionFailedError(msg)
             if self._protocol_handshake is not None:
                 self._protocol_handshake.fail(handshake_failure)
@@ -1014,6 +1083,7 @@ class ControllerRuntime:
                 self._protocol_handshake = None
             else:
                 await self._stop_protocol_handshake()
+            await self._stop_input_readiness_wait()
             if self._report_loop is not None:
                 await self._report_loop.stop()
                 self._report_loop = None

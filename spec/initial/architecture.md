@@ -13,7 +13,7 @@ SwitchGamepad public ABC / runtime delegation
   ↓
 ControllerRuntime + InputStateStore
   ├─ ProtocolHandshake [initializing中だけ]
-  ├─ PeriodicSwitchGamepad → ReportLoop [ready後だけ]
+  ├─ PeriodicSwitchGamepad → ReportLoop [通常入力 readiness 成立時から]
   └─ DirectSwitchGamepad → input operation lock
                     ↓
                ReportSender ← OutputReportDispatcher
@@ -86,11 +86,11 @@ resource scope の `open()` / `close()`、明示接続 API の `pair()` / `conne
 
 `SwitchGamepad` は共通 public method と `ControllerRuntime` への参照を所有する。公開 method の実装は、lifecycle、connection、意味的入力、status、snapshot を runtime へ委譲する。`SwitchGamepad` は第三者実装用の runtime 非依存 interface とは扱わない。
 
-stateful owner は `ControllerRuntime` とする。runtime は内部に `InputStateStore`、`ReportSender`、`SwitchHidProtocol`、`HidDeviceTransport` を保持する。link接続からprotocol readyまでは、同じsessionとsenderを借用する期限付き`ProtocolHandshake`を保持する。Periodic の runtime はready後だけ`ReportLoop`を保持し、Directは全lifecycleで生成しない。利用者に内部コンポーネントを直接操作させない。
+stateful owner は `ControllerRuntime` とする。runtime は内部に `InputStateStore`、`ReportSender`、`SwitchHidProtocol`、`HidDeviceTransport` を保持する。link接続からprotocol readyまでは、同じsessionとsenderを借用する期限付き`ProtocolHandshake`を保持する。Periodic の runtime は最新replyのautomatic input holdoff終了後に`ReportLoop`を開始して通常入力 readiness を公開し、Directは全lifecycleで生成しない。利用者に内部コンポーネントを直接操作させない。
 
 各具象 gamepad は controller profile を class 属性として所有する。公開 constructor は profile default と明示引数を内部設定型 `_GamepadConfig` へ正規化し、`ControllerRuntime` の唯一の constructor を呼ぶ。runtime に transport が注入されていればその instance を使い、未指定なら open 時に `create_default_transport()` を直接呼ぶ。transport factory object、constructor 回避、production package 内の test 用 factory は置かない。Bumble transport の import は `create_default_transport()` の関数内に閉じ込める。
 
-`ControllerRuntime` は reconnect と no-bond 時の optional pairing fallback も所有する。transport は current bonded peer の address または `None` を返し、複数 current peer は `InvalidKeyStoreError` とする。runtime の状態、protocol-ready wait、cleanup を callback object に再包装しない。
+`ControllerRuntime` は reconnect と no-bond 時の optional pairing fallback も所有する。transport は current bonded peer の address または `None` を返し、複数 current peer は `InvalidKeyStoreError` とする。runtime の状態、protocol readyと通常入力 readiness のwait、cleanup を callback object に再包装しない。
 
 ### 2.2 `InputState`
 
@@ -108,7 +108,7 @@ stateful owner は `ControllerRuntime` とする。runtime は内部に `InputSt
 
 `ProtocolHandshake` はlink接続直後のbootstrap neutralと、supported report modeからreadyまでのneutralを送る。readyまたはfailureで停止・破棄し、sender、session、dispatcherはRuntimeに残る。
 
-`ReportLoop` は Periodic だけがready後に所有する scheduler であり、一定周期で current state を `ReportSender` へ渡す。Direct は `ReportLoop` を生成せず、input operation lock 内で候補 state を `ReportSender` へ渡す。output report / subcommand は両型で自動処理し、同じ `ReportSender` へ入る。
+`ReportLoop` は Periodic だけが通常入力 readiness 成立時から所有する scheduler であり、一定周期で current state を `ReportSender` へ渡す。Direct は `ReportLoop` を生成せず、input operation lock 内で候補 state を `ReportSender` へ渡す。output report / subcommand は両型で自動処理し、同じ `ReportSender` へ入る。
 
 送信周期の初期値は `8000us` とする。ただし、この値は既定値であり、全環境での最適値とは扱わない。実送信時刻は diagnostics に記録する。
 

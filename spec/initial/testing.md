@@ -155,16 +155,20 @@ Fake transport integration tests は `tests/integration/` に置く。
 - `0x40` の session 遷移と ACK が input report と同じ sender lock で直列化され、新形式の `0x30` が ACK を追い越さない
 - Direct input の直後に並ぶ reply の state prefix と timer が実際の送信順に一致する
 - close後の再openで前回接続のhost要求状態とquaternion状態を引き継がない
-- link 接続だけでは接続 API が戻らず、reply 送信完了後の protocol ready で戻る
-- Pro Controller / Joy-Con L/R と Periodic / Direct が同じ ready 境界を共有する
+- link 接続だけでは接続 API が戻らず、reply 送信完了後に protocol ready へ進む
+- Periodic は protocol ready 後も最新 reply の automatic input holdoff 終了まで接続 API を完了せず、`ReportLoop` 開始後に通常入力 readiness を公開する
+- Direct は protocol ready で通常入力 readiness を満たし、holdoff 経過や確認用 `0x30` を要求しない
+- Pro Controller / Joy-Con L/R と Periodic / Direct が同じ通常入力 readiness 契約を共有する
 - Periodic / Direct は link 接続後に neutral `0x30` の起動 report を送り、subcommand
   未受信中だけ1秒間隔で再送する
 - 最初の有効な subcommand を parse した後は起動 report を再送しない
 - supported `0x03 30` reply 後は neutral `0x30` の requested report mode を開始する
-- readyを成立させるreplyの受理後、`ProtocolHandshake`を停止・回収してから接続APIを完了する
+- readyを成立させるreplyの受理後、`ProtocolHandshake`を停止・回収してから通常入力 readiness を評価する
+- readiness待機中の追加reply、timeout、cancellation、disconnectを処理し、前sessionのreadinessを再利用しない
+- 既定8 msのPeriodicで接続完了直後に50 ms保持した入力が初期化holdoffに全送信機会を奪われない
 - ready後のoutput reportは同じdispatcher、session、senderで1回だけ処理する
 - ready 前の利用者 state は wire へ出ず、subcommand reply prefix も neutral になる
-- ready 後は Periodic が利用者 state の送信を継続し、Direct は全lifecycleで`ReportLoop`を持たず自動 `0x30` を送らない
+- 通常入力 readiness 後は Periodic が利用者 state の送信を継続し、Direct は全lifecycleで`ReportLoop`を持たず自動 `0x30` を送らない
 - reply 送信失敗または ready 前 disconnect は timeout を待たず接続失敗になる
 
 ### 3.4 neutral fail-safe

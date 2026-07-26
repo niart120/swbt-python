@@ -190,7 +190,7 @@ HidDeviceTransport.send_interrupt()
 
 ### 5.3 reply 後 holdoff の理由
 
-`0x21`をcallback内で送信した後、`ReportSender`は300 msの自動`0x30`をholdoffする。対象は`ProtocolHandshake`とready後`ReportLoop`であり、明示Direct入力とtrailing neutralは対象にしない。これにより、送信済みreplyの直後に次の自動inputを続けない。すでに送信lockを取得しているinput reportは中断せず、replyはその完了後に同じtimer sequenceで送る。
+`0x21`をcallback内で送信した後、`ReportSender`は300 msの自動`0x30`をholdoffする。対象は`ProtocolHandshake`と通常入力 readiness 成立後の`ReportLoop`であり、明示Direct入力とtrailing neutralは対象にしない。これにより、送信済みreplyの直後に次の自動inputを続けない。すでに送信lockを取得しているinput reportは中断せず、replyはその完了後に同じtimer sequenceで送る。
 
 2026-07-25の`usb:0` / Windows 11 / Bumble 0.0.230 / 同一peerのSwitch（model / firmware未記録）の実機比較では、300 msはPeriodicとDirectのactive reconnectおよびPro fresh pairingでprotocol readyまで到達した。100 msは接続できたが、Periodicではhandshake中のreplyとautomatic reportが大きく増え、利用者はfresh pairing後のButton A反映を確認できなかった。0 msはPeriodicとDirectの双方でsession内部のready条件に達してもpublic ready前にtimeoutし、fresh pairingではSwitchがコントローラーとして認識しなかった。このため値は300 msを維持する。ready後のSwitch起点subcommandはこの比較で観測できず、holdoffをinitializingだけへ狭める根拠はないため、適用範囲も変更しない。
 
